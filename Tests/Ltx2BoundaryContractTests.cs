@@ -42,29 +42,17 @@ public class Ltx2BoundaryContractTests
     /// <summary>Frames a 5.0-second clip generates.</summary>
     private const int LongClipFrames = 121;
 
-    private static JObject Clip(double duration, params JObject[] stages)
-    {
-        JObject clip = MakeClip(stages);
-        clip["duration"] = duration;
-        return clip;
-    }
-
     private static JObject ContinueClip(double duration, params JObject[] stages)
     {
-        JObject clip = Clip(duration, stages);
+        JObject clip = MakeClip(duration, stages);
         clip["boundaryOut"] = Constants.BoundaryOutContinue;
         return clip;
     }
 
-    private static LTXVConcatAVLatentNode JointLatentOf(SwarmKSamplerNode sampler) =>
-        Assert.IsType<LTXVConcatAVLatentNode>(sampler.LatentImage.Connection?.Node);
-
     /// <summary>The decode of a clip's final stage — the pixels the timeline merge slices up.</summary>
     private static string ClipOutputDecodeId(WorkflowBridge bridge, SwarmKSamplerNode sampler)
     {
-        LTXVSeparateAVLatentNode separate = Assert.Single(
-            bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>(),
-            node => node.AvLatent.Connection?.Node.Id == sampler.Id);
+        LTXVSeparateAVLatentNode separate = OutputOf(bridge, sampler);
         return Assert.Single(
             bridge.Graph.NodesOfType<VAEDecodeTiledNode>(),
             node => node.Samples.Connection?.Node.Id == separate.Id
@@ -141,7 +129,7 @@ public class Ltx2BoundaryContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         JObject first = ContinueClip(0.6, fixture.Stage(control: 0.5, steps: 10));
-        JObject second = Clip(0.6, fixture.Stage(control: 0.5, steps: 10));
+        JObject second = MakeClip(0.6, fixture.Stage(control: 0.5, steps: 10));
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(first, second));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -170,8 +158,7 @@ public class Ltx2BoundaryContractTests
 
         // Clip 0's audio runs to the end of the blend and clip 1's picks up after it, dropping its
         // 8-frame handle: 16 + 17 = the 33 frames the slices publish.
-        AudioConcatNode audio = Assert.IsType<AudioConcatNode>(
-            live.FinalVideoSave().Audio.Connection?.Node);
+        AudioConcatNode audio = Assert.IsType<AudioConcatNode>(live.PublishedAudio());
         TrimAudioDurationNode head = Assert.IsType<TrimAudioDurationNode>(
             audio.Audio1.Connection?.Node);
         TrimAudioDurationNode rest = Assert.IsType<TrimAudioDurationNode>(
@@ -183,9 +170,7 @@ public class Ltx2BoundaryContractTests
         Assert.Equal(ClipFrames / 24.0, rest.Duration.LiteralAsDouble()!.Value, precision: 6);
 
         live.AssertAllLive(firstClip, secondClip, tail, anchor, blend, ramp, audio);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -211,9 +196,7 @@ public class Ltx2BoundaryContractTests
         Assert.Equal([-2, 10], guides.Select(guide => guide.FrameIdx.LiteralAsInt()!.Value).Order());
 
         live.AssertAllLive(guides);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -229,10 +212,10 @@ public class Ltx2BoundaryContractTests
         double windowEndSeconds)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject first = Clip(0.6, fixture.Stage(control: 0.5, steps: 10));
+        JObject first = MakeClip(0.6, fixture.Stage(control: 0.5, steps: 10));
         first["boundaryOut"] = boundary;
         first["boundaryOutCarryAudio"] = true;
-        JObject second = Clip(0.6, fixture.Stage(control: 0.5, steps: 10));
+        JObject second = MakeClip(0.6, fixture.Stage(control: 0.5, steps: 10));
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(first, second));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -265,12 +248,10 @@ public class Ltx2BoundaryContractTests
 
         // Carry is generation-time context. There is no second merge near final publication.
         Assert.Empty(bridge.Graph.NodesOfType<AudioMergeNode>());
-        Assert.IsType<AudioConcatNode>(live.FinalVideoSave().Audio.Connection!.Node);
+        Assert.IsType<AudioConcatNode>(live.PublishedAudio());
 
         live.AssertAllLive(firstClip, secondClip, carryMask);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -284,7 +265,7 @@ public class Ltx2BoundaryContractTests
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject first = ContinueClip(5.0, fixture.Stage(control: 0.5, steps: 10));
         first["boundaryOutCarryAudio"] = true;
-        JObject second = Clip(5.0, fixture.Stage(control: 0.5, steps: 10));
+        JObject second = MakeClip(5.0, fixture.Stage(control: 0.5, steps: 10));
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(first, second),
@@ -300,7 +281,7 @@ public class Ltx2BoundaryContractTests
         SwarmKSamplerNode secondClip = StageSampler(bridge, 1);
 
         // The root really is an image: clip 0 guides off core's base-image decode.
-        VAEDecodeNode baseImage = Assert.Single(bridge.Graph.NodesOfType<VAEDecodeNode>());
+        VAEDecodeNode baseImage = BaseImage(bridge);
         Assert.True(ReachesUpstream(
             bridge,
             Assert.IsType<LTXVImgToVideoInplaceNode>(
@@ -319,9 +300,7 @@ public class Ltx2BoundaryContractTests
         Assert.Empty(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
 
         live.AssertAllLive(firstClip, secondClip, carryMask);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -337,7 +316,7 @@ public class Ltx2BoundaryContractTests
             0.6,
             fixture.Stage(control: 0.5, steps: 10),
             fixture.Stage(control: 0.5, steps: 10, upscale: 2.0));
-        JObject second = Clip(
+        JObject second = MakeClip(
             0.6,
             fixture.Stage(control: 0.5, steps: 10),
             fixture.Stage(control: 0.5, steps: 10, upscale: 2.0));
@@ -362,9 +341,7 @@ public class Ltx2BoundaryContractTests
         Assert.Equal(ContinueMergeSlices, MergeSlices(bridge));
 
         live.AssertAllLive([tail, clipZeroLast, .. anchors]);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -376,7 +353,7 @@ public class Ltx2BoundaryContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         JObject first = ContinueClip(0.6, fixture.Stage(control: 0.5, steps: 10));
-        JObject second = Clip(
+        JObject second = MakeClip(
             0.6,
             fixture.Stage(control: 0.5, steps: 10),
             fixture.Stage(control: 0.0, steps: 10));
@@ -397,9 +374,7 @@ public class Ltx2BoundaryContractTests
                 == VideoStagesWorkflowFixture.StageSeed(2));
 
         live.AssertAllLive(firstClip, tail, anchor);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -412,10 +387,10 @@ public class Ltx2BoundaryContractTests
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         JObject singleWorkflow = await fixture.GenerateAsync(MakeDocument(
             ContinueClip(0.6, fixture.Stage(control: 0.5, steps: 10)),
-            Clip(0.6, fixture.Stage(control: 0.5, steps: 10))));
+            MakeClip(0.6, fixture.Stage(control: 0.5, steps: 10))));
         JObject reanchoredWorkflow = await fixture.GenerateAsync(MakeDocument(
             ContinueClip(0.6, fixture.Stage(control: 0.5, steps: 10)),
-            Clip(
+            MakeClip(
                 0.6,
                 fixture.Stage(control: 0.5, steps: 10),
                 fixture.Stage(control: 0.5, steps: 10))));
@@ -442,13 +417,9 @@ public class Ltx2BoundaryContractTests
                 .Frames.LiteralAsInt());
 
         singleLive.AssertAllLive(singleTail);
-        singleLive.AssertNoOrphanNodes();
+        AssertShippable(singleBridge, singleWorkflow, singleLive);
         reanchoredLive.AssertAllLive(reanchoredTail);
-        reanchoredLive.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(singleWorkflow);
-        AssertNoDanglingNodeRefs(reanchoredWorkflow);
-        AssertAcyclic(singleBridge);
-        AssertAcyclic(reanchoredBridge);
+        AssertShippable(reanchoredBridge, reanchoredWorkflow, reanchoredLive);
     }
 
     /// <summary>
@@ -473,7 +444,7 @@ public class Ltx2BoundaryContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         // Both of the target clip's stages guide off the base image, not off clip 0's tail.
-        VAEDecodeNode baseImage = Assert.Single(bridge.Graph.NodesOfType<VAEDecodeNode>());
+        VAEDecodeNode baseImage = BaseImage(bridge);
         SwarmKSamplerNode firstClip = StageSampler(bridge, 0);
         LTXVImgToVideoInplaceNode[] targetGuides =
         [
@@ -496,9 +467,7 @@ public class Ltx2BoundaryContractTests
         Assert.Equal(2, batch.Images.Count);
 
         live.AssertAllLive([batch, .. targetGuides]);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -509,9 +478,9 @@ public class Ltx2BoundaryContractTests
     public async Task Crossfade_boundary_anchors_nothing_at_any_stage()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject first = Clip(0.6, fixture.Stage(control: 0.5, steps: 10));
+        JObject first = MakeClip(0.6, fixture.Stage(control: 0.5, steps: 10));
         first["boundaryOut"] = Constants.BoundaryOutCrossfade;
-        JObject second = Clip(
+        JObject second = MakeClip(
             0.6,
             fixture.Stage(control: 0.5, steps: 10),
             fixture.Stage(control: 0.5, steps: 10, upscale: 2.0));
@@ -535,8 +504,6 @@ public class Ltx2BoundaryContractTests
             Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>()).Frames.LiteralAsInt());
 
         live.AssertAllLive(blend);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 }

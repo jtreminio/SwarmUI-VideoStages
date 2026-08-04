@@ -24,23 +24,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class Ltx2AudioContractTests
 {
-    /// <summary>4.0s at 24 fps aligns up to 97 frames.</summary>
-    private const int RetakeClipFrames = 97;
-
-    private static JObject UploadedAudioPayload(string payload, string fileName) => new()
-    {
-        ["data"] = $"data:audio/wav;base64,{payload}",
-        ["fileName"] = fileName,
-    };
-
-    /// <summary>Uploaded footage a clip refines instead of generating from noise.</summary>
-    private static JObject SourceVideo() => new()
-    {
-        ["data"] = "data:video/mp4;base64," + Convert.ToBase64String([0xDE, 0xAD, 0xBE, 0xEF]),
-        ["fileName"] = "refine.mp4",
-        ["startSeconds"] = 0.0,
-    };
-
     private static JObject AudioClip(
         string audioSource,
         double? duration,
@@ -60,35 +43,8 @@ public class Ltx2AudioContractTests
         return clip;
     }
 
-    /// <summary>A root timeline audio lane; planning projects it onto every clip it overlaps.</summary>
-    private static JObject AudioTrack(
-        double timelineStartSeconds,
-        double timelineLengthSeconds,
-        double sourceStartSeconds,
-        double volume) => new()
-        {
-            ["id"] = "track-seg",
-            ["volume"] = volume,
-            ["source"] = new JObject
-            {
-                ["kind"] = "Upload",
-                ["reference"] = "timeline.wav",
-                ["uploadedAudio"] = UploadedAudioPayload("QUJD", "timeline.wav"),
-            },
-            ["spans"] = new JArray(new JObject
-            {
-                ["timelineStartSeconds"] = timelineStartSeconds,
-                ["timelineLengthSeconds"] = timelineLengthSeconds,
-                ["sourceStartSeconds"] = sourceStartSeconds,
-            }),
-        };
-
-    /// <summary>The joint latent a stage sampler consumes.</summary>
-    private static LTXVConcatAVLatentNode JointLatentOf(SwarmKSamplerNode sampler) =>
-        Assert.IsType<LTXVConcatAVLatentNode>(sampler.LatentImage.Connection?.Node);
-
     private static LTXVAudioVAEDecodeNode PublishedAudioDecode(WorkflowLivePath live) =>
-        Assert.IsType<LTXVAudioVAEDecodeNode>(live.FinalVideoSave().Audio.Connection?.Node);
+        Assert.IsType<LTXVAudioVAEDecodeNode>(live.PublishedAudio());
 
     /// <summary>The single window a preserve-mask node carries.</summary>
     private static (double Start, double End) OnlyWindowOf(SwarmSetAudioMaskWindowsNode mask)
@@ -113,7 +69,7 @@ public class Ltx2AudioContractTests
         JObject clip = AudioClip(
             Constants.AudioSourceUpload,
             duration: 1.0,
-            hasPayload ? UploadedAudioPayload("QUJD", "clip.wav") : null,
+            hasPayload ? UploadedAudio("clip.wav") : null,
             fixture.Stage(control: 0.5));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
@@ -156,9 +112,7 @@ public class Ltx2AudioContractTests
 
         Assert.True(ReachesUpstream(bridge, published, sampler.Id));
         live.AssertAllLive(sampler, published);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -173,7 +127,7 @@ public class Ltx2AudioContractTests
         JObject clip = AudioClip(
             Constants.AudioSourceUpload,
             duration: 1.0,
-            UploadedAudioPayload("QUJD", "clip.wav"),
+            UploadedAudio("clip.wav"),
             fixture.Stage(control: 0.5));
         clip["clipLengthFromAudio"] = true;
 
@@ -209,9 +163,7 @@ public class Ltx2AudioContractTests
         Assert.True(ReachesUpstream(bridge, published, upload.Id));
 
         live.AssertAllLive(lengthToFrames, emptyVideo, StageSampler(bridge, 0), published);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -262,9 +214,7 @@ public class Ltx2AudioContractTests
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
 
         live.AssertAllLive(stage, encode, mask, published);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -279,7 +229,7 @@ public class Ltx2AudioContractTests
         JObject clip = AudioClip(
             Constants.AudioSourceUpload,
             duration: 1.0,
-            UploadedAudioPayload("QUJD", "clip.wav"),
+            UploadedAudio("clip.wav"),
             fixture.Stage(control: 0.5),
             fixture.Stage(control: 0.5));
 
@@ -307,9 +257,7 @@ public class Ltx2AudioContractTests
         Assert.True(ReachesUpstream(bridge, published, second.Id));
 
         live.AssertAllLive(first, second, published);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -324,12 +272,12 @@ public class Ltx2AudioContractTests
         JObject first = AudioClip(
             Constants.AudioSourceUpload,
             duration: 1.0,
-            UploadedAudioPayload("QUFB", "first.wav"),
+            UploadedAudio("first.wav", payload: "QUFB"),
             fixture.Stage(control: 0.5));
         JObject second = AudioClip(
             Constants.AudioSourceUpload,
             duration: 1.0,
-            UploadedAudioPayload("QkJC", "second.wav"),
+            UploadedAudio("second.wav", payload: "QkJC"),
             fixture.Stage(control: 0.5));
 
         (JObject workflow, WorkflowGenerator generator) =
@@ -366,9 +314,7 @@ public class Ltx2AudioContractTests
         Assert.Equal(audio.Id, $"{generator.CurrentMedia.AttachedAudio.Path[0]}");
 
         live.AssertAllLive([.. stages, batch, audio]);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -387,7 +333,7 @@ public class Ltx2AudioContractTests
         JObject second = AudioClip(
             Constants.AudioSourceUpload,
             duration: 1.0,
-            UploadedAudioPayload("QkJC", "second.wav"),
+            UploadedAudio("second.wav", payload: "QkJC"),
             fixture.Stage(control: 0.5));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(first, second));
@@ -405,9 +351,7 @@ public class Ltx2AudioContractTests
         Assert.True(ReachesUpstream(bridge, JointLatentOf(uploadStage), upload.Id));
 
         live.AssertAllLive(nativeStage, uploadStage, upload);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -426,7 +370,7 @@ public class Ltx2AudioContractTests
         JObject document = MakeDocument(AudioClip(
             Constants.AudioSourceUpload,
             duration: 1.0,
-            UploadedAudioPayload("QUJD", "clip.wav"),
+            UploadedAudio("clip.wav"),
             fixture.Stage(control: 0.5)));
         document["width"] = rootWidth;
         document["height"] = rootHeight;
@@ -447,9 +391,7 @@ public class Ltx2AudioContractTests
         Assert.Equal(rootHeight, emptyVideo.Height.LiteralAsInt());
 
         live.AssertAllLive(solidMask, emptyVideo, StageSampler(bridge, 0));
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -476,11 +418,10 @@ public class Ltx2AudioContractTests
             uploadedAudio: null,
             fixture.Stage(control: 0.5)));
         document["audioTracks"] = new JArray(
-            AudioTrack(
+            AudioTrack("track-seg", volume: 0.5, fileName: "timeline.wav", AudioSpan(
                 timelineStartSeconds: 1.0,
                 timelineLengthSeconds: 2.0,
-                sourceStartSeconds: 0.5,
-                volume: 0.5));
+                sourceStartSeconds: 0.5)));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(document);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -507,9 +448,7 @@ public class Ltx2AudioContractTests
         Assert.Same(mask.Latent, JointLatentOf(sampler).AudioLatent.Connection);
 
         live.AssertAllLive(mask, trim, volume, encode, sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -530,11 +469,10 @@ public class Ltx2AudioContractTests
             uploadedAudio: null,
             fixture.Stage(control: 0.5)));
         document["audioTracks"] = new JArray(
-            AudioTrack(
+            AudioTrack("track-seg", volume: 1.0, fileName: "timeline.wav", AudioSpan(
                 timelineStartSeconds: 1.0,
                 timelineLengthSeconds: 2.0,
-                sourceStartSeconds: 0.0,
-                volume: 1.0));
+                sourceStartSeconds: 0.0)));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(document);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -549,9 +487,7 @@ public class Ltx2AudioContractTests
             bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>().Count);
 
         live.AssertAllLive(StageSampler(bridge, 0));
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -578,11 +514,10 @@ public class Ltx2AudioContractTests
 
         JObject document = MakeDocument(first, second);
         document["audioTracks"] = new JArray(
-            AudioTrack(
+            AudioTrack("track-seg", volume: 2.0, fileName: "timeline.wav", AudioSpan(
                 timelineStartSeconds: 4.0,
                 timelineLengthSeconds: 2.0,
-                sourceStartSeconds: 0.0,
-                volume: 2.0));
+                sourceStartSeconds: 0.0)));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(document);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -606,9 +541,7 @@ public class Ltx2AudioContractTests
         Assert.Equal((1.0, 2.0), OnlyWindowOf(MaskConditioning(stages[1])));
 
         live.AssertAllLive([.. stages, .. masks]);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -641,9 +574,7 @@ public class Ltx2AudioContractTests
             save.Images.Connection?.Node.Id);
 
         live.AssertAllLive(fixture.BaseSampler(bridge), joint);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -658,26 +589,20 @@ public class Ltx2AudioContractTests
     public async Task Retake_windows_the_joint_audio_video_latent_to_the_retake_range(bool retake)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject stage = fixture.Stage(control: 0.5, steps: 10);
-        // Strip MakeStage's "Generated" default so the retake graph has no root donor — keeping it
-        // would pull in core's root sampler and a second guide chain.
-        stage.Remove("imageReference");
-        JObject clip = MakeClip(stage);
-        clip["duration"] = 4.0;
-        clip["initVideo"] = SourceVideo();
-        if (retake)
-        {
-            clip["retake"] = new JObject
-            {
-                ["startSeconds"] = 1.0,
-                ["lengthSeconds"] = 1.0,
-                ["strength"] = 0.8,
-            };
-        }
+        JObject clip = RetakeClip(
+            retake
+                ? new JObject
+                {
+                    ["startSeconds"] = 1.0,
+                    ["lengthSeconds"] = 1.0,
+                    ["strength"] = 0.8,
+                }
+                : null,
+            fixture.Stage(control: 0.5, steps: 10));
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(clip),
-            post => post["text2videoframes"] = RetakeClipFrames);
+            post => post["text2videoframes"] = Ltx2WorkflowFixture.RetakeClipFrames);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -715,8 +640,6 @@ public class Ltx2AudioContractTests
         }
 
         live.AssertAllLive(sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 }

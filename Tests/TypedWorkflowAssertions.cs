@@ -64,6 +64,39 @@ internal static class TypedWorkflowAssertions
     }
 
     /// <summary>
+    /// The three whole-graph checks every generated-workflow test closes with: nothing built is
+    /// orphaned, no input references a pruned node, and the graph is acyclic.
+    /// </summary>
+    public static void AssertShippable(
+        WorkflowBridge bridge,
+        JObject workflow,
+        WorkflowLivePath live)
+    {
+        live.AssertNoOrphanNodes();
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    /// <summary>The joint latent a stage sampler consumes.</summary>
+    public static LTXVConcatAVLatentNode JointLatentOf(SwarmKSamplerNode sampler) =>
+        Assert.IsType<LTXVConcatAVLatentNode>(sampler.LatentImage.Connection?.Node);
+
+    /// <summary>The split of a stage's sampled joint latent — its video and audio handoff.</summary>
+    public static LTXVSeparateAVLatentNode OutputOf(
+        WorkflowBridge bridge,
+        SwarmKSamplerNode sampler) =>
+        Assert.Single(
+            bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>(),
+            separate => ReferenceEquals(separate.AvLatent.Connection?.Node, sampler));
+
+    /// <summary>
+    /// Core's base-image decode, the node an authored <c>Base</c> reference must resolve to. Only
+    /// the image-to-video shape has one, and it is the graph's only plain <c>VAEDecode</c>.
+    /// </summary>
+    public static VAEDecodeNode BaseImage(WorkflowBridge bridge) =>
+        Assert.Single(bridge.Graph.NodesOfType<VAEDecodeNode>());
+
+    /// <summary>
     /// Selects a sampler by its seed. Under the production step list core can contribute samplers
     /// of its own, so counting or indexing samplers cannot identify a stage.
     /// </summary>

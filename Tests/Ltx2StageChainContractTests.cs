@@ -25,24 +25,6 @@ public class Ltx2StageChainContractTests
     /// <summary>A latent-model upscale doubles 512 to this.</summary>
     private const int UpscaledEdge = 1024;
 
-    private static LTXVConcatAVLatentNode JointLatentOf(SwarmKSamplerNode sampler) =>
-        Assert.IsType<LTXVConcatAVLatentNode>(sampler.LatentImage.Connection?.Node);
-
-    /// <summary>The split of a stage's sampled joint latent — its video and audio handoff.</summary>
-    private static LTXVSeparateAVLatentNode OutputOf(
-        WorkflowBridge bridge,
-        SwarmKSamplerNode sampler) =>
-        Assert.Single(
-            bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>(),
-            separate => ReferenceEquals(separate.AvLatent.Connection?.Node, sampler));
-
-    /// <summary>
-    /// Core's base-image decode, the node an authored <c>Base</c> reference must resolve to. Only
-    /// the image-to-video shape has one, and it is the graph's only plain <c>VAEDecode</c>.
-    /// </summary>
-    private static VAEDecodeNode BaseImage(WorkflowBridge bridge) =>
-        Assert.Single(bridge.Graph.NodesOfType<VAEDecodeNode>());
-
     /// <summary>The <c>ImageScale</c> that fits a guide image to the stage resolution.</summary>
     private static ImageScaleNode FramingOf(LTXVImgToVideoInplaceNode guide) =>
         Assert.IsType<ImageScaleNode>(
@@ -57,8 +39,7 @@ public class Ltx2StageChainContractTests
     public async Task Stage_zero_injects_the_host_base_image_as_its_guide_exactly_once()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(fixture.Stage(control: 0.5));
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage(control: 0.5));
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
@@ -91,9 +72,7 @@ public class Ltx2StageChainContractTests
         Assert.Equal(videoDecode.Id, $"{generator.CurrentMedia.Path[0]}");
 
         live.AssertAllLive(preprocess, guide, sampler, videoDecode, audioDecode);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -109,8 +88,7 @@ public class Ltx2StageChainContractTests
         int expectedTrimNodes)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject clip = MakeClip(fixture.Stage(control: 0.5));
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage(control: 0.5));
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(clip),
@@ -140,17 +118,14 @@ public class Ltx2StageChainContractTests
         }
 
         live.AssertAllLive(StageSampler(bridge, 0));
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     [Fact]
     public async Task Final_decode_uses_the_requests_vae_tiling_overrides()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject clip = MakeClip(fixture.Stage(control: 0.5));
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage(control: 0.5));
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(clip),
@@ -172,17 +147,14 @@ public class Ltx2StageChainContractTests
         Assert.Equal(12, decode.TemporalOverlap.LiteralAsInt());
 
         live.AssertAllLive(decode);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     [Fact]
     public async Task Stage_guide_uses_the_core_default_strength_without_a_ref_override()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(fixture.Stage("Base", control: 0.5));
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage("Base", control: 0.5));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -193,9 +165,7 @@ public class Ltx2StageChainContractTests
         Assert.Equal(1.0, guide.Strength.LiteralAsDouble());
 
         live.AssertAllLive(guide, StageSampler(bridge, 0));
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -240,9 +210,7 @@ public class Ltx2StageChainContractTests
         }
 
         live.AssertAllLive(sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -272,9 +240,7 @@ public class Ltx2StageChainContractTests
         Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
 
         live.AssertAllLive(StageSampler(bridge, 0));
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -319,9 +285,7 @@ public class Ltx2StageChainContractTests
         Assert.Same(crop.Latent, decode.Samples.Connection);
 
         live.AssertAllLive(conditioning, addGuide, sampler, crop, decode);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -336,11 +300,10 @@ public class Ltx2StageChainContractTests
         double scale)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(
+        JObject clip = MakeClip(1.0, 
             fixture.Stage(control: 0.5),
             fixture.Stage("PreviousStage", control: 0.5, upscale: scale,
                 upscaleMethod: "latent-bislerp"));
-        clip["duration"] = 1.0;
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -368,9 +331,7 @@ public class Ltx2StageChainContractTests
             splits.Select(split => split.AvLatent.Connection).Distinct().Count());
 
         live.AssertAllLive(scaler, guide, first, second);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -381,12 +342,11 @@ public class Ltx2StageChainContractTests
     public async Task A_latent_model_upscale_carries_both_the_latent_and_the_guide_forward()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(
+        JObject clip = MakeClip(1.0, 
             fixture.Stage(control: 0.5),
             fixture.Stage("PreviousStage", control: 0.5, upscale: 2.0,
                 upscaleMethod: LtxV23SpatialUpscaler),
             fixture.Stage("PreviousStage", control: 0.5));
-        clip["duration"] = 1.0;
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -415,9 +375,7 @@ public class Ltx2StageChainContractTests
             Assert.IsType<VAEDecodeTiledNode>(framing.Image.Connection?.Node).Samples.Connection);
 
         live.AssertAllLive(upsampler, lastGuide, first, upscaling, last);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -429,13 +387,12 @@ public class Ltx2StageChainContractTests
     public async Task A_pixel_upscale_after_a_latent_model_upscale_is_ignored()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(
+        JObject clip = MakeClip(1.0, 
             fixture.Stage(control: 0.5),
             fixture.Stage("PreviousStage", control: 0.5, upscale: 2.0,
                 upscaleMethod: LtxV23SpatialUpscaler),
             fixture.Stage("PreviousStage", control: 0.5, upscale: 2.0,
                 upscaleMethod: "pixel-lanczos"));
-        clip["duration"] = 1.0;
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -458,9 +415,7 @@ public class Ltx2StageChainContractTests
                 || scale.Height.LiteralAsInt() > UpscaledEdge);
 
         live.AssertAllLive(lastGuide, upscaling, last);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -472,8 +427,7 @@ public class Ltx2StageChainContractTests
     public async Task A_generated_reference_on_a_later_stage_skips_the_guide_entirely()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(fixture.Stage(control: 0.5), fixture.Stage(control: 0.5));
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage(control: 0.5), fixture.Stage(control: 0.5));
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
@@ -499,9 +453,7 @@ public class Ltx2StageChainContractTests
         Assert.Equal(decode.Id, $"{generator.CurrentMedia.Path[0]}");
 
         live.AssertAllLive(first, second, decode);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -513,8 +465,7 @@ public class Ltx2StageChainContractTests
     public async Task A_prehandler_pixel_wrapper_invalidates_the_prepared_latent_handoff()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(fixture.Stage(control: 0.5), fixture.Stage(control: 0.5));
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage(control: 0.5), fixture.Stage(control: 0.5));
 
         string wrapperId = null;
         Action<WorkflowGenerator.ImageToVideoGenInfo> wrapSecondStageSource = info =>
@@ -564,9 +515,7 @@ public class Ltx2StageChainContractTests
         Assert.True(ReachesUpstream(result, secondLatent, reEncode.Id));
 
         live.AssertAllLive(first, second, reEncode);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(result);
+        AssertShippable(result, workflow, live);
     }
 
     /// <summary>
@@ -578,11 +527,9 @@ public class Ltx2StageChainContractTests
     public async Task Each_clip_decodes_only_at_its_terminal_stage()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject first = MakeClip(fixture.Stage(control: 0.5), fixture.Stage(control: 0.5));
-        first["duration"] = 1.0;
+        JObject first = MakeClip(1.0, fixture.Stage(control: 0.5), fixture.Stage(control: 0.5));
         first["boundaryOut"] = Constants.BoundaryOutCut;
-        JObject second = MakeClip(fixture.Stage(control: 0.5), fixture.Stage(control: 0.5));
-        second["duration"] = 1.0;
+        JObject second = MakeClip(1.0, fixture.Stage(control: 0.5), fixture.Stage(control: 0.5));
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(first, second));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -617,9 +564,7 @@ public class Ltx2StageChainContractTests
         Assert.Same(batch, live.FinalVideoSave().Images.Connection?.Node);
 
         live.AssertAllLive([.. stages, batch]);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -634,10 +579,9 @@ public class Ltx2StageChainContractTests
         string secondStageReference)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(
+        JObject clip = MakeClip(1.0, 
             fixture.Stage("Base"),
             fixture.Stage(secondStageReference));
-        clip["duration"] = 1.0;
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -673,9 +617,7 @@ public class Ltx2StageChainContractTests
             Assert.IsType<LTXVAudioVAEDecodeNode>(save.Audio.Connection?.Node).Samples.Connection);
 
         live.AssertAllLive(first, second, secondGuide);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -689,11 +631,10 @@ public class Ltx2StageChainContractTests
     public async Task Reuse_audio_pins_every_later_stage_to_the_first_stages_audio(bool reuseAudio)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(
+        JObject clip = MakeClip(1.0, 
             fixture.Stage("Base"),
             fixture.Stage("PreviousStage"),
             fixture.Stage("PreviousStage"));
-        clip["duration"] = 1.0;
         clip["reuseAudio"] = reuseAudio;
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
@@ -713,9 +654,7 @@ public class Ltx2StageChainContractTests
             JointLatentOf(stages[2]).AudioLatent.Connection);
 
         live.AssertAllLive(stages);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -733,10 +672,9 @@ public class Ltx2StageChainContractTests
         int expectedPreprocessNodes)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(
+        JObject clip = MakeClip(1.0, 
             fixture.Stage(control: 0.5),
             fixture.Stage(secondStageReference, control: 0.5));
-        clip["duration"] = 1.0;
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -760,8 +698,6 @@ public class Ltx2StageChainContractTests
         Assert.Same(OutputOf(bridge, first).VideoLatent, secondGuide.LatentInput.Connection);
 
         live.AssertAllLive(first, second, secondGuide);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 }

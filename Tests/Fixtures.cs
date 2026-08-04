@@ -38,6 +38,38 @@ internal static class Fixtures
             ["stages"] = new JArray(stages)
         };
 
+    /// <summary>A clip of an authored length in seconds.</summary>
+    public static JObject MakeClip(double duration, params JObject[] stages)
+    {
+        JObject clip = MakeClip(stages);
+        clip["duration"] = duration;
+        return clip;
+    }
+
+    /// <summary>Uploaded footage a clip refines instead of generating from noise.</summary>
+    public static JObject SourceVideo() => new()
+    {
+        ["data"] = "data:video/mp4;base64," + Convert.ToBase64String([0xDE, 0xAD, 0xBE, 0xEF]),
+        ["fileName"] = "refine.mp4",
+        ["startSeconds"] = 0.0,
+    };
+
+    /// <summary>A retake is only honoured on a sourced clip with a usable duration; 4.0s is the
+    /// length <see cref="Ltx2WorkflowFixture.RetakeClipFrames"/> is derived from.</summary>
+    public static JObject RetakeClip(JObject retake, params JObject[] stages)
+    {
+        // Strip MakeStage's "Generated" default so the retake graph has no root donor — keeping it
+        // would pull in core's base sampler and a second guide chain.
+        stages[0].Remove("imageReference");
+        JObject clip = MakeClip(4.0, stages);
+        clip["initVideo"] = SourceVideo();
+        if (retake is not null)
+        {
+            clip["retake"] = retake;
+        }
+        return clip;
+    }
+
     public static JObject MakeClipWithRefs(IEnumerable<JObject> refs = null, params JObject[] stages) =>
         new()
         {
@@ -71,11 +103,41 @@ internal static class Fixtures
             },
         };
 
-    public static JObject UploadedAudio(string fileName = "clip.wav") =>
+    public static JObject UploadedAudio(string fileName = "clip.wav", string payload = "QUJD") =>
         new()
         {
-            ["data"] = "data:audio/wav;base64,QUJD",
+            ["data"] = $"data:audio/wav;base64,{payload}",
             ["fileName"] = fileName,
+        };
+
+    /// <summary>A root timeline audio lane; planning projects it onto every clip it overlaps.</summary>
+    public static JObject AudioTrack(
+        string id,
+        double volume,
+        string fileName,
+        params JObject[] spans) =>
+        new()
+        {
+            ["id"] = id,
+            ["volume"] = volume,
+            ["source"] = new JObject
+            {
+                ["kind"] = "Upload",
+                ["reference"] = fileName,
+                ["uploadedAudio"] = UploadedAudio(fileName),
+            },
+            ["spans"] = new JArray(spans.Cast<object>().ToArray()),
+        };
+
+    public static JObject AudioSpan(
+        double timelineStartSeconds,
+        double timelineLengthSeconds,
+        double sourceStartSeconds) =>
+        new()
+        {
+            ["timelineStartSeconds"] = timelineStartSeconds,
+            ["timelineLengthSeconds"] = timelineLengthSeconds,
+            ["sourceStartSeconds"] = sourceStartSeconds,
         };
 
     public static JObject MakeRootConfig(int width, int height, params JObject[] clips) =>

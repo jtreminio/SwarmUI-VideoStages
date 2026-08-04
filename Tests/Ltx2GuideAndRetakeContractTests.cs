@@ -14,30 +14,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class Ltx2GuideAndRetakeContractTests
 {
-    /// <summary>4.0s at 24 fps aligns up to 97 frames, which is 13 LTX latent frames.</summary>
-    private const int RetakeClipFrames = 97;
-
-    /// <summary>Uploaded footage a clip refines instead of generating from noise.</summary>
-    private static JObject SourceVideo() => new()
-    {
-        ["data"] = "data:video/mp4;base64," + Convert.ToBase64String([0xDE, 0xAD, 0xBE, 0xEF]),
-        ["fileName"] = "refine.mp4",
-        ["startSeconds"] = 0.0,
-    };
-
-    /// <summary>A retake is only honoured on a sourced clip with a usable duration.</summary>
-    private static JObject RetakeClip(JObject retake, params JObject[] stages)
-    {
-        // Strip MakeStage's "Generated" default so the retake graph has no root donor — keeping it
-        // would pull in core's base sampler and a second guide chain.
-        stages[0].Remove("imageReference");
-        JObject clip = MakeClip(stages);
-        clip["duration"] = 4.0;
-        clip["initVideo"] = SourceVideo();
-        clip["retake"] = retake;
-        return clip;
-    }
-
     /// <summary>
     /// The image feeding the in-place guide a stage sampler consumes. Node ids are allocation
     /// order, not stage order, so the guide has to be reached through the sampler that uses it.
@@ -62,8 +38,7 @@ public class Ltx2GuideAndRetakeContractTests
     public async Task Authored_guide_uses_the_clips_green_fit_framing()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(fixture.Stage("Base"));
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage("Base"));
         clip["refFraming"] = Constants.ReferenceFramingFitGreen;
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
@@ -86,9 +61,7 @@ public class Ltx2GuideAndRetakeContractTests
             "The stage guide does not trace back through the clip's framing node.");
 
         live.AssertAllLive(frame, sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -110,8 +83,7 @@ public class Ltx2GuideAndRetakeContractTests
         string source)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(fixture.Stage(), fixture.Stage(source));
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage(), fixture.Stage(source));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(
             MakeDocument(clip),
@@ -139,17 +111,14 @@ public class Ltx2GuideAndRetakeContractTests
         Assert.True(ReachesUpstream(bridge, guideImage, baseSampler.Id));
 
         live.AssertAllLive(baseSampler, refinerSampler, stageSampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     [Fact]
     public async Task Authored_stage_reference_drives_the_selected_stage_guide()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(fixture.Stage("Base"), fixture.Stage("Stage0"));
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage("Base"), fixture.Stage("Stage0"));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -163,9 +132,7 @@ public class Ltx2GuideAndRetakeContractTests
             "Stage0's selected guide does not trace to this clip's first stage.");
 
         live.AssertAllLive(stage0, stage1);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -175,10 +142,8 @@ public class Ltx2GuideAndRetakeContractTests
     public async Task Stage_reference_numbers_are_local_to_each_clip()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject first = MakeClip(fixture.Stage("Base"), fixture.Stage("Stage0"));
-        first["duration"] = 1.0;
-        JObject second = MakeClip(fixture.Stage("Base"), fixture.Stage("Stage0"));
-        second["duration"] = 1.0;
+        JObject first = MakeClip(1.0, fixture.Stage("Base"), fixture.Stage("Stage0"));
+        JObject second = MakeClip(1.0, fixture.Stage("Base"), fixture.Stage("Stage0"));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(first, second));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -197,9 +162,7 @@ public class Ltx2GuideAndRetakeContractTests
             "Clip 1 Stage0 incorrectly resolved to clip 0's first stage.");
 
         live.AssertAllLive(clip0Stage0, clip1Stage0, clip1Stage1);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -210,8 +173,7 @@ public class Ltx2GuideAndRetakeContractTests
     public async Task InitVideo_stage_zero_explicit_generated_reference_uses_the_captured_root()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject clip = MakeClip(fixture.Stage("Generated", control: 0.5));
-        clip["duration"] = 0.6;
+        JObject clip = MakeClip(0.6, fixture.Stage("Generated", control: 0.5));
         clip["initVideo"] = SourceVideo();
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
@@ -239,9 +201,7 @@ public class Ltx2GuideAndRetakeContractTests
             "The explicit Generated guide was replaced by the init-video footage.");
 
         live.AssertAllLive(initVideoWindow, hostRootLatent, stage);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -263,7 +223,7 @@ public class Ltx2GuideAndRetakeContractTests
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(clip),
-            post => post["text2videoframes"] = RetakeClipFrames);
+            post => post["text2videoframes"] = Ltx2WorkflowFixture.RetakeClipFrames);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -288,9 +248,7 @@ public class Ltx2GuideAndRetakeContractTests
             "Retake noise-mask samples input does not trace upstream to the loaded source video.");
 
         live.AssertAllLive(maskNode, loadVideo, sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -314,7 +272,7 @@ public class Ltx2GuideAndRetakeContractTests
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(clip),
-            post => post["text2videoframes"] = RetakeClipFrames);
+            post => post["text2videoframes"] = Ltx2WorkflowFixture.RetakeClipFrames);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -335,9 +293,7 @@ public class Ltx2GuideAndRetakeContractTests
         Assert.Equal(2, solids.Count(solid => solid.Value.LiteralAsDouble() == 0.0));
 
         live.AssertAllLive(maskNode);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -361,7 +317,7 @@ public class Ltx2GuideAndRetakeContractTests
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(clip),
-            post => post["text2videoframes"] = RetakeClipFrames);
+            post => post["text2videoframes"] = Ltx2WorkflowFixture.RetakeClipFrames);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -379,9 +335,7 @@ public class Ltx2GuideAndRetakeContractTests
                 && ReachesUpstream(bridge, last.LatentImage.Connection?.Node, node.Id));
 
         live.AssertAllLive(first, last, mask);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -403,7 +357,7 @@ public class Ltx2GuideAndRetakeContractTests
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(clip),
-            post => post["text2videoframes"] = RetakeClipFrames);
+            post => post["text2videoframes"] = Ltx2WorkflowFixture.RetakeClipFrames);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -423,8 +377,6 @@ public class Ltx2GuideAndRetakeContractTests
         Assert.Equal(97.0 / 24, maskByTime.EndTime.LiteralAsDouble()!.Value, precision: 6);
 
         live.AssertAllLive(maskNode, maskByTime);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 }

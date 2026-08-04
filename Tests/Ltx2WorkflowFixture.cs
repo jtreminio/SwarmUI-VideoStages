@@ -21,6 +21,9 @@ internal sealed class Ltx2WorkflowFixture : VideoStagesWorkflowFixture
     /// <summary>25 is already on LTX-2's 8k+1 grid.</summary>
     public const int GeneratedFrames = 25;
 
+    /// <summary>4.0s at 24 fps aligns up to 97 frames, which is 13 LTX latent frames.</summary>
+    public const int RetakeClipFrames = 97;
+
     private Ltx2WorkflowFixture(string modelFixturePath, bool withBaseModel)
         : base([modelFixturePath], withBaseModel)
     {

@@ -74,6 +74,9 @@ internal sealed class WorkflowLivePath
             .First();
     }
 
+    /// <summary>Whatever feeds the published save's audio input, if anything does.</summary>
+    public ComfyNode PublishedAudio() => FinalVideoSave().Audio.Connection?.Node;
+
     /// <summary>A save node satisfies the downstream half itself.</summary>
     public void AssertLive(ComfyNode node, string because = null)
     {

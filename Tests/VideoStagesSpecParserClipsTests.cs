@@ -67,17 +67,6 @@ public class VideoStagesSpecParserClipsTests
         return clip;
     }
 
-    private static JObject MakeUploadedAudio(
-        string data = "data:audio/wav;base64,QUJD",
-        string fileName = "clip.wav")
-    {
-        return new JObject
-        {
-            ["data"] = data,
-            ["fileName"] = fileName,
-        };
-    }
-
     private static T2IParamInput BuildInputWithJson(string json)
     {
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
@@ -561,11 +550,11 @@ public class VideoStagesSpecParserClipsTests
             MakeClip(
                 stages: [MakeStage("model-a")],
                 audioSource: Constants.AudioSourceUpload,
-                uploadedAudio: MakeUploadedAudio(fileName: "first.wav")),
+                uploadedAudio: UploadedAudio(fileName: "first.wav")),
             MakeClip(
                 stages: [MakeStage("model-b")],
                 audioSource: Constants.AudioSourceUpload,
-                uploadedAudio: MakeUploadedAudio(fileName: "second.wav"))
+                uploadedAudio: UploadedAudio(fileName: "second.wav"))
         ));
         WorkflowGenerator parser = BuildParser(json);
 
@@ -1497,35 +1486,22 @@ public class VideoStagesSpecParserClipsTests
     [Fact]
     public void Parse_RootTimelineAudioSegments_PreservesExecutableSourceWindowAndVolume()
     {
+        JObject span = AudioSpan(
+            timelineStartSeconds: 1.5,
+            timelineLengthSeconds: 2.5,
+            sourceStartSeconds: 4);
+        span["projection"] = new JObject
+        {
+            ["firstClipId"] = "clip-a",
+            ["lastClipId"] = "clip-a",
+            ["clipStartOffsetSeconds"] = 1.5,
+            ["clipEndOffsetSeconds"] = 4,
+        };
         JObject root = new()
         {
             ["clips"] = new JArray(MakeClip([MakeStage("ltx-2")], duration: 4)),
             ["audioTracks"] = new JArray(
-                new JObject
-                {
-                    ["id"] = "track-dialogue",
-                    ["volume"] = 0.75,
-                    ["source"] = new JObject
-                    {
-                        ["kind"] = "Upload",
-                        ["reference"] = "dialogue.wav",
-                        ["uploadedAudio"] = MakeUploadedAudio(fileName: "dialogue.wav"),
-                    },
-                    ["spans"] = new JArray(
-                        new JObject
-                        {
-                            ["timelineStartSeconds"] = 1.5,
-                            ["timelineLengthSeconds"] = 2.5,
-                            ["sourceStartSeconds"] = 4,
-                            ["projection"] = new JObject
-                            {
-                                ["firstClipId"] = "clip-a",
-                                ["lastClipId"] = "clip-a",
-                                ["clipStartOffsetSeconds"] = 1.5,
-                                ["clipEndOffsetSeconds"] = 4,
-                            },
-                        }),
-                }),
+                AudioTrack("track-dialogue", volume: 0.75, fileName: "dialogue.wav", span)),
         };
         ((JObject)((JArray)root["clips"])[0])["id"] = "clip-a";
 
@@ -1545,25 +1521,8 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(4, segment.LastClipOffsetSeconds);
     }
 
-    private static JObject MakeAudioTrack(string id, params JObject[] spans) => new()
-    {
-        ["id"] = id,
-        ["volume"] = 0.5,
-        ["source"] = new JObject
-        {
-            ["kind"] = "Upload",
-            ["reference"] = "score.wav",
-            ["uploadedAudio"] = MakeUploadedAudio(fileName: "score.wav"),
-        },
-        ["spans"] = new JArray(spans.Cast<object>().ToArray()),
-    };
-
-    private static JObject MakeAudioSpan(double start, double length, double sourceStart) => new()
-    {
-        ["timelineStartSeconds"] = start,
-        ["timelineLengthSeconds"] = length,
-        ["sourceStartSeconds"] = sourceStart,
-    };
+    private static JObject MakeAudioTrack(string id, params JObject[] spans) =>
+        AudioTrack(id, volume: 0.5, fileName: "score.wav", spans);
 
     [Fact]
     public void Parse_RootTimelineAudioSegments_MultiSpanTrackMatchesSplitSingleSpanLanes()
@@ -1582,11 +1541,11 @@ public class VideoStagesSpecParserClipsTests
         IReadOnlyList<TimelineAudioSegmentSpec> combined = ParseWithTracks(
             MakeAudioTrack(
                 "track-multi",
-                MakeAudioSpan(0, 1, 0),
-                MakeAudioSpan(3, 2, 5))).TimelineAudioSegments;
+                AudioSpan(0, 1, 0),
+                AudioSpan(3, 2, 5))).TimelineAudioSegments;
         IReadOnlyList<TimelineAudioSegmentSpec> split = ParseWithTracks(
-            MakeAudioTrack("track-multi:0", MakeAudioSpan(0, 1, 0)),
-            MakeAudioTrack("track-multi:1", MakeAudioSpan(3, 2, 5))).TimelineAudioSegments;
+            MakeAudioTrack("track-multi:0", AudioSpan(0, 1, 0)),
+            MakeAudioTrack("track-multi:1", AudioSpan(3, 2, 5))).TimelineAudioSegments;
 
         Assert.Equal(2, combined.Count);
         Assert.Equal(

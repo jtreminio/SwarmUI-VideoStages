@@ -21,8 +21,7 @@ public class Ltx2GeneratedWorkflowContractTests
     public async Task Basic_text_to_video_can_be_generated_from_the_Comfy_API_POST_body()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject clip = MakeClip(fixture.Stage());
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage());
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
@@ -39,8 +38,7 @@ public class Ltx2GeneratedWorkflowContractTests
 
         SwarmKSamplerNode sampler = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
         Assert.Equal(Ltx2WorkflowFixture.Steps, sampler.Steps.LiteralAsInt());
-        LTXVConcatAVLatentNode joint = Assert.IsType<LTXVConcatAVLatentNode>(
-            sampler.LatentImage.Connection?.Node);
+        LTXVConcatAVLatentNode joint = JointLatentOf(sampler);
         Assert.Same(latent, joint.VideoLatent.Connection?.Node);
 
         // The 2.3 branch: a dual CLIP loader (Gemma + text projection) and a separate audio VAE.
@@ -50,9 +48,7 @@ public class Ltx2GeneratedWorkflowContractTests
             bridge.Graph.NodesOfType<LTXVAudioVAEDecodeNode>());
 
         live.AssertAllLive(latent, joint, sampler, audioDecode);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -77,8 +73,7 @@ public class Ltx2GeneratedWorkflowContractTests
         string expected)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject clip = MakeClip(fixture.Stage());
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage());
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(clip),
@@ -101,9 +96,7 @@ public class Ltx2GeneratedWorkflowContractTests
             encoder => !string.IsNullOrWhiteSpace(encoder.Prompt.LiteralAsString()));
 
         live.AssertAllLive(positive, conditioning, sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -118,10 +111,8 @@ public class Ltx2GeneratedWorkflowContractTests
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         fixture.InstallModel("LoRA", "UnitTest_VideoClipLora.safetensors");
 
-        JObject plain = MakeClip(fixture.Stage());
-        plain["duration"] = 1.0;
-        JObject loraClip = MakeClip(fixture.Stage());
-        loraClip["duration"] = 1.0;
+        JObject plain = MakeClip(1.0, fixture.Stage());
+        JObject loraClip = MakeClip(1.0, fixture.Stage());
         loraClip["loras"] = new JArray(new JObject
         {
             ["name"] = "UnitTest_VideoClipLora",
@@ -144,9 +135,7 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.True(ReachesUpstream(bridge, loraSampler, lora.Id));
 
         live.AssertAllLive(lora, plainSampler, loraSampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     [Fact]
@@ -161,8 +150,7 @@ public class Ltx2GeneratedWorkflowContractTests
             ["name"] = "UnitTest_VideoClipStageLora",
             ["weight"] = 0.5,
         });
-        JObject clip = MakeClip(stage);
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, stage);
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -181,9 +169,7 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.All(encoders, encoder => Assert.Same(lora, encoder.Clip.Connection?.Node));
 
         live.AssertAllLive(lora, sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -196,8 +182,7 @@ public class Ltx2GeneratedWorkflowContractTests
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         fixture.InstallModel("LoRA", "UnitTest_ControlNetLora.safetensors");
 
-        JObject clip = MakeClip(fixture.Stage());
-        clip["duration"] = 1.0;
+        JObject clip = MakeClip(1.0, fixture.Stage());
         clip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_ControlNetLora",
@@ -219,9 +204,7 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.Same(icLora, sampler.Model.Connection?.Node);
 
         live.AssertAllLive(icLora, sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -232,8 +215,7 @@ public class Ltx2GeneratedWorkflowContractTests
     public async Task A_minor_prompt_window_and_its_gap_emit_a_wired_prompt_relay()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject clip = MakeClip(fixture.Stage());
-        clip["duration"] = 4.0;
+        JObject clip = MakeClip(4.0, fixture.Stage());
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(clip),
@@ -277,17 +259,14 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.Same(conditioning, sampler.Positive.Connection?.Node);
 
         live.AssertAllLive(relay, latent, conditioning, sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     [Fact]
     public async Task A_clip_with_no_prompt_windows_emits_no_relay()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject clip = MakeClip(fixture.Stage());
-        clip["duration"] = 4.0;
+        JObject clip = MakeClip(4.0, fixture.Stage());
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(clip),
@@ -305,9 +284,7 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.Equal("global words", positive.Prompt.LiteralAsString());
 
         live.AssertAllLive(positive, conditioning);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -318,11 +295,9 @@ public class Ltx2GeneratedWorkflowContractTests
     public async Task A_continue_target_delays_its_prompt_windows_behind_the_hidden_handle()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject lead = MakeClip(fixture.Stage());
-        lead["duration"] = 0.6;
+        JObject lead = MakeClip(0.6, fixture.Stage());
         lead["boundaryOut"] = Constants.BoundaryOutContinue;
-        JObject target = MakeClip(fixture.Stage());
-        target["duration"] = 0.6;
+        JObject target = MakeClip(0.6, fixture.Stage());
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(lead, target),
@@ -351,9 +326,7 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.True(ReachesUpstream(bridge, targetSampler, relay.Id));
 
         live.AssertAllLive(relay, targetLatent, targetSampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -364,8 +337,7 @@ public class Ltx2GeneratedWorkflowContractTests
     public async Task A_single_full_span_window_replaces_the_prompt_without_a_relay()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject clip = MakeClip(fixture.Stage());
-        clip["duration"] = 4.0;
+        JObject clip = MakeClip(4.0, fixture.Stage());
 
         JObject workflow = await fixture.GenerateAsync(
             MakeDocument(clip),
@@ -385,8 +357,6 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.Same(conditioning, sampler.Positive.Connection?.Node);
 
         live.AssertAllLive(positive, conditioning, sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 }
