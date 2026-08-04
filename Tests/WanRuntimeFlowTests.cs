@@ -102,7 +102,7 @@ public class WanRuntimeFlowTests
 
         (JObject workflow, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(
-                WanInput(models, steps: 10),
+                WithClipVision(WanInput(models, steps: 10), models),
                 WorkflowTestHarness.Template_BaseOnlyImage()
                     .Concat([
                         WorkflowTestHarness.CoreImageToVideoStep(),
@@ -501,9 +501,9 @@ public class WanRuntimeFlowTests
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 10));
         clip["refs"] = new JArray(UploadedWanReference("TEFTVA==", fromEnd: true));
-        T2IParamInput input = BuildTextToVideoInput(
-            models.VideoModel,
-            MakeDocument(clip).ToString());
+        T2IParamInput input = WithClipVision(
+            BuildTextToVideoInput(models.VideoModel, MakeDocument(clip).ToString()),
+            models);
         WorkflowGenerator.WorkflowGenStep clearUnusedRootDonor = new(g =>
         {
             g.CurrentMedia = null;
@@ -3186,7 +3186,7 @@ public class WanRuntimeFlowTests
                 Name = "Wan 2.1 Image2Video 14B",
             };
         }
-        T2IParamInput input = WanInput(models, steps: 10);
+        T2IParamInput input = WithClipVision(WanInput(models, steps: 10), models);
         input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
         string discardedHostConditioningId = null;
         WorkflowGenerator.WorkflowGenStep captureHostConditioning = new(g =>
@@ -4129,16 +4129,18 @@ public class WanRuntimeFlowTests
                 Name = "Wan 2.1 Video 14B",
             };
         }
-        T2IParamInput input = BuildNativeInput(
-            models.BaseModel,
-            models.VideoModel,
-            JsonSingleClipStages(
-                MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10),
-                MakeStage(
-                    models.VideoModel.Name,
-                    "PreviousStage",
-                    control: terminalControl,
-                    steps: 12)));
+        T2IParamInput input = WithClipVision(
+            BuildNativeInput(
+                models.BaseModel,
+                models.VideoModel,
+                JsonSingleClipStages(
+                    MakeStage(models.VideoModel.Name, "Generated", control: 1, steps: 10),
+                    MakeStage(
+                        models.VideoModel.Name,
+                        "PreviousStage",
+                        control: terminalControl,
+                        steps: 12))),
+            models);
         input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
 
         (JObject workflow, WorkflowGenerator generator) =
@@ -4465,6 +4467,17 @@ public class WanRuntimeFlowTests
         TestModelBundle models,
         int steps) =>
         WorkflowTestHarness.GenerateWithStepsAndState(WanInput(models, steps), WanSteps());
+
+    /// <summary>
+    /// A <c>wan-21-14b</c>/<c>wan-21-1_3b</c> compat class — which Wan 2.2 I2V 14B also carries —
+    /// routes core into <c>RequireVisionModel</c>, which downloads unless the request names the
+    /// model — see <see cref="TestModelFactory.InstallWanSupportModels"/>.
+    /// </summary>
+    private static T2IParamInput WithClipVision(T2IParamInput input, TestModelBundle models)
+    {
+        input.Set(T2IParamTypes.ClipVisionModel, models.VisionModel);
+        return input;
+    }
 
     private static T2IParamInput WanInput(TestModelBundle models, int steps) =>
         BuildNativeInput(

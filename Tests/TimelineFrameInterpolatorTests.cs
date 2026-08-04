@@ -223,8 +223,13 @@ public sealed class TimelineFrameInterpolatorTests
             "frameinterps");
     }
 
+    /// <summary>
+    /// A multiplier of 1 is the param's <c>IgnoreIf</c> value, so setting it removes the param
+    /// rather than storing it — interpolation is skipped for want of a request, not by the
+    /// <c>multiplier == 1</c> guard, which no caller can reach.
+    /// </summary>
     [Fact]
-    public void Multiplier_one_is_a_noop_without_a_method_or_features()
+    public void Multiplier_one_leaves_the_request_without_an_interpolation_setting()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();

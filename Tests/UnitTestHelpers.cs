@@ -95,11 +95,12 @@ internal static class UnitTestStubs
                 Name: "Video Frame Interpolation Multiplier",
                 Description: "Stub frame interpolation multiplier used by VideoStages unit tests.",
                 Default: "1",
+                IgnoreIf: "1",
                 FeatureFlag: "comfyui",
                 Group: T2IParamTypes.GroupAdvancedVideo,
                 Toggleable: true,
                 Min: 1,
-                Max: 8,
+                Max: 10,
                 Step: 1
             ));
         }
@@ -235,6 +236,8 @@ internal sealed class SwarmUiTestContext : IDisposable
     private readonly bool _priorIncludeHash;
     private readonly List<WorkflowGenerator.WorkflowGenStep> _priorModelGenSteps;
     private readonly ConcurrentDictionary<string, Func<string, Dictionary<string, JObject>>> _priorExtraModelProviders;
+    private readonly ConcurrentDictionary<string, string> _priorClipModelsValid;
+    private readonly ConcurrentDictionary<string, string> _priorVisionModelsValid;
 
     public SwarmUiTestContext(
         bool disableImageMetadataModelHash = true,
@@ -247,6 +250,12 @@ internal sealed class SwarmUiTestContext : IDisposable
         _priorIncludeHash = Program.ServerSettings.Metadata.ImageMetadataIncludeModelHash;
         _priorModelGenSteps = [.. WorkflowGenerator.ModelGenSteps];
         _priorExtraModelProviders = ModelsAPI.ExtraModelProviders;
+        // Never-cleared statics: once one test installs a support model, every later test passes
+        // without it, while the same test under --filter downloads. Green in suite, hangs alone.
+        _priorClipModelsValid = WorkflowGenerator.ClipModelsValid;
+        _priorVisionModelsValid = WorkflowGenerator.VisionModelsValid;
+        WorkflowGenerator.ClipModelsValid = new(_priorClipModelsValid);
+        WorkflowGenerator.VisionModelsValid = new(_priorVisionModelsValid);
 
         if (disableImageMetadataModelHash)
         {
@@ -267,6 +276,8 @@ internal sealed class SwarmUiTestContext : IDisposable
 
     public void Dispose()
     {
+        WorkflowGenerator.VisionModelsValid = _priorVisionModelsValid;
+        WorkflowGenerator.ClipModelsValid = _priorClipModelsValid;
         WorkflowGenerator.ModelGenSteps = _priorModelGenSteps;
         ModelsAPI.ExtraModelProviders = _priorExtraModelProviders;
         Program.T2IModelSets = new Dictionary<string, T2IModelHandler>(_priorModelSets);
@@ -274,7 +285,11 @@ internal sealed class SwarmUiTestContext : IDisposable
     }
 }
 
-internal sealed record TestModelBundle(T2IModel BaseModel, T2IModel VideoModel, T2IModel GemmaModel = null);
+internal sealed record TestModelBundle(
+    T2IModel BaseModel,
+    T2IModel VideoModel,
+    T2IModel GemmaModel = null,
+    T2IModel VisionModel = null);
 
 internal sealed record MixedVideoModelBundle(
     T2IModel BaseModel,
@@ -340,6 +355,25 @@ internal static class TestModelFactory
         Install("VAE", CommonModels.Known["minimax-h3-audio-vae"].FileName);
     }
 
+    /// <summary>
+    /// The four support models core's LTX-2.3 loader branch resolves. Names must match
+    /// <c>WorkflowGeneratorModelSupport</c> exactly — a miss does not fail, it downloads.
+    /// </summary>
+    public static void InstallLtx2SupportModels()
+    {
+        EnsureModelSet("Stable-Diffusion");
+        EnsureModelSet("Clip");
+        Program.T2IModelSets["VAE"] = new() { ModelType = "VAE" };
+        if (CommonModels.Known.IsEmpty)
+        {
+            CommonModels.RegisterCoreSet();
+        }
+        Install("Clip", "gemma_3_12B_it.safetensors");
+        Install("Clip", "LTX-2/ltx-2.3_text_projection_bf16.safetensors");
+        Install("VAE", CommonModels.Known["ltx2-3-video-vae"].FileName);
+        Install("VAE", CommonModels.Known["ltx2-3-audio-vae"].FileName);
+    }
+
     private static void EnsureModelSet(string modelType)
     {
         if (!Program.T2IModelSets.ContainsKey(modelType))
@@ -355,8 +389,7 @@ internal static class TestModelFactory
             WanArchitectureModule.ImageToVideoModelClassId,
             "Wan 2.2 Image2Video 14B");
         // WAN resolves its CLIP and VAE support models through the host registries.
-        InstallWanSupportModels();
-        return models;
+        return models with { VisionModel = InstallWanSupportModels() };
     }
 
     public static TestModelBundle CreateBaseAndWan22Ti2v5bModels()
@@ -370,8 +403,7 @@ internal static class TestModelFactory
             StandardWidth = 960,
             StandardHeight = 960,
         };
-        InstallWanSupportModels();
-        return models;
+        return models with { VisionModel = InstallWanSupportModels() };
     }
 
     public static MixedVideoModelBundle CreateBaseLtxv2AndWan22ImageToVideoModels()
@@ -417,8 +449,22 @@ internal static class TestModelFactory
         return (ltx.BaseModel, ltx.VideoModel, miniMax);
     }
 
-    private static void InstallWanSupportModels()
+    public const string WanClipVisionFileName = "clip_vision_h.safetensors";
+
+    /// <summary>
+    /// Returns the CLIP-vision stub. Models whose compat class is <c>wan-21-14b</c> or
+    /// <c>wan-21-1_3b</c> — which includes Wan 2.2 I2V 14B, so the model class ID is not the
+    /// discriminator — route core into
+    /// <c>RequireVisionModel</c>, which — unlike <c>RequireClipModel</c> — has no "already
+    /// installed" fallback and downloads 1.2 GB unless the request names the model itself, so
+    /// callers reaching that branch must set <see cref="T2IParamTypes.ClipVisionModel"/>. Stubbing
+    /// it under core's own file name keeps the generated <c>CLIPVisionLoader</c> unchanged.
+    /// </summary>
+    public static T2IModel InstallWanSupportModels()
     {
+        EnsureModelSet("Stable-Diffusion");
+        EnsureModelSet("Clip");
+        EnsureModelSet("ClipVision");
         Program.T2IModelSets["VAE"] = new() { ModelType = "VAE" };
         if (CommonModels.Known.IsEmpty)
         {
@@ -427,6 +473,9 @@ internal static class TestModelFactory
         Install("Clip", "umt5_xxl_fp8_e4m3fn_scaled.safetensors");
         Install("VAE", CommonModels.Known["wan21-vae"].FileName);
         Install("VAE", CommonModels.Known["wan22-vae"].FileName);
+        return TestStubModel.Install(
+            Program.T2IModelSets["ClipVision"],
+            WanClipVisionFileName);
     }
 
     private static void Install(string modelType, string fileName)

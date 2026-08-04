@@ -27,7 +27,8 @@ internal static class ComfyWorkflowApiTestHarness
 
     public static async Task<JObject> GenerateAsync(
         JObject postParameters,
-        IEnumerable<string> extraFeatures = null)
+        IEnumerable<string> extraFeatures = null,
+        IEnumerable<WorkflowGenerator.WorkflowGenStep> extraSteps = null)
     {
         ArgumentNullException.ThrowIfNull(postParameters);
         UnitTestStubs.EnsureComfyWorkflowParamsRegistered();
@@ -38,8 +39,10 @@ internal static class ComfyWorkflowApiTestHarness
         try
         {
             ComfyUIBackendExtension.FeaturesSupported =
-                [.. priorFeatures, .. extraFeatures ?? SwarmNodeFeatures];
-            WorkflowGenerator.Steps = [.. WorkflowTestHarness.ProductionSteps()];
+                [.. priorFeatures, .. SwarmNodeFeatures, .. extraFeatures ?? []];
+            WorkflowGenerator.Steps = [.. WorkflowTestHarness.ProductionSteps()
+                .Concat(extraSteps ?? [])
+                .OrderBy(step => step.Priority)];
             InstallNoNetworkComfyBackend();
             JObject response = await ComfyUIWebAPI.ComfyGetGeneratedWorkflow(
                 CreateSession(),
@@ -61,6 +64,25 @@ internal static class ComfyWorkflowApiTestHarness
             WorkflowGenerator.Steps = priorSteps;
             ComfyUIBackendExtension.FeaturesSupported = priorFeatures;
         }
+    }
+
+    /// <summary>
+    /// The API route builds a <see cref="WorkflowGenerator"/> and discards it, but a step ordered
+    /// after core's post-cleanup (200) still receives it, and its <c>Workflow</c> is the object the
+    /// route serialises. This is how generator-state assertions survive the move off the stub
+    /// harness.
+    /// </summary>
+    public static async Task<(JObject Workflow, WorkflowGenerator Generator)> GenerateWithStateAsync(
+        JObject postParameters,
+        IEnumerable<string> extraFeatures = null)
+    {
+        WorkflowGenerator generator = null;
+        JObject workflow = await GenerateAsync(
+            postParameters,
+            extraFeatures,
+            [new(g => generator = g, double.MaxValue)]);
+        return (workflow, generator ?? throw new InvalidOperationException(
+            "The capture step never ran, so a step set SkipFurtherSteps before it."));
     }
 
     private static void InstallNoNetworkComfyBackend()

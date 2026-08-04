@@ -202,23 +202,6 @@ public class MiniMaxGeneratedWorkflowContractTests
     }
 
     /// <summary>
-    /// <c>CompatMiniMaxH3.LorasTargetTextEnc</c> is false, so the authored textEncoderWeight is
-    /// dropped and there is no strength_clip.
-    /// </summary>
-    private static void AssertModelOnlyLora(
-        IEnumerable<ComfyNode> loras,
-        string fileName,
-        double modelWeight)
-    {
-        ComfyNode lora = Assert.Single(
-            loras,
-            node => node.FindInput("lora_name").LiteralAsString() == fileName);
-        Assert.IsType<LoraLoaderModelOnlyNode>(lora);
-        Assert.Equal(modelWeight, lora.FindInput("strength_model").LiteralAsDouble());
-        Assert.Null(lora.FindInput("strength_clip"));
-    }
-
-    /// <summary>
     /// Without <c>comfy_loadimage_b64</c> core loads the upload as a bare image with no attached
     /// audio and no FPS reference, so only this path exercises the conform chain end to end.
     /// </summary>
@@ -457,18 +440,6 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertAcyclic(bridge);
     }
 
-    private static JObject UploadedAudio() =>
-        new()
-        {
-            ["data"] = "data:audio/wav;base64,QUJD",
-            ["fileName"] = "clip.wav",
-        };
-
-    private static SwarmKSamplerNode StageSampler(
-        IEnumerable<SwarmKSamplerNode> samplers,
-        long seed) =>
-        Assert.Single(samplers, sampler => sampler.NoiseSeed.LiteralAsLong() == seed);
-
     [Fact]
     public async Task Two_clips_cut_together_into_one_published_video()
     {
@@ -676,7 +647,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
-        clip["refs"] = new JArray(HostReference(source, fromEnd: false));
+        clip["refs"] = new JArray(MakeRef(source));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(
             MakeDocument(clip),
@@ -689,9 +660,8 @@ public class MiniMaxGeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        List<SwarmKSamplerNode> samplers = SamplerNodesOrdered(bridge);
-        SwarmKSamplerNode baseSampler = StageSampler(samplers, MiniMaxWorkflowFixture.Seed);
-        SwarmKSamplerNode refinerSampler = StageSampler(samplers, MiniMaxWorkflowFixture.Seed + 1);
+        SwarmKSamplerNode baseSampler = fixture.BaseSampler(bridge);
+        SwarmKSamplerNode refinerSampler = fixture.RefinerSampler(bridge);
 
         SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
             bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
@@ -875,7 +845,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
-        clip["refs"] = new JArray(HostReference("Base", fromEnd: false));
+        clip["refs"] = new JArray(MakeRef("Base"));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -901,32 +871,6 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
     }
-
-    /// <summary>
-    /// An unconnected input is fine — the reference was dropped — so callers must assert
-    /// connectedness themselves.
-    /// </summary>
-    private static void AssertImageSource(ComfyNode source, string inputName)
-    {
-        if (source is null)
-        {
-            return;
-        }
-        Assert.False(
-            source is EmptyMiniMaxH3LatentAVNode or LTXVConcatAVLatentNode
-                or SetLatentNoiseMaskNode or EmptyLatentImageNode or VAEEncodeNode
-                or SwarmKSamplerNode or KSamplerAdvancedNode,
-            $"{inputName} is fed by {source.ClassTypeName} (node {source.Id}), which produces a "
-                + "latent, not an image.");
-    }
-
-    private static JObject HostReference(string source, bool fromEnd) =>
-        new()
-        {
-            ["source"] = source,
-            ["frame"] = 1,
-            ["fromEnd"] = fromEnd,
-        };
 
     /// <summary>
     /// No cleanup pass sweeps <c>TrimAudioDuration</c>, so the discarded source-audio branch must
@@ -995,19 +939,6 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);
     }
-
-    private static JObject UploadedReference(string payload, bool fromEnd, int frame = 1) =>
-        new()
-        {
-            ["source"] = "Upload",
-            ["frame"] = frame,
-            ["fromEnd"] = fromEnd,
-            ["uploadedImage"] = new JObject
-            {
-                ["data"] = $"data:image/png;base64,{payload}",
-                ["fileName"] = "ref.png",
-            },
-        };
 
     /// <summary>
     /// The only assertion anywhere that <c>preserveAttachedAudio</c> reaches the published save.

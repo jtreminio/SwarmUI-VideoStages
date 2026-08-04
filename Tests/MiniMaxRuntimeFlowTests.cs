@@ -689,8 +689,8 @@ public class MiniMaxRuntimeFlowTests
         JObject clip = MakeClip(
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
         clip["refs"] = new JArray(
-            HostReference("Refiner", fromEnd: false),
-            HostReference("Refiner", fromEnd: true));
+            MakeRef("Refiner"),
+            MakeRef("Refiner", fromEnd: true));
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -1099,19 +1099,6 @@ public class MiniMaxRuntimeFlowTests
         AssertAcyclic(bridge);
     }
 
-    private static JObject UploadedReference(string payload, bool fromEnd) =>
-        new()
-        {
-            ["source"] = "Upload",
-            ["frame"] = 1,
-            ["fromEnd"] = fromEnd,
-            ["uploadedImage"] = new JObject
-            {
-                ["data"] = $"data:image/png;base64,{payload}",
-                ["fileName"] = fromEnd ? "last.png" : "first.png",
-            },
-        };
-
     private static JObject MiniMaxInitVideoClip(params JObject[] stages)
     {
         JObject clip = MakeClip(stages);
@@ -1124,14 +1111,6 @@ public class MiniMaxRuntimeFlowTests
         };
         return clip;
     }
-
-    private static JObject HostReference(string source, bool fromEnd) =>
-        new()
-        {
-            ["source"] = source,
-            ["frame"] = 1,
-            ["fromEnd"] = fromEnd,
-        };
 
     private static IEnumerable<WorkflowGenerator.WorkflowGenStep> MiniMaxSteps() =>
         WorkflowTestHarness.Template_BaseOnlyImage()

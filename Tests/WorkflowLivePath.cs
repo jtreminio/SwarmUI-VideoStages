@@ -126,6 +126,23 @@ internal sealed class WorkflowLivePath
                 + string.Join("\n  ", orphans));
     }
 
+    /// <summary>
+    /// The counterpart for <c>donotsave</c> requests, which by design produce a graph with no
+    /// output node at all — the state <see cref="FinalVideoSave"/> and
+    /// <see cref="AssertNoOrphanNodes"/> both hard-fail on.
+    /// </summary>
+    public void AssertNoPublishedOutput()
+    {
+        string[] outputs = [.. _bridge.Graph.Nodes.Values
+            .Where(IsOutputNode)
+            .Select(node => $"{node.ClassTypeName}#{node.Id}")
+            .Order()];
+        Assert.True(
+            outputs.Length == 0,
+            "Workflow publishes output nodes it was asked not to save:\n  "
+                + string.Join("\n  ", outputs));
+    }
+
     private static bool IsOutputNode(ComfyNode node) =>
         node is SwarmSaveAnimationWSNode or SwarmSaveImageWSNode or SaveImageNode or PreviewImageNode;
 

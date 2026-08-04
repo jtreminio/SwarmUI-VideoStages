@@ -373,19 +373,6 @@ public class MiniMaxArchitectureTests
                 == "effective-request.minimax-middle-frame-reference-ignored");
     }
 
-    private static JObject UploadedReference(bool fromEnd, int frame) =>
-        new()
-        {
-            ["source"] = "Upload",
-            ["frame"] = frame,
-            ["fromEnd"] = fromEnd,
-            ["uploadedImage"] = new JObject
-            {
-                ["data"] = "data:image/png;base64,AAAA",
-                ["fileName"] = fromEnd ? "last.png" : "first.png",
-            },
-        };
-
     private static IReadOnlyList<PlanDiagnostic> CompileDiagnostics(
         TestModelBundle models,
         params JObject[] stages) =>

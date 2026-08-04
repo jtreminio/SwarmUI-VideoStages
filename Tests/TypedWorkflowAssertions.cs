@@ -63,6 +63,50 @@ internal static class TypedWorkflowAssertions
         }
     }
 
+    /// <summary>
+    /// Selects a sampler by its seed. Under the production step list core can contribute samplers
+    /// of its own, so counting or indexing samplers cannot identify a stage.
+    /// </summary>
+    public static SwarmKSamplerNode StageSampler(
+        IEnumerable<SwarmKSamplerNode> samplers,
+        long seed) =>
+        Assert.Single(samplers, sampler => sampler.NoiseSeed.LiteralAsLong() == seed);
+
+    /// <summary>
+    /// For architectures whose compat class sets <c>LorasTargetTextEnc</c> false: the authored
+    /// textEncoderWeight is dropped and there is no strength_clip.
+    /// </summary>
+    public static void AssertModelOnlyLora(
+        IEnumerable<ComfyNode> loras,
+        string fileName,
+        double modelWeight)
+    {
+        ComfyNode lora = Assert.Single(
+            loras,
+            node => node.FindInput("lora_name").LiteralAsString() == fileName);
+        Assert.IsType<LoraLoaderModelOnlyNode>(lora);
+        Assert.Equal(modelWeight, lora.FindInput("strength_model").LiteralAsDouble());
+        Assert.Null(lora.FindInput("strength_clip"));
+    }
+
+    /// <summary>
+    /// An unconnected input is fine — the reference was dropped — so callers must assert
+    /// connectedness themselves.
+    /// </summary>
+    public static void AssertImageSource(ComfyNode source, string inputName)
+    {
+        if (source is null)
+        {
+            return;
+        }
+        Assert.False(
+            source is EmptyMiniMaxH3LatentAVNode or LTXVConcatAVLatentNode
+                or SetLatentNoiseMaskNode or EmptyLatentImageNode or VAEEncodeNode
+                or SwarmKSamplerNode or KSamplerAdvancedNode,
+            $"{inputName} is fed by {source.ClassTypeName} (node {source.Id}), which produces a "
+                + "latent, not an image.");
+    }
+
     public static List<SwarmKSamplerNode> SamplerNodesOrdered(WorkflowBridge bridge)
     {
         return bridge.Graph.NodesOfType<SwarmKSamplerNode>()

@@ -53,6 +53,31 @@ internal static class Fixtures
             ["fromEnd"] = fromEnd
         };
 
+    /// <summary>A clip reference carrying its own uploaded image.</summary>
+    public static JObject UploadedReference(
+        string payload = "AAAA",
+        bool fromEnd = false,
+        int frame = 1,
+        string fileName = null) =>
+        new()
+        {
+            ["source"] = "Upload",
+            ["frame"] = frame,
+            ["fromEnd"] = fromEnd,
+            ["uploadedImage"] = new JObject
+            {
+                ["data"] = $"data:image/png;base64,{payload}",
+                ["fileName"] = fileName ?? (fromEnd ? "last.png" : "first.png"),
+            },
+        };
+
+    public static JObject UploadedAudio(string fileName = "clip.wav") =>
+        new()
+        {
+            ["data"] = "data:audio/wav;base64,QUJD",
+            ["fileName"] = fileName,
+        };
+
     public static JObject MakeRootConfig(int width, int height, params JObject[] clips) =>
         new()
         {
