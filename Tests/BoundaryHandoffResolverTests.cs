@@ -23,7 +23,7 @@ public class BoundaryHandoffResolverTests
 
     private static WorkflowGenerator NewGenerator()
     {
-        // Side-effect: registers the VideoStages node types used by the carry builder.
+        // Side-effect: registers the VideoStages node types used by boundary audio carry.
         _ = WorkflowTestHarness.VideoStagesSteps();
         JObject workflow = [];
         WorkflowGenerator g = new()
@@ -86,8 +86,8 @@ public class BoundaryHandoffResolverTests
     private static (BoundaryHandoffResolver Resolver, TimelineAssemblySession Assembly, ClipContext Context)
         Arrange(WorkflowGenerator g, VideoExecutionPlan plan) =>
         (new BoundaryHandoffResolver(
-                new ContinuityGuideBuilder(g),
-                new LtxBoundaryAudioCarryBuilder(g)),
+                g,
+                new ContinuityGuideBuilder(g)),
             new TimelineAssemblySession(g, new MultiClipParallelMerger(g), plan),
             new ClipContext(plan, plan.Clips[1], null, null));
 

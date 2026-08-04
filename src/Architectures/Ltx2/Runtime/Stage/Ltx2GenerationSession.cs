@@ -45,7 +45,12 @@ internal sealed class Ltx2GenerationSession(
             g.CurrentMedia = initVideoMedia;
         }
 
-        PrepareClipAudio(context, clipContext, initVideoMedia, boundaryAudioCarry);
+        audioTimelineExecutor.PrepareClipAudio(
+            context,
+            clipContext,
+            initVideoMedia,
+            rootSources.AudioSources,
+            boundaryAudioCarry);
         RuntimeArtifact output = CaptureRuntimeArtifact();
         foreach (StagePlan stage in clip.Stages)
         {
@@ -119,30 +124,6 @@ internal sealed class Ltx2GenerationSession(
             context.PreviousClipOutput?.ToHostMedia(g),
             context.Clip,
             clipContext);
-    }
-
-    private void PrepareClipAudio(
-        ArchitectureClipRuntimeContext context,
-        ClipContext clipContext,
-        WGNodeData initVideoMedia,
-        LtxBoundaryAudioCarry boundaryAudioCarry)
-    {
-        ClipPlan clip = context.Clip;
-        StagePlan firstStage = clip.Stages.FirstOrDefault();
-        audioTimelineExecutor.ApplyControlNetClipLength(clip);
-        AudioRuntimeSources clipAudioSources =
-            initVideoMedia?.AttachedAudio is WGNodeData initVideoAudio
-                ? rootSources.AudioSources with { NativeAudio = initVideoAudio }
-                : rootSources.AudioSources;
-        audioTimelineExecutor.PrepareClipAudio(new(
-            firstStage,
-            clip,
-            session.Plan.FramesPerSecond,
-            IsFirstClip: context.ClipIndex == 0,
-            clipAudioSources,
-            session.Plan.Root),
-            clipContext,
-            boundaryAudioCarry);
     }
 
     private void ExecuteStage(

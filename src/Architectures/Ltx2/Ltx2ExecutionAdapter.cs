@@ -114,8 +114,8 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             audioTimelineExecutor,
             guideReferences,
             new BoundaryHandoffResolver(
-                new ContinuityGuideBuilder(generator),
-                new LtxBoundaryAudioCarryBuilder(generator)),
+                generator,
+                new ContinuityGuideBuilder(generator)),
             rootSources,
             context);
     }

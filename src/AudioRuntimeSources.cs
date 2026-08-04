@@ -1,5 +1,4 @@
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Planning;
 
 namespace VideoStages;
 
@@ -8,12 +7,3 @@ internal sealed record AudioRuntimeSources(
     WGNodeData NativeAudio,
     IReadOnlyDictionary<int, WGNodeData> ClipAudios,
     IReadOnlyDictionary<int, WGNodeData> UploadedAudios);
-
-/// <summary>One compiled clip entering runtime audio preparation.</summary>
-internal sealed record ClipAudioExecutionContext(
-    StagePlan FirstStage,
-    ClipPlan PlannedClip,
-    int FramesPerSecond,
-    bool IsFirstClip,
-    AudioRuntimeSources Sources,
-    RootPlan Root);
