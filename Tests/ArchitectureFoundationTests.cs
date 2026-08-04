@@ -65,8 +65,6 @@ public class ArchitectureFoundationTests
             RootEnvironment.FromSpec(spec),
             result);
 
-        // The resolver derives identity from the stage-0 model alone, so a stale hint is not its
-        // concern at all; only the effective-request projection reports it.
         Assert.Empty(result.Diagnostics);
         Assert.Contains(
             plan.Diagnostics,
@@ -105,7 +103,6 @@ public class ArchitectureFoundationTests
         IVideoArchitectureRegistry restricted =
             production.ForSession(RestrictedSession(models.VideoModel.Name));
 
-        // A missing request user means there is no authorization context to apply.
         Assert.Same(production, production.ForSession(null));
         Assert.Same(production, production.ForSession(new Session()));
         Assert.Contains(
@@ -264,8 +261,6 @@ public class ArchitectureFoundationTests
             Spec(clip),
             new FakeRegistry(undeclaredFakeProfile: true));
 
-        // A profile the architecture never declared is carried through silently: the resolver
-        // owns architecture identity, not the profile alias, so it says nothing.
         Assert.Empty(result.Diagnostics);
         Assert.Equal(
             "ghost-profile",
@@ -340,8 +335,6 @@ public class ArchitectureFoundationTests
             ArchitecturePlanResolver.Resolve(Spec(clip), new FakeRegistry());
 
         Assert.Equal(NoneArchitecture.Id, result.Clips[0].Architecture.Id);
-        // One architecture and one host compatibility class across both dormant stages: differing
-        // profile aliases are not a same-architecture violation of any kind.
         Assert.Empty(result.Diagnostics);
     }
 
@@ -653,8 +646,6 @@ public class ArchitectureFoundationTests
                 descriptor,
                 ArchitectureEntryMode.ImageToVideo);
 
-        // The audio-duration rule only ever warns, and every external kind can supply a length,
-        // so the whole capability pass has nothing to say about this clip.
         Assert.Empty(diagnostics);
     }
 
@@ -679,8 +670,6 @@ public class ArchitectureFoundationTests
             diagnostic => diagnostic.Code
                     == "audio.length.source_cannot_drive_duration"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
-        // LTX declares AudioDerivedDuration, so the feature itself is never refused; only the
-        // native source's inability to supply a length is reported.
         Assert.DoesNotContain(
             diagnostics,
             diagnostic => diagnostic.Code
@@ -706,8 +695,6 @@ public class ArchitectureFoundationTests
         ClipPlan compiled = Assert.Single(plan.Clips);
         Assert.NotNull(compiled.ArchitecturePayload);
         Assert.Equal(AudioLengthOwner.Timeline, compiled.Audio.Length.Owner);
-        // The authored length still snaps to the model's frame grid, exactly as it does
-        // without the flag; nothing derives a length from the native source.
         Assert.Equal(33, compiled.Frames);
         Assert.Equal(Assert.Single(authoredLengthPlan.Clips).Frames, compiled.Frames);
     }
@@ -1277,7 +1264,6 @@ public class ArchitectureFoundationTests
             none["capabilities"]["audioSourceKinds"].Values<string>());
         JObject noneCrossfade = (JObject)none["boundaryRules"]["crossfade"];
         Assert.Equal("unsupported", noneCrossfade["support"]);
-        // An unsupported rule publishes an explicitly null constraint block, not an empty one.
         Assert.Equal(JTokenType.Null, noneCrossfade["constraints"].Type);
         JObject ltx = Assert.Single(
             architectures.Values<JObject>(),
@@ -1309,7 +1295,7 @@ public class ArchitectureFoundationTests
         Assert.Equal("conditional", crossfadeRule["support"]);
         Assert.Equal("ltx2.boundary.crossfade", crossfadeRule["code"]);
         Assert.Equal(
-            "Crossfade currently uses the LTX-owned decoded transition path.",
+            "Decoded LTX clips can be crossfaded.",
             crossfadeRule["reason"]);
         Assert.True(crossfadeRule["constraints"]["sameArchitecture"].Value<bool>());
         Assert.Equal(8, crossfadeRule["constraints"]["frameStep"]);
@@ -1344,8 +1330,6 @@ public class ArchitectureFoundationTests
         Assert.Equal("ltx2", model["architectureId"]);
         Assert.Equal("ltx-2.3", model["modelProfileId"]);
         Assert.Equal(Ltx2ArchitectureModule.FrameGrid, model["frameGrid"]);
-        // A model republishes its architecture's capability block verbatim; entry modes live
-        // there rather than on the model itself.
         Assert.Equal(
             capabilities["features"].Values<string>(),
             model["capabilities"]["features"].Values<string>());

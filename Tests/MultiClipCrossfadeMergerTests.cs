@@ -5,7 +5,6 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Architectures.Ltx2;
 using VideoStages.Execution;
 using VideoStages.Generated;
 using VideoStages.Planning;
@@ -13,13 +12,12 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// Graph-shape tests for multi-clip cut and overlap assembly without a full LTX flow.
-/// </summary>
+/// <summary>Graph-shape tests for neutral multi-clip assembly.</summary>
 [Collection("VideoStagesTests")]
 public class MultiClipCrossfadeMergerTests
 {
     private const int Fps = 24;
+    private static readonly ArchitectureId TestArchitecture = new("test");
 
     private static string VideoId(int i) => $"{10 + i}";
     private static string AudioId(int i) => $"{40 + i}";
@@ -87,8 +85,7 @@ public class MultiClipCrossfadeMergerTests
     }
 
     private static List<DecodedClipArtifact> Artifacts(
-        IReadOnlyList<WGNodeData> clips,
-        IReadOnlyList<ArchitectureId> architectures = null)
+        IReadOnlyList<WGNodeData> clips)
     {
         List<DecodedClipArtifact> artifacts = [];
         for (int i = 0; i < clips.Count; i++)
@@ -105,7 +102,7 @@ public class MultiClipCrossfadeMergerTests
                 clip.Height!.Value,
                 clip.GetRawFPS()!.Value,
                 clip.Frames!.Value,
-                architectures?[i] ?? Ltx2ArchitectureModule.ArchitectureId,
+                TestArchitecture,
                 i));
         }
         return artifacts;
@@ -289,7 +286,8 @@ public class MultiClipCrossfadeMergerTests
     {
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([121, 145], T2IModelClassSorter.CompatLtxv2);
-        ArchitectureId missing = new("missing");
+        List<DecodedClipArtifact> artifacts = Artifacts(clips);
+        artifacts[0] = artifacts[0] with { Frames = 25 };
         BoundaryPlan boundary = new(
             0,
             BoundaryJoinType.Continue,
@@ -303,11 +301,18 @@ public class MultiClipCrossfadeMergerTests
 
         BoundaryBudgetResolution result = MergeAndPublish(
             g,
-            Artifacts(clips, [missing, missing]),
+            artifacts,
             [boundary]);
 
         Assert.True(result.Degraded);
-        Assert.Equal(242, g.CurrentMedia.Frames);
+        BoundaryPlan resolved = Assert.Single(result.Boundaries);
+        Assert.Equal(BoundaryJoinType.Cut, resolved.Effective);
+        Assert.Equal(BoundaryFallbackReason.InsufficientFrameBudget, resolved.Fallback);
+        Assert.Contains(
+            Assert.IsType<List<string>>(g.UserInput.ExtraMeta["parser_warnings"]),
+            warning => warning.Contains(
+                "runtime clip lengths cannot support the compiled boundary windows"));
+        Assert.Equal(146, g.CurrentMedia.Frames);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         ImageFromBatchNode videoTrim = Assert.Single(
             bridge.Graph.NodesOfType<ImageFromBatchNode>());
@@ -345,44 +350,43 @@ public class MultiClipCrossfadeMergerTests
     }
 
     [Fact]
-    public void Crossfade_Run_ThenHardCut_KeepsTheRunsSeparate()
+    public void Crossfade_ThenHardCut_UsesOneAuthoredOrderConcat()
     {
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
-        List<DecodedClipArtifact> artifacts = Artifacts(
-            clips,
-            [
-                Ltx2ArchitectureModule.ArchitectureId,
-                Ltx2ArchitectureModule.ArchitectureId,
-                new ArchitectureId("fake"),
-            ]);
 
         MergeAndPublish(g,
-            artifacts,
+            Artifacts(clips),
             PlansFor(clips, ["crossfade", "cut", "cut"]));
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        Assert.Single(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
-        Assert.Equal(2, CountOf<BatchImagesNodeNode>(bridge));
+        ImageCompositeMaskedNode blend =
+            Assert.Single(bridge.Graph.NodesOfType<ImageCompositeMaskedNode>());
+        BatchImagesNodeNode concat =
+            Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        List<INodeOutput> inputs = [
+            .. Enumerable.Range(0, concat.Images.Count)
+                .Select(index => concat.Images[index].Connection)
+        ];
+        Assert.Equal(4, inputs.Count);
+        Assert.Equal(
+            VideoId(0),
+            Assert.IsType<ImageFromBatchNode>(inputs[0].Node).Image.Connection!.Node.Id);
+        Assert.Same(blend, inputs[1].Node);
+        Assert.Equal(
+            VideoId(1),
+            Assert.IsType<ImageFromBatchNode>(inputs[2].Node).Image.Connection!.Node.Id);
+        Assert.Equal(VideoId(2), inputs[3].Node.Id);
         Assert.Equal(51 - 8, g.CurrentMedia.Frames);
     }
 
     [Fact]
-    public void Crossfade_LaterRun_UsesTheSharedDecodedImplementation()
+    public void CutSeparatedCrossfades_ShareOneDecodedMergeAndRamp()
     {
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17, 17, 17], T2IModelClassSorter.CompatLtxv2);
-        ArchitectureId missingArchitecture = new("missing");
-        List<DecodedClipArtifact> artifacts = Artifacts(
-            clips,
-            [
-                Ltx2ArchitectureModule.ArchitectureId,
-                Ltx2ArchitectureModule.ArchitectureId,
-                missingArchitecture,
-                missingArchitecture,
-            ]);
         BoundaryBudgetResolution resolution = MergeAndPublish(g,
-            artifacts,
+            Artifacts(clips),
             PlansFor(
                 clips,
                 ["crossfade", "cut", "crossfade", "cut"]));
@@ -392,7 +396,8 @@ public class MultiClipCrossfadeMergerTests
         Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[2].Effective);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         Assert.Equal(2, CountOf<ImageCompositeMaskedNode>(bridge));
-        Assert.Equal(3, CountOf<BatchImagesNodeNode>(bridge));
+        Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
         Assert.Equal(68 - 16, g.CurrentMedia.Frames);
     }
 

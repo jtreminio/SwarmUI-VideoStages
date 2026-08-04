@@ -29,7 +29,7 @@ internal static class Ltx2BoundaryPolicy
                     TargetDisallowsInitialReference: true)),
             [BoundaryJoinType.Crossfade] = RuleDecision.Conditional(
                 "ltx2.boundary.crossfade",
-                "Crossfade currently uses the LTX-owned decoded transition path.",
+                "Decoded LTX clips can be crossfaded.",
                 new BoundaryRuleConstraints(
                     FrameStep: Ltx2ArchitectureModule.FrameGrid,
                     MinFrames: DefaultFrames,

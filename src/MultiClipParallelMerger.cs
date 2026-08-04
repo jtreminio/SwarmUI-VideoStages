@@ -3,8 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Architectures.Abstractions;
-using VideoStages.Architectures.Ltx2;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -16,11 +14,6 @@ internal sealed record TimelineMergeResult(
 
 internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 {
-    private sealed record ArchitectureMergeRun(
-        int Start,
-        int Length,
-        BoundaryOverlapPlan Overlap);
-
     internal TimelineMergeResult Merge(
         IReadOnlyList<DecodedClipArtifact> clipArtifacts,
         IReadOnlyList<BoundaryPlan> boundaries)
@@ -60,22 +53,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         }
         BoundaryOverlapPlan overlapPlan =
             BoundaryOverlapPlanner.ToOverlapPlan(runtimeBoundaries.Boundaries);
-        IReadOnlyList<ArchitectureMergeRun> architectureRuns = [];
-        if (overlapPlan is not null
-            && !TryPreflightArchitectureRuns(
-                generatedClips,
-                runtimeBoundaries.Boundaries,
-                out architectureRuns,
-                out string preflightFailure))
-        {
-            runtimeBoundaries = BoundaryOverlapPlanner.DegradeAllToCuts(
-                runtimeBoundaries.Boundaries,
-                preflightFailure);
-            PlanDiagnosticReporter.TrackRequestWarning(
-                g.UserInput,
-                $"VideoStages: overlap boundaries degraded to cuts because {preflightFailure}.");
-            overlapPlan = null;
-        }
         int[] discardedHandles = new int[generatedClips.Count];
         for (int i = 0; i < generatedBoundaries.Count; i++)
         {
@@ -117,11 +94,11 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 
         INodeOutput mergedVideo = overlapPlan is null
             ? MultiClipVideoGraphAssembler.MergeCut(bridge, videoOutputs)
-            : MergeArchitectureRuns(
+            : DecodedCrossfadeAssembler.MergeOverlaps(
                 bridge,
                 clips,
                 videoOutputs,
-                architectureRuns);
+                overlapPlan);
 
         IReadOnlyList<INodeOutput> audioOutputs =
             MultiClipAudioGraphAssembler.MaterializeTimelineAudio(
@@ -178,101 +155,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             new(
                 mergedMedia,
                 MediaRef.FromWGNodeData(g.CurrentVae, bridge)));
-    }
-
-    private static INodeOutput MergeArchitectureRuns(
-        WorkflowBridge bridge,
-        IReadOnlyList<DecodedClipArtifact> clips,
-        IReadOnlyList<INodeOutput> videoOutputs,
-        IReadOnlyList<ArchitectureMergeRun> runs)
-    {
-        List<INodeOutput> runOutputs = new(runs.Count);
-        foreach (ArchitectureMergeRun run in runs)
-        {
-            if (run.Length == 1)
-            {
-                runOutputs.Add(videoOutputs[run.Start]);
-                continue;
-            }
-            runOutputs.Add(DecodedCrossfadeAssembler.MergeOverlaps(
-                bridge,
-                [.. clips.Skip(run.Start).Take(run.Length)],
-                [.. videoOutputs.Skip(run.Start).Take(run.Length)],
-                run.Overlap));
-        }
-        return MultiClipVideoGraphAssembler.MergeCut(bridge, runOutputs);
-    }
-
-    private bool TryPreflightArchitectureRuns(
-        IReadOnlyList<DecodedClipArtifact> artifacts,
-        IReadOnlyList<BoundaryPlan> boundaries,
-        out IReadOnlyList<ArchitectureMergeRun> runs,
-        out string failure)
-    {
-        if (boundaries.Count != artifacts.Count - 1)
-        {
-            runs = [];
-            failure = "the decoded clip count does not match the boundary count";
-            return false;
-        }
-
-        List<ArchitectureMergeRun> resolved = [];
-        int runStart = 0;
-        for (int boundaryIndex = 0; boundaryIndex <= boundaries.Count; boundaryIndex++)
-        {
-            bool endOfTimeline = boundaryIndex == boundaries.Count;
-            if (!endOfTimeline
-                && boundaries[boundaryIndex].Effective != BoundaryJoinType.Cut)
-            {
-                continue;
-            }
-
-            int runEndExclusive = boundaryIndex + 1;
-            int runLength = runEndExclusive - runStart;
-            if (runLength == 1)
-            {
-                resolved.Add(new(runStart, runLength, null));
-                runStart = runEndExclusive;
-                continue;
-            }
-
-            ArchitectureId architectureId = artifacts[runStart].ArchitectureId;
-            if (artifacts
-                .Skip(runStart)
-                .Take(runLength)
-                .Any(artifact => artifact.ArchitectureId != architectureId))
-            {
-                runs = [];
-                failure = "an overlap crosses architecture ownership";
-                return false;
-            }
-            if (architectureId != Ltx2ArchitectureModule.ArchitectureId)
-            {
-                bool crossfadeOnly = boundaries
-                    .Skip(runStart)
-                    .Take(runLength - 1)
-                    .All(boundary => boundary.Effective == BoundaryJoinType.Crossfade);
-                if (!crossfadeOnly)
-                {
-                    runs = [];
-                    failure = $"architecture '{architectureId}' has no decoded overlap implementation";
-                    return false;
-                }
-            }
-            BoundaryOverlapPlan runPlan = BoundaryOverlapPlanner.ToOverlapPlan(
-                [.. boundaries.Skip(runStart).Take(runLength - 1)]);
-            if (runPlan is null)
-            {
-                runs = [];
-                failure = "an overlap run has no overlap plan";
-                return false;
-            }
-            resolved.Add(new(runStart, runLength, runPlan));
-            runStart = runEndExclusive;
-        }
-        runs = resolved;
-        failure = null;
-        return true;
     }
 
     private static List<INodeOutput> ResolveOutputs(WorkflowBridge bridge, IEnumerable<JArray> paths)

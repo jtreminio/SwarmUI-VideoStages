@@ -53,7 +53,7 @@
       "crossfade": {
         "support": "conditional",
         "code": "ltx2.boundary.crossfade",
-        "reason": "Crossfade currently uses the LTX-owned decoded transition path.",
+        "reason": "Decoded LTX clips can be crossfaded.",
         "constraints": {
           "sameArchitecture": true,
           "frameStep": 8,

@@ -34,11 +34,13 @@ internal static class DecodedCrossfadeAssembler
             int startTrim = i > 0 ? plan.BoundaryOverlap[i - 1] : 0;
             int endTrim = i < videoOutputs.Count - 1 ? plan.BoundaryOverlap[i] : 0;
             int frames = clips[i].Frames;
-            segments.Add(SliceImageFrames(
-                bridge,
-                videoOutputs[i],
-                startTrim,
-                frames - startTrim - endTrim));
+            segments.Add(startTrim == 0 && endTrim == 0
+                ? videoOutputs[i]
+                : SliceImageFrames(
+                    bridge,
+                    videoOutputs[i],
+                    startTrim,
+                    frames - startTrim - endTrim));
 
             if (endTrim > 0)
             {
