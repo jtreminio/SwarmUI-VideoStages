@@ -182,14 +182,14 @@ internal sealed class StockHostVideoGenerationSession(
             ? null
             : ParamSnapshot.Of(
                 g.UserInput,
-                T2IParamTypes.VideoAudioReference.Type))
+                T2IParamTypes.PromptAudios.Type))
         {
             if (_wanBehavior is null)
             {
                 // LTX v2's stock branch reads this request-global enhancement directly. The
                 // generic fallback does not advertise it, so retain it only in request metadata.
                 g.UserInput.InternalSet.ValuesInput.Remove(
-                    T2IParamTypes.VideoAudioReference.Type.ID);
+                    T2IParamTypes.PromptAudios.Type.ID);
             }
             WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
                 clip,

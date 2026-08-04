@@ -150,12 +150,12 @@ internal sealed class MiniMaxGenerationSession(
             payload.LoraTargetPolicy))
         using (ParamSnapshot ignoredAudioReference = ParamSnapshot.Of(
             g.UserInput,
-            T2IParamTypes.VideoAudioReference.Type))
+            T2IParamTypes.PromptAudios.Type))
         {
             // H3 writes its own audio and has no reference-audio input; keep the request-global
             // enhancement in metadata only.
             g.UserInput.InternalSet.ValuesInput.Remove(
-                T2IParamTypes.VideoAudioReference.Type.ID);
+                T2IParamTypes.PromptAudios.Type.ID);
             WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
                 clip,
                 stage,

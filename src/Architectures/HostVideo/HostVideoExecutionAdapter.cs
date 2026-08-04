@@ -1,4 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.HostVideo.Runtime;
@@ -43,11 +44,12 @@ internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
                 "'Video2Video Creativity' is request-global and was ignored by the generic "
                     + "host-video fallback. Use each later stage's Control value instead."));
         }
-        if (generator.UserInput.Get(T2IParamTypes.VideoAudioReference, null) is not null)
+        if (generator.UserInput.TryGet(T2IParamTypes.PromptAudios, out List<AudioFile> promptAudios)
+            && promptAudios.Count > 0)
         {
             diagnostics.Add(Ignored(
                 "host-video.audio-reference.ignored",
-                "'Video Audio Reference' is an architecture-specific enhancement and was "
+                "'Prompt Audios' is an architecture-specific enhancement and was "
                     + "ignored by the generic host-video fallback."));
         }
         return diagnostics;
