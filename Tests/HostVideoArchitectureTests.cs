@@ -104,7 +104,7 @@ public class HostVideoArchitectureTests
             HostVideoArchitectureModule.Instance.ValidateAndCompileClip(
                 clip,
                 new Dictionary<int, ResolvedVideoModel> { [0] = resolved },
-                new(512, 512, 24));
+                new(512, 512, 24, ArchitectureEntryMode.ImageToVideo));
 
         StockHostVideoStagePayload payload = Assert.IsType<StockHostVideoStagePayload>(
             compilation.StagePayloads[0]);

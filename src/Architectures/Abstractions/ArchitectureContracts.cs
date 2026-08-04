@@ -212,7 +212,7 @@ internal sealed record ArchitectureClipCompileContext(
     int Width,
     int Height,
     int FramesPerSecond,
-    ArchitectureEntryMode EntryMode = ArchitectureEntryMode.ImageToVideo,
+    ArchitectureEntryMode EntryMode,
     bool HasPreviousClipOutput = false);
 
 internal interface IVideoArchitectureModule

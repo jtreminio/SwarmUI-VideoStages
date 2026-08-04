@@ -18,7 +18,6 @@ public class RootPlanTests
         Assert.False(root.DiscardsRoot);
         Assert.False(root.UsesGeneratedClipDonor);
         Assert.False(root.InterceptsHostCore);
-        Assert.False(root.FirstClipHasInitVideo);
         Assert.False(root.UsesStageHandoff);
         Assert.False(root.DropsTextToVideoRootDonor);
         Assert.False(root.DiscardsTextToVideoRoot);
@@ -81,7 +80,6 @@ public class RootPlanTests
             InitVideoClip(0));
         RootPlan root = plan.Root;
 
-        Assert.True(root.FirstClipHasInitVideo);
         Assert.False(root.UsesStageHandoff);
         Assert.False(root.UsesGeneratedClipDonor);
     }

@@ -71,7 +71,7 @@ internal sealed class Ltx2GenerationSession(
 
     private WGNodeData InstallSourceIfPlanned(ClipPlan clip)
     {
-        if (!clip.HasInitVideo)
+        if (clip.EntryMode != ArchitectureEntryMode.InitVideo)
         {
             return null;
         }
@@ -118,7 +118,6 @@ internal sealed class Ltx2GenerationSession(
             context.PreviousClip,
             context.PreviousClipOutput?.ToHostMedia(g),
             context.Clip,
-            nextClipHasInitVideo: initVideoMedia is not null,
             clipContext);
     }
 

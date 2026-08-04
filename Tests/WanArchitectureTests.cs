@@ -414,7 +414,7 @@ public class WanArchitectureTests
             ResolveWan(spec));
 
         ClipPlan compiled = Assert.Single(plan.Clips);
-        Assert.Equal(ClipInputKind.EmptyLatent, compiled.Input);
+        Assert.Equal(ArchitectureEntryMode.TextToVideo, compiled.EntryMode);
         Assert.Equal(StageInputKind.EmptyLatent, Assert.Single(compiled.Stages).Input);
         Assert.Null(compiled.RequireWanPayload().FirstFrameReference);
         Assert.Contains(
@@ -447,7 +447,7 @@ public class WanArchitectureTests
             ResolveWan(spec));
 
         ClipPlan compiled = Assert.Single(plan.Clips);
-        Assert.Equal(ClipInputKind.EmptyLatent, compiled.Input);
+        Assert.Equal(ArchitectureEntryMode.TextToVideo, compiled.EntryMode);
         Assert.Equal(StageInputKind.EmptyLatent, Assert.Single(compiled.Stages).Input);
         Assert.NotNull(compiled.RequireWanPayload().FirstFrameReference);
     }
@@ -481,7 +481,7 @@ public class WanArchitectureTests
 
         ClipPlan compiled = Assert.Single(plan.Clips);
         Assert.Null(compiled.RequireWanPayload().FirstFrameReference);
-        Assert.Equal(ClipInputKind.EmptyLatent, compiled.Input);
+        Assert.Equal(ArchitectureEntryMode.TextToVideo, compiled.EntryMode);
         Assert.Contains(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
@@ -830,7 +830,6 @@ public class WanArchitectureTests
             Compile(InitVideoClip(0, first, second)).Clips);
 
         Assert.Equal(ArchitectureEntryMode.InitVideo, compiled.EntryMode);
-        Assert.Equal(ClipInputKind.InitVideo, compiled.Input);
         Assert.Equal(StageInputKind.InitVideo, compiled.Stages[0].Input);
         Assert.Equal(StageInputKind.PreviousStage, compiled.Stages[1].Input);
         Assert.Equal(0.5, compiled.Stages[0].Core.Control);
@@ -1114,7 +1113,6 @@ public class WanArchitectureTests
             diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
         ClipPlan compiled = Assert.Single(plan.Clips);
         Assert.Equal(ArchitectureEntryMode.TextToVideo, compiled.EntryMode);
-        Assert.Equal(ClipInputKind.EmptyLatent, compiled.Input);
         Assert.Equal(StageInputKind.EmptyLatent, Assert.Single(compiled.Stages).Input);
         Assert.Equal(
             WanArchitectureModule.Ti2v5bModelClassId,
@@ -1177,7 +1175,6 @@ public class WanArchitectureTests
             diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
         ClipPlan compiled = Assert.Single(plan.Clips);
         Assert.Equal(ArchitectureEntryMode.TextToVideo, compiled.EntryMode);
-        Assert.Equal(ClipInputKind.EmptyLatent, compiled.Input);
         Assert.Equal(StageInputKind.EmptyLatent, Assert.Single(compiled.Stages).Input);
     }
 
@@ -1199,7 +1196,7 @@ public class WanArchitectureTests
             {
                 [stage.ClipStageRawIndex] = resolved,
             },
-            new(512, 512, 24));
+            new(512, 512, 24, ArchitectureEntryMode.ImageToVideo));
 
         Assert.DoesNotContain(
             compilation.Diagnostics,
@@ -1389,7 +1386,7 @@ public class WanArchitectureTests
             WanArchitectureModule.Instance.ValidateAndCompileClip(
                 clip,
                 stageModels,
-                new(512, 512, 24));
+                new(512, 512, 24, ArchitectureEntryMode.ImageToVideo));
 
         Assert.DoesNotContain(
             compilation.Diagnostics,

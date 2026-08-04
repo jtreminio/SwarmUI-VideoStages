@@ -336,8 +336,7 @@ public class MiniMaxArchitectureTests
         ClipPlan scaled = new(
             0,
             49,
-            ClipInputKind.RootMedia,
-            false,
+            ArchitectureEntryMode.ImageToVideo,
             null,
             [upscale],
             AudioPlanCompiler.Compile(authored))

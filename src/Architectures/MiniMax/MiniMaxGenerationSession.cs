@@ -56,7 +56,7 @@ internal sealed class MiniMaxGenerationSession(
             payload.FirstFrameReference,
             "MiniMax H3 first-frame reference");
         _endFrame = ResolveEndFrame(payload.LastFrameReference);
-        if (clip.HasInitVideo)
+        if (clip.EntryMode == ArchitectureEntryMode.InitVideo)
         {
             InitVideoPlan source = clip.InitVideo
                 ?? throw VideoStagesInvariant.Failure(
@@ -86,7 +86,7 @@ internal sealed class MiniMaxGenerationSession(
             // unrelated text-root donor VAE to the uploaded image.
             g.CurrentVae = null;
         }
-        else if (clip.Input == ClipInputKind.EmptyLatent)
+        else if (clip.EntryMode == ArchitectureEntryMode.TextToVideo)
         {
             g.CurrentMedia = null;
             g.CurrentVae = null;
@@ -99,7 +99,8 @@ internal sealed class MiniMaxGenerationSession(
             g.CurrentVae = rootSources.Vae?.Duplicate();
             _entryFirstFrame = g.CurrentMedia;
         }
-        if (!clip.HasInitVideo && g.CurrentMedia is not null)
+        if (clip.EntryMode != ArchitectureEntryMode.InitVideo
+            && g.CurrentMedia is not null)
         {
             // Incoming audio belongs to whichever architecture owns the shared root, not to H3.
             g.CurrentMedia.AttachedAudio = null;

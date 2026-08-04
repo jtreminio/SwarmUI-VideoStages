@@ -237,16 +237,14 @@ public class ArchitectureRuntimeOwnershipTests
         VideoArchitectureDescriptor futureArchitecture = Descriptor("future-arch");
         ClipPlan initVideoClip = Clip(
             0,
-            ClipInputKind.InitVideo,
+            ArchitectureEntryMode.InitVideo,
             StageInputKind.InitVideo,
-            initVideoArchitecture,
-            hasInitVideo: true);
+            initVideoArchitecture);
         ClipPlan generated = Clip(
             1,
-            ClipInputKind.RootMedia,
+            ArchitectureEntryMode.ImageToVideo,
             StageInputKind.RootMedia,
-            futureArchitecture,
-            hasInitVideo: false);
+            futureArchitecture);
         return new(
             512,
             512,
@@ -256,7 +254,6 @@ public class ArchitectureRuntimeOwnershipTests
                 DiscardsRoot: false,
                 UsesGeneratedClipDonor: true,
                 InterceptsHostCore: true,
-                FirstClipHasInitVideo: true,
                 UsesStageHandoff: false,
                 DropsTextToVideoRootDonor: false,
                 DiscardsTextToVideoRoot: false),
@@ -274,10 +271,9 @@ public class ArchitectureRuntimeOwnershipTests
 
     private static ClipPlan Clip(
         int id,
-        ClipInputKind clipInput,
+        ArchitectureEntryMode entryMode,
         StageInputKind stageInput,
-        VideoArchitectureDescriptor architecture,
-        bool hasInitVideo)
+        VideoArchitectureDescriptor architecture)
     {
         TestPayload payload = new(architecture.Id);
         StagePlan stage = new(
@@ -294,9 +290,10 @@ public class ArchitectureRuntimeOwnershipTests
         return new(
             id,
             25,
-            clipInput,
-            hasInitVideo,
-            hasInitVideo ? new("data", "source.mp4", 0, 512, 512, 24) : null,
+            entryMode,
+            entryMode == ArchitectureEntryMode.InitVideo
+                ? new("data", "source.mp4", 0, 512, 512, 24)
+                : null,
             [stage],
             Audio: new(
                 new(AudioSourceKind.Disabled, "", null, false, null),

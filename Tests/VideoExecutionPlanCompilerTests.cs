@@ -40,7 +40,7 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, initVideoClip));
 
         ClipPlan clip = Assert.Single(plan.Clips);
-        Assert.Equal(ClipInputKind.InitVideo, clip.Input);
+        Assert.Equal(ArchitectureEntryMode.InitVideo, clip.EntryMode);
         Assert.Equal(StageInputKind.InitVideo, clip.Stages[0].Input);
         Assert.True(clip.Stages[0].IsPassthrough);
         Assert.False(clip.Stages[1].IsPassthrough);
@@ -510,11 +510,10 @@ public class VideoExecutionPlanCompilerTests
                 CanHandoffHostCore: true));
 
         ClipPlan surviving = Assert.Single(plan.Clips);
-        Assert.True(surviving.HasInitVideo);
+        Assert.Equal(ArchitectureEntryMode.InitVideo, surviving.EntryMode);
         Assert.True(plan.Root.DiscardsRoot);
         Assert.True(plan.Root.InterceptsHostCore);
         Assert.False(plan.Root.UsesGeneratedClipDonor);
-        Assert.True(plan.Root.FirstClipHasInitVideo);
         Assert.False(plan.Root.UsesStageHandoff);
         Assert.False(plan.Root.DropsTextToVideoRootDonor);
         Assert.False(plan.Root.DiscardsTextToVideoRoot);

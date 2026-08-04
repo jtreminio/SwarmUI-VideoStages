@@ -35,5 +35,5 @@ internal static class ArchitectureRootOwnerResolver
     private static ClipPlan FindOwner(VideoExecutionPlan plan) =>
         plan.Clips.FirstOrDefault(clip =>
             clip.Stages.Count > 0
-            && clip.Input is ClipInputKind.RootMedia or ClipInputKind.EmptyLatent);
+            && clip.EntryMode != ArchitectureEntryMode.InitVideo);
 }

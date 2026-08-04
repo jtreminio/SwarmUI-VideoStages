@@ -60,7 +60,7 @@ internal static class WanClipPlanCompiler
 
         Dictionary<int, StockHostVideoStagePayload> stages = [];
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
-        bool initVideoEntry = clip.InitVideo is not null;
+        bool initVideoEntry = context.EntryMode == ArchitectureEntryMode.InitVideo;
         bool previousStageContinuesSampling = false;
         // Resolved stage models are a prerequisite; indexing asserts that planning contract.
         string clipCompatibilityClassId = activeStages.Count == 0

@@ -1,4 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -16,7 +17,6 @@ internal sealed class BoundaryHandoffResolver(
         ClipPlan previousClip,
         WGNodeData previousOutput,
         ClipPlan nextClip,
-        bool nextClipHasInitVideo,
         ClipContext clipContext)
     {
         ArgumentNullException.ThrowIfNull(assembly);
@@ -53,7 +53,7 @@ internal sealed class BoundaryHandoffResolver(
                 assembly.DegradeToCut(previousClip.ClipId);
                 return null;
             }
-            if (nextClipHasInitVideo)
+            if (nextClip.EntryMode == ArchitectureEntryMode.InitVideo)
             {
                 assembly.ReportWarning(
                     $"VideoStages: Clip {previousClip.ClipId} boundary 'continue' flows into "

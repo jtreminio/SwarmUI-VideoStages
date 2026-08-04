@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Generated;
 using VideoStages.Planning;
 using Xunit;
@@ -176,8 +177,7 @@ public sealed class LtxIcLoraTests
         ClipPlan clip = new(
             ClipId: 7,
             Frames: 25,
-            ClipInputKind.EmptyLatent,
-            HasInitVideo: false,
+            ArchitectureEntryMode.TextToVideo,
             InitVideo: null,
             Stages: [],
             Audio: null);

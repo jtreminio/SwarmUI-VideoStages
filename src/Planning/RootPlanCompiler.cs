@@ -12,7 +12,6 @@ internal static class RootPlanCompiler
                 DiscardsRoot: false,
                 UsesGeneratedClipDonor: false,
                 InterceptsHostCore: false,
-                FirstClipHasInitVideo: false,
                 UsesStageHandoff: false,
                 DropsTextToVideoRootDonor: false,
                 DiscardsTextToVideoRoot: false);
@@ -29,7 +28,6 @@ internal static class RootPlanCompiler
             DiscardsRoot: discardsRoot,
             UsesGeneratedClipDonor: !discardsRoot && initVideoLeadWithGeneratedClips,
             InterceptsHostCore: interceptsHostCore,
-            FirstClipHasInitVideo: firstClipHasInitVideo,
             UsesStageHandoff: interceptsHostCore && !firstClipHasInitVideo,
             DropsTextToVideoRootDonor: environment.HostKind == HostRootKind.TextToVideoRoot
                 && initVideoLeadWithGeneratedClips,

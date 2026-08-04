@@ -92,7 +92,7 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
         foreach (StageSpec stage in activeStages)
         {
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
-            bool decodedInput = clip.InitVideo is not null
+            bool decodedInput = context.EntryMode == ArchitectureEntryMode.InitVideo
                 || stage.ClipStageIndex > 0;
             NormalLoraTargetPolicy loraTargetPolicy =
                 resolved.LorasTargetTextEncoder == false

@@ -67,7 +67,6 @@ public class AudioHandlerTests
             DiscardsRoot: false,
             UsesGeneratedClipDonor: false,
             InterceptsHostCore: true,
-            FirstClipHasInitVideo: false,
             UsesStageHandoff: true,
             DropsTextToVideoRootDonor: false,
             DiscardsTextToVideoRoot: false),

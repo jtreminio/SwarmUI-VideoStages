@@ -3,6 +3,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
 using Xunit;
@@ -183,7 +184,7 @@ public class VideoExecutionPlanContextTests
             ?? throw new InvalidOperationException("Expected a init-video-only plan context.");
 
         ClipPlan clip = Assert.Single(context.Plan.Clips);
-        Assert.True(clip.HasInitVideo);
+        Assert.Equal(ArchitectureEntryMode.InitVideo, clip.EntryMode);
         Assert.Empty(clip.Stages);
         Assert.Equal(NoneArchitecture.Id, clip.Architecture.Id);
     }

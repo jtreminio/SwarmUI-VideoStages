@@ -8,13 +8,19 @@ internal static class ClipPlanCompiler
 {
     internal static ClipPlan Compile(ClipSpec clip, ClipPlanCompilationContext context)
     {
-        bool initVideoClip = clip.InitVideo is not null;
         AudioPlan audio = AudioPlanCompiler.Compile(clip);
         ArchitectureClipCompilation architectureCompilation =
             ValidateArchitectureCompilation(clip, context);
-        ClipInputKind clipInput = initVideoClip
-            ? ClipInputKind.InitVideo
-            : context.IsTextToVideo ? ClipInputKind.EmptyLatent : ClipInputKind.RootMedia;
+        InitVideoPlan initVideo = CompileInitVideo(
+            clip.InitVideo,
+            context.Width,
+            context.Height,
+            context.FramesPerSecond);
+        if ((context.EntryMode == ArchitectureEntryMode.InitVideo) != (initVideo is not null))
+        {
+            throw VideoStagesInvariant.Failure(
+                $"Clip {clip.Id} entry mode and init-video plan disagree.");
+        }
         List<StagePlan> stages = [];
         for (int i = 0; i < (clip.Stages?.Count ?? 0); i++)
         {
@@ -26,7 +32,7 @@ internal static class ClipPlanCompiler
                 stage.Id,
                 stage.ClipStageIndex,
                 stage.ClipStageRawIndex,
-                ResolveStageInput(clipInput, i),
+                ResolveStageInput(context.EntryMode, i),
                 ArchitectureStageActivity.IsPassthrough(
                     stage,
                     context.Architecture?.Architecture),
@@ -45,19 +51,13 @@ internal static class ClipPlanCompiler
         return new ClipPlan(
             clip.Id,
             clip.Frames,
-            clipInput,
-            initVideoClip,
-            CompileInitVideo(
-                clip.InitVideo,
-                context.Width,
-                context.Height,
-                context.FramesPerSecond),
+            context.EntryMode,
+            initVideo,
             Array.AsReadOnly(stages.ToArray()),
             audio)
         {
             Architecture = context.Architecture?.Architecture,
             ArchitecturePayload = architectureCompilation?.Payload,
-            EntryMode = context.EntryMode,
         };
     }
 
@@ -75,17 +75,20 @@ internal static class ClipPlanCompiler
                 height,
                 framesPerSecond);
 
-    private static StageInputKind ResolveStageInput(ClipInputKind clipInput, int stageIndex)
+    private static StageInputKind ResolveStageInput(
+        ArchitectureEntryMode entryMode,
+        int stageIndex)
     {
         if (stageIndex > 0)
         {
             return StageInputKind.PreviousStage;
         }
-        return clipInput switch
+        return entryMode switch
         {
-            ClipInputKind.EmptyLatent => StageInputKind.EmptyLatent,
-            ClipInputKind.InitVideo => StageInputKind.InitVideo,
-            _ => StageInputKind.RootMedia,
+            ArchitectureEntryMode.TextToVideo => StageInputKind.EmptyLatent,
+            ArchitectureEntryMode.ImageToVideo => StageInputKind.RootMedia,
+            ArchitectureEntryMode.InitVideo => StageInputKind.InitVideo,
+            _ => throw VideoStagesInvariant.Failure($"Unknown clip entry mode '{entryMode}'."),
         };
     }
 
@@ -127,7 +130,6 @@ internal static class ClipPlanCompiler
 }
 
 internal sealed record ClipPlanCompilationContext(
-    bool IsTextToVideo,
     int Width,
     int Height,
     int FramesPerSecond,

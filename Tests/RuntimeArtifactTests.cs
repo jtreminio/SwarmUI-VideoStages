@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2;
 using VideoStages.Execution;
 using VideoStages.Planning;
@@ -251,8 +252,7 @@ public class RuntimeArtifactTests
     private static ClipPlan Clip() => new(
         ClipId: 7,
         Frames: 25,
-        Input: ClipInputKind.RootMedia,
-        HasInitVideo: false,
+        EntryMode: ArchitectureEntryMode.ImageToVideo,
         InitVideo: null,
         Stages: [],
         Audio: null)

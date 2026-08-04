@@ -155,7 +155,8 @@ internal class StageRunner
         else
         {
             // Reinjection would overwrite the noise mask for the encoded footage's frame span.
-            bool initVideoFootageIsStageInput = clipContext.PlannedClip.HasInitVideo
+            bool initVideoFootageIsStageInput =
+                clipContext.PlannedClip.EntryMode == ArchitectureEntryMode.InitVideo
                 && clipContext.IsFirstStage(stage)
                 && payload.Guide.Kind == StageGuideReferenceKind.Generated
                 && !payload.ImageReferenceWasExplicit;

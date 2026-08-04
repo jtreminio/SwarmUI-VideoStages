@@ -65,7 +65,7 @@ internal sealed class StockHostVideoGenerationSession(
         ArgumentNullException.ThrowIfNull(context);
         ClipPlan clip = context.Clip;
 
-        if (clip.HasInitVideo)
+        if (clip.EntryMode == ArchitectureEntryMode.InitVideo)
         {
             InitVideoPlan source = clip.InitVideo
                 ?? throw VideoStagesInvariant.Failure(
@@ -96,7 +96,7 @@ internal sealed class StockHostVideoGenerationSession(
                 // attach an unrelated text-root donor VAE to the uploaded image.
                 g.CurrentVae = null;
             }
-            else if (clip.Input == ClipInputKind.EmptyLatent)
+            else if (clip.EntryMode == ArchitectureEntryMode.TextToVideo)
             {
                 // Upload materialization is deliberately runtime-owned. A missing or malformed
                 // first image leaves the text-root plan unchanged and falls back to native text

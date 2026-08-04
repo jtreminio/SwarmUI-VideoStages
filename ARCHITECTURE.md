@@ -52,8 +52,9 @@ invalid or partially preflighted document.
 
 Architecture-specific capture is scoped either to the single root-owning
 architecture or to every active architecture. `ArchitectureRootOwnerResolver` picks the root owner: the
-first clip with stages whose input is host root media or an empty latent.
-InitVideo clips consume their own media and never claim the host root. The
+first staged clip whose `ClipPlan.EntryMode` is not init-video. `EntryMode` is
+the sole compiled clip-entry decision; init-video clips also carry their source
+plan. Init-video clips consume their own media and never claim the host root. The
 ControlNet preprocessor capture is architecture-neutral and therefore runs for
 every active architecture, including the source-only adapter, guarded so a
 mixed timeline captures once.

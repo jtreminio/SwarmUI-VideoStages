@@ -26,14 +26,13 @@ internal sealed record RootPlan(
     bool DiscardsRoot,
     bool UsesGeneratedClipDonor,
     bool InterceptsHostCore,
-    bool FirstClipHasInitVideo,
     bool UsesStageHandoff,
     bool DropsTextToVideoRootDonor,
     bool DiscardsTextToVideoRoot)
 {
     public bool ReplacesTextToVideoRootStage(StagePlan stage, ClipPlan clip) =>
         DiscardsTextToVideoRoot
-        && clip.Input == ClipInputKind.EmptyLatent
+        && clip.EntryMode == ArchitectureEntryMode.TextToVideo
         && stage.Input == StageInputKind.EmptyLatent
         && stage.ClipStageIndex == 0;
 }
@@ -56,31 +55,16 @@ internal sealed record RootEnvironment(
         spec.IsTextToVideo ? HostRootKind.TextToVideoRoot : HostRootKind.ImageToVideo);
 }
 
-/// <summary>The primary artifact that starts a clip before its stages run.</summary>
-internal enum ClipInputKind
-{
-    RootMedia,
-    EmptyLatent,
-    InitVideo,
-}
-
 internal sealed record ClipPlan(
     int ClipId,
     int? Frames,
-    ClipInputKind Input,
-    bool HasInitVideo,
+    ArchitectureEntryMode EntryMode,
     InitVideoPlan InitVideo,
     IReadOnlyList<StagePlan> Stages,
     AudioPlan Audio)
 {
     /// <summary>The one architecture established for this clip before graph mutation begins.</summary>
     public VideoArchitectureDescriptor Architecture { get; init; }
-
-    /// <summary>
-    /// How this clip enters the timeline. Resolved once during compilation so plan validators do
-    /// not each re-derive it from root ownership and sourcing.
-    /// </summary>
-    public ArchitectureEntryMode EntryMode { get; init; }
 
     public IArchitectureClipPayload ArchitecturePayload { get; init; }
 }

@@ -156,7 +156,6 @@ public class RealArchitectureContractTests
         ClipPlan directlyCompiledClip = ClipPlanCompiler.Compile(
             clip,
             new(
-                IsTextToVideo: false,
                 Width: 512,
                 Height: 512,
                 FramesPerSecond: 24,

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 using Xunit;
 
@@ -10,7 +11,9 @@ public class AudioPlanCompilerComponentTests
     private static Ltx2AudioPlan CompileLtxAudio(ClipSpec clip)
     {
         IcLoraClipPlanCompilation icLoras =
-            IcLoraPlanCompiler.CompileClip(clip, new(0, 0, 0));
+            IcLoraPlanCompiler.CompileClip(
+                clip,
+                new(0, 0, 0, ArchitectureEntryMode.ImageToVideo));
         return Ltx2AudioPlanCompiler.Compile(
             clip,
             icLoras.PrimaryControlNetSourceIndex);

@@ -118,7 +118,6 @@ internal static class VideoExecutionPlanCompiler
             clips.Add(ClipPlanCompiler.Compile(
                 activeClips[i],
                 new ClipPlanCompilationContext(
-                    spec.IsTextToVideo,
                     spec.Width,
                     spec.Height,
                     spec.FPS,

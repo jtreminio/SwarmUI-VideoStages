@@ -121,7 +121,6 @@ public class BoundaryHandoffResolverTests
             plan.Clips[0],
             previousOutput,
             plan.Clips[1],
-            nextClipHasInitVideo: false,
             context);
 
         Assert.Null(carry);
@@ -147,7 +146,6 @@ public class BoundaryHandoffResolverTests
             plan.Clips[0],
             PreviousOutput(g),
             plan.Clips[1],
-            nextClipHasInitVideo: false,
             context);
 
         Assert.NotNull(carry);

@@ -22,10 +22,7 @@ internal static class WanVideoEndFramePolicy
         }
         ClipPlan onlyClip = plan.Clips[0];
         if (onlyClip.Architecture?.Id != WanArchitectureModule.ArchitectureId
-            || onlyClip.EntryMode != ArchitectureEntryMode.ImageToVideo
-            || onlyClip.Input != ClipInputKind.RootMedia
-            || onlyClip.HasInitVideo
-            || onlyClip.InitVideo is not null)
+            || onlyClip.EntryMode != ArchitectureEntryMode.ImageToVideo)
         {
             return false;
         }

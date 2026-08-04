@@ -36,7 +36,8 @@ internal sealed class AudioTimelineExecutor
             _ = _audioInjector.TryInject(sources.NativeAudio);
             return;
         }
-        if (root.UsesStageHandoff || root.FirstClipHasInitVideo)
+        if (root.UsesStageHandoff
+            || plan.Clips[0].EntryMode == ArchitectureEntryMode.InitVideo)
         {
             return;
         }

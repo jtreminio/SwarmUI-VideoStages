@@ -414,7 +414,13 @@ public class DecisionOwnerRegressionTests
         {
             FPS = 30,
         };
-        ClipPlan clip = new(0, 48, ClipInputKind.InitVideo, true, null, [], Audio: null);
+        ClipPlan clip = new(
+            0,
+            48,
+            ArchitectureEntryMode.ImageToVideo,
+            null,
+            [],
+            Audio: null);
 
         Assert.Equal(2.0, ClipAudioBedDuration.Seconds(clip, 24, media));
         Assert.Equal(1.6, ClipAudioBedDuration.Seconds(clip, 0, media), 6);
@@ -427,8 +433,7 @@ public class DecisionOwnerRegressionTests
         ClipPlan clip = new(
             0,
             25,
-            ClipInputKind.InitVideo,
-            HasInitVideo: true,
+            ArchitectureEntryMode.InitVideo,
             new("data", "source.mp4", 0, 512, 512, 24),
             noStages,
             Audio: null)
@@ -444,7 +449,6 @@ public class DecisionOwnerRegressionTests
                 DiscardsRoot: true,
                 UsesGeneratedClipDonor: false,
                 InterceptsHostCore: true,
-                FirstClipHasInitVideo: true,
                 UsesStageHandoff: false,
                 DropsTextToVideoRootDonor: false,
                 DiscardsTextToVideoRoot: true),
@@ -514,8 +518,10 @@ public class DecisionOwnerRegressionTests
 
     private static VideoExecutionPlan Plan(ClipPlan[] clips)
     {
-        bool firstClipHasInitVideo = clips.FirstOrDefault()?.HasInitVideo == true;
-        bool hasGeneratedClip = clips.Any(clip => !clip.HasInitVideo);
+        bool firstClipHasInitVideo =
+            clips.FirstOrDefault()?.EntryMode == ArchitectureEntryMode.InitVideo;
+        bool hasGeneratedClip = clips.Any(clip =>
+            clip.EntryMode != ArchitectureEntryMode.InitVideo);
         return new(
             512,
             512,
@@ -525,7 +531,6 @@ public class DecisionOwnerRegressionTests
                 DiscardsRoot: true,
                 UsesGeneratedClipDonor: false,
                 InterceptsHostCore: true,
-                firstClipHasInitVideo,
                 UsesStageHandoff: !firstClipHasInitVideo,
                 DropsTextToVideoRootDonor: firstClipHasInitVideo && hasGeneratedClip,
                 DiscardsTextToVideoRoot: true),
@@ -581,8 +586,7 @@ public class DecisionOwnerRegressionTests
         VideoArchitectureDescriptor architecture) => new(
         id,
         25,
-        ClipInputKind.InitVideo,
-        HasInitVideo: true,
+        ArchitectureEntryMode.InitVideo,
         new("data", $"source-{id}.mp4", 0, 512, 512, 24),
         Stages: [],
         Audio: null)
@@ -590,15 +594,12 @@ public class DecisionOwnerRegressionTests
         Architecture = architecture,
     };
 
-    /// <summary>Creates the host-root owner shape recognized by
-    /// <see cref="ArchitectureRootOwnerResolver"/>.</summary>
     private static ClipPlan GeneratedClip(
         int id,
         VideoArchitectureDescriptor architecture) => new(
         id,
         25,
-        ClipInputKind.RootMedia,
-        HasInitVideo: false,
+        ArchitectureEntryMode.ImageToVideo,
         InitVideo: null,
         [
             new StagePlan(

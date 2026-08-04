@@ -211,7 +211,7 @@ internal static class IcLoraPlanCompiler
         }
         if (source == IcLoraMediaSourceKind.Incoming)
         {
-            IcLoraDriveMediaKind kind = ResolveIncomingKind(clip, stage, context);
+            IcLoraDriveMediaKind kind = ResolveIncomingKind(stage, context);
             return new(
                 source,
                 normalizedSource,
@@ -283,12 +283,10 @@ internal static class IcLoraPlanCompiler
     }
 
     private static IcLoraDriveMediaKind ResolveIncomingKind(
-        ClipSpec clip,
         StageSpec stage,
         ArchitectureClipCompileContext context)
     {
         if (stage.ClipStageIndex > 0
-            || clip.InitVideo is not null
             || context.HasPreviousClipOutput
             || context.EntryMode == ArchitectureEntryMode.InitVideo)
         {

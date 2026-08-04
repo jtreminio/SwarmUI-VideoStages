@@ -1,3 +1,4 @@
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 using Xunit;
 
@@ -7,7 +8,9 @@ namespace VideoStages.Tests;
 public class AudioPlanCompilerTests
 {
     private static IcLoraClipPlanCompilation CompileIcLoras(ClipSpec clip) =>
-        IcLoraPlanCompiler.CompileClip(clip, new(0, 0, 0));
+        IcLoraPlanCompiler.CompileClip(
+            clip,
+            new(0, 0, 0, ArchitectureEntryMode.ImageToVideo));
 
     private static Ltx2AudioPlan CompileLtxAudio(ClipSpec clip)
     {

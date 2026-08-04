@@ -211,12 +211,12 @@ public class PlanningCompilerComponentTests
 
         PromptRelayPlan prompt = PromptRelayPlanCompiler.Compile(clip, 24);
         GuideReferencePlan guide = Ltx2ClipPlanCompiler
-            .Compile(clip, new(640, 360, 24))
+            .Compile(clip, new(640, 360, 24, ArchitectureEntryMode.ImageToVideo))
             .Stages[stage.ClipStageRawIndex]
             .Guide;
         var loras = NormalLoraPlanCompiler.Compile(clip, stage);
         var icLoras = IcLoraPlanCompiler
-            .CompileClip(clip, new(640, 360, 24))
+            .CompileClip(clip, new(640, 360, 24, ArchitectureEntryMode.ImageToVideo))
             .Stages[stage.ClipStageRawIndex];
         var references = ImageReferencePlanCompiler.Compile(clip, stage);
 
@@ -386,7 +386,7 @@ public class PlanningCompilerComponentTests
         };
 
         var plans = IcLoraPlanCompiler
-            .CompileClip(clip, new(640, 360, 24))
+            .CompileClip(clip, new(640, 360, 24, ArchitectureEntryMode.ImageToVideo))
             .Stages[stage.ClipStageRawIndex];
 
         Assert.Equal(2, plans.Length);
@@ -432,7 +432,7 @@ public class PlanningCompilerComponentTests
 
         Ltx2ClipPlanCompilation compilation = Ltx2ClipPlanCompiler.Compile(
             clip,
-            new(640, 360, 24));
+            new(640, 360, 24, ArchitectureEntryMode.ImageToVideo));
 
         Assert.Contains(
             compilation.Diagnostics,
@@ -485,12 +485,11 @@ public class PlanningCompilerComponentTests
         ClipSpec clip = InitVideoClip(7, Stage(10, control: 0), Stage(11, rawIndex: 1));
         Ltx2ClipPlanCompilation compilation = Ltx2ClipPlanCompiler.Compile(
             clip,
-            new(640, 360, 30));
+            new(640, 360, 30, ArchitectureEntryMode.InitVideo));
 
         ClipPlan plan = ClipPlanCompiler.Compile(
             clip,
             new ClipPlanCompilationContext(
-                IsTextToVideo: false,
                 Width: 640,
                 Height: 360,
                 FramesPerSecond: 30,
@@ -506,12 +505,41 @@ public class PlanningCompilerComponentTests
                         pair => (IArchitectureStagePayload)pair.Value),
                     compilation.Diagnostics)));
 
-        Assert.Equal(ClipInputKind.InitVideo, plan.Input);
+        Assert.Equal(ArchitectureEntryMode.InitVideo, plan.EntryMode);
         Assert.True(plan.Stages[0].IsPassthrough);
         Assert.Equal(StageInputKind.PreviousStage, plan.Stages[1].Input);
         Assert.False(plan.Stages[1].IsPassthrough);
         Assert.Equal(640, plan.InitVideo.TargetWidth);
         Assert.True(plan.Stages[1].Output.IsTimelineTerminal);
+    }
+
+    [Theory]
+    [InlineData((int)ArchitectureEntryMode.InitVideo, false)]
+    [InlineData((int)ArchitectureEntryMode.ImageToVideo, true)]
+    public void ClipPlanCompiler_rejects_mismatched_init_video_entry(
+        int entryMode,
+        bool hasInitVideo)
+    {
+        ClipSpec clip = InitVideoClip(7) with
+        {
+            InitVideo = hasInitVideo
+                ? new("data", "source.mp4", 0)
+                : null,
+        };
+        ClipPlanCompilationContext context = new(
+            Width: 640,
+            Height: 360,
+            FramesPerSecond: 30,
+            IsLastClip: true,
+            IsMultiClip: false,
+            TotalStageCount: 0,
+            FirstStageOrdinal: 0,
+            EntryMode: (ArchitectureEntryMode)entryMode);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
+            () => ClipPlanCompiler.Compile(clip, context));
+
+        Assert.Contains("entry mode and init-video plan disagree", error.Message);
     }
 
     [Fact]
@@ -807,7 +835,6 @@ public class PlanningCompilerComponentTests
                 }
             }
             plans.Add(ClipPlanCompiler.Compile(clips[i], new ClipPlanCompilationContext(
-                spec.IsTextToVideo,
                 spec.Width,
                 spec.Height,
                 spec.FPS,
@@ -936,7 +963,6 @@ public class PlanningCompilerComponentTests
         IReadOnlyDictionary<int, IArchitectureStagePayload> stagePayloads,
         ClipArchitectureAssignment architecture = null) =>
         new(
-            IsTextToVideo: false,
             Width: 512,
             Height: 512,
             FramesPerSecond: 24,
