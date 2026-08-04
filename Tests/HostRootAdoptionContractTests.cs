@@ -540,4 +540,30 @@ public sealed class HostRootAdoptionContractTests
                 entry.Value,
                 WorkflowGeneratorSteps.AutoCleanupNodeTypes));
     }
+
+    /// <summary>
+    /// Two clips carrying the same prompt encode it once. A text encode is the expensive part of a
+    /// stage — LTX-2 runs a 12B text model — so a timeline that repeats a prompt should not pay for
+    /// it twice, and a clip that repeats the previous clip's settings should not rebuild what it
+    /// already has.
+    /// </summary>
+    [Fact]
+    public async Task Two_clips_with_the_same_prompt_encode_it_once()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(
+            MakeClip(1.0, fixture.Stage()),
+            MakeClip(1.0, fixture.Stage())));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        // The prompt encoders core reserved 6 and 7 for, and nothing beside them.
+        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmClipTextEncodeAdvancedNode>().Count);
+        Assert.Single(bridge.Graph.NodesOfType<LTXVConditioningNode>());
+        // Each clip still samples for itself: the seeds differ, so the samplers cannot be one.
+        Assert.NotEqual(StageSampler(bridge, 0).Id, StageSampler(bridge, 1).Id);
+
+        AssertShippable(bridge, workflow, live);
+    }
 }

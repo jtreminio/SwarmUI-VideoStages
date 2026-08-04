@@ -1,3 +1,6 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
@@ -255,6 +258,74 @@ internal sealed class VideoArchitectureExecutionHost
             _generator,
             Constants.SweptHostRootNodesKey,
             rootSession.DisplacedRootRemovals);
+        CollapseDuplicateNodes();
+    }
+
+    /// <summary>
+    /// Folds together nodes the timeline built more than once. A clip repeating the previous clip's
+    /// prompt encodes it twice otherwise, and a stage repeating the previous stage's IC-LoRA builds
+    /// the whole loader and guide chain again; neither is cheap, and both compute the same thing.
+    /// <para>
+    /// Runs last, once the graph is final. Merging a node invalidates any path still naming it, and
+    /// the passes that rewrite a node in place for one stage — frame-count connection, the host
+    /// clamp widening — have all had their turn by now, so nothing can mutate a node another stage
+    /// has since been folded onto.
+    /// </para>
+    /// <para>
+    /// Only a node something reads may be folded. One that nothing reads is there for its effect
+    /// rather than for a value — a save, a preview — and two of those are two outputs the request
+    /// asked for, not one computed twice; <c>outputintermediateimages</c> is exactly that case.
+    /// </para>
+    /// </summary>
+    private void CollapseDuplicateNodes()
+    {
+        using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+        IReadOnlyDictionary<string, string> merged = DuplicateNodeCollapse.Collapse(
+            bridge,
+            mergeable: node => node.Outputs.Any(
+                output => bridge.Graph.FindInputsConnectedTo(output).Any()));
+        if (merged.Count == 0)
+        {
+            return;
+        }
+        // Every tracker, not only the media: core's own later steps read the VAEs off the generator
+        // to attach audio and to save, and a tracker naming a folded node would reach a node the
+        // workflow no longer has.
+        foreach (WGNodeData tracked in new[]
+        {
+            _generator.CurrentMedia,
+            _generator.CurrentMedia?.AttachedAudio,
+            _generator.CurrentModel,
+            _generator.CurrentTextEnc,
+            _generator.CurrentVae,
+            _generator.CurrentAudioVae,
+            _generator.BasicInputImage,
+        })
+        {
+            Repoint(tracked?.Path, merged);
+        }
+        foreach (JArray tracked in new[]
+        {
+            _generator.FinalMask,
+            _generator.FinalPrompt,
+            _generator.FinalNegativePrompt,
+            _generator.FinalTrimLatent,
+            _generator.LoadingModel,
+            _generator.LoadingClip,
+            _generator.LoadingVAE,
+        })
+        {
+            Repoint(tracked, merged);
+        }
+        VideoGraphHelpers.InvalidateForRemovedNodes(_generator.NodeHelpers, [.. merged.Keys]);
+    }
+
+    private static void Repoint(JArray path, IReadOnlyDictionary<string, string> merged)
+    {
+        if (path is { Count: 2 } && merged.TryGetValue($"{path[0]}", out string survivor))
+        {
+            path[0] = survivor;
+        }
     }
 
     private static void ValidateOutput(

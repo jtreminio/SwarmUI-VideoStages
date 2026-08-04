@@ -1509,12 +1509,12 @@ public class Ltx2CoreVideoContractTests
     }
 
     /// <summary>
-    /// Two stages sharing one clip's IC-LoRA still get a patch loader each, because each stage's
-    /// sampler runs its own model chain, and each carries the guide at that stage's own authored
-    /// strength. Sharing a loader would make one of the two strengths unreachable.
+    /// Two stages sharing one clip's IC-LoRA patch the model the same way, so they sample through
+    /// one loader. The strength is authored per stage and lives on the guide, which is why the
+    /// guides stay two: sharing the loader leaves neither strength unreachable.
     /// </summary>
     [Fact]
-    public async Task Each_stage_of_a_clip_gets_its_own_ic_lora_loader_and_guide()
+    public async Task Stages_sharing_an_ic_lora_share_its_loader_and_keep_their_own_guides()
     {
         using Ltx2WorkflowFixture fixture = WithControlNetStubs(
             Ltx2WorkflowFixture.CreateWithBaseModel());
@@ -1528,23 +1528,23 @@ public class Ltx2CoreVideoContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        Assert.Equal(2, bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>().Count);
+        LTXICLoRALoaderModelOnlyNode shared = Assert.Single(
+            bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count);
 
         double[] strengths = [0.7, 0.3];
-        HashSet<string> loaders = [];
+        HashSet<string> guides = [];
         for (int stage = 0; stage < strengths.Length; stage++)
         {
             SwarmKSamplerNode sampler = StageSampler(bridge, stage);
-            LTXICLoRALoaderModelOnlyNode loader = Assert.IsType<LTXICLoRALoaderModelOnlyNode>(
-                sampler.Model.Connection?.Node);
-            Assert.True(
-                loaders.Add(loader.Id),
-                $"Stage {stage} reuses IC-LoRA loader {loader.Id} that an earlier stage claimed.");
+            Assert.Same(shared, sampler.Model.Connection?.Node);
             LTXAddVideoICLoRAGuideNode guide = Assert.IsType<LTXAddVideoICLoRAGuideNode>(
                 sampler.Positive.Connection?.Node);
+            Assert.True(
+                guides.Add(guide.Id),
+                $"Stage {stage} reuses IC-LoRA guide {guide.Id} that an earlier stage claimed.");
             Assert.Equal(strengths[stage], guide.Strength.LiteralAsDouble());
-            live.AssertAllLive(loader, guide, sampler);
+            live.AssertAllLive(shared, guide, sampler);
         }
 
         AssertShippable(bridge, workflow, live);

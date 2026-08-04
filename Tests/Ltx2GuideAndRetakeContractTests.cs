@@ -291,12 +291,14 @@ public class Ltx2GuideAndRetakeContractTests
             .Select(repeat => repeat.Amount.LiteralAsInt() ?? 0)];
         Assert.Equal([3, 3, 7], amounts);
 
-        // Exactly the window block carries the retake strength; the frozen blocks are value 0. The
-        // upstream filter matters: the audio latent carries a full-frame SolidMask of its own.
+        // Exactly the window block carries the retake strength; the frozen blocks are value 0, and
+        // one zero mask serves both of them because a mask of the same size and value is the same
+        // mask. The upstream filter matters: the audio latent carries a full-frame SolidMask of
+        // its own.
         List<SolidMaskNode> solids = [.. bridge.Graph.NodesOfType<SolidMaskNode>()
             .Where(solid => ReachesUpstream(bridge, maskNode, solid.Id))];
         Assert.Single(solids, solid => solid.Value.LiteralAsDouble() == strength);
-        Assert.Equal(2, solids.Count(solid => solid.Value.LiteralAsDouble() == 0.0));
+        Assert.Single(solids, solid => solid.Value.LiteralAsDouble() == 0.0);
 
         live.AssertAllLive(maskNode);
         AssertShippable(bridge, workflow, live);

@@ -608,9 +608,13 @@ public class Ltx2StageChainContractTests
         SwarmKSamplerNode second = StageSampler(bridge, 1);
         LTXVSeparateAVLatentNode firstOutput = OutputOf(bridge, first);
 
-        // Each stage gets conditioning of its own, so a shared guide is not a shared prompt.
-        Assert.Equal(2, bridge.Graph.NodesOfType<LTXVConditioningNode>().Count);
-        Assert.NotSame(first.Positive.Connection?.Node, second.Positive.Connection?.Node);
+        // Both stages carry the clip's one prompt, so they carry one conditioning between them.
+        // What advances per stage is the latent, which the rest of this asserts: the second stage
+        // guides off the first's video and carries the first's audio forward.
+        Assert.Same(
+            Assert.Single(bridge.Graph.NodesOfType<LTXVConditioningNode>()),
+            first.Positive.Connection?.Node);
+        Assert.Same(first.Positive.Connection?.Node, second.Positive.Connection?.Node);
 
         LTXVImgToVideoInplaceNode secondGuide = Assert.IsType<LTXVImgToVideoInplaceNode>(
             JointLatentOf(second).VideoLatent.Connection?.Node);

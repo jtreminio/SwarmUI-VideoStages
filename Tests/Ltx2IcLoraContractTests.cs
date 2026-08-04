@@ -212,8 +212,8 @@ public class Ltx2IcLoraContractTests
     }
 
     /// <summary>
-    /// An unscoped entry patches every stage, and each stage gets its own loader rather than
-    /// sharing one — the patch rides the stage's own model chain.
+    /// An unscoped entry patches every stage. They all ask for the same patch, so they sample
+    /// through one loader; what stays per stage is the guide each carries.
     /// </summary>
     [Fact]
     public async Task Unscoped_entry_applies_on_every_stage()
@@ -227,20 +227,19 @@ public class Ltx2IcLoraContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        IReadOnlyList<LTXICLoRALoaderModelOnlyNode> loaders =
-            [.. bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>()];
-        Assert.Equal(2, loaders.Count);
+        LTXICLoRALoaderModelOnlyNode loader = Assert.Single(
+            bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count);
 
         SwarmKSamplerNode[] stages = [StageSampler(bridge, 0), StageSampler(bridge, 1)];
-        Assert.All(
-            stages,
-            stage => Assert.IsType<LTXICLoRALoaderModelOnlyNode>(stage.Model.Connection?.Node));
-        // Two distinct loaders across two stages is the claim; one shared loader would still
-        // satisfy the type check above.
-        Assert.Equal(2, stages.Select(stage => stage.Model.Connection?.Node.Id).Distinct().Count());
+        // Both stages patched, and by the same node: the entry is unscoped, so the two stages ask
+        // for an identical patch and there is only one to make. Each still guides for itself.
+        Assert.All(stages, stage => Assert.Same(loader, stage.Model.Connection?.Node));
+        Assert.Equal(
+            2,
+            stages.Select(stage => stage.Positive.Connection?.Node?.Id).Distinct().Count());
 
-        live.AssertAllLive([.. loaders, .. stages]);
+        live.AssertAllLive([loader, .. stages]);
         AssertShippable(bridge, workflow, live);
     }
 
@@ -710,7 +709,7 @@ public class Ltx2IcLoraContractTests
 
     /// <summary>
     /// One upload feeds every stage the entry applies on: the load/components pair is built once
-    /// and both stages' guides read it, while the loaders stay per stage.
+    /// and both stages' guides read it, while the guides stay per stage.
     /// </summary>
     [Fact]
     public async Task Uploaded_drive_chain_is_shared_across_stages()
@@ -727,7 +726,9 @@ public class Ltx2IcLoraContractTests
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
         GetVideoComponentsNode components = Assert.Single(
             bridge.Graph.NodesOfType<GetVideoComponentsNode>());
-        Assert.Equal(2, bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>().Count);
+        // Both stages ask for the same patch, so there is one loader to make; the guides are what
+        // stay per stage, and they are what the drive has to reach.
+        Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
 
         IReadOnlyList<LTXAddVideoICLoRAGuideNode> guides =
             [.. bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>()];
@@ -978,8 +979,9 @@ public class Ltx2IcLoraContractTests
     }
 
     /// <summary>
-    /// Across stages the voice track is materialised and encoded once; only the token node that
-    /// rewrites each stage's conditioning is rebuilt.
+    /// Across stages the voice track is materialised and encoded once, and the reference tokens
+    /// rewriting the conditioning are one node too — the stages carry the same prompt, so there is
+    /// one conditioning between them to rewrite.
     /// </summary>
     [Fact]
     public async Task Lipdub_all_stages_reuses_one_materialized_audio_sample()
@@ -1000,10 +1002,12 @@ public class Ltx2IcLoraContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        Assert.Equal(2, bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>().Count);
+        Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+        // Both stages wrap the same conditioning in the same reference tokens, so there is one
+        // wrapper; the claim is the sample beneath it, materialized once for the whole clip.
         IReadOnlyList<LTXVSetAudioRefTokensNode> refTokens =
             [.. bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>()];
-        Assert.Equal(2, refTokens.Count);
+        Assert.Single(refTokens);
         SwarmLoadAudioB64Node upload = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         LTXVAudioVAEEncodeNode encode = Assert.Single(

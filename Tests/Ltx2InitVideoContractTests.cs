@@ -1034,11 +1034,15 @@ public class Ltx2InitVideoContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         AssertOnlyCoresBasePassSamples(fixture, bridge);
-        // One upload, windowed twice — the clips share the decode.
+        // One upload and one window: both clips take the same span of the same footage, so they
+        // are the same frames twice and the merge batches that one window into both slots.
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
-        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmFrameWindowNode>().Count);
+        Assert.Single(bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
 
         BatchImagesNodeNode merge = Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
+        // Two slots, both the one window: with the windows folded together, the slot count is the
+        // only thing left saying the second clip is still in the timeline at all.
+        Assert.Equal(2, merge.Images.Items.Count);
         SwarmTrimFramesNode videoTrim = Assert.Single(
             bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
         Assert.Same(merge.IMAGE, videoTrim.Image.Connection);
@@ -1209,8 +1213,9 @@ public class Ltx2InitVideoContractTests
                 ReachesUpstream(bridge, sampler, window.Id),
                 "A surviving sampler does not trace back to the clip's footage."));
 
-        // The all-stages drive emits a loader, guide and crop on each sampling stage.
-        Assert.Equal(2, bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>().Count);
+        // The all-stages drive emits a guide and a crop on each sampling stage, patching the model
+        // through the one loader both stages ask for.
+        Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count);
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXVCropGuidesNode>().Count);
         // Each crop on its own stage's latent: two crops stacked on stage 0 would count the same.
