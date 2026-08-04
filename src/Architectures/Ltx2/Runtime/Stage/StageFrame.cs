@@ -37,13 +37,9 @@ internal sealed class StageFrame
 
     public bool NeedsCropGuidesAfterSampler { get; set; }
 
-    /// <summary>Core's own sampler and decode ids when this stage took them over, null otherwise.
-    /// The claim is made once, before sampling, but the decode is built well after it.</summary>
-    public string ClaimedSamplerId { get; set; }
-
-    public string ClaimedDecodeId { get; set; }
-
-    public string ClaimedLatentId { get; set; }
+    /// <summary>Which of core's nodes this stage took over. Claimed once, before the earliest of
+    /// them is built, and read again by each builder as its turn comes.</summary>
+    public HostRootClaim Claim { get; set; } = HostRootClaim.None;
 
     /// <summary>The continue boundary's tail, conformed to this stage's resolution, for a stage past
     /// the clip's first that regenerates the head. The opening stage takes the tail as its primary

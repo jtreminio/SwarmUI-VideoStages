@@ -38,7 +38,8 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
         INodeOutput clipOutput = bridge.ResolvePath(clip.Path);
 
         SwarmClipTextEncodeAdvancedNode negCondNode = AddSwarmClipTextEncodeAdvanced(
-            bridge, clipOutput, steps, negativePrompt, width, height, guidance);
+            bridge, clipOutput, steps, negativePrompt, width, height, guidance,
+            stageFrame?.Claim.Negative);
         genInfo.NegCond = negCondNode.CONDITIONING.ToPath();
 
         if (TryBuildPromptRelay(
@@ -48,8 +49,11 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
             return;
         }
 
+        // Not reached in relay mode, which supplies its own positive conditioning; core's node then
+        // goes unclaimed and is swept as before.
         SwarmClipTextEncodeAdvancedNode posCondNode = AddSwarmClipTextEncodeAdvanced(
-            bridge, clipOutput, steps, overridePositive ?? positivePrompt, width, height, guidance);
+            bridge, clipOutput, steps, overridePositive ?? positivePrompt, width, height, guidance,
+            stageFrame?.Claim.Positive);
         genInfo.PosCond = posCondNode.CONDITIONING.ToPath();
     }
 
@@ -142,16 +146,20 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
         string prompt,
         int width,
         int height,
-        double guidance)
+        double guidance,
+        string nodeId)
     {
-        SwarmClipTextEncodeAdvancedNode node = bridge.AddNode(new SwarmClipTextEncodeAdvancedNode().With(
+        SwarmClipTextEncodeAdvancedNode encode = new SwarmClipTextEncodeAdvancedNode().With(
             Steps: steps,
             Prompt: prompt ?? "",
             Width: width,
             Height: height,
             TargetWidth: width,
             TargetHeight: height,
-            Guidance: guidance));
+            Guidance: guidance);
+        SwarmClipTextEncodeAdvancedNode node = nodeId is null
+            ? bridge.AddNode(encode)
+            : bridge.AddNode(encode, nodeId);
         node.Clip.TryConnectToUntyped(clipOutput);
         return node;
     }

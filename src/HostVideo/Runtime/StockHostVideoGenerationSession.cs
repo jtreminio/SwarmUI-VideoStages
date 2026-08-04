@@ -377,7 +377,7 @@ internal sealed class StockHostVideoGenerationSession(
                     genInfo.Vae,
                     g.CurrentAudioVae);
             }
-            (string samplerId, string decodeId) = rootAdoption.ClaimTextRoot(clip, stage);
+            HostRootClaim claim = rootAdoption.ClaimTextRoot(clip, stage);
             string sampled = g.CreateKSampler(
                 genInfo.Model.Path,
                 genInfo.PosCond,
@@ -394,13 +394,13 @@ internal sealed class StockHostVideoGenerationSession(
                 sigmax: 1000,
                 defsampler: "euler",
                 defscheduler: "simple",
-                id: samplerId,
+                id: claim.Sampler,
                 explicitSampler: core.Sampler,
                 explicitScheduler: core.Scheduler,
                 sectionId: genInfo.ContextID);
             g.CurrentMedia = g.CurrentMedia
                 .WithPath([sampled, 0])
-                .DecodeLatents(genInfo.Vae, false, decodeId);
+                .DecodeLatents(genInfo.Vae, false, claim.Decode);
         }
         finally
         {

@@ -60,7 +60,7 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
                 g,
                 g.CurrentMedia,
                 genInfo.Vae,
-                stageFrame.ClaimedDecodeId);
+                stageFrame.Claim.Decode);
             AttachDecodedLtxAudioFromCurrentVideo();
             ApplyCurrentMediaOutputMetadata(
                 outputWidth,

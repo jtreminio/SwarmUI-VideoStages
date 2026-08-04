@@ -33,35 +33,48 @@ internal sealed class HostRootAdoption(
 
     private const string LatentNodeId = "5";
 
+    private const string PositiveNodeId = "6";
+
+    private const string NegativeNodeId = "7";
+
     private bool _claimed;
 
     /// <summary>
     /// The ids a text stage should build its sampler and decode under, or nulls to let the host
     /// allocate fresh ones. There is one host root, so this is granted at most once.
     /// </summary>
-    internal (string Sampler, string Decode) ClaimTextRoot(ClipPlan clip, StagePlan stage)
-    {
-        string[] ids = [SamplerNodeId, DecodeNodeId];
-        return TryClaim(clip, stage, ids)
-            ? (SamplerNodeId, DecodeNodeId)
-            : (null, null);
-    }
+    internal HostRootClaim ClaimTextRoot(ClipPlan clip, StagePlan stage) =>
+        TryClaim(clip, stage, [SamplerNodeId, DecodeNodeId])
+            ? new HostRootClaim { Sampler = SamplerNodeId, Decode = DecodeNodeId }
+            : HostRootClaim.None;
 
     /// <summary>
-    /// The same claim, plus core's empty latent — for a stage that builds its latent through the
-    /// typed bridge, which never consults <see cref="WorkflowGenerator.CreateNode"/>'s dedup cache.
-    /// Every other architecture builds its latent through that cache and lands on core's node
-    /// unaided, so taking the id from them would only cost them the collapse they already get.
+    /// The same claim, plus core's empty latent and conditioning pair — for a family that builds
+    /// those through the typed bridge, which never consults
+    /// <see cref="WorkflowGenerator.CreateNode"/>'s dedup cache. The others build them through that
+    /// cache and land on core's nodes unaided, so taking the ids from them would only cost them the
+    /// collapse they already get: claiming an id retires its dedup entry.
+    /// <para>
+    /// All or nothing, so a request where core allocates no positive conditioning — an H3 positive
+    /// with reference media returns before the reserved id is used — leaves this family without the
+    /// claim entirely, and a later clip of another family takes it instead. The shipped graph is the
+    /// same either way; only which clip owns core's ids moves.
+    /// </para>
     /// </summary>
-    internal (string Sampler, string Decode, string Latent) ClaimTextRootWithLatent(
-        ClipPlan clip,
-        StagePlan stage)
-    {
-        string[] ids = [SamplerNodeId, DecodeNodeId, LatentNodeId];
-        return TryClaim(clip, stage, ids)
-            ? (SamplerNodeId, DecodeNodeId, LatentNodeId)
-            : (null, null, null);
-    }
+    internal HostRootClaim ClaimWholeTextRoot(ClipPlan clip, StagePlan stage) =>
+        TryClaim(
+            clip,
+            stage,
+            [SamplerNodeId, DecodeNodeId, LatentNodeId, PositiveNodeId, NegativeNodeId])
+            ? new HostRootClaim
+            {
+                Sampler = SamplerNodeId,
+                Decode = DecodeNodeId,
+                Latent = LatentNodeId,
+                Positive = PositiveNodeId,
+                Negative = NegativeNodeId,
+            }
+            : HostRootClaim.None;
 
     private bool TryClaim(ClipPlan clip, StagePlan stage, IReadOnlyCollection<string> ids)
     {
@@ -79,4 +92,21 @@ internal sealed class HostRootAdoption(
         VideoGraphHelpers.InvalidateForRemovedNodes(generator.NodeHelpers, ids);
         return true;
     }
+}
+
+/// <summary>Which of core's nodes a stage took over, by the role each plays. Null where it took
+/// none — an unclaimed role simply leaves core's node to be swept as before.</summary>
+internal sealed record HostRootClaim
+{
+    internal static readonly HostRootClaim None = new();
+
+    internal string Sampler { get; init; }
+
+    internal string Decode { get; init; }
+
+    internal string Latent { get; init; }
+
+    internal string Positive { get; init; }
+
+    internal string Negative { get; init; }
 }

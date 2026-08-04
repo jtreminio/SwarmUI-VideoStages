@@ -165,6 +165,40 @@ public sealed class HostRootAdoptionContractTests
     }
 
     /// <summary>
+    /// The conditioning pair, on core's terms: its id map reserves 6 for the positive prompt and 7
+    /// for the negative, and a stage that takes those ids has to honour that or the encoders swap
+    /// roles for anything downstream that reads them by id.
+    /// </summary>
+    [Fact]
+    public async Task An_ltx_text_stage_claims_cores_conditioning_pair_in_cores_own_roles()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+
+        JObject workflow = await fixture.GenerateAsync(
+            MakeDocument(MakeClip(1.0, fixture.Stage())));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmClipTextEncodeAdvancedNode positive =
+            RequireTypedNode<SwarmClipTextEncodeAdvancedNode>(bridge, "6");
+        SwarmClipTextEncodeAdvancedNode negative =
+            RequireTypedNode<SwarmClipTextEncodeAdvancedNode>(bridge, "7");
+        Assert.Equal(
+            "A red kite flying over a green field",
+            positive.Prompt.LiteralAsString());
+        Assert.Equal("", negative.Prompt.LiteralAsString());
+
+        LTXVConditioningNode conditioning = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConditioningNode>());
+        Assert.Same(positive, conditioning.PositiveInput.Connection?.Node);
+        Assert.Same(negative, conditioning.NegativeInput.Connection?.Node);
+        Assert.Same(conditioning, StageSampler(bridge, 0).Positive.Connection?.Node);
+
+        live.AssertAllLive(positive, negative, conditioning);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
     /// LTX-2 builds its latent through the typed bridge, which never consults the dedup cache the
     /// other families' latents collapse through, so it takes core's id outright. What sits above it
     /// then collapses unaided: with core's video and audio latents on both inputs, the stage's joint

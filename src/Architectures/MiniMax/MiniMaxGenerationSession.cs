@@ -320,7 +320,7 @@ internal sealed class MiniMaxGenerationSession(
                 : JointLatent(incoming, genInfo);
             ApplyLatentInterpolation(stageUpscale);
             AttachKeyframes(genInfo, firstFrame);
-            (string samplerId, string decodeId) = rootAdoption.ClaimTextRoot(clip, stage);
+            HostRootClaim claim = rootAdoption.ClaimTextRoot(clip, stage);
             string sampled = g.CreateKSampler(
                 genInfo.Model.Path,
                 genInfo.PosCond,
@@ -336,14 +336,14 @@ internal sealed class MiniMaxGenerationSession(
                 sigmin: 0.002,
                 sigmax: 1000,
                 previews: g.UserInput.Get(ComfyUIBackendExtension.VideoPreviewType, "animate"),
-                id: samplerId,
+                id: claim.Sampler,
                 hadSpecialCond: true,
                 explicitSampler: genInfo.DefaultSampler,
                 explicitScheduler: genInfo.DefaultScheduler,
                 sectionId: genInfo.ContextID);
             g.CurrentMedia = g.CurrentMedia
                 .WithPath([sampled, 0])
-                .DecodeLatents(genInfo.Vae, false, decodeId);
+                .DecodeLatents(genInfo.Vae, false, claim.Decode);
         }
         finally
         {

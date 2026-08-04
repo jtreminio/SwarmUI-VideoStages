@@ -60,11 +60,9 @@ internal sealed class LtxStageExecutor
             }
 
             // Claimed before the latent is built, which is the earliest of the three nodes.
-            (stageFrame.ClaimedSamplerId,
-                stageFrame.ClaimedDecodeId,
-                stageFrame.ClaimedLatentId) = rootAdoption.ClaimTextRootWithLatent(
-                    stageFrame.ClipContext.PlannedClip,
-                    stageFrame.Stage);
+            stageFrame.Claim = rootAdoption.ClaimWholeTextRoot(
+                stageFrame.ClipContext.PlannedClip,
+                stageFrame.Stage);
             WGNodeData effectiveSourceMedia = g.CurrentMedia ?? sourceMedia;
             modelPromptPreparer.Prepare(genInfo, stageFrame, effectiveSourceMedia);
             bool canReuseLatent =
