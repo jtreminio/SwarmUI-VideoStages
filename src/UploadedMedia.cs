@@ -23,7 +23,7 @@ internal static class UploadedMedia
     {
         if (!TryGetAudio(input, data, fileName, out AudioFile audio, out string error))
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Request preflight accepted uploaded audio that runtime cannot load. {error}");
         }
         return audio;
@@ -33,7 +33,7 @@ internal static class UploadedMedia
     {
         if (!TryGetInitVideo(input, source, out ImageFile video, out string error))
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Request preflight accepted a clip source video that runtime cannot load. {error}");
         }
         return video;
@@ -48,7 +48,7 @@ internal static class UploadedMedia
         if (!TryGetRefImage(
             input, inlineData, uploadFileName, descriptor, out ImageFile image, out string error))
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Request preflight accepted a reference image that runtime cannot load. {error}");
         }
         return image;

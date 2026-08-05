@@ -307,6 +307,6 @@ public class StageRunnerCollaboratorTests
             ImageRefs: [],
             Stages: [stage]);
         return TestPlanCompiler.Compile(
-            new VideoStagesSpec(512, 512, 24, false, [clip]));
+            new TimelineSpec(512, 512, 24, false, [clip]));
     }
 }

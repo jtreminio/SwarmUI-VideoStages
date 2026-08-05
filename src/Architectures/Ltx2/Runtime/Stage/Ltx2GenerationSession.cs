@@ -59,7 +59,7 @@ internal sealed class Ltx2GenerationSession(
             output = CaptureRuntimeArtifact();
             if (!output.HasMedia)
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     $"stage {stage.StageId} produced no media artifact.");
             }
             if (stage.Output.IsTimelineTerminal && _trimmer.IsRequested)
@@ -83,7 +83,7 @@ internal sealed class Ltx2GenerationSession(
         WGNodeData initVideoMedia = _initVideoClipInstaller.TryInstall(clip);
         if (initVideoMedia is null)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"clip {clip.ClipId} source video could not be installed.");
         }
         return initVideoMedia;
@@ -103,7 +103,7 @@ internal sealed class Ltx2GenerationSession(
         {
             if (clipContext.SourceMedia is null)
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     $"clip {context.Clip.ClipId} requires root media before its first stage.");
             }
             g.CurrentMedia = clipContext.SourceMedia.Duplicate();

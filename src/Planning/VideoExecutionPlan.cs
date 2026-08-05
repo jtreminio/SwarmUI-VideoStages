@@ -51,7 +51,7 @@ internal sealed record RootEnvironment(
     HostRootKind HostKind,
     bool CanHandoffHostCore = false)
 {
-    public static RootEnvironment FromSpec(VideoStagesSpec spec) => new(
+    public static RootEnvironment FromSpec(TimelineSpec spec) => new(
         spec.IsTextToVideo ? HostRootKind.TextToVideoRoot : HostRootKind.ImageToVideo);
 }
 
@@ -91,7 +91,7 @@ internal sealed record StagePlan(
 
     public StageCorePlan Core =>
         ArchitecturePayload?.Core
-        ?? throw VideoStagesInvariant.Failure(
+        ?? throw Invariant.Failure(
             $"Stage {StageId} has no common execution settings.");
 
     public bool ContinuesSamplingFromPreviousStage =>

@@ -25,7 +25,7 @@ internal sealed class StageFramePreparer(
         ArgumentNullException.ThrowIfNull(root);
 
         WGNodeData currentMedia = g.CurrentMedia
-            ?? throw VideoStagesInvariant.Failure(
+            ?? throw Invariant.Failure(
                 $"stage {stage.StageId} has no input media.");
         JArray priorOutputPath = CopyPath(currentMedia.Path);
         LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
@@ -40,7 +40,7 @@ internal sealed class StageFramePreparer(
             : upscaleGraphBuilder.Apply(clipContext, stage, sectionId, postVideoChain);
         if (sourceMedia is null)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"stage {stage.StageId} could not resolve its source media.");
         }
 
@@ -77,7 +77,7 @@ internal sealed class StageFramePreparer(
             sectionId: sectionId);
         if (videoModel is null)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"stage {stage.StageId} could not resolve LTX video model "
                 + $"'{stage.ResolvedModel.ModelName}'.");
         }

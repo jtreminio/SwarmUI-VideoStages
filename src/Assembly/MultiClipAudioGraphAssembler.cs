@@ -43,7 +43,7 @@ internal static class MultiClipAudioGraphAssembler
             INodeOutput output = clip.Audio.Resolve(bridge);
             if (output is null)
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     $"clip {clip.ClipId} decoded audio could not be resolved "
                     + "for timeline assembly.");
             }
@@ -70,7 +70,7 @@ internal static class MultiClipAudioGraphAssembler
         }
         if (preflight.DecodedOutputs.Count != clips.Count)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 "Timeline audio preflight does not match the decoded clip count.");
         }
 

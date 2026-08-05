@@ -619,7 +619,7 @@ public class VideoExecutionPlanCompilerTests
     [Fact]
     public void Compile_TimelineAudioUsesTheFittedBoundaryWindow()
     {
-        VideoStagesSpec spec = Spec(
+        TimelineSpec spec = Spec(
             false,
             GeneratedClip(0, Stage(10)) with
             {
@@ -653,7 +653,7 @@ public class VideoExecutionPlanCompilerTests
     [Fact]
     public void Compile_TimelineAudioSegment_CutsAtEveryClipAndAdvancesSourceOffset()
     {
-        VideoStagesSpec spec = Spec(
+        TimelineSpec spec = Spec(
             false,
             GeneratedClip(0, Stage(10)) with { Frames = 49 },
             GeneratedClip(1, Stage(11)) with { Frames = 49 },
@@ -698,7 +698,7 @@ public class VideoExecutionPlanCompilerTests
     [Fact]
     public void Compile_FinalPlanIncludesTimelineAudioAndAuthoredResolutionState()
     {
-        VideoStagesSpec spec = Spec(false, GeneratedClip(0, Stage(10))) with
+        TimelineSpec spec = Spec(false, GeneratedClip(0, Stage(10))) with
         {
             HasConfiguredResolution = false,
             TimelineAudioSegments =
@@ -724,7 +724,7 @@ public class VideoExecutionPlanCompilerTests
     {
         ClipSpec ltx = GeneratedClip(0, Stage(10));
         ClipSpec host = GeneratedClip(1, Stage(11));
-        VideoStagesSpec spec = Spec(false, ltx, host) with
+        TimelineSpec spec = Spec(false, ltx, host) with
         {
             TimelineAudioSegments =
             [
@@ -780,7 +780,7 @@ public class VideoExecutionPlanCompilerTests
     [Fact]
     public void Compile_OverlappingTimelineAudioSegments_RemainIndependentPerClip()
     {
-        VideoStagesSpec spec = Spec(
+        TimelineSpec spec = Spec(
             false,
             GeneratedClip(0, Stage(10)) with { Frames = 48 },
             GeneratedClip(1, Stage(11)) with { Frames = 48 }) with
@@ -807,7 +807,7 @@ public class VideoExecutionPlanCompilerTests
     [Fact]
     public void Compile_TimelineAudioSeamAnchor_DoesNotLeakAnAlignedFrameIntoPreviousClip()
     {
-        VideoStagesSpec spec = Spec(
+        TimelineSpec spec = Spec(
             false,
             GeneratedClip(0, Stage(10)) with { Frames = 49 },
             GeneratedClip(1, Stage(11)) with { Frames = 49 }) with
@@ -837,7 +837,7 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(1, item.LengthSeconds);
     }
 
-    private static VideoStagesSpec Spec(bool isTextToVideo, params ClipSpec[] clips) =>
+    private static TimelineSpec Spec(bool isTextToVideo, params ClipSpec[] clips) =>
         new(512, 512, 24, isTextToVideo, clips);
 
     private static ClipSpec GeneratedClip(int id, params StageSpec[] stages) =>

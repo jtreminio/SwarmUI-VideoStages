@@ -8,9 +8,9 @@ using VideoStages.Planning;
 
 namespace VideoStages;
 
-internal static class VideoStagesContext
+internal static class RequestCaches
 {
-    private static readonly ConditionalWeakTable<WorkflowGenerator, VideoStagesSpec> Cache = new();
+    private static readonly ConditionalWeakTable<WorkflowGenerator, TimelineSpec> Cache = new();
 
     // The execution plan is deliberately a separate cache from the parsed specification so it
     // can be compiled before the host graph exists and consumed by every workflow phase.
@@ -18,12 +18,12 @@ internal static class VideoStagesContext
 
     // Prompt-tag section resolution has no live WorkflowGenerator to key the cache on, so repeated
     // videoclip[clip,stage] lookups in one generation share the parse via the stable param input.
-    private static readonly ConditionalWeakTable<T2IParamInput, VideoStagesSpec> PromptParseCache = new();
+    private static readonly ConditionalWeakTable<T2IParamInput, TimelineSpec> PromptParseCache = new();
 
-    public static VideoStagesSpec GetVideoStagesSpec(this WorkflowGenerator g) =>
+    public static TimelineSpec GetTimelineSpec(this WorkflowGenerator g) =>
         Cache.GetValue(g, generator => RequestReader.Read(generator.UserInput));
 
-    public static VideoStagesSpec GetVideoStagesSpecForPromptParse(T2IParamInput input) =>
+    public static TimelineSpec GetTimelineSpecForPromptParse(T2IParamInput input) =>
         PromptParseCache.GetValue(input, RequestReader.Read);
 
     public static VideoExecutionPlanContext? GetVideoExecutionPlanContext(this WorkflowGenerator g) =>
@@ -58,12 +58,12 @@ internal static class VideoStagesContext
 
     private static VideoExecutionPlanContext RequireExistingContext(WorkflowGenerator g) =>
         g.GetVideoExecutionPlanContext()
-        ?? throw VideoStagesInvariant.Failure(
+        ?? throw Invariant.Failure(
             "VideoStages has no executable clips in the active timeline.");
 
     private static VideoExecutionPlanContext CompilePlan(WorkflowGenerator g)
     {
-        VideoStagesSpec spec = g.GetVideoStagesSpec();
+        TimelineSpec spec = g.GetTimelineSpec();
         if (spec.Clips.Count == 0)
         {
             return null;
@@ -144,7 +144,7 @@ internal sealed class VideoExecutionPlanContext
             }
             if (State != VideoExecutionState.Compiled)
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     $"VideoStages request preparation cannot start from state '{State}'.");
             }
 
@@ -157,7 +157,7 @@ internal sealed class VideoExecutionPlanContext
                 _executionHost = _createExecutionHost();
                 if (!ReferenceEquals(Plan, _executionHost.Plan))
                 {
-                    throw VideoStagesInvariant.Failure(
+                    throw Invariant.Failure(
                         "The execution host was created for a different video execution plan.");
                 }
                 PreflightDiagnostics = _executionHost.CollectPreflightDiagnostics();
@@ -191,7 +191,7 @@ internal sealed class VideoExecutionPlanContext
         // Do not prepare lazily from a mutation callback: alternate host callbacks run after core
         // graph construction. The registered graph-free preflight phase is the sole preparation
         // owner, and skipping it must fail before this extension mutates anything.
-        throw VideoStagesInvariant.Failure(
+        throw Invariant.Failure(
             $"VideoStages cannot mutate the workflow while request state is '{State}'. "
                 + "Graph-free request preflight must complete first.");
     }
@@ -240,7 +240,7 @@ internal sealed class VideoExecutionPlanContext
         ArgumentNullException.ThrowIfNull(error);
         if (State == VideoExecutionState.Completed)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 "A completed VideoStages execution cannot transition to failed.", error);
         }
         _failure = ExceptionDispatchInfo.Capture(error);

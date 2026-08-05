@@ -89,7 +89,7 @@ public class RootPlanTests
         RootEnvironment root,
         params ClipSpec[] clips) =>
         TestPlanCompiler.Compile(
-            new VideoStagesSpec(512, 512, 24, isTextToVideo, clips),
+            new TimelineSpec(512, 512, 24, isTextToVideo, clips),
             root);
 
     private static ClipSpec GeneratedClip(int id) => new(

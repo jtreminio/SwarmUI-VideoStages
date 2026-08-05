@@ -78,14 +78,14 @@ internal sealed class RootRuntimeSession
         ArgumentNullException.ThrowIfNull(timeline);
         if (!timeline.HasMedia)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 "the completed timeline did not produce a publishable video artifact.");
         }
 
         bool rootIsDisplaced = _rootPlan.DiscardsRoot;
         if (!Publish(timeline))
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 "the completed timeline could not be connected to the final output.");
         }
 

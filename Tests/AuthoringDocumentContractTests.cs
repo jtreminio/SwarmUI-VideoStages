@@ -88,14 +88,14 @@ public class AuthoringDocumentContractTests
         }
     }
 
-    private static VideoStagesSpec ParseFixture(out KeyLog log)
+    private static TimelineSpec ParseFixture(out KeyLog log)
     {
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
         T2IParamInput input = new(null);
         Fixtures.SetVideoStagesConfig(input, FixtureJson());
         KeyLog keyLog = new();
         DocumentJson.KeyProbe = keyLog.Observe;
-        VideoStagesSpec spec;
+        TimelineSpec spec;
         try
         {
             spec = RequestReader.Read(input);
@@ -143,7 +143,7 @@ public class AuthoringDocumentContractTests
     [Fact]
     public void ParsesTheSharedFixtureIntoTheExpectedSpec()
     {
-        VideoStagesSpec spec = ParseFixture(out _);
+        TimelineSpec spec = ParseFixture(out _);
         Assert.Equal(768, spec.Width);
         Assert.Equal(512, spec.Height);
         Assert.Equal(24, spec.FPS);
@@ -246,7 +246,7 @@ public class AuthoringDocumentContractTests
         Fixtures.SetVideoStagesConfig(input, "{}");
         input.Set(VideoStagesExtension.Data, document.ToString());
 
-        VideoStagesSpec spec = RequestReader.Read(input);
+        TimelineSpec spec = RequestReader.Read(input);
 
         Assert.Equal("ltx2", spec.Clips[0].AuthoredArchitectureHint);
     }

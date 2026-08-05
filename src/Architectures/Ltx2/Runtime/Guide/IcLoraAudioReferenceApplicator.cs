@@ -119,13 +119,13 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         }
         if (entry.Drive.Source != IcLoraMediaSourceKind.Upload)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"IC-LoRA entry {entry.EntryIndex} has no supported audio drive source.");
         }
         UploadedMediaSpec media = entry.Drive.Upload;
         if (string.IsNullOrWhiteSpace(media?.Data))
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"IC-LoRA entry {entry.EntryIndex} requires audio or video Drive Media.");
         }
         if (entry.Drive.MediaKind == IcLoraDriveMediaKind.Audio)
@@ -139,7 +139,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         }
         if (entry.Drive.MediaKind != IcLoraDriveMediaKind.Video)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 "This IC-LoRA requires audio or video Drive Media for its speaker reference.");
         }
         SwarmLoadVideoB64Node load =

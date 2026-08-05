@@ -18,7 +18,7 @@ internal static class ArchitectureRootOwnerResolver
             return null;
         }
         return owner.Architecture?.Id
-            ?? throw VideoStagesInvariant.Failure(
+            ?? throw Invariant.Failure(
                 $"Root-owning clip {owner.ClipId} has no architecture identity.");
     }
 

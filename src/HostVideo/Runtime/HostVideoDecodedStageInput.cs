@@ -86,7 +86,7 @@ internal sealed class HostVideoDecodedStageInput
         WidenHostSourceClamp();
         if (_generator.CurrentMedia is null)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"clip {clip.ClipId} stage {stage.StageId} produced no "
                 + $"{_architectureDisplayLabel} video.");
         }
@@ -105,7 +105,7 @@ internal sealed class HostVideoDecodedStageInput
             || _generator.CurrentMedia.Path is not JArray { Count: 2 } path
             || bridge.ResolvePath(path) is null)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"clip {clip.ClipId} stage {stage.StageId} did not produce a "
                 + $"resolvable decoded {_architectureDisplayLabel} video.");
         }
@@ -160,14 +160,14 @@ internal sealed class HostVideoDecodedStageInput
             || media.Path is not JArray { Count: 2 } path
             || bridge.ResolvePath(path) is null)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"clip {clip.ClipId} stage {stage.StageId} requires its resolvable "
                 + $"{owner}.");
         }
         if (media.GetRawFPS() != _framesPerSecond
             || expectedFrames is int frames && media.Frames != frames)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"clip {clip.ClipId} stage {stage.StageId} requires its {owner} at "
                 + $"{expectedFrames} frames and {_framesPerSecond} fps, but received "
                 + $"{media.Frames} frames and {media.GetRawFPS()} fps.");

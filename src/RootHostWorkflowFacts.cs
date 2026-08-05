@@ -59,7 +59,7 @@ internal static class RootHostWorkflowFacts
 
     internal static bool CanInterceptHostCore(
         WorkflowGenerator generator,
-        VideoStagesSpec spec)
+        TimelineSpec spec)
     {
         if (CoreImageToVideoStep is null
             || !spec.Clips.Any(clip => clip.Stages.Count > 0))

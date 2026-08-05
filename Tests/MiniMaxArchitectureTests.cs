@@ -413,7 +413,7 @@ public class MiniMaxArchitectureTests
             models.BaseModel,
             models.VideoModel,
             MakeDocument(clip).ToString());
-        VideoStagesSpec spec = VideoStagesContext.GetVideoStagesSpecForPromptParse(input);
+        TimelineSpec spec = RequestCaches.GetTimelineSpecForPromptParse(input);
         return Assert.Single(spec.Clips);
     }
 }

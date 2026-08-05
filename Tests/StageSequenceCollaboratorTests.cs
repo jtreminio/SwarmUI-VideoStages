@@ -27,7 +27,7 @@ public class StageSequenceCollaboratorTests
             WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             WorkflowTestHarness.Template_BaseOnlyImage());
-        VideoStagesSpec spec = generator.GetVideoStagesSpec();
+        TimelineSpec spec = generator.GetTimelineSpec();
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
         ClipPlan plannedClip = Assert.Single(plan.Clips);
         StagePlan plannedStage = Assert.Single(plannedClip.Stages);
@@ -90,7 +90,7 @@ public class StageSequenceCollaboratorTests
             WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             WorkflowTestHarness.Template_BaseOnlyImage());
-        VideoExecutionPlan plan = TestPlanCompiler.Compile(generator.GetVideoStagesSpec());
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(generator.GetTimelineSpec());
         ClipPlan nextClip = Assert.Single(plan.Clips);
         ClipPlan previousClip = nextClip with { ClipId = 41, Frames = 16 };
         WGNodeData previousOutput = generator.CurrentMedia.Duplicate();
@@ -123,7 +123,7 @@ public class StageSequenceCollaboratorTests
             WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             WorkflowTestHarness.Template_BaseOnlyImage());
-        VideoExecutionPlan plan = TestPlanCompiler.Compile(generator.GetVideoStagesSpec());
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(generator.GetTimelineSpec());
         ClipPlan nextClip = Assert.Single(plan.Clips);
         ClipPlan previousClip = nextClip with { ClipId = 41, Frames = 16 };
         WGNodeData previousOutput = generator.CurrentMedia.Duplicate();
@@ -178,7 +178,7 @@ public class StageSequenceCollaboratorTests
             WorkflowTestHarness.GenerateWithStepsAndState(
             input,
             WorkflowTestHarness.Template_BaseOnlyImage());
-        VideoExecutionPlan plan = TestPlanCompiler.Compile(generator.GetVideoStagesSpec());
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(generator.GetTimelineSpec());
         StageRefStore store = new(generator);
         StageGuideReferenceState state = new(
             generator,

@@ -62,7 +62,7 @@ public class WanRuntimeFlowTests
                 StringComparison.Ordinal));
 
         LegacyVideoSwapRequestSnapshot snapshot =
-            generator.GetVideoStagesSpec().LegacyVideoSwap;
+            generator.GetTimelineSpec().LegacyVideoSwap;
         Assert.Equal(legacySwapModel.Name, snapshot.VideoSwapModelName);
         Assert.True(snapshot.HasExplicitVideoSwapPercent);
         Assert.True(double.IsNaN(snapshot.ExplicitVideoSwapPercent!.Value));

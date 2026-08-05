@@ -18,7 +18,7 @@ internal static class ClipPlanCompiler
             context.FramesPerSecond);
         if ((context.EntryMode == ArchitectureEntryMode.InitVideo) != (initVideo is not null))
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Clip {clip.Id} entry mode and init-video plan disagree.");
         }
         List<StagePlan> stages = [];
@@ -88,7 +88,7 @@ internal static class ClipPlanCompiler
             ArchitectureEntryMode.TextToVideo => StageInputKind.EmptyLatent,
             ArchitectureEntryMode.ImageToVideo => StageInputKind.RootMedia,
             ArchitectureEntryMode.InitVideo => StageInputKind.InitVideo,
-            _ => throw VideoStagesInvariant.Failure($"Unknown clip entry mode '{entryMode}'."),
+            _ => throw Invariant.Failure($"Unknown clip entry mode '{entryMode}'."),
         };
     }
 
@@ -109,7 +109,7 @@ internal static class ClipPlanCompiler
         if (assignedArchitectureId.HasValue
             && clipArchitectureId != assignedArchitectureId.Value)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Clip payload architecture '{clipArchitectureId}' does not match assigned "
                     + $"architecture '{assignedArchitectureId.Value}'.");
         }
@@ -121,7 +121,7 @@ internal static class ClipPlanCompiler
         {
             if (!compilation.StagePayloads.ContainsKey(rawStageIndex))
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     $"Clip stage {rawStageIndex} has no architecture stage payload.");
             }
         }

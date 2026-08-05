@@ -374,7 +374,7 @@ public class WanArchitectureTests
         {
             ImageRefs = [new("Upload", 1, true, "last.png", "last")],
         };
-        VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
+        TimelineSpec spec = new(512, 512, 24, false, [clip]);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
@@ -404,7 +404,7 @@ public class WanArchitectureTests
         {
             ImageRefs = [new("Base", 1, false, null)],
         };
-        VideoStagesSpec spec = new(512, 512, 24, true, [clip]);
+        TimelineSpec spec = new(512, 512, 24, true, [clip]);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
@@ -437,7 +437,7 @@ public class WanArchitectureTests
                     "data:image/png;base64,RklSU1Q="),
             ],
         };
-        VideoStagesSpec spec = new(512, 512, 24, true, [clip]);
+        TimelineSpec spec = new(512, 512, 24, true, [clip]);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
@@ -465,7 +465,7 @@ public class WanArchitectureTests
                     "data:image/png;base64,RklSU1Q="),
             ],
         };
-        VideoStagesSpec spec = new(512, 512, 24, true, [clip]);
+        TimelineSpec spec = new(512, 512, 24, true, [clip]);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
@@ -530,7 +530,7 @@ public class WanArchitectureTests
         {
             ImageRefs = [new("Upload", 1, true, "last.png", "last")],
         };
-        VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
+        TimelineSpec spec = new(512, 512, 24, false, [clip]);
 
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
@@ -715,7 +715,7 @@ public class WanArchitectureTests
             Control = 0,
             Upscale = 2,
         };
-        VideoStagesSpec spec = new(
+        TimelineSpec spec = new(
             512,
             512,
             24,
@@ -840,7 +840,7 @@ public class WanArchitectureTests
             ClipStageRawIndex = 1,
         };
         ClipSpec fiveClip = GeneratedClip(0, firstFive, secondFive);
-        VideoStagesSpec fiveSpec = new(512, 512, 24, false, [fiveClip]);
+        TimelineSpec fiveSpec = new(512, 512, 24, false, [fiveClip]);
         VideoExecutionPlan fivePlan = VideoExecutionPlanCompiler.Compile(
             fiveSpec,
             RootEnvironment.FromSpec(fiveSpec),
@@ -862,7 +862,7 @@ public class WanArchitectureTests
                     WanArchitectureModule.ArchitectureId,
                     "Wan").ModelClassId));
 
-        VideoStagesSpec cutSpec = new(
+        TimelineSpec cutSpec = new(
             512,
             512,
             24,
@@ -1004,7 +1004,7 @@ public class WanArchitectureTests
         {
             AuthoredStages = [new(0, model.Name, null, false)],
         };
-        VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
+        TimelineSpec spec = new(512, 512, 24, false, [clip]);
         VideoArchitectureRegistry registry = new(
         [
             Ltx2ArchitectureModule.Instance,
@@ -1060,7 +1060,7 @@ public class WanArchitectureTests
                 new(1, other.Name, null, skipped),
             ],
         };
-        VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
+        TimelineSpec spec = new(512, 512, 24, false, [clip]);
         VideoArchitectureRegistry registry = new(
         [
             Ltx2ArchitectureModule.Instance,
@@ -1085,7 +1085,7 @@ public class WanArchitectureTests
     {
         StageSpec stage = Stage(10, "wan-five");
         ClipSpec clip = GeneratedClip(0, stage);
-        VideoStagesSpec spec = new(
+        TimelineSpec spec = new(
             Width: 512,
             Height: 512,
             FPS: 24,
@@ -1132,7 +1132,7 @@ public class WanArchitectureTests
             ImageReference = "PreviousStage",
         };
         ClipSpec clip = GeneratedClip(0, first, second);
-        VideoStagesSpec spec = new(512, 512, 24, true, [clip]);
+        TimelineSpec spec = new(512, 512, 24, true, [clip]);
         ArchitecturePlanningResult planning = ResolveWan(
             spec,
             new Dictionary<string, ModelProfileId>
@@ -1159,7 +1159,7 @@ public class WanArchitectureTests
     {
         StageSpec stage = Stage(10, "wan-fourteen");
         ClipSpec clip = GeneratedClip(0, stage);
-        VideoStagesSpec spec = new(512, 512, 24, true, [clip]);
+        TimelineSpec spec = new(512, 512, 24, true, [clip]);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
@@ -1400,7 +1400,7 @@ public class WanArchitectureTests
 
     private static VideoExecutionPlan Compile(ClipSpec clip)
     {
-        VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
+        TimelineSpec spec = new(512, 512, 24, false, [clip]);
         return VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
@@ -1436,7 +1436,7 @@ public class WanArchitectureTests
 
     /// <summary>Assigns Wan to every clip without needing host model metadata installed.</summary>
     private static ArchitecturePlanningResult ResolveWan(
-        VideoStagesSpec spec,
+        TimelineSpec spec,
         IReadOnlyDictionary<string, ModelProfileId> profilesByModel = null,
         IReadOnlyDictionary<string, IReadOnlyList<string>>
             referencePositionsByModel = null)

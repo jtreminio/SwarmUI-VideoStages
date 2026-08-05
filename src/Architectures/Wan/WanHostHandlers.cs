@@ -22,7 +22,7 @@ internal static class WanHostHandlers
     internal static void IsolateCoreSettings(
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        if (!VideoStagesContext.TryGetActiveCoreVideoContext(
+        if (!RequestCaches.TryGetActiveCoreVideoContext(
                 genInfo,
                 out _,
                 out VideoExecutionPlanContext context)

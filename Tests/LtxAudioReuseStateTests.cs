@@ -51,7 +51,7 @@ public class LtxAudioReuseStateTests
         Stages: [MakeStage(0), MakeStage(1), MakeStage(2)]);
 
     private static VideoExecutionPlan Plan(ClipSpec clip) =>
-        TestPlanCompiler.Compile(new VideoStagesSpec(512, 512, 24, false, [clip]));
+        TestPlanCompiler.Compile(new TimelineSpec(512, 512, 24, false, [clip]));
 
     private static WGNodeData MakeVideoMedia(WorkflowGenerator g, JArray attachedAudioPath = null)
     {

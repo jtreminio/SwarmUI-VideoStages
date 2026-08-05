@@ -80,7 +80,7 @@ internal static class VideoArchitectureManifest
                 architectureId,
                 out VideoArchitectureRegistration registration))
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     $"No generation runtime provider is registered for architecture "
                         + $"'{architectureId}'.");
             }

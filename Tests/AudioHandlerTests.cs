@@ -40,7 +40,7 @@ public class AudioHandlerTests
             UploadedAudio: null,
             ImageRefs: [],
             Stages: [stage]);
-        VideoStagesSpec spec = new(768, 512, 24, true, [clip]);
+        TimelineSpec spec = new(768, 512, 24, true, [clip]);
         return Assert.Single(TestPlanCompiler.Compile(spec).Clips);
     }
 

@@ -108,12 +108,12 @@ internal sealed class VideoStageRunner : IDisposable
             output = CaptureRuntimeArtifact();
             if (!output.HasMedia)
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     $"stage {stage.StageId} produced no media artifact.");
             }
             if (consumedContinuation && continuation is null)
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     $"stage {stage.StageId} consumed no planned continuation.");
             }
             StagePlan outputStage = consumedContinuation ? continuation : stage;
@@ -167,10 +167,10 @@ internal sealed class VideoStageRunner : IDisposable
             return;
         }
         int width = _generator.CurrentMedia.Width
-            ?? throw VideoStagesInvariant.Failure(
+            ?? throw Invariant.Failure(
                 $"Stage {stage.StageId} cannot upscale media with no width.");
         int height = _generator.CurrentMedia.Height
-            ?? throw VideoStagesInvariant.Failure(
+            ?? throw Invariant.Failure(
                 $"Stage {stage.StageId} cannot upscale media with no height.");
         (int targetWidth, int targetHeight) = StageUpscaleGraph.ResolveTargetDimensions(
             width,

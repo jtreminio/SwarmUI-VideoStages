@@ -64,7 +64,7 @@ internal sealed class StockHostVideoGenerationSession(
         if (clip.EntryMode == ArchitectureEntryMode.InitVideo)
         {
             InitVideoPlan source = clip.InitVideo
-                ?? throw VideoStagesInvariant.Failure(
+                ?? throw Invariant.Failure(
                     $"InitVideo {architectureLabel} clip {clip.ClipId} has no init-video plan.");
             ClipPlan sourceInstallPlan = clip with
             {
@@ -77,7 +77,7 @@ internal sealed class StockHostVideoGenerationSession(
             g.CurrentMedia = _initVideoClipInstaller.TryInstall(
                 sourceInstallPlan,
                 includeSourceAudio: false)
-                ?? throw VideoStagesInvariant.Failure(
+                ?? throw Invariant.Failure(
                     $"clip {clip.ClipId} source video could not be installed.");
             g.CurrentVae = null;
         }
@@ -103,7 +103,7 @@ internal sealed class StockHostVideoGenerationSession(
             else
             {
                 g.CurrentMedia = rootSources.Media?.Duplicate()
-                    ?? throw VideoStagesInvariant.Failure(
+                    ?? throw Invariant.Failure(
                         $"clip {clip.ClipId} has no host image to generate from.");
                 g.CurrentVae = rootSources.Vae?.Duplicate();
             }
@@ -363,7 +363,7 @@ internal sealed class StockHostVideoGenerationSession(
         if (decode?.Samples.Connection?.Node is not ComfyNode lowSampler
             || lowSampler.FindInput("latent_image")?.Connection is not INodeOutput highLatent)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"stage {stage.StageId} could not publish its "
                     + "sampling-continuation intermediate.");
         }
@@ -460,7 +460,7 @@ internal sealed class StockHostVideoGenerationSession(
         StagePlan stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo) =>
         genInfo.Frames
-        ?? throw VideoStagesInvariant.Failure(
+        ?? throw Invariant.Failure(
             $"Clip {clip.ClipId} stage {stage.StageId} has no "
                 + $"{architectureLabel} text-video frame count.");
 
@@ -543,7 +543,7 @@ internal sealed class StockHostVideoGenerationSession(
             && latent.Height == height;
         if (!valid)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"clip {clip.ClipId} stage {stage.StageId} could not create a "
                     + $"valid {width}x{height}, {frames}-frame {architectureLabel} "
                     + "text-video latent.");
@@ -562,7 +562,7 @@ internal sealed class StockHostVideoGenerationSession(
     {
         StageCorePlan core = stage.Core;
         T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId)
-            ?? throw VideoStagesInvariant.Failure(
+            ?? throw Invariant.Failure(
                 $"clip {clip.ClipId} could not resolve {architectureLabel} "
                     + "video model "
                 + $"'{stage.ResolvedModel.ModelName}'.");
@@ -576,7 +576,7 @@ internal sealed class StockHostVideoGenerationSession(
                     continuation.StageId));
             if (continuationModel is null)
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     $"clip {clip.ClipId} could not resolve {architectureLabel} "
                         + $"video model '{continuation.ResolvedModel.ModelName}'.");
             }

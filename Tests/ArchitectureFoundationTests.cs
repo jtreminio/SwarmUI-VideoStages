@@ -57,7 +57,7 @@ public class ArchitectureFoundationTests
             AuthoredStages = [new(0, "ltx-model", "ltx-profile", Skipped: false)],
         };
 
-        VideoStagesSpec spec = Spec(clip);
+        TimelineSpec spec = Spec(clip);
         ArchitecturePlanningResult result =
             ArchitecturePlanResolver.Resolve(spec, new FakeRegistry());
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
@@ -302,7 +302,7 @@ public class ArchitectureFoundationTests
                 new(2, "ltx-model", "ltx-profile", Skipped: true),
             ],
         };
-        VideoStagesSpec spec = Spec(clip);
+        TimelineSpec spec = Spec(clip);
         ArchitecturePlanningResult architecture =
             ArchitecturePlanResolver.Resolve(spec, new FakeRegistry());
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
@@ -352,7 +352,7 @@ public class ArchitectureFoundationTests
             AuthoredArchitectureHint = "fake",
             AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
         };
-        VideoStagesSpec spec = Spec(left, right);
+        TimelineSpec spec = Spec(left, right);
         ArchitecturePlanningResult architecture =
             ArchitecturePlanResolver.Resolve(spec, new FakeRegistry());
 
@@ -384,7 +384,7 @@ public class ArchitectureFoundationTests
             AuthoredArchitectureHint = "ltx2",
             AuthoredStages = [new(0, "ltx-model", "ltx-profile", false)],
         };
-        VideoStagesSpec spec = Spec(clip);
+        TimelineSpec spec = Spec(clip);
         ArchitecturePlanningResult architecture =
             ArchitecturePlanResolver.Resolve(spec, new FakeRegistry());
 
@@ -423,7 +423,7 @@ public class ArchitectureFoundationTests
                 new(1, "ltx23-model", "ltx-2.3-profile", Skipped: false),
             ],
         };
-        VideoStagesSpec spec = Spec(clip);
+        TimelineSpec spec = Spec(clip);
         ArchitecturePlanningResult architecture =
             ArchitecturePlanResolver.Resolve(spec, new FakeRegistry());
 
@@ -458,7 +458,7 @@ public class ArchitectureFoundationTests
         {
             AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
         };
-        VideoStagesSpec spec = Spec(clip);
+        TimelineSpec spec = Spec(clip);
 
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
@@ -993,7 +993,7 @@ public class ArchitectureFoundationTests
                 BoundaryOut = Constants.BoundaryOutCut,
             })
         ];
-        VideoStagesSpec spec = Spec(clips);
+        TimelineSpec spec = Spec(clips);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
@@ -1071,7 +1071,7 @@ public class ArchitectureFoundationTests
     [Fact]
     public void Execution_host_rejects_sessions_created_for_another_architecture()
     {
-        VideoStagesSpec spec = Spec(
+        TimelineSpec spec = Spec(
             GeneratedClip(0, Stage(0, "ltx-model")),
             GeneratedClip(1, Stage(1, "fake-model")));
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
@@ -1104,7 +1104,7 @@ public class ArchitectureFoundationTests
     [Fact]
     public void Execution_host_disposes_partial_sessions_when_construction_fails()
     {
-        VideoStagesSpec spec = Spec(
+        TimelineSpec spec = Spec(
             GeneratedClip(0, Stage(0, "ltx-model")),
             GeneratedClip(1, Stage(1, "fake-model")));
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
@@ -1404,7 +1404,7 @@ public class ArchitectureFoundationTests
     private static IEnumerable<string> Keys(JObject value) =>
         value.Properties().Select(property => property.Name);
 
-    private static VideoStagesSpec Spec(params ClipSpec[] clips) =>
+    private static TimelineSpec Spec(params ClipSpec[] clips) =>
         new(512, 512, 24, false, clips);
 
     private static ClipSpec GeneratedClip(int id, params StageSpec[] stages) =>
@@ -1441,7 +1441,7 @@ public class ArchitectureFoundationTests
 
     private static VideoExecutionPlan Compile(ClipSpec clip, FakeRegistry registry)
     {
-        VideoStagesSpec spec = Spec(clip);
+        TimelineSpec spec = Spec(clip);
         return VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
@@ -1452,7 +1452,7 @@ public class ArchitectureFoundationTests
     {
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor;
-        VideoStagesSpec spec = Spec(clip);
+        TimelineSpec spec = Spec(clip);
         return VideoExecutionPlanCompiler.Compile(
             spec,
             RootEnvironment.FromSpec(spec),
@@ -1500,7 +1500,7 @@ public class ArchitectureFoundationTests
 
     private static VideoExecutionPlan Plan(ClipSpec clip)
     {
-        VideoStagesSpec spec = Spec(clip with
+        TimelineSpec spec = Spec(clip with
         {
             AuthoredArchitectureHint = "ltx2",
             AuthoredModelProfileHint = "ltx-profile",

@@ -11,7 +11,7 @@ public class PlanningCompilerComponentTests
     [Fact]
     public void BoundaryPlanCompiler_ReportsContinueFallbackAsImmutableResult()
     {
-        VideoStagesSpec spec = new(640, 360, 24, false,
+        TimelineSpec spec = new(640, 360, 24, false,
         [
             GeneratedClip(0, Stage(10)) with
             {
@@ -37,7 +37,7 @@ public class PlanningCompilerComponentTests
     [Fact]
     public void BoundaryPlanCompiler_CarriesAudioOnlyForEffectiveOverlappedBoundary()
     {
-        VideoStagesSpec spec = new(640, 360, 24, false,
+        TimelineSpec spec = new(640, 360, 24, false,
         [
             GeneratedClip(0, Stage(10)) with
             {
@@ -59,7 +59,7 @@ public class PlanningCompilerComponentTests
     [Fact]
     public void BoundaryPlanCompiler_RejectsMisalignedCompiledClips()
     {
-        VideoStagesSpec spec = new(640, 360, 24, false,
+        TimelineSpec spec = new(640, 360, 24, false,
         [
             GeneratedClip(0, Stage(10)),
             GeneratedClip(1, Stage(11)),
@@ -76,7 +76,7 @@ public class PlanningCompilerComponentTests
     [Fact]
     public void BoundaryPlanCompiler_CutsContinueIntoRuntimeDerivedDuration()
     {
-        VideoStagesSpec spec = new(640, 360, 24, false,
+        TimelineSpec spec = new(640, 360, 24, false,
         [
             GeneratedClip(0, Stage(10)) with
             {
@@ -100,7 +100,7 @@ public class PlanningCompilerComponentTests
     [Fact]
     public void BoundaryPlanCompiler_CutsContinueIntoAPassthroughOnlyTarget()
     {
-        VideoStagesSpec spec = new(640, 360, 24, false,
+        TimelineSpec spec = new(640, 360, 24, false,
         [
             GeneratedClip(0, Stage(10)) with
             {
@@ -119,7 +119,7 @@ public class PlanningCompilerComponentTests
     [Fact]
     public void BoundaryPlanCompiler_UsesArchitecturePolicyForRequirementsAndFrameGrid()
     {
-        VideoStagesSpec spec = new(640, 360, 24, false,
+        TimelineSpec spec = new(640, 360, 24, false,
         [
             GeneratedClip(0, Stage(10)) with
             {
@@ -588,7 +588,7 @@ public class PlanningCompilerComponentTests
 
         Assert.Null(registration.Module);
         ClipPlan compiled = Assert.Single(TestPlanCompiler.Compile(
-            new VideoStagesSpec(640, 360, 30, false, [clip])).Clips);
+            new TimelineSpec(640, 360, 30, false, [clip])).Clips);
         Assert.IsType<NoneClipPayload>(compiled.ArchitecturePayload);
         Assert.Empty(compiled.Stages);
     }
@@ -596,7 +596,7 @@ public class PlanningCompilerComponentTests
     [Fact]
     public void ClipGeometryProjection_WarnsBeforeGenerationWhenAClipWillBeConformed()
     {
-        VideoStagesSpec spec = new(512, 512, 24, false,
+        TimelineSpec spec = new(512, 512, 24, false,
         [
             GeneratedClip(0, Stage(10) with { Upscale = 2 }),
             GeneratedClip(1, Stage(11)),
@@ -616,7 +616,7 @@ public class PlanningCompilerComponentTests
     [Fact]
     public void ClipGeometryProjection_StaysSilentWhenEveryClipEndsAtTheSameSize()
     {
-        VideoStagesSpec spec = new(512, 512, 24, false,
+        TimelineSpec spec = new(512, 512, 24, false,
         [
             GeneratedClip(0, Stage(10) with { Upscale = 2 }),
             GeneratedClip(1, Stage(11) with { Upscale = 2 }),
@@ -632,7 +632,7 @@ public class PlanningCompilerComponentTests
     [Fact]
     public void ClipGeometryProjection_ProjectsStagelessInitVideoClipsInsteadOfGoingSilent()
     {
-        VideoStagesSpec spec = new(512, 512, 24, false,
+        TimelineSpec spec = new(512, 512, 24, false,
         [
             InitVideoClip(0),
             GeneratedClip(1, Stage(11) with { Upscale = 2 }),

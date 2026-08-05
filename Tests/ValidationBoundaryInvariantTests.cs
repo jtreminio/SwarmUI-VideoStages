@@ -31,7 +31,7 @@ public sealed class ValidationBoundaryInvariantTests
     public void Internal_failures_use_the_invariant_exception_factory()
     {
         string sourceRoot = Path.GetFullPath(Path.Combine(TestDirectory(), "..", "src"));
-        string factoryPath = Path.Combine(sourceRoot, "VideoStagesInvariant.cs");
+        string factoryPath = Path.Combine(sourceRoot, "Invariant.cs");
         string[] offenders = Directory
             .EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
             .Where(path => path != factoryPath)

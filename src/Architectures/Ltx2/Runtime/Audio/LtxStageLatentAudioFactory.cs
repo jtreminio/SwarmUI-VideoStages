@@ -28,7 +28,7 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
             out _);
         return CreateEmpty(
             stageFrame.ClipContext.PlannedClip?.Audio
-                ?? throw VideoStagesInvariant.Failure(
+                ?? throw Invariant.Failure(
                     "LTX stage execution requires the compiled clip plan."),
             genInfo,
             sourceMedia,

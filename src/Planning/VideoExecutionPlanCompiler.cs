@@ -14,7 +14,7 @@ using VideoStages.Architectures.Wan;
 internal static class VideoExecutionPlanCompiler
 {
     internal static VideoExecutionPlan Compile(
-        VideoStagesSpec spec,
+        TimelineSpec spec,
         RootEnvironment rootEnvironment,
         ArchitecturePlanningResult architecturePlanning)
     {
@@ -194,12 +194,12 @@ internal static class VideoExecutionPlanCompiler
                 new Dictionary<int, IArchitectureStagePayload>(),
                 []);
         }
-        throw VideoStagesInvariant.Failure(
+        throw Invariant.Failure(
             $"architecture '{assignment.Architecture.Id}' has no clip compiler");
     }
 
     private static ArchitectureEntryMode ResolveEntryMode(
-        VideoStagesSpec spec,
+        TimelineSpec spec,
         ClipSpec clip) =>
         clip.InitVideo is not null
             ? ArchitectureEntryMode.InitVideo

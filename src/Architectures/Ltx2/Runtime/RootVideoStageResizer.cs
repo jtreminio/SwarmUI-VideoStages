@@ -68,7 +68,7 @@ internal sealed class RootVideoStageResizer(WorkflowGenerator g)
         out VideoExecutionPlanContext context)
     {
         context = null;
-        if (!VideoStagesContext.TryGetActiveCoreVideoContext(
+        if (!RequestCaches.TryGetActiveCoreVideoContext(
                 genInfo,
                 out _,
                 out context))

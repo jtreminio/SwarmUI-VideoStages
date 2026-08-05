@@ -241,7 +241,7 @@ internal static class MiniMaxClipPayloadExtensions
         ArgumentNullException.ThrowIfNull(clip);
         if (clip.ArchitecturePayload is not MiniMaxClipPayload payload)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Clip {clip.ClipId} has no MiniMax architecture payload.");
         }
         return payload;

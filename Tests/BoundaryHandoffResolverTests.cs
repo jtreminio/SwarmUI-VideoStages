@@ -42,7 +42,7 @@ public class BoundaryHandoffResolverTests
 
     private static VideoExecutionPlan CrossfadeCarryPlan()
     {
-        VideoStagesSpec spec = new(512, 512, 24, false,
+        TimelineSpec spec = new(512, 512, 24, false,
         [
             GeneratedClip(0) with
             {

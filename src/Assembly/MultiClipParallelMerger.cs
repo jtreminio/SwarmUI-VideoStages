@@ -23,7 +23,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             ResolveOutputs(bridge, clipArtifacts.Select(clip => clip.Video.ToPath()));
         if (resolvedOutputs.Count != clipArtifacts.Count)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"timeline assembly could resolve only {resolvedOutputs.Count} of "
                 + $"{clipArtifacts.Count} planned clip video outputs.");
         }
@@ -75,7 +75,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             }
             if (clips[i].Frames <= handle)
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     $"clip {clips[i].ClipId} cannot discard its {handle}-frame "
                     + "Continue handle after a runtime fallback.");
             }

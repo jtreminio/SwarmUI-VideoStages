@@ -176,7 +176,7 @@ public class VideoExecutionPlanContextTests
             InitVideoOnlyConfig());
         WorkflowGenerator generator = CreateGenerator(input);
 
-        Assert.Single(generator.GetVideoStagesSpec().Clips);
+        Assert.Single(generator.GetTimelineSpec().Clips);
         Assert.True(generator.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel hostModel));
         Assert.True(Ltx2ArchitectureModule.IsLtxV2VideoModel(hostModel));
 

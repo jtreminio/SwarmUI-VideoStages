@@ -32,7 +32,7 @@ internal sealed class StageUpscaleGraph(WorkflowGenerator g)
         if (source.DataType != WGNodeData.DT_IMAGE
             && source.DataType != WGNodeData.DT_VIDEO)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"stage upscaling received '{source.DataType}' instead of decoded media");
         }
 

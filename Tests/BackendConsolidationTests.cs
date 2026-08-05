@@ -114,7 +114,7 @@ public class BackendConsolidationTests
     [Fact]
     public void Plan_warnings_survive_compilation_instead_of_being_computed_and_discarded()
     {
-        VideoExecutionPlan plan = TestPlanCompiler.Compile(new VideoStagesSpec(
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(new TimelineSpec(
             512,
             512,
             24,
@@ -190,7 +190,7 @@ public class BackendConsolidationTests
     [Fact]
     public void Unknown_audio_source_warns_once_and_falls_back_to_disabled()
     {
-        VideoExecutionPlan plan = TestPlanCompiler.Compile(new VideoStagesSpec(
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(new TimelineSpec(
             512,
             512,
             24,

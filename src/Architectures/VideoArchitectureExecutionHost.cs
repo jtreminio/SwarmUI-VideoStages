@@ -56,7 +56,7 @@ internal sealed class VideoArchitectureExecutionHost
             ArgumentNullException.ThrowIfNull(provider);
             if (!byId.TryAdd(provider.ArchitectureId, provider))
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     $"Duplicate generation runtime provider for architecture "
                     + $"'{provider.ArchitectureId}'.");
             }
@@ -159,7 +159,7 @@ internal sealed class VideoArchitectureExecutionHost
                 if (session.ArchitectureId != provider.ArchitectureId)
                 {
                     TryDispose(session);
-                    throw VideoStagesInvariant.Failure(
+                    throw Invariant.Failure(
                         $"Generation runtime provider for architecture "
                             + $"'{provider.ArchitectureId}' created a session for architecture "
                             + $"'{session.ArchitectureId}'.");
@@ -183,18 +183,18 @@ internal sealed class VideoArchitectureExecutionHost
                     PreviousClipOutput: exposesPrevious ? previousClipOutput : null,
                     PreviousTimelineClipOutput: clipIndex > 0 ? previousClipOutput : null);
                 ArchitectureId architectureId = plannedClip.Architecture?.Id
-                    ?? throw VideoStagesInvariant.Failure(
+                    ?? throw Invariant.Failure(
                         $"Clip {plannedClip.ClipId} has no architecture identity.");
                 if (!sessions.TryGetValue(
                         architectureId,
                         out IVideoGenerationSession session))
                 {
-                    throw VideoStagesInvariant.Failure(
+                    throw Invariant.Failure(
                         $"No runtime session is registered for architecture "
                             + $"'{architectureId}'.");
                 }
                 DecodedClipArtifact output = session.Execute(runtimeContext)
-                    ?? throw VideoStagesInvariant.Failure(
+                    ?? throw Invariant.Failure(
                         $"Architecture '{session.ArchitectureId}' returned no decoded clip "
                             + "artifact.");
                 ValidateOutput(output, session, runtimeContext);
@@ -322,14 +322,14 @@ internal sealed class VideoArchitectureExecutionHost
     {
         if (output.ClipId != context.Clip.ClipId)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Architecture '{session.ArchitectureId}' returned artifact for clip "
                     + $"'{output.ClipId}' instead of planned clip '{context.Clip.ClipId}'.");
         }
         ArchitectureId plannedArchitectureId = context.Clip.Architecture.Id;
         if (output.ArchitectureId != session.ArchitectureId)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Architecture '{session.ArchitectureId}' returned artifact for architecture "
                     + $"'{output.ArchitectureId}' instead of planned architecture "
                     + $"'{plannedArchitectureId}' for clip '{context.Clip.ClipId}'.");
@@ -431,7 +431,7 @@ internal sealed class VideoArchitectureExecutionHost
     }
 
     private static InvalidOperationException RootHandoffError(string detail) =>
-        VideoStagesInvariant.Failure(
+        Invariant.Failure(
             $"VideoStages could not restore the host root because {detail}.");
 
     private bool ShouldHandoffRoot() =>
@@ -447,7 +447,7 @@ internal sealed class VideoArchitectureExecutionHost
             _rootOwner.Value,
             out IArchitectureGenerationSessionProvider provider))
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"No generation runtime provider is registered for root architecture "
                     + $"'{_rootOwner.Value}'.");
         }
@@ -496,7 +496,7 @@ internal sealed class VideoArchitectureExecutionHost
         ArgumentNullException.ThrowIfNull(plan);
         return Array.AsReadOnly(plan.Clips
             .Select(clip => clip.Architecture?.Id
-                ?? throw VideoStagesInvariant.Failure(
+                ?? throw Invariant.Failure(
                     $"Clip {clip.ClipId} has no architecture identity."))
             .Distinct()
             .ToArray());

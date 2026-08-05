@@ -697,7 +697,7 @@ public class HostVideoContractTests
         Assert.Same(bed, mix.Audio1.Connection?.Node);
         Assert.Same(mix, live.PublishedAudio());
         Assert.NotNull(generator.CurrentMedia.AttachedAudio);
-        Assert.Single(generator.GetVideoStagesSpec().TimelineAudioSegments);
+        Assert.Single(generator.GetTimelineSpec().TimelineAudioSegments);
 
         live.AssertAllLive(StageSampler(bridge, 0), mix);
         AssertShippable(bridge, workflow, live);
@@ -859,7 +859,7 @@ public class HostVideoContractTests
             warnings,
             warning => warning.Contains("upscale", StringComparison.OrdinalIgnoreCase));
 
-        ClipSpec authored = Assert.Single(generator.GetVideoStagesSpec().Clips);
+        ClipSpec authored = Assert.Single(generator.GetTimelineSpec().Clips);
         Assert.True(authored.SaveAudioTrack);
         Assert.True(authored.ReuseAudio);
         Assert.True(authored.ClipLengthFromAudio);

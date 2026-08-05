@@ -116,7 +116,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
     {
         StagePlan stage = stageFrame.Stage;
         ClipPlan clip = stageFrame.ClipContext.PlannedClip
-            ?? throw VideoStagesInvariant.Failure(
+            ?? throw Invariant.Failure(
                 "LTX stage execution requires the compiled clip plan.");
         int fps = genInfo.VideoFPS ?? LtxStageRuntimeSettings.DefaultFps;
         Ltx2StagePayload payload = stage.RequireLtx2Payload();

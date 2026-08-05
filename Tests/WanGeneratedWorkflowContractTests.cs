@@ -2966,7 +2966,7 @@ public class WanGeneratedWorkflowContractTests
         second.Remove("imageReference");
         WorkflowGenerator captured = null;
         JObject beforePreflight = null;
-        VideoStagesSpec parsed = null;
+        TimelineSpec parsed = null;
 
         SwarmReadableErrorException error = await Assert.ThrowsAsync<SwarmReadableErrorException>(
             () => ComfyWorkflowApiTestHarness.GenerateAsync(
@@ -2977,7 +2977,7 @@ public class WanGeneratedWorkflowContractTests
                     {
                         captured = g;
                         beforePreflight = (JObject)g.Workflow.DeepClone();
-                        parsed = g.GetVideoStagesSpec();
+                        parsed = g.GetTimelineSpec();
                     }, Constants.WorkflowStepPriority.PreflightRequest - 0.1),
                 ]));
 

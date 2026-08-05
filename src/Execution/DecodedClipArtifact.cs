@@ -32,7 +32,7 @@ internal sealed record DecodedOutputHandle(
     internal static DecodedOutputHandle FromPath(JArray path) =>
         path is { Count: 2 }
             ? new((string)path[0], (int)path[1], DecodedMediaKind.Audio)
-            : throw VideoStagesInvariant.Failure(
+            : throw Invariant.Failure(
                 "decoded audio path is not a node output.");
 
     internal INodeOutput Resolve(WorkflowBridge bridge) =>
@@ -65,7 +65,7 @@ internal sealed record DecodedClipArtifact(
             || FramesPerSecond <= 0
             || Frames <= 0)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Clip {ClipId} returned an invalid decoded media artifact.");
         }
     }
@@ -96,19 +96,19 @@ internal sealed record DecodedClipArtifact(
         ArgumentNullException.ThrowIfNull(clip);
         if (!artifact.HasMedia)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"clip {clip.ClipId} did not produce decoded video media.");
         }
         if (artifact.Media.DataType != WGNodeData.DT_VIDEO)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"clip {clip.ClipId} did not produce decoded video media; "
                 + $"received '{artifact.Media.DataType ?? "unknown"}'.");
         }
         if (artifact.Media.AttachedAudio is MediaRef attachedAudio
             && attachedAudio.DataType != WGNodeData.DT_AUDIO)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"clip {clip.ClipId} did not produce decoded attached audio; "
                 + $"received '{attachedAudio.DataType ?? "unknown"}'.");
         }
@@ -118,7 +118,7 @@ internal sealed record DecodedClipArtifact(
             || artifact.Media.FPS?.Type != JTokenType.Integer
             || artifact.Media.FPS.Value<int>() <= 0)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"clip {clip.ClipId} decoded media is missing literal dimensions, fps, or frames.");
         }
         DecodedClipArtifact decoded = new(
@@ -130,7 +130,7 @@ internal sealed record DecodedClipArtifact(
             artifact.Media.Height.Value,
             artifact.Media.FPS.Value<int>(),
             artifact.Media.Frames.Value,
-            clip.Architecture?.Id ?? throw VideoStagesInvariant.Failure(
+            clip.Architecture?.Id ?? throw Invariant.Failure(
                 $"Clip {clip.ClipId} has no resolved architecture identity."),
             clip.ClipId);
         return decoded;

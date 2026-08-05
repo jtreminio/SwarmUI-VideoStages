@@ -29,7 +29,7 @@ public sealed class EffectiveVideoRequestTests
     {
         StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
         ClipSpec clip = Clip(stage) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = frameGrid };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
@@ -50,7 +50,7 @@ public sealed class EffectiveVideoRequestTests
             RetakeWindow = new(2, 25, 0.6),
         };
         ClipSpec clip = Clip(stage) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
@@ -71,7 +71,7 @@ public sealed class EffectiveVideoRequestTests
             Control = 0,
         };
         ClipSpec clip = Clip(stage) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip) with { IsTextToVideo = true };
+        TimelineSpec authored = Spec(clip) with { IsTextToVideo = true };
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
@@ -101,7 +101,7 @@ public sealed class EffectiveVideoRequestTests
             InitVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
         };
         ClipSpec trailing = Clip(trailingStage) with { Id = 1, Frames = 27 };
-        VideoStagesSpec authored = Spec(source, trailing) with
+        TimelineSpec authored = Spec(source, trailing) with
         {
             IsTextToVideo = true,
         };
@@ -134,7 +134,7 @@ public sealed class EffectiveVideoRequestTests
             ClipLengthFromAudio = fromAudio,
             ClipLengthFromControlNet = fromControl,
         };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
@@ -156,7 +156,7 @@ public sealed class EffectiveVideoRequestTests
             AudioSource = Constants.AudioSourceNative,
             ClipLengthFromAudio = true,
         };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
@@ -180,7 +180,7 @@ public sealed class EffectiveVideoRequestTests
             AudioSource = "future-audio-source",
             ClipLengthFromAudio = true,
         };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             MiniMaxArchitectureModule.Instance.Descriptor;
 
@@ -204,7 +204,7 @@ public sealed class EffectiveVideoRequestTests
             ClipLengthFromAudio = fromAudio,
             ClipLengthFromControlNet = fromControl,
         };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
             authored,
@@ -229,7 +229,7 @@ public sealed class EffectiveVideoRequestTests
             Frames = 27,
             InitVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
         };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
@@ -254,7 +254,7 @@ public sealed class EffectiveVideoRequestTests
             Frames = 28,
             InitVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
         };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
         ArchitecturePlanningResult architectures = ResolveWan(authored);
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
@@ -278,7 +278,7 @@ public sealed class EffectiveVideoRequestTests
     {
         StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
         ClipSpec clip = Clip(stage) with { Frames = 27 };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
@@ -308,7 +308,7 @@ public sealed class EffectiveVideoRequestTests
     {
         StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model");
         ClipSpec clip = Clip(stage) with { Frames = int.MaxValue };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
@@ -357,7 +357,7 @@ public sealed class EffectiveVideoRequestTests
                     null),
             ],
         };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
             authored,
@@ -417,7 +417,7 @@ public sealed class EffectiveVideoRequestTests
                     null),
             ],
         };
-        VideoStagesSpec spec = Spec(clip);
+        TimelineSpec spec = Spec(clip);
 
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
@@ -461,7 +461,7 @@ public sealed class EffectiveVideoRequestTests
                     false),
             ],
         };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
         ArchitecturePlanningResult architectures = Resolve(
             authored,
             _ => HostVideoArchitectureModule.Instance,
@@ -543,7 +543,7 @@ public sealed class EffectiveVideoRequestTests
                     null),
             ],
         };
-        VideoStagesSpec authored = Spec(clip);
+        TimelineSpec authored = Spec(clip);
         ArchitecturePlanningResult architectures = Resolve(
             authored,
             _ => HostVideoArchitectureModule.Instance,
@@ -606,7 +606,7 @@ public sealed class EffectiveVideoRequestTests
             BoundaryOutCarryAudio = true,
         };
         ClipSpec wanClip = Clip(Stage(0, rawIndex: 0)) with { Id = 1 };
-        VideoStagesSpec authored = Spec(ltxClip, wanClip);
+        TimelineSpec authored = Spec(ltxClip, wanClip);
         ArchitecturePlanningResult architectures = ResolveMixed(authored);
 
         EffectiveVideoRequest request =
@@ -657,7 +657,7 @@ public sealed class EffectiveVideoRequestTests
             ],
         };
         ClipSpec wan = Clip(Stage(0, rawIndex: 0)) with { Id = 1 };
-        VideoStagesSpec authored = Spec(host, wan) with
+        TimelineSpec authored = Spec(host, wan) with
         {
             LegacyVideoSwap = new("legacy-swap-model"),
         };
@@ -690,7 +690,7 @@ public sealed class EffectiveVideoRequestTests
             rawIndex: 1,
             upscale: 2,
             upscaleMethod: "future-upscale");
-        VideoStagesSpec spec = Spec(Clip(first, unknown));
+        TimelineSpec spec = Spec(Clip(first, unknown));
         ArchitecturePlanningResult architectures = ResolveWan(spec);
 
         EffectiveVideoRequest request =
@@ -720,7 +720,7 @@ public sealed class EffectiveVideoRequestTests
             rawIndex: 1,
             upscale: 2,
             upscaleMethod: "pixel-   ");
-        VideoStagesSpec spec = Spec(Clip(first, malformed));
+        TimelineSpec spec = Spec(Clip(first, malformed));
         ArchitecturePlanningResult architectures = ResolveWan(spec);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
@@ -745,7 +745,7 @@ public sealed class EffectiveVideoRequestTests
         {
             ControlNetStrength = Constants.DefaultStageControlNetStrength,
         };
-        VideoStagesSpec spec = Spec(Clip(stage));
+        TimelineSpec spec = Spec(Clip(stage));
         ArchitecturePlanningResult architectures = Resolve(
             spec,
             _ => HostVideoArchitectureModule.Instance,
@@ -816,7 +816,7 @@ public sealed class EffectiveVideoRequestTests
         Assert.Contains(warnings, warning => warning.Contains("cached architecture"));
         Assert.Contains(warnings, warning => warning.Contains("cached model profile"));
         Assert.Contains(warnings, warning => warning.Contains("IC-LoRA data"));
-        ClipSpec authored = Assert.Single(generator.GetVideoStagesSpec().Clips);
+        ClipSpec authored = Assert.Single(generator.GetTimelineSpec().Clips);
         Assert.Equal("old-wan-cache", authored.AuthoredArchitectureHint);
         Assert.Equal("old-wan-profile", authored.AuthoredModelProfileHint);
         Assert.Single(authored.IcLoras);
@@ -887,11 +887,11 @@ public sealed class EffectiveVideoRequestTests
         };
     }
 
-    private static VideoStagesSpec Spec(params ClipSpec[] clips) =>
+    private static TimelineSpec Spec(params ClipSpec[] clips) =>
         new(512, 512, 24, false, clips);
 
     private static ArchitecturePlanningResult ResolveWan(
-        VideoStagesSpec spec,
+        TimelineSpec spec,
         IVideoArchitectureModule module = null)
     {
         VideoArchitectureDescriptor descriptor =
@@ -902,7 +902,7 @@ public sealed class EffectiveVideoRequestTests
             _ => descriptor);
     }
 
-    private static ArchitecturePlanningResult ResolveMixed(VideoStagesSpec spec) =>
+    private static ArchitecturePlanningResult ResolveMixed(TimelineSpec spec) =>
         Resolve(
             spec,
             clip => clip.Id == 0
@@ -913,7 +913,7 @@ public sealed class EffectiveVideoRequestTests
                 : WanArchitectureModule.Instance.Descriptor);
 
     private static ArchitecturePlanningResult Resolve(
-        VideoStagesSpec spec,
+        TimelineSpec spec,
         Func<ClipSpec, IVideoArchitectureModule> moduleFor,
         Func<ClipSpec, VideoArchitectureDescriptor> descriptorFor)
     {

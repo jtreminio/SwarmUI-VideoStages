@@ -179,7 +179,7 @@ public class TimelineAudioSegmentPlanCompilerTests
             length);
 
     private static VideoExecutionPlan Plan(params ClipSpec[] clips) =>
-        TestPlanCompiler.Compile(new VideoStagesSpec(512, 512, Fps, false, clips));
+        TestPlanCompiler.Compile(new TimelineSpec(512, 512, Fps, false, clips));
 
     private static ClipSpec Clip(
         int id,

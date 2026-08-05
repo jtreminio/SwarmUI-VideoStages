@@ -85,7 +85,7 @@ internal sealed class TimelineAssemblySession
         ArgumentNullException.ThrowIfNull(clipOutputs);
         if (clipOutputs.Count != _plan.Clips.Count)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"timeline assembly expected {_plan.Clips.Count} clip outputs "
                 + $"but received {clipOutputs.Count}.");
         }

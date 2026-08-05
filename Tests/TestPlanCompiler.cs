@@ -16,18 +16,18 @@ internal static class TestPlanCompiler
         new(StageUpscaleMode.None, 1, "", ""),
         []);
 
-    internal static VideoExecutionPlan Compile(VideoStagesSpec spec) =>
+    internal static VideoExecutionPlan Compile(TimelineSpec spec) =>
         Compile(spec, RootEnvironment.FromSpec(spec));
 
     internal static VideoExecutionPlan Compile(
-        VideoStagesSpec spec,
+        TimelineSpec spec,
         RootEnvironment rootEnvironment)
         => VideoExecutionPlanCompiler.Compile(
             spec,
             rootEnvironment,
             ResolveLtx(spec));
 
-    internal static ArchitecturePlanningResult ResolveLtx(VideoStagesSpec spec)
+    internal static ArchitecturePlanningResult ResolveLtx(TimelineSpec spec)
     {
         VideoArchitectureDescriptor descriptor =
             Ltx2ArchitectureModule.Instance.Descriptor;

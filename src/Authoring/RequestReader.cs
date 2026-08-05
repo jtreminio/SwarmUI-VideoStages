@@ -31,7 +31,7 @@ internal static class RequestReader
         PromptTags.Directives Directives,
         Action<string> Warn);
 
-    public static VideoStagesSpec Read(T2IParamInput input)
+    public static TimelineSpec Read(T2IParamInput input)
     {
         LegacyVideoSwapRequestSnapshot legacyVideoSwap = CaptureLegacyVideoSwap(input);
         Action<string> warn =
@@ -54,7 +54,7 @@ internal static class RequestReader
         bool hasConfiguredResolution = rawWidth is > 0 && rawHeight is > 0;
         if (document.Clips.Count == 0)
         {
-            return new VideoStagesSpec(
+            return new TimelineSpec(
                 width,
                 height,
                 fps,
@@ -106,7 +106,7 @@ internal static class RequestReader
             clips.Add(clip);
         }
 
-        return new VideoStagesSpec(
+        return new TimelineSpec(
             width,
             height,
             fps,

@@ -137,7 +137,7 @@ public class RealArchitectureContractTests
         using SwarmUiTestContext context = new();
         FamilyFixture fixture = CreateFixture(family);
         ClipSpec clip = fixture.MinimalClip();
-        VideoStagesSpec spec = new(512, 512, 24, false, [clip]);
+        TimelineSpec spec = new(512, 512, 24, false, [clip]);
         ArchitecturePlanningResult planning =
             ArchitecturePlanResolver.Resolve(spec, RealRegistry());
         ClipArchitectureAssignment assignment = planning.Clips[clip.Id];

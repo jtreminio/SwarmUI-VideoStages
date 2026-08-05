@@ -25,7 +25,7 @@ internal static class WanClipPlanExtensions
         ArgumentNullException.ThrowIfNull(clip);
         if (clip.ArchitecturePayload is not WanClipPayload payload)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Clip {clip.ClipId} has no Wan architecture payload.");
         }
         return payload;

@@ -21,13 +21,13 @@ internal sealed record ArchitecturePlanningResult(
 internal static class ArchitecturePlanResolver
 {
     internal static ArchitecturePlanningResult Resolve(
-        VideoStagesSpec spec,
+        TimelineSpec spec,
         IVideoArchitectureRegistry registry,
         Session session) =>
         Resolve(spec, registry.ForSession(session));
 
     internal static ArchitecturePlanningResult Resolve(
-        VideoStagesSpec spec,
+        TimelineSpec spec,
         IVideoArchitectureRegistry registry)
     {
         ArgumentNullException.ThrowIfNull(spec);

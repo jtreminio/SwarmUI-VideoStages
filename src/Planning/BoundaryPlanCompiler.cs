@@ -14,14 +14,14 @@ internal static class BoundaryPlanCompiler
         ArgumentNullException.ThrowIfNull(clips);
         if (authoredClips.Count != clips.Count)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 "Boundary planning requires aligned authored and compiled clips.");
         }
         for (int i = 0; i < authoredClips.Count; i++)
         {
             if (authoredClips[i].Id != clips[i].ClipId)
             {
-                throw VideoStagesInvariant.Failure(
+                throw Invariant.Failure(
                     "Boundary planning requires aligned authored and compiled clips.");
             }
         }

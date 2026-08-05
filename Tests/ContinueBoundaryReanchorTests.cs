@@ -26,7 +26,7 @@ public partial class StageFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         string model = models.VideoModel.Name;
 
-        VideoStagesSpec spec = new(512, 512, 24, false,
+        TimelineSpec spec = new(512, 512, 24, false,
         [
             ReanchorClipSpec(0, ReanchorStageSpec(0, model)) with
             {

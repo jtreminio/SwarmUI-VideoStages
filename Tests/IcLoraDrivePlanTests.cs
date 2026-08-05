@@ -302,7 +302,7 @@ public class IcLoraDrivePlanTests
         ]);
 
         VideoExecutionPlan execution = TestPlanCompiler.Compile(
-            new VideoStagesSpec(1232, 688, 24, false, [clip]));
+            new TimelineSpec(1232, 688, 24, false, [clip]));
 
         PlanDiagnostic diagnostic = Assert.Single(
             execution.Diagnostics,

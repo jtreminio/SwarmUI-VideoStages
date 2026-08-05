@@ -5,7 +5,7 @@ namespace VideoStages.Planning;
 
 /// <summary>Post-resolution request values and projection diagnostics.</summary>
 internal sealed record EffectiveVideoRequest(
-    VideoStagesSpec Spec,
+    TimelineSpec Spec,
     IReadOnlyList<PlanDiagnostic> Diagnostics);
 
 /// <summary>
@@ -14,12 +14,12 @@ internal sealed record EffectiveVideoRequest(
 internal static class EffectiveVideoRequestProjector
 {
     internal static EffectiveVideoRequest Project(
-        VideoStagesSpec authored,
+        TimelineSpec authored,
         ArchitecturePlanningResult architecturePlanning) =>
         Project(authored, RootEnvironment.FromSpec(authored), architecturePlanning);
 
     internal static EffectiveVideoRequest Project(
-        VideoStagesSpec authored,
+        TimelineSpec authored,
         RootEnvironment rootEnvironment,
         ArchitecturePlanningResult architecturePlanning)
     {

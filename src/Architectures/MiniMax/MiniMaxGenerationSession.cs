@@ -58,7 +58,7 @@ internal sealed class MiniMaxGenerationSession(
         if (clip.EntryMode == ArchitectureEntryMode.InitVideo)
         {
             InitVideoPlan source = clip.InitVideo
-                ?? throw VideoStagesInvariant.Failure(
+                ?? throw Invariant.Failure(
                     $"MiniMax H3 clip {clip.ClipId} has no init-video plan.");
             ClipPlan sourceInstallPlan = clip with
             {
@@ -73,7 +73,7 @@ internal sealed class MiniMaxGenerationSession(
             g.CurrentMedia = _initVideoClipInstaller.TryInstall(
                 sourceInstallPlan,
                 includeSourceAudio: clip.Audio.Base.Kind == AudioSourceKind.Native)
-                ?? throw VideoStagesInvariant.Failure(
+                ?? throw Invariant.Failure(
                     $"clip {clip.ClipId} source video could not be installed.");
             PrepareInitVideoAudio(clip);
             g.CurrentVae = null;
@@ -93,7 +93,7 @@ internal sealed class MiniMaxGenerationSession(
         else
         {
             g.CurrentMedia = rootSources.Media?.Duplicate()
-                ?? throw VideoStagesInvariant.Failure(
+                ?? throw Invariant.Failure(
                     $"clip {clip.ClipId} has no host image to generate from.");
             g.CurrentVae = rootSources.Vae?.Duplicate();
             _entryFirstFrame = g.CurrentMedia;
@@ -132,7 +132,7 @@ internal sealed class MiniMaxGenerationSession(
     {
         if (continuation is not null)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"MiniMax H3 clip {clip.ClipId} cannot continue sampling into stage "
                     + $"{continuation.StageId}.");
         }
@@ -170,11 +170,11 @@ internal sealed class MiniMaxGenerationSession(
             {
                 stageInput.Configure(clip, stage, genInfo, startStep: 0);
                 incoming = g.CurrentMedia
-                    ?? throw VideoStagesInvariant.Failure(
+                    ?? throw Invariant.Failure(
                         "A MiniMax H3 refine stage has no incoming decoded media.");
                 if (incoming.AttachedAudio is null)
                 {
-                    throw VideoStagesInvariant.Failure(
+                    throw Invariant.Failure(
                         "A MiniMax H3 refine stage's incoming media carries no audio input.");
                 }
                 firstFrame = null;
@@ -289,7 +289,7 @@ internal sealed class MiniMaxGenerationSession(
             g.IsImageToVideo = true;
             PrepModelAndPrompt(genInfo);
             int frames = genInfo.Frames
-                ?? throw VideoStagesInvariant.Failure(
+                ?? throw Invariant.Failure(
                     "A MiniMax H3 stage has no resolved frame count.");
             g.CurrentMedia = incoming is null
                 ? EntryJointLatent(clip, genInfo, frames)
@@ -452,7 +452,7 @@ internal sealed class MiniMaxGenerationSession(
                 combinedAudio,
                 preserveWindows,
                 clip.Stages[0].StageId)
-                ?? throw VideoStagesInvariant.Failure(
+                ?? throw Invariant.Failure(
                     $"MiniMax H3 clip {clip.ClipId} could not preserve its timeline audio windows.")
             : combinedAudio;
 
@@ -497,7 +497,7 @@ internal sealed class MiniMaxGenerationSession(
     private void PrepareInitVideoAudio(ClipPlan clip)
     {
         WGNodeData current = g.CurrentMedia
-            ?? throw VideoStagesInvariant.Failure(
+            ?? throw Invariant.Failure(
                 $"MiniMax H3 clip {clip.ClipId} has no installed init video.");
         WGNodeData combinedAudio = CombineClipAudio(
             clip,
@@ -559,7 +559,7 @@ internal sealed class MiniMaxGenerationSession(
         }
         if (g.CurrentAudioVae is null)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 "MiniMax H3 produced latent audio but no audio VAE was loaded to decode it.");
         }
         g.CurrentMedia.AttachedAudio = attached.DecodeLatents(g.CurrentAudioVae, true);
@@ -629,7 +629,7 @@ internal sealed class MiniMaxGenerationSession(
                 T2IParamTypes.VideoModel,
                 null,
                 sectionId: sectionId)
-            ?? throw VideoStagesInvariant.Failure(
+            ?? throw Invariant.Failure(
                 $"clip {clip.ClipId} could not resolve MiniMax H3 video model "
                     + $"'{stage.ResolvedModel.ModelName}'.");
         return new WorkflowGenerator.ImageToVideoGenInfo

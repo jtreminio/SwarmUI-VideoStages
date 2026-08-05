@@ -28,7 +28,7 @@ internal static class StockHostVideoStagePayloadExtensions
         if (stage.ArchitecturePayload is not StockHostVideoStagePayload payload
             || payload.ArchitectureId != architectureId)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Stage {stage.StageId} has no {architectureLabel} stock host-video payload.");
         }
         return payload;

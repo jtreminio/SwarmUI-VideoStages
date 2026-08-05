@@ -275,10 +275,10 @@ internal static class PromptTags
             return false;
         }
 
-        VideoStagesSpec spec;
+        TimelineSpec spec;
         try
         {
-            spec = VideoStagesContext.GetVideoStagesSpecForPromptParse(input);
+            spec = RequestCaches.GetTimelineSpecForPromptParse(input);
         }
         catch (Exception ex)
         {

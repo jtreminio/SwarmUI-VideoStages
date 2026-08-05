@@ -28,7 +28,7 @@ internal static class Ltx2StagePlanExtensions
         ArgumentNullException.ThrowIfNull(stage);
         if (stage.ArchitecturePayload is not Ltx2StagePayload payload)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Stage {stage.StageId} has no LTX architecture payload.");
         }
         return payload;
@@ -54,7 +54,7 @@ internal static class Ltx2StagePlanExtensions
         ArgumentNullException.ThrowIfNull(clip);
         if (clip.ArchitecturePayload is not Ltx2ClipPayload payload)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Clip {clip.ClipId} has no LTX architecture payload.");
         }
         return payload;

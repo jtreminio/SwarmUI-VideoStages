@@ -89,7 +89,7 @@ internal static class HostVideoCorePassIsolation
 
     internal static void Isolate(WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        if (!VideoStagesContext.TryGetActiveCoreVideoContext(
+        if (!RequestCaches.TryGetActiveCoreVideoContext(
                 genInfo,
                 out WorkflowGenerator generator,
                 out VideoExecutionPlanContext context))
@@ -112,10 +112,10 @@ internal static class HostVideoCorePassIsolation
             // Reuse the live base model state so the discarded core pass never loads the selected
             // video checkpoint, reads its audio-reference options, or leaves a video audio VAE behind.
             genInfo.Model = generator.CurrentModel
-                ?? throw VideoStagesInvariant.Failure(
+                ?? throw Invariant.Failure(
                     "The generic host-video core pass has no live base model.");
             genInfo.Vae = generator.CurrentVae
-                ?? throw VideoStagesInvariant.Failure(
+                ?? throw Invariant.Failure(
                     "The generic host-video core pass has no live base VAE.");
             genInfo.PosCond = generator.FinalPrompt;
             genInfo.NegCond = generator.FinalNegativePrompt;

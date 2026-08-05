@@ -43,7 +43,7 @@ public class BoundaryPolicyOwnershipTests
                 TargetRequiresGeneratedEntry: false,
                 TargetRequiresStage: false,
                 TargetDisallowsInitialReference: false));
-        VideoStagesSpec spec = new(640, 360, 24, false,
+        TimelineSpec spec = new(640, 360, 24, false,
         [
             new ClipSpec(0, 49, Constants.AudioSourceNative, [], false, false, false, false,
                 null, [], [Stage(10)]) with

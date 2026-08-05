@@ -193,7 +193,7 @@ public sealed record ClipSpec(
 
 }
 
-public sealed record VideoStagesSpec(
+public sealed record TimelineSpec(
     int Width,
     int Height,
     int FPS,

@@ -49,7 +49,7 @@ internal class StageRunner
         ArgumentNullException.ThrowIfNull(root);
         if (_generator.CurrentMedia is null)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"stage {stage.StageId} has no input media.");
         }
 
@@ -88,7 +88,7 @@ internal class StageRunner
             || (sourceMedia?.DataType != WGNodeData.DT_VIDEO
                 && sourceMedia?.DataType != WGNodeData.DT_IMAGE))
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 "the LTX stage input was neither decoded video nor image media.");
         }
 

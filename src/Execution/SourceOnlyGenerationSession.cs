@@ -33,11 +33,11 @@ internal sealed class SourceOnlyGenerationSession(
         ArgumentNullException.ThrowIfNull(context);
         if (context.Clip.ArchitecturePayload is not NoneClipPayload)
         {
-            throw VideoStagesInvariant.Failure(
+            throw Invariant.Failure(
                 $"Clip {context.Clip.ClipId} has no init-video-only architecture payload.");
         }
         WGNodeData initVideoMedia = _sourceInstaller.TryInstall(context.Clip)
-            ?? throw VideoStagesInvariant.Failure(
+            ?? throw Invariant.Failure(
                 $"clip {context.Clip.ClipId} source video could not be installed.");
         generator.CurrentMedia = initVideoMedia;
         PrepareAudio(context.Clip, initVideoMedia);

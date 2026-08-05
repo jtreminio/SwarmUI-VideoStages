@@ -1,6 +1,6 @@
 namespace VideoStages;
 
-internal static class VideoStagesInvariant
+internal static class Invariant
 {
     internal static InvalidOperationException Failure(
         string detail,
