@@ -9,21 +9,6 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// LTX-2 IC-LoRA: which stages a loader patches, where a guide's drive frames come from, how the
-/// control-signal chains splice in, and how an audio-consuming preset reaches the conditioning —
-/// all generated through the real Comfy API POST path.
-/// <para>
-/// None of the IC-LoRA node types are in core's <c>AutoCleanupNodeTypes</c>, so an IC-LoRA subgraph
-/// that ends up orphaned is shipped to Comfy as-is. Every test here closes with
-/// <see cref="AssertShippable"/>, which is what catches that.
-/// </para>
-/// <para>
-/// Shape: text-to-video unless a test needs the base image, either as IC-LoRA entry media or —
-/// for the clip-audio test — to avoid the clip-0 audio-conditioning defect the findings doc calls
-/// P1.
-/// </para>
-/// </summary>
 [Collection("VideoStagesTests")]
 public class Ltx2IcLoraContractTests
 {
@@ -71,7 +56,6 @@ public class Ltx2IcLoraContractTests
         return clip;
     }
 
-    /// <summary>A dropped entry leaves nothing of itself behind.</summary>
     private static void AssertNoIcLoraNodes(WorkflowBridge bridge)
     {
         Assert.Empty(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
@@ -82,17 +66,12 @@ public class Ltx2IcLoraContractTests
     private static LTXAddVideoICLoRAGuideNode OnlyGuide(WorkflowBridge bridge) =>
         Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
 
-    /// <summary>True when the guide's drive frames trace back to <paramref name="wanted"/>.</summary>
     private static bool GuideDrivenBy(
         WorkflowBridge bridge,
         LTXAddVideoICLoRAGuideNode guide,
         ComfyNode wanted) =>
         ReachesUpstream(bridge, guide.Image.Connection?.Node, wanted.Id);
 
-    /// <summary>
-    /// The framing node the guide's drive frames pass through, walking back over the trim/repeat
-    /// wrappers the guide builder puts in front of it.
-    /// </summary>
     private static ComfyNode GuideFraming(LTXAddVideoICLoRAGuideNode guide)
     {
         ComfyNode current = guide.Image.Connection?.Node;
@@ -109,10 +88,6 @@ public class Ltx2IcLoraContractTests
         return null;
     }
 
-    /// <summary>
-    /// The auto-model token resolves a preset to weights already on disk. The dotted file name is
-    /// the legacy spelling core's strict filename clean would otherwise mangle, so it is pinned.
-    /// </summary>
     [Fact]
     public async Task Auto_ic_lora_resolves_the_presets_downloaded_weights()
     {
@@ -141,11 +116,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A stage-scoped entry patches one stage. Counting loaders cannot show which one, so both
-    /// samplers are checked: the scoped stage reaches the loader and its guide, the other reaches
-    /// neither.
-    /// </summary>
     [Fact]
     public async Task Stage_scoped_entry_applies_only_on_its_target_stage()
     {
@@ -170,19 +140,12 @@ public class Ltx2IcLoraContractTests
         Assert.False(ReachesUpstream(bridge, unscoped, loader.Id));
         Assert.False(ReachesUpstream(bridge, unscoped, guide.Id));
         Assert.Same(loader, scoped.Model.Connection?.Node);
-        // Reachability would be inherited through stage 0's latent, so the direct wiring is the
-        // claim: the guide is what conditions this stage.
         Assert.Same(guide, scoped.Positive.Connection?.Node);
 
         live.AssertAllLive(loader, guide, unscoped, scoped);
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Runtime stage ids are flat across clips; an entry's <c>stage</c> is clip-relative. Stage 0
-    /// of the second clip is runtime stage 1, and that — not runtime stage 0 — is what must be
-    /// patched.
-    /// </summary>
     [Fact]
     public async Task Stage_scope_is_clip_relative_not_global()
     {
@@ -211,10 +174,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// An unscoped entry patches every stage. They all ask for the same patch, so they sample
-    /// through one loader; what stays per stage is the guide each carries.
-    /// </summary>
     [Fact]
     public async Task Unscoped_entry_applies_on_every_stage()
     {
@@ -232,8 +191,6 @@ public class Ltx2IcLoraContractTests
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count);
 
         SwarmKSamplerNode[] stages = [StageSampler(bridge, 0), StageSampler(bridge, 1)];
-        // Both stages patched, and by the same node: the entry is unscoped, so the two stages ask
-        // for an identical patch and there is only one to make. Each still guides for itself.
         Assert.All(stages, stage => Assert.Same(loader, stage.Model.Connection?.Node));
         Assert.Equal(
             2,
@@ -243,11 +200,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// The <c>Incoming</c> drive source takes whatever media enters the stage. That is the host
-    /// base image on stage 0 and the previous stage's output on stage 1, so asserting only "a guide
-    /// exists" would pass with the guide fed by entirely the wrong media.
-    /// </summary>
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
@@ -268,7 +220,6 @@ public class Ltx2IcLoraContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        // Nothing is uploaded: the drive frames are the stage's own input.
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
 
@@ -277,15 +228,10 @@ public class Ltx2IcLoraContractTests
         Assert.True(ReachesUpstream(bridge, scoped, guide.Id));
 
         ImageScaleNode resize = Assert.IsType<ImageScaleNode>(GuideFraming(guide));
-        // Neither stage upscales, so these match the POST's own 512x512 and cannot tell a stage
-        // resolution from an inherited request resolution — see
-        // Uploaded_drive_media_is_resized_to_stage_dimensions for the discriminating shape.
         Assert.Equal(VideoStagesWorkflowFixture.Width, resize.Width.LiteralAsInt());
         Assert.Equal(VideoStagesWorkflowFixture.Height, resize.Height.LiteralAsInt());
         Assert.Equal("center", resize.Crop.LiteralAsString());
 
-        // Both arms trace to the base image; the discriminator is whether the frames have been
-        // through stage 0's sampler on the way.
         Assert.True(GuideDrivenBy(bridge, guide, BaseImage(bridge)));
         Assert.Equal(stageId == 1, GuideDrivenBy(bridge, guide, StageSampler(bridge, 0)));
 
@@ -293,11 +239,44 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// On a latent-space upscale the incoming media is still a latent, so the guide gets a decode
-    /// of its own. That decode must stay off the sampling path — the upsampler keeps consuming the
-    /// raw latent — or the stage would re-encode pixels it never needed to leave.
-    /// </summary>
+    [Fact]
+    public async Task Incoming_control_signal_is_built_from_each_stages_input()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        fixture.InstallModel("LoRA", "UnitTest_IcLoraA.safetensors");
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(IcLoraClip(
+            [fixture.Stage(control: 0.5), fixture.Stage("PreviousStage", control: 0.5)],
+            MakeIcLora(
+                "UnitTest_IcLoraA",
+                source: Constants.IcLoraSourceIncoming,
+                controlType: Constants.IcLoraControlCanny,
+                driveData: IcLoraDriveData.Visual))));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmKSamplerNode[] stages = [StageSampler(bridge, 0), StageSampler(bridge, 1)];
+        LTXAddVideoICLoRAGuideNode[] guides = [.. stages.Select(stage =>
+            Assert.IsType<LTXAddVideoICLoRAGuideNode>(stage.Positive.Connection?.Node))];
+        CannyNode[] controls = [.. bridge.Graph.NodesOfType<CannyNode>()];
+        Assert.Equal(2, controls.Length);
+        Assert.Equal(2, guides.Distinct().Count());
+
+        CannyNode firstControl = bridge.Graph.FindNearestUpstream<CannyNode>(
+            guides[0].Image.Connection?.Node);
+        CannyNode secondControl = bridge.Graph.FindNearestUpstream<CannyNode>(
+            guides[1].Image.Connection?.Node);
+        Assert.Contains(firstControl, controls);
+        Assert.Contains(secondControl, controls);
+        Assert.NotSame(firstControl, secondControl);
+        Assert.True(ReachesUpstream(bridge, firstControl.Image.Connection?.Node, BaseImage(bridge).Id));
+        Assert.False(ReachesUpstream(bridge, firstControl.Image.Connection?.Node, stages[0].Id));
+        Assert.True(ReachesUpstream(bridge, secondControl.Image.Connection?.Node, stages[0].Id));
+
+        live.AssertAllLive([.. stages, .. guides, .. controls]);
+        AssertShippable(bridge, workflow, live);
+    }
+
     [Fact]
     public async Task Stage_input_source_works_on_a_latent_upscale_stage()
     {
@@ -324,12 +303,10 @@ public class Ltx2IcLoraContractTests
         SwarmKSamplerNode second = StageSampler(bridge, 1);
         LTXAddVideoICLoRAGuideNode guide = OnlyGuide(bridge);
 
-        // The upsampler continues in latent space, straight off the previous stage's split.
         LatentUpscaleByNode scaler = Assert.Single(bridge.Graph.NodesOfType<LatentUpscaleByNode>());
         Assert.Same(OutputOf(bridge, first).VideoLatent, scaler.Samples.Connection);
         Assert.True(ReachesUpstream(bridge, second.LatentImage.Connection?.Node, scaler.Id));
 
-        // The guide's decode hangs off that same latent and feeds nothing but the guide.
         VAEDecodeTiledNode decode = Assert.Single(
             bridge.Graph.NodesOfType<VAEDecodeTiledNode>(),
             node => GuideDrivenBy(bridge, guide, node));
@@ -340,11 +317,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Uploaded drive media is framed to the resolution its own stage generates at, which a pixel
-    /// upscale moves away from the request's. The dimensions are the whole claim — a resize to the
-    /// wrong size still looks like a resize.
-    /// </summary>
     [Fact]
     public async Task Uploaded_drive_media_is_resized_to_stage_dimensions()
     {
@@ -362,7 +334,6 @@ public class Ltx2IcLoraContractTests
 
         LTXAddVideoICLoRAGuideNode guide = OnlyGuide(bridge);
         ImageScaleNode resize = Assert.IsType<ImageScaleNode>(GuideFraming(guide));
-        // 2× the POST's 512, so neither edge can be right by inheriting the request.
         Assert.Equal(1024, resize.Width.LiteralAsInt());
         Assert.Equal(1024, resize.Height.LiteralAsInt());
         Assert.Equal("center", resize.Crop.LiteralAsString());
@@ -371,10 +342,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A non-crop clip framing mode routes the same drive media through the pad-and-fit node
-    /// instead of a plain scale.
-    /// </summary>
     [Fact]
     public async Task Uploaded_drive_media_uses_the_clips_green_fit_method()
     {
@@ -386,7 +353,6 @@ public class Ltx2IcLoraContractTests
             MakeIcLora("UnitTest_IcLoraA", driveMediaData: DriveVideo));
         clip["refFraming"] = Constants.ReferenceFramingFitGreen;
 
-        // Non-square: SwarmFrameImage's own default is 512x512, the fixture's resolution.
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip), post =>
         {
             post["width"] = 768;
@@ -406,11 +372,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Two entries on one stage chain: the loaders patch one model in sequence and the guides thread
-    /// conditioning and latent through each other, each reading its own loader's downscale factor.
-    /// The stage's controlNetStrength is what both guides sample at.
-    /// </summary>
     [Fact]
     public async Task Two_uploaded_ic_loras_chain_loaders_and_stack_guides()
     {
@@ -454,7 +415,6 @@ public class Ltx2IcLoraContractTests
         Assert.Same(firstGuide, secondGuide.PositiveInput.Connection?.Node);
         Assert.Same(firstGuide, secondGuide.NegativeInput.Connection?.Node);
         Assert.Same(firstGuide, secondGuide.LatentInput.Connection?.Node);
-        // Slot 1 of the loader is the downscale factor; slot 0 is the patched model.
         Assert.Equal(1, firstGuide.LatentDownscaleFactor.Connection?.SlotIndex);
         Assert.Equal(0.7, firstGuide.Strength.LiteralAsDouble());
         Assert.Equal(0.7, secondGuide.Strength.LiteralAsDouble());
@@ -463,10 +423,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// An uploaded video drive loses its data-URI prefix, is split into components and its frames
-    /// reach the guide.
-    /// </summary>
     [Fact]
     public async Task Uploaded_drive_video_loads_b64_with_stripped_prefix_and_feeds_guide()
     {
@@ -493,10 +449,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Attention strength below 1 is the only thing that selects the advanced guide node, and it
-    /// still stacks on the basic one built for the sibling entry.
-    /// </summary>
     [Fact]
     public async Task Attention_strength_below_one_selects_advanced_guide()
     {
@@ -623,7 +575,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>An uploaded still takes the image loader, never the video one.</summary>
     [Fact]
     public async Task Uploaded_image_drive_uses_image_b64_load()
     {
@@ -648,11 +599,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// With no drive media the entry is still a model patch. A loader with no guide has nothing but
-    /// the stage's model downstream of it, so a regressed model assignment leaves it orphaned —
-    /// which is what the live-path assertion catches and a node count never would.
-    /// </summary>
     [Fact]
     public async Task Entry_without_drive_video_is_loader_only()
     {
@@ -677,10 +623,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// An entry naming weights that are not installed is dropped, and the drop must not take the
-    /// following entry's drive media with it.
-    /// </summary>
     [Fact]
     public async Task Unresolvable_entry_is_skipped_and_later_entries_still_apply()
     {
@@ -697,7 +639,6 @@ public class Ltx2IcLoraContractTests
         LTXICLoRALoaderModelOnlyNode loader = Assert.Single(
             bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
         Assert.Equal("UnitTest_IcLoraB.safetensors", loader.LoraName.LiteralAsString());
-        // The surviving guide reads the surviving entry's upload, not the dropped one's.
         SwarmLoadVideoB64Node load = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
         Assert.Equal("REVG", load.VideoBase64.LiteralAsString());
@@ -707,42 +648,37 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// One upload feeds every stage the entry applies on: the load/components pair is built once
-    /// and both stages' guides read it, while the guides stay per stage.
-    /// </summary>
     [Fact]
-    public async Task Uploaded_drive_chain_is_shared_across_stages()
+    public async Task Uploaded_drive_and_control_chain_are_shared_across_stages()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         fixture.InstallModel("LoRA", "UnitTest_IcLoraA.safetensors");
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(IcLoraClip(
             [fixture.Stage(), fixture.Stage()],
-            MakeIcLora("UnitTest_IcLoraA", driveMediaData: DriveVideo))));
+            MakeIcLora(
+                "UnitTest_IcLoraA",
+                controlType: Constants.IcLoraControlCanny,
+                driveMediaData: DriveVideo))));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
         GetVideoComponentsNode components = Assert.Single(
             bridge.Graph.NodesOfType<GetVideoComponentsNode>());
-        // Both stages ask for the same patch, so there is one loader to make; the guides are what
-        // stay per stage, and they are what the drive has to reach.
+        CannyNode control = Assert.Single(bridge.Graph.NodesOfType<CannyNode>());
         Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
 
         IReadOnlyList<LTXAddVideoICLoRAGuideNode> guides =
             [.. bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>()];
         Assert.Equal(2, guides.Count);
-        Assert.All(guides, guide => Assert.True(GuideDrivenBy(bridge, guide, components)));
+        Assert.True(ReachesUpstream(bridge, control.Image.Connection?.Node, components.Id));
+        Assert.All(guides, guide => Assert.True(GuideDrivenBy(bridge, guide, control)));
 
-        live.AssertAllLive([.. guides, components]);
+        live.AssertAllLive([.. guides, components, control]);
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A still drive is repeated up to the clip's frame count — trimming a one-frame batch could
-    /// never produce a full-length guide, and the repeat amount is the whole claim.
-    /// </summary>
     [Fact]
     public async Task Still_image_drive_is_repeated_to_the_clip_frame_count()
     {
@@ -757,7 +693,6 @@ public class Ltx2IcLoraContractTests
 
         RepeatImageBatchNode repeat = Assert.Single(
             bridge.Graph.NodesOfType<RepeatImageBatchNode>());
-        // The POST's 25 frames are already on LTX-2's 8k+1 grid.
         Assert.Equal(25, repeat.Amount.LiteralAsInt());
         LTXAddVideoICLoRAGuideNode guide = OnlyGuide(bridge);
         Assert.Same(repeat, guide.Image.Connection?.Node);
@@ -766,12 +701,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A continue boundary makes the clip generate a handle ahead of its own content, so an
-    /// authored drive has to be padded by the same amount to stay in sync — its first frame is held
-    /// for the handle. Media that already arrives from the previous stage is not padded, because it
-    /// carries the handle already.
-    /// </summary>
     [Fact]
     public async Task Continue_handle_offsets_authored_drives_but_not_later_stage_output()
     {
@@ -799,8 +728,6 @@ public class Ltx2IcLoraContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        // 0.6s at 24 fps is 16 structural frames, which LTX's 8k+1 grid rounds up to 17; the
-        // 8-frame continue handle the clip generates ahead of its content brings the guide to 25.
         LTXAddVideoICLoRAGuideNode[] guides =
             [.. bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>()];
         Assert.Equal(2, guides.Length);
@@ -813,16 +740,9 @@ public class Ltx2IcLoraContractTests
         Assert.Equal(8, handle.Amount.LiteralAsInt());
         ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
             handle.Image.Connection?.Node);
-        // Both values are ImageFromBatch's codegen defaults and this wrap is extension-built, so the
-        // shipped JSON carries them either way and a handle that held the wrong slice cannot be
-        // authored into existence here. Ltx2BoundaryContractTests' tail slices are the control that
-        // batch_index/length reach the node at all; what this pins is that the handle repeats one
-        // frame rather than the whole guide.
         Assert.Equal(0, firstFrame.BatchIndex.LiteralAsInt());
         Assert.Equal(1, firstFrame.Length.LiteralAsInt());
 
-        // Which trim belongs to which entry: a guide names its entry through the loader wired to
-        // its downscale factor. Counting padded trims would never say that.
         ImageFromBatchNode TrimOfEntry(string loraFile) => Assert.IsType<ImageFromBatchNode>(
             Assert.Single(
                 guides,
@@ -831,7 +751,6 @@ public class Ltx2IcLoraContractTests
                     && loader.LoraName.LiteralAsString() == loraFile)
                 .Image.Connection?.Node);
 
-        // The uploaded drive is padded: the held first frame, then the upload's own frames.
         BatchImagesNodeNode padded = Assert.IsType<BatchImagesNodeNode>(
             TrimOfEntry("UnitTest_IcLoraA.safetensors").Image.Connection?.Node);
         Assert.Equal(2, padded.Images.Count);
@@ -840,8 +759,6 @@ public class Ltx2IcLoraContractTests
             bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
         Assert.True(ReachesUpstream(bridge, padded.Images[1].Connection?.Node, upload.Id));
 
-        // The stage-1 entry reads the previous stage's output, which already carries the handle, so
-        // it is trimmed only. Its media is downstream of that stage's sampler; the upload is not.
         ComfyNode incomingDrive = TrimOfEntry("UnitTest_IcLoraB.safetensors").Image.Connection?.Node;
         Assert.IsNotType<BatchImagesNodeNode>(incomingDrive);
         string firstTargetStage = StageSampler(bridge, 1).Id;
@@ -852,10 +769,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// An audio-consuming preset with a video drive takes the drive's audio stream only: the video
-    /// is loaded and split, but no visual guide is built from its frames.
-    /// </summary>
     [Fact]
     public async Task Custom_audio_consuming_ic_lora_feeds_reference_tokens_without_a_visual_guide()
     {
@@ -886,8 +799,6 @@ public class Ltx2IcLoraContractTests
             bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
         LTXVAudioVAEEncodeNode encode = Assert.IsType<LTXVAudioVAEEncodeNode>(
             refTokens.AudioLatent.Connection?.Node);
-        // Slot 1 of the components node is the audio stream; slot 0 is the frames a visual guide
-        // would have taken.
         Assert.Same(driveComponents, encode.Audio.Connection?.Node);
         Assert.Equal(1, encode.Audio.Connection?.SlotIndex);
         Assert.True(ReachesUpstream(bridge, StageSampler(bridge, 0), refTokens.Id));
@@ -896,10 +807,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// LipDub with an uploaded voice track conditions through reference tokens alone: no video is
-    /// loaded and no guide frames are built.
-    /// </summary>
     [Fact]
     public async Task Lipdub_drive_audio_feeds_audio_reference_tokens_without_loading_video_or_guide_frames()
     {
@@ -936,10 +843,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A stage-scoped LipDub entry conditions only its own stage's sampler; the unscoped stage's
-    /// conditioning must not reach the reference tokens.
-    /// </summary>
     [Fact]
     public async Task Lipdub_audio_reference_obeys_the_entry_stage_scope()
     {
@@ -978,11 +881,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Across stages the voice track is materialised and encoded once, and the reference tokens
-    /// rewriting the conditioning are one node too — the stages carry the same prompt, so there is
-    /// one conditioning between them to rewrite.
-    /// </summary>
     [Fact]
     public async Task Lipdub_all_stages_reuses_one_materialized_audio_sample()
     {
@@ -1003,8 +901,6 @@ public class Ltx2IcLoraContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
-        // Both stages wrap the same conditioning in the same reference tokens, so there is one
-        // wrapper; the claim is the sample beneath it, materialized once for the whole clip.
         IReadOnlyList<LTXVSetAudioRefTokensNode> refTokens =
             [.. bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>()];
         Assert.Single(refTokens);
@@ -1021,12 +917,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A clip that uploads its own audio track and a LipDub entry that uploads a speaker reference
-    /// must stay separate. Which upload the reference tokens read is the claim: reading the clip's
-    /// base track instead would condition on the wrong voice and look identical by node count.
-    /// <para>Image-to-video, because clip 0 of a text-to-video request hits the P1 audio defect.</para>
-    /// </summary>
     [Fact]
     public async Task Lipdub_drive_audio_stays_separate_from_the_clip_base_audio_upload()
     {
@@ -1056,17 +946,12 @@ public class Ltx2IcLoraContractTests
                 refTokens.AudioLatent.Connection?.Node);
         Assert.NotNull(referenceUpload);
         Assert.Equal("RFJJVkU=", referenceUpload.AudioBase64.LiteralAsString());
-        // The two tracks are never merged: the clip's own audio is conditioned separately.
         Assert.Empty(bridge.Graph.NodesOfType<AudioConcatNode>());
 
         live.AssertAllLive(refTokens, referenceUpload, StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// An audio entry and a visual entry on the same two-stage clip do not interfere: each stage
-    /// gets both, while the two uploads are materialised once each.
-    /// </summary>
     [Fact]
     public async Task Lipdub_and_visual_guide_coexist_across_refinement_without_extra_audio_wrapping()
     {
@@ -1099,8 +984,6 @@ public class Ltx2IcLoraContractTests
             [.. bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>()];
         Assert.Equal(2, refTokens.Count);
         Assert.Equal(2, guides.Count);
-        // Each visual guide extends the latent, so each stage crops the guide frames back off —
-        // named by the latent it crops, since a count alone would pass with both crops on one stage.
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXVCropGuidesNode>().Count);
         Assert.All(
             new[] { StageSampler(bridge, 0), StageSampler(bridge, 1) },
@@ -1108,14 +991,10 @@ public class Ltx2IcLoraContractTests
                 bridge.Graph.NodesOfType<LTXVCropGuidesNode>(),
                 crop => ReferenceEquals(
                     crop.LatentInput.Connection?.Node, OutputOf(bridge, stage))));
-        // One upload each, and the voice track is encoded once for both stages.
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
         Assert.Single(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
 
-        // Reachability cannot separate the stages — stage 1 refines stage 0's latent, so all of
-        // stage 0 is upstream of it. The direct wrapping order is the claim instead: each stage's
-        // conditioning is its own token node over its own visual guide, in that order.
         SwarmKSamplerNode[] stages = [StageSampler(bridge, 0), StageSampler(bridge, 1)];
         LTXVSetAudioRefTokensNode[] wrappers = [.. stages.Select(stage =>
             Assert.IsType<LTXVSetAudioRefTokensNode>(stage.Positive.Connection?.Node))];
@@ -1132,12 +1011,7 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    // ---- dropped entries ------------------------------------------------------------------
 
-    /// <summary>
-    /// The auto-model token only resolves through a preset name, so an entry without one is warned
-    /// about and dropped — and the stage still generates, off an unpatched model.
-    /// </summary>
     [Fact]
     public async Task Auto_ic_lora_without_a_preset_warns_and_drops_the_entry()
     {
@@ -1162,10 +1036,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A known preset whose weights were never downloaded names the file it wanted, so the warning
-    /// is actionable. The <c>.</c>-to-<c>_</c> spelling is what the downloader writes to disk.
-    /// </summary>
     [Fact]
     public async Task Auto_ic_lora_with_uninstalled_weights_warns_and_drops_the_entry()
     {
@@ -1212,11 +1082,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// An audio-consuming preset needs audio to consume. The weights are installed, so the drop is
-    /// attributable to the drive media alone — and nothing of the entry reaches the graph, not even
-    /// the upload.
-    /// </summary>
     [Theory]
     [InlineData(null, "requires uploaded Audio Drive Media")]
     [InlineData("data:image/png;base64,QUJD", "cannot consume Audio data from Image media")]
@@ -1248,11 +1113,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A skip marker does not drop only its own stage. <c>ParseStages</c> breaks at the first
-    /// skipped stage, so the clip keeps none of them, the timeline never activates, and the
-    /// entry's <c>stage: 1</c> scope is never consulted — core generates the request alone.
-    /// </summary>
     [Fact]
     public async Task Skip_marker_truncates_the_clips_stage_list()
     {
@@ -1269,8 +1129,6 @@ public class Ltx2IcLoraContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        // Core's own text-to-video pass, and only it: a surviving stage 1 would add a second
-        // sampler at StageSeed(1).
         SwarmKSamplerNode core = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
         Assert.Equal(VideoStagesWorkflowFixture.Seed, core.NoiseSeed.LiteralAsLong());
         AssertNoIcLoraNodes(bridge);

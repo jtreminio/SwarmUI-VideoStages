@@ -11,6 +11,7 @@ internal sealed class IcLoraControlSignalBuilder(WorkflowGenerator g)
     internal JArray Apply(
         WorkflowBridge bridge,
         int clipId,
+        int rawStageIndex,
         IcLoraPlan entry,
         JArray driveImages)
     {
@@ -18,7 +19,13 @@ internal sealed class IcLoraControlSignalBuilder(WorkflowGenerator g)
         {
             return driveImages;
         }
-        string key = LtxRuntimeKeyScope.IcLoraControlSignal(clipId, entry.EntryIndex);
+        int? stageKey = entry.Drive.Source == IcLoraMediaSourceKind.Incoming
+            ? rawStageIndex
+            : null;
+        string key = LtxRuntimeKeyScope.IcLoraControlSignal(
+            clipId,
+            entry.EntryIndex,
+            stageKey);
         if (VideoGraphHelpers.TryGetCachedPath(g, bridge, key, out JArray cached))
         {
             return cached;

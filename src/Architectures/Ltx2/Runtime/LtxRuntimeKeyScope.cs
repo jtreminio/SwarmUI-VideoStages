@@ -34,8 +34,16 @@ internal static class LtxRuntimeKeyScope
             : key;
     }
 
-    internal static string IcLoraControlSignal(int clipId, int entryIndex) =>
-        $"{Prefix}.iclora.control.{clipId}.{entryIndex}";
+    internal static string IcLoraControlSignal(
+        int clipId,
+        int entryIndex,
+        int? rawStageIndex = null)
+    {
+        string key = $"{Prefix}.iclora.control.{clipId}.{entryIndex}";
+        return rawStageIndex is int stageIndex
+            ? $"{key}.{stageIndex}"
+            : key;
+    }
 
     internal static string IcLoraUploadedDriveImages(int clipId, int entryIndex) =>
         $"{Prefix}.iclora.upload.{clipId}.{entryIndex}";

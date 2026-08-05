@@ -50,6 +50,7 @@ public sealed class LtxIcLoraTests
         JArray result = new IcLoraControlSignalBuilder(generator).Apply(
             bridge,
             clipId: 0,
+            rawStageIndex: 0,
             plan,
             driveImages);
 

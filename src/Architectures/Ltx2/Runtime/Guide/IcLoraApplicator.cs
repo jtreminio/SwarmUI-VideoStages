@@ -81,7 +81,12 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
             }
 
             JArray controlImages =
-                controlSignals.Apply(bridge, clip.ClipId, entry.Plan, drive.Images);
+                controlSignals.Apply(
+                    bridge,
+                    clip.ClipId,
+                    stage.ClipStageRawIndex,
+                    entry.Plan,
+                    drive.Images);
             if (drive.ControlNetIndex is null)
             {
                 controlImages = driveResolver.ResizeToStageDimensions(
