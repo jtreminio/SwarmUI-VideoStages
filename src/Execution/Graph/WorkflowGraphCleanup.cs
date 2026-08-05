@@ -99,8 +99,8 @@ internal static class WorkflowGraphCleanup
     }
 
     /// <summary>
-    /// Collects the ids of every node connected to <paramref name="startNodeIds"/> (walking BOTH
-    /// directions), removing nothing.
+    /// Collects the ids of every node connected to <paramref name="startNodeIds"/> in both
+    /// directions, removing nothing.
     /// </summary>
     public static HashSet<string> CollectComponentIds(
         WorkflowBridge bridge, IEnumerable<string> startNodeIds) =>

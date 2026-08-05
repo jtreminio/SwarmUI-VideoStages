@@ -3,9 +3,6 @@ using VideoStages.Planning;
 
 namespace VideoStages;
 
-/// <summary>
-/// Computes the silent-bed duration used to place a clip's audio segments.
-/// </summary>
 internal static class ClipAudioBedDuration
 {
     /// <summary>Uses planned fps when available, otherwise the installed media fps.</summary>

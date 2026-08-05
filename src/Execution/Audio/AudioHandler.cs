@@ -21,7 +21,6 @@ public sealed class AudioHandler(WorkflowGenerator g)
         return DetectAceStepFunAudio(trackIndex, bridge);
     }
 
-    /// <summary>Bridge-reusing typed counterpart for compiled execution plans.</summary>
     public WGNodeData DetectAceStepFunAudio(int trackIndex, WorkflowBridge bridge)
     {
         if (trackIndex < 0)

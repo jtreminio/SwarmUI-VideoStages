@@ -6,10 +6,7 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages;
 
-/// <summary>Rebuilds a <see cref="WGNodeData"/> from the fields persisted in a stage-ref marker,
-/// shared by architecture-owned stage stores (pipe-string markers and JSON payloads).
-/// Owns the marker field logic and compat
-/// resolution; the two callers keep their own encode/decode of the field values.</summary>
+/// <summary>Rebuilds <see cref="WGNodeData"/> from stage-reference fields shared by pipe and JSON marker codecs.</summary>
 internal static class WGNodeDataMarkerCodec
 {
     public static WGNodeData Build(
