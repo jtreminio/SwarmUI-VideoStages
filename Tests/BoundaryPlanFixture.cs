@@ -18,7 +18,7 @@ internal static class BoundaryPlanFixture
             string raw = boundaryOuts is not null && i < boundaryOuts.Count
                 ? boundaryOuts[i]
                 : Constants.BoundaryOutCut;
-            BoundaryJoinType mode = BoundaryPolicy.ParsePlanMode(raw);
+            BoundaryJoinType mode = BoundaryPlanCompiler.ParseJoinType(raw);
             int overlap = boundaryOverlapPrefs is not null && i < boundaryOverlapPrefs.Count
                 ? boundaryOverlapPrefs[i]
                 : Ltx2BoundaryPolicy.DefaultFrames;

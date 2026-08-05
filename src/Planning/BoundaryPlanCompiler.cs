@@ -33,8 +33,7 @@ internal static class BoundaryPlanCompiler
         {
             ClipSpec authoredFrom = authoredClips[i];
             ClipPlan from = clips[i];
-            BoundaryJoinType effectiveRequested =
-                BoundaryPolicy.ParsePlanMode(authoredFrom.BoundaryOut);
+            BoundaryJoinType effectiveRequested = ParseJoinType(authoredFrom.BoundaryOut);
             ClipSpec authoredTo = authoredClips[i + 1];
             ClipPlan to = clips[i + 1];
             BoundaryFallbackReason fallback = BoundaryFallbackReason.None;
@@ -178,6 +177,19 @@ internal static class BoundaryPlanCompiler
             return BoundaryFallbackReason.TargetHasFirstFrameReference;
         }
         return null;
+    }
+
+    internal static BoundaryJoinType ParseJoinType(string value)
+    {
+        if (string.Equals(value, Constants.BoundaryOutContinue, StringComparison.OrdinalIgnoreCase))
+        {
+            return BoundaryJoinType.Continue;
+        }
+        if (string.Equals(value, Constants.BoundaryOutCrossfade, StringComparison.OrdinalIgnoreCase))
+        {
+            return BoundaryJoinType.Crossfade;
+        }
+        return BoundaryJoinType.Cut;
     }
 
     private static bool HasExplicitFirstFrameReference(ClipSpec clip) =>

@@ -199,7 +199,7 @@ internal static class RequestReader
             Stages: stages,
             Loras: Loras.ReadNormal(clipObject, context.Warn),
             PromptWindows: SortWindows(context.Directives.ClipWindows.GetValueOrDefault(clipIndex)),
-            BoundaryOut: BoundaryPolicy.NormalizeAuthoredMode(
+            BoundaryOut: NormalizeBoundaryOut(
                 DocumentJson.GetString(clipObject, "boundaryOut")),
             BoundaryOutOverlap: Math.Max(
                 0,
@@ -611,6 +611,20 @@ internal static class RequestReader
 
     private static double ClampUnitOrDefault(double value, double fallback) =>
         IsFinite(value) ? Math.Clamp(value, 0.0, 1.0) : fallback;
+
+    private static string NormalizeBoundaryOut(string raw)
+    {
+        string compact = StringUtils.Compact(raw);
+        if (StringUtils.Equals(compact, Constants.BoundaryOutContinue))
+        {
+            return Constants.BoundaryOutContinue;
+        }
+        if (StringUtils.Equals(compact, Constants.BoundaryOutCrossfade))
+        {
+            return Constants.BoundaryOutCrossfade;
+        }
+        return Constants.BoundaryOutCut;
+    }
 
     private static double NormalizeControl(double control) =>
         TruncateToDecimals(Math.Clamp(control, 0, 1), 2);
