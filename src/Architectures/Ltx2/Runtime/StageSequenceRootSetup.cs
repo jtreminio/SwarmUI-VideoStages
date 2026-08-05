@@ -1,13 +1,8 @@
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>
-/// Applies the compiled root plan once, captures the generated reference at the
-/// post-video-chain boundary, and snapshots the root sources shared by generated clips.
-/// </summary>
 internal sealed class StageSequenceRootSetup(
     WorkflowGenerator g,
     StageRefStore store,
@@ -20,23 +15,20 @@ internal sealed class StageSequenceRootSetup(
         ArgumentNullException.ThrowIfNull(preparedAudioSources);
         ArgumentNullException.ThrowIfNull(root);
 
-        if (root.UsesStageHandoff)
+        if (root.UsesStageHandoff
+            || root.DropsTextToVideoRootDonor
+            || root.UsesGeneratedClipDonor)
         {
-            rootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia();
+            rootVideoStageResizer.ApplyConfiguredRootStageDimensionsToCurrentMedia();
         }
-        else if (root.DropsTextToVideoRootDonor)
+
+        if (root.DropsTextToVideoRootDonor)
         {
-            // The root will be pruned, so only stamp its timeline dimensions. Removing inherited
-            // audio prevents replacement clips from retaining the unrelated root sampler.
-            rootVideoStageResizer.ApplyConfiguredRootStageResolutionToCurrentMedia();
+            // Do not let replacement clips retain the unrelated root sampler through its audio.
             if (g.CurrentMedia is not null)
             {
                 g.CurrentMedia.AttachedAudio = null;
             }
-        }
-        else if (root.UsesGeneratedClipDonor)
-        {
-            rootVideoStageResizer.ApplyConfiguredRootStageResolutionToSurvivingRootMedia();
         }
 
         CaptureGeneratedReference(root);

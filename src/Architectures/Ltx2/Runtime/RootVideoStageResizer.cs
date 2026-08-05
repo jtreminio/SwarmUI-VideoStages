@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -80,33 +79,13 @@ internal sealed class RootVideoStageResizer(WorkflowGenerator g)
             == Ltx2ArchitectureModule.ArchitectureId;
     }
 
-    public void ApplyConfiguredRootStageResolutionToCurrentMedia()
+    public void ApplyConfiguredRootStageDimensionsToCurrentMedia()
     {
         if (!TryGetRootStageResolution(out int width, out int height))
         {
             return;
         }
-        if (g.RequireVideoExecutionPlanContext().Plan.Root.HostKind
-                == HostRootKind.TextToVideoRoot
-            || CurrentMediaFeedsSaveImage())
-        {
-            SetCurrentMediaDimensions(width, height);
-            return;
-        }
-
-        ApplyCurrentMediaResolution(width, height);
-    }
-
-    /// <summary>
-    /// Pixel-resizes a surviving root generation used as the clips' shared source. Leaving it at the
-    /// core resolution would force overlap-boundary merges to use hard cuts.
-    /// </summary>
-    public void ApplyConfiguredRootStageResolutionToSurvivingRootMedia()
-    {
-        if (TryGetRootStageResolution(out int width, out int height))
-        {
-            ApplyCurrentMediaResolution(width, height);
-        }
+        SetCurrentMediaDimensions(width, height);
     }
 
     public bool TryGetRootStageResolution(out int width, out int height)
@@ -120,31 +99,6 @@ internal sealed class RootVideoStageResizer(WorkflowGenerator g)
 
         width = 0;
         height = 0;
-        return false;
-    }
-
-    private bool CurrentMediaFeedsSaveImage()
-    {
-        if (!g.RequireVideoExecutionPlanContext().Plan.Root.InterceptsHostCore
-            || g.CurrentMedia?.Path is not { Count: 2 } mediaPath)
-        {
-            return false;
-        }
-
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (bridge.ResolvePath(mediaPath) is not INodeOutput output)
-        {
-            return false;
-        }
-
-        foreach (ComfyNode consumer in bridge.Graph.FindDownstream(output))
-        {
-            if (consumer is SwarmSaveImageWSNode or SaveImageNode)
-            {
-                return true;
-            }
-        }
-
         return false;
     }
 
