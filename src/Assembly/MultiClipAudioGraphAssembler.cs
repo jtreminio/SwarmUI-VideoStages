@@ -7,15 +7,11 @@ namespace VideoStages;
 /// <summary>Resolves clip audio and assembles a concat aligned to video boundary overlaps.</summary>
 internal static class MultiClipAudioGraphAssembler
 {
-    private const long SilenceSampleRate = 44100;
-    private const long SilenceChannels = 2;
-
-    internal sealed record TimelineAudioPreflight(IReadOnlyList<INodeOutput> DecodedOutputs);
-
     /// <summary>
-    /// Resolves every architecture-neutral decoded audio handle without mutating the graph.
+    /// Returns one audio input per clip, or nothing when no clip has audio. Clips without audio
+    /// receive duration-matched silence so one silent clip cannot erase the timeline's audio.
     /// </summary>
-    internal static TimelineAudioPreflight PreflightTimelineAudio(
+    internal static IReadOnlyList<INodeOutput> MaterializeTimelineAudio(
         WorkflowBridge bridge,
         IReadOnlyList<DecodedClipArtifact> clips)
     {
@@ -23,72 +19,57 @@ internal static class MultiClipAudioGraphAssembler
         ArgumentNullException.ThrowIfNull(clips);
         if (!clips.Any(clip => clip?.Audio is not null))
         {
-            return new([]);
+            return [];
         }
 
         List<INodeOutput> outputs = new(clips.Count);
-        for (int i = 0; i < clips.Count; i++)
+        foreach (DecodedClipArtifact clip in clips)
         {
-            DecodedClipArtifact clip = clips[i];
             if (clip.Audio is null)
             {
-                outputs.Add(null);
+                EmptyAudioNode silence = bridge.AddNode(new EmptyAudioNode()).With(
+                    Duration: clip.Frames / (double)clip.FramesPerSecond,
+                    SampleRate: 44100,
+                    Channels: 2);
+                outputs.Add(silence.AUDIO);
                 continue;
             }
-
-            INodeOutput output = clip.Audio.Resolve(bridge);
-            if (output is null)
-            {
-                throw Invariant.Failure(
+            outputs.Add(clip.Audio.Resolve(bridge)
+                ?? throw Invariant.Failure(
                     $"clip {clip.ClipId} decoded audio could not be resolved "
-                    + "for timeline assembly.");
-            }
-            outputs.Add(output);
+                    + "for timeline assembly."));
         }
-        return new(outputs);
+        return outputs;
     }
 
     /// <summary>
-    /// Returns one audio input per clip, or nothing when the preflight found no audio anywhere.
-    /// Clips without audio receive duration-matched silence so one silent clip cannot erase the
-    /// timeline's audio.
+    /// Drops a Continue pre-roll that the video side already discarded because its boundary
+    /// degraded to a cut at runtime.
     /// </summary>
-    internal static IReadOnlyList<INodeOutput> MaterializeTimelineAudio(
+    internal static IReadOnlyList<INodeOutput> TrimDiscardedHandles(
         WorkflowBridge bridge,
         IReadOnlyList<DecodedClipArtifact> clips,
-        TimelineAudioPreflight preflight)
+        IReadOnlyList<INodeOutput> audioOutputs,
+        IReadOnlyList<int> discardedHandles)
     {
-        ArgumentNullException.ThrowIfNull(bridge);
-        ArgumentNullException.ThrowIfNull(clips);
-        ArgumentNullException.ThrowIfNull(preflight);
-        if (preflight.DecodedOutputs.Count == 0)
+        if (audioOutputs.Count == 0 || !discardedHandles.Any(handle => handle > 0))
         {
-            return [];
-        }
-        if (preflight.DecodedOutputs.Count != clips.Count)
-        {
-            throw Invariant.Failure(
-                "Timeline audio preflight does not match the decoded clip count.");
+            return audioOutputs;
         }
 
-        List<INodeOutput> outputs = new(clips.Count);
-        for (int i = 0; i < clips.Count; i++)
+        List<INodeOutput> trimmed = [.. audioOutputs];
+        for (int i = 0; i < discardedHandles.Count; i++)
         {
-            DecodedClipArtifact clip = clips[i];
-            INodeOutput decodedAudio = preflight.DecodedOutputs[i];
-            if (decodedAudio is not null)
+            if (discardedHandles[i] > 0)
             {
-                outputs.Add(decodedAudio);
-                continue;
+                trimmed[i] = TrimToRange(
+                    bridge,
+                    trimmed[i],
+                    discardedHandles[i] / (double)clips[i].FramesPerSecond,
+                    clips[i].Frames / (double)clips[i].FramesPerSecond);
             }
-
-            EmptyAudioNode silence = bridge.AddNode(new EmptyAudioNode()).With(
-                Duration: clip.Frames / (double)clip.FramesPerSecond,
-                SampleRate: SilenceSampleRate,
-                Channels: SilenceChannels);
-            outputs.Add(silence.AUDIO);
         }
-        return outputs;
+        return trimmed;
     }
 
     /// <summary>

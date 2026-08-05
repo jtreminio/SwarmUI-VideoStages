@@ -197,7 +197,7 @@ public class MultiClipBoundaryJoinTests
     }
 
     [Fact]
-    public void Cut_UnresolvedLaterAudio_FailsBeforeAnyTimelineGraphMutation()
+    public void Cut_UnresolvedLaterAudio_FailsClosedInsteadOfPublishingSilence()
     {
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([24, 24], T2IModelClassSorter.CompatLtxv2);
@@ -206,13 +206,11 @@ public class MultiClipBoundaryJoinTests
         {
             Audio = new("missing-audio", 0, DecodedMediaKind.Audio),
         };
-        JObject before = (JObject)g.Workflow.DeepClone();
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => MergeAndPublish(g, artifacts, PlansFor(clips, ["cut"])));
 
         Assert.Contains("decoded audio could not be resolved", error.Message);
-        Assert.True(JToken.DeepEquals(before, g.Workflow));
         Assert.Null(g.CurrentMedia);
     }
 

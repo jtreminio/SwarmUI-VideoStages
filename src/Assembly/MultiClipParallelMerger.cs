@@ -87,11 +87,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             clips[i] = clips[i] with { Frames = clips[i].Frames - handle };
         }
         int sumFrames = clips.Sum(clip => clip.Frames);
-        MultiClipAudioGraphAssembler.TimelineAudioPreflight audioPreflight =
-            MultiClipAudioGraphAssembler.PreflightTimelineAudio(
-                bridge,
-                generatedClips);
-
         INodeOutput mergedVideo = overlapPlan is null
             ? MultiClipVideoGraphAssembler.MergeCut(bridge, videoOutputs)
             : DecodedBoundaryJoiner.MergeOverlaps(
@@ -101,29 +96,11 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
                 overlapPlan);
 
         IReadOnlyList<INodeOutput> audioOutputs =
-            MultiClipAudioGraphAssembler.MaterializeTimelineAudio(
+            MultiClipAudioGraphAssembler.TrimDiscardedHandles(
                 bridge,
-                generatedClips,
-                audioPreflight);
-        if (audioOutputs.Count > 0 && discardedHandles.Any(handle => handle > 0))
-        {
-            List<INodeOutput> trimmedAudio = [.. audioOutputs];
-            for (int i = 0; i < discardedHandles.Length; i++)
-            {
-                int handle = discardedHandles[i];
-                if (handle <= 0)
-                {
-                    continue;
-                }
-                TrimAudioDurationNode trim = bridge.AddNode(
-                    new TrimAudioDurationNode().With(
-                        StartIndex: handle / (double)clips[i].FramesPerSecond,
-                        Duration: clips[i].Frames / (double)clips[i].FramesPerSecond));
-                trim.Audio.ConnectToUntyped(trimmedAudio[i]);
-                trimmedAudio[i] = trim.AUDIO;
-            }
-            audioOutputs = trimmedAudio;
-        }
+                clips,
+                MultiClipAudioGraphAssembler.MaterializeTimelineAudio(bridge, generatedClips),
+                discardedHandles);
         INodeOutput mergedAudio = audioOutputs.Count > 0
             ? MultiClipAudioGraphAssembler.Merge(
                 bridge,
