@@ -69,6 +69,12 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
         int? framesPerSecond = media.FPS?.Type == JTokenType.Integer
             ? media.FPS.Value<int>()
             : null;
+        if (originalFrames is int knownFrames
+            && Math.Max(0, trimStartFrames) + Math.Max(0, trimEndFrames) >= knownFrames)
+        {
+            throw Invariant.Failure(
+                $"global frame trim removes all {knownFrames} frames of the final video.");
+        }
         MediaRef attachedAudio = media.AttachedAudio;
         ValidateAttachedAudio(
             attachedAudio,
