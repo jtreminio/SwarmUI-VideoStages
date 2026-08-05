@@ -6,7 +6,7 @@ using VideoStages.Generated;
 namespace VideoStages;
 
 /// <summary>Joins clips into one image batch, blending overlapped boundaries in pixel space.</summary>
-internal static class DecodedBoundaryJoiner
+internal static class DecodedVideoJoiner
 {
     /// <summary>
     /// Concatenates clip video on the resolved boundary timeline. Overlapped boundaries trim both
@@ -74,11 +74,6 @@ internal static class DecodedBoundaryJoiner
     /// </summary>
     private static INodeOutput Concat(WorkflowBridge bridge, IReadOnlyList<INodeOutput> outputs)
     {
-        if (outputs.Count == 1)
-        {
-            return outputs[0];
-        }
-
         List<INodeOutput> layer = [.. outputs];
         while (true)
         {

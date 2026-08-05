@@ -87,20 +87,20 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             clips[i] = clips[i] with { Frames = clips[i].Frames - handle };
         }
         int sumFrames = clips.Sum(clip => clip.Frames);
-        INodeOutput mergedVideo = DecodedBoundaryJoiner.Merge(
+        INodeOutput mergedVideo = DecodedVideoJoiner.Merge(
             bridge,
             clips,
             videoOutputs,
             overlapPlan);
 
         IReadOnlyList<INodeOutput> audioOutputs =
-            MultiClipAudioGraphAssembler.TrimDiscardedHandles(
+            DecodedAudioJoiner.TrimDiscardedHandles(
                 bridge,
                 clips,
-                MultiClipAudioGraphAssembler.MaterializeTimelineAudio(bridge, generatedClips),
+                DecodedAudioJoiner.MaterializeTimelineAudio(bridge, generatedClips),
                 discardedHandles);
         INodeOutput mergedAudio = audioOutputs.Count > 0
-            ? MultiClipAudioGraphAssembler.Merge(
+            ? DecodedAudioJoiner.Merge(
                 bridge,
                 clips,
                 audioOutputs,

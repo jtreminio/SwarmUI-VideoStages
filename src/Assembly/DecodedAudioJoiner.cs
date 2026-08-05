@@ -4,8 +4,8 @@ using VideoStages.Execution;
 
 namespace VideoStages;
 
-/// <summary>Resolves clip audio and assembles a concat aligned to video boundary overlaps.</summary>
-internal static class MultiClipAudioGraphAssembler
+/// <summary>Resolves clip audio and joins it on the same boundary timeline as the video.</summary>
+internal static class DecodedAudioJoiner
 {
     /// <summary>
     /// Returns one audio input per clip, or nothing when no clip has audio. Clips without audio
