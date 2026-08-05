@@ -167,14 +167,12 @@ internal static class RequestReader
             }
         }
 
-        IReadOnlyList<IcLoraSpec> icLoras =
-            VideoStageResourceParser.ParseIcLoras(clipObject, context.Warn);
+        IReadOnlyList<IcLoraSpec> icLoras = Loras.ReadIc(clipObject, context.Warn);
         List<JObject> rawStages = DocumentJson.GetObjectArray(clipObject, "stages");
-        IReadOnlyList<ImageRefSpec> references =
-            VideoStageResourceParser.ParseImageReferences(
-                clipObject,
-                clipIndex,
-                context.Warn);
+        IReadOnlyList<ImageRefSpec> references = ImageReferences.Read(
+            clipObject,
+            clipIndex,
+            context.Warn);
         InitVideoSpec initVideo = AuthoringTimeline.ReadInitVideo(
             clipObject, duration, context.Fps, clipIndex, context.Warn);
         List<StageSpec> stages = ReadStages(
@@ -199,7 +197,7 @@ internal static class RequestReader
                 clipObject, UploadContainers.ClipAudio),
             ImageRefs: references,
             Stages: stages,
-            Loras: VideoStageResourceParser.ParseLoras(clipObject, context.Warn),
+            Loras: Loras.ReadNormal(clipObject, context.Warn),
             PromptWindows: SortWindows(context.Tags.ClipWindows.GetValueOrDefault(clipIndex)),
             BoundaryOut: BoundaryPolicy.NormalizeAuthoredMode(
                 DocumentJson.GetString(clipObject, "boundaryOut")),
@@ -332,8 +330,8 @@ internal static class RequestReader
             IcLoraStrengths: ReadIcLoraStrengths(stage),
             ImageRefStrengths: ReadRefStrengths(stage, clipRefCount),
             ImageRefWasExplicit: DocumentJson.HasProperty(stage, "imageReference"),
-            Loras: VideoStageResourceParser.ParseLoras(stage, warn),
-            LoraWeights: VideoStageResourceParser.ParseLoraWeights(stage));
+            Loras: Loras.ReadNormal(stage, warn),
+            LoraWeights: Loras.ReadWeights(stage));
     }
 
     private static StageDefaults ReadDefaults(WorkflowGenerator g)

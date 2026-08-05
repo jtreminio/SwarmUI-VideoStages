@@ -3,35 +3,12 @@ using Newtonsoft.Json.Linq;
 
 namespace VideoStages;
 
-internal static class VideoStageResourceParser
+internal static class Loras
 {
     internal const int IcLoraStrengthMin = 0;
     internal const int IcLoraStrengthMax = 5;
 
-    public static IReadOnlyList<ImageRefSpec> ParseImageReferences(
-        JObject clipObject,
-        int clipIndex,
-        Action<string> warn = null)
-    {
-        List<JObject> rawReferences = DocumentJson.GetObjectArray(
-            clipObject, UploadContainers.RefsCollection);
-        List<ImageRefSpec> references = [];
-        for (int index = 0; index < rawReferences.Count; index++)
-        {
-            ImageRefSpec parsed = ParseImageReference(
-                rawReferences[index],
-                clipIndex,
-                index,
-                warn);
-            if (parsed is not null)
-            {
-                references.Add(parsed);
-            }
-        }
-        return references;
-    }
-
-    public static IReadOnlyList<LoraRef> ParseLoras(
+    public static IReadOnlyList<LoraRef> ReadNormal(
         JObject obj,
         Action<string> warn = null)
     {
@@ -61,7 +38,7 @@ internal static class VideoStageResourceParser
         return loras;
     }
 
-    public static IReadOnlyList<double> ParseLoraWeights(JObject obj)
+    public static IReadOnlyList<double> ReadWeights(JObject obj)
     {
         if (!DocumentJson.HasProperty(obj, "loraWeights"))
         {
@@ -98,7 +75,7 @@ internal static class VideoStageResourceParser
         return weights.AsReadOnly();
     }
 
-    public static IReadOnlyList<IcLoraSpec> ParseIcLoras(
+    public static IReadOnlyList<IcLoraSpec> ReadIc(
         JObject clipObject,
         Action<string> warn = null)
     {
@@ -130,13 +107,13 @@ internal static class VideoStageResourceParser
                     entry, "attentionStrength", 1, "Clip IcLora", warn), 0, 1),
                 ControlType: DocumentJson.GetString(entry, "controlType")?.Trim(),
                 DriveMedia: driveMedia,
-                DriveData: ParseDriveData(rawDriveData, index, warn),
-                DriveMediaKinds: ParseDriveMediaKinds(entry, index, warn)));
+                DriveData: ReadDriveData(rawDriveData, index, warn),
+                DriveMediaKinds: ReadDriveMediaKinds(entry, index, warn)));
         }
         return entries;
     }
 
-    private static IcLoraDriveData ParseDriveData(
+    private static IcLoraDriveData ReadDriveData(
         string rawValue,
         int entryIndex,
         Action<string> warn)
@@ -165,7 +142,7 @@ internal static class VideoStageResourceParser
         return IcLoraDriveData.None;
     }
 
-    private static IReadOnlyList<string> ParseDriveMediaKinds(
+    private static IReadOnlyList<string> ReadDriveMediaKinds(
         JObject entry,
         int entryIndex,
         Action<string> warn)
@@ -229,58 +206,6 @@ internal static class VideoStageResourceParser
             return "audio";
         }
         return null;
-    }
-
-    private static ImageRefSpec ParseImageReference(
-        JObject obj,
-        int clipIndex,
-        int refIndex,
-        Action<string> warn)
-    {
-        string source = DocumentJson.GetString(obj, "source");
-        if (string.IsNullOrWhiteSpace(source))
-        {
-            DocumentJson.Warn(
-                warn,
-                $"VideoStages: Clip {clipIndex} reference {refIndex} is missing a Source value; skipping.");
-            return null;
-        }
-
-        int frame = 1;
-        string rawFrame = DocumentJson.GetString(obj, "frame");
-        if (!string.IsNullOrWhiteSpace(rawFrame) && int.TryParse(rawFrame.Trim(), out int parsedFrame))
-        {
-            frame = Math.Max(1, parsedFrame);
-        }
-
-        bool fromEnd = false;
-        string rawFromEnd = DocumentJson.GetString(obj, "fromEnd");
-        if (!string.IsNullOrWhiteSpace(rawFromEnd)
-            && bool.TryParse(rawFromEnd.Trim(), out bool parsedFromEnd))
-        {
-            fromEnd = parsedFromEnd;
-        }
-
-        string uploadFileName = DocumentJson.GetString(obj, "uploadFileName");
-        string data = DocumentJson.GetString(obj, "data");
-        UploadedMediaSpec embeddedImage = DocumentJson.GetEmbeddedUpload(
-            obj, UploadContainers.RefImage);
-        if (embeddedImage is not null)
-        {
-            data = embeddedImage.Data;
-            if (string.IsNullOrWhiteSpace(uploadFileName)
-                && !string.IsNullOrWhiteSpace(embeddedImage.FileName))
-            {
-                uploadFileName = embeddedImage.FileName;
-            }
-        }
-
-        return new ImageRefSpec(
-            source.Trim(),
-            frame,
-            fromEnd,
-            string.IsNullOrWhiteSpace(uploadFileName) ? null : uploadFileName.Trim(),
-            string.IsNullOrWhiteSpace(data) ? null : data.Trim());
     }
 
     private static double SanitizeWeight(double value, double fallback) =>

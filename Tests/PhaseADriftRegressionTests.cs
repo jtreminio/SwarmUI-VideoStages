@@ -80,10 +80,10 @@ public class PhaseADriftRegressionTests
             Path.Combine(TestSourceDirectory(), "..", "frontend", "icLoraAuthoring.ts")));
 
         Assert.Contains(
-            $"export const IC_LORA_STRENGTH_MIN = {VideoStageResourceParser.IcLoraStrengthMin};",
+            $"export const IC_LORA_STRENGTH_MIN = {Loras.IcLoraStrengthMin};",
             source);
         Assert.Contains(
-            $"export const IC_LORA_STRENGTH_MAX = {VideoStageResourceParser.IcLoraStrengthMax};",
+            $"export const IC_LORA_STRENGTH_MAX = {Loras.IcLoraStrengthMax};",
             source);
     }
 
