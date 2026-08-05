@@ -122,7 +122,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
             || media.Output is not INodeOutput videoOutput)
         {
             throw VideoStagesInvariant.Failure(
-                "VideoStages: frame interpolation requires a resolvable decoded final video.");
+                "frame interpolation requires a resolvable decoded final video.");
         }
         if (media.Frames is not int frames
             || frames <= 0
@@ -130,7 +130,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
             || media.FPS.Value<int>() <= 0)
         {
             throw VideoStagesInvariant.Failure(
-                "VideoStages: frame interpolation requires literal positive final frame-count "
+                "frame interpolation requires literal positive final frame-count "
                 + "and frame-rate metadata.");
         }
         int fps = media.FPS.Value<int>();
@@ -149,7 +149,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         catch (OverflowException)
         {
             throw VideoStagesInvariant.Failure(
-                "VideoStages: frame interpolation metadata exceeds the supported integer range.");
+                "frame interpolation metadata exceeds the supported integer range.");
         }
 
         if (g.UserInput.Get(T2IParamTypes.OutputIntermediateImages, false))
@@ -166,7 +166,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         using WorkflowBridge outputBridge = BridgeSync.For(g);
         INodeOutput interpolatedOutput = outputBridge.ResolvePath(interpolated)
             ?? throw VideoStagesInvariant.Failure(
-                "VideoStages: frame interpolation did not produce a resolvable video.");
+                "frame interpolation did not produce a resolvable video.");
         return artifact with
         {
             Media = new MediaRef

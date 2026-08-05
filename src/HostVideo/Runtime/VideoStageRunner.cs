@@ -109,12 +109,12 @@ internal sealed class VideoStageRunner : IDisposable
             if (!output.HasMedia)
             {
                 throw VideoStagesInvariant.Failure(
-                    $"VideoStages: stage {stage.StageId} produced no media artifact.");
+                    $"stage {stage.StageId} produced no media artifact.");
             }
             if (consumedContinuation && continuation is null)
             {
                 throw VideoStagesInvariant.Failure(
-                    $"VideoStages: stage {stage.StageId} consumed no planned continuation.");
+                    $"stage {stage.StageId} consumed no planned continuation.");
             }
             StagePlan outputStage = consumedContinuation ? continuation : stage;
             if (outputStage.Output.IsTimelineTerminal && _trimmer.IsRequested)

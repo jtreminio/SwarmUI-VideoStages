@@ -38,7 +38,7 @@ internal sealed class SourceOnlyGenerationSession(
         }
         WGNodeData initVideoMedia = _sourceInstaller.TryInstall(context.Clip)
             ?? throw VideoStagesInvariant.Failure(
-                $"VideoStages: clip {context.Clip.ClipId} source video could not be installed.");
+                $"clip {context.Clip.ClipId} source video could not be installed.");
         generator.CurrentMedia = initVideoMedia;
         PrepareAudio(context.Clip, initVideoMedia);
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);

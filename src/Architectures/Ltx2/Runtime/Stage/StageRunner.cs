@@ -50,7 +50,7 @@ internal class StageRunner
         if (_generator.CurrentMedia is null)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: stage {stage.StageId} has no input media.");
+                $"stage {stage.StageId} has no input media.");
         }
 
         ClipPlan clip = clipContext.PlannedClip;
@@ -89,7 +89,7 @@ internal class StageRunner
                 && sourceMedia?.DataType != WGNodeData.DT_IMAGE))
         {
             throw VideoStagesInvariant.Failure(
-                "VideoStages: the LTX stage input was neither decoded video nor image media.");
+                "the LTX stage input was neither decoded video nor image media.");
         }
 
         StagePlan stage = stageFrame.Stage;

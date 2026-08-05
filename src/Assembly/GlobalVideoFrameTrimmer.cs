@@ -49,13 +49,13 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
         if (media?.Output is not INodeOutput videoOutput)
         {
             throw VideoStagesInvariant.Failure(
-                "VideoStages: the final output uses global frame trim, but the timeline produced "
+                "the final output uses global frame trim, but the timeline produced "
                 + "no decoded output to trim.");
         }
         if (media.DataType != WGNodeData.DT_VIDEO)
         {
             throw VideoStagesInvariant.Failure(
-                "VideoStages: the final output uses global frame trim, but it is not a decoded "
+                "the final output uses global frame trim, but it is not a decoded "
                 + "video stream.");
         }
         int? originalFrames = media.Frames;
@@ -113,14 +113,14 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
             || audio.Path is not JArray { Count: 2 } audioPath)
         {
             throw VideoStagesInvariant.Failure(
-                "VideoStages: the final video uses global frame trim, but its attached audio "
+                "the final video uses global frame trim, but its attached audio "
                 + "is not a decoded audio stream.");
         }
         if (g.CurrentMedia.Frames is not > 0
             || g.CurrentMedia.GetRawFPS() is not > 0)
         {
             throw VideoStagesInvariant.Failure(
-                "VideoStages: the final video uses global frame trim, but its frame count or "
+                "the final video uses global frame trim, but its frame count or "
                 + "frame rate is unavailable, so attached audio cannot be trimmed in sync.");
         }
         ResolveHostOutput(bridge, audioPath, "attached audio");
@@ -132,7 +132,7 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
         string outputKind) =>
         bridge.ResolvePath(path)
         ?? throw VideoStagesInvariant.Failure(
-            $"VideoStages: the final {outputKind} stream required for global frame trim "
+            $"the final {outputKind} stream required for global frame trim "
             + "is unavailable in the workflow.");
 
     private MediaRef TrimAttachedAudio(
@@ -177,13 +177,13 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
             || audio.Output is null)
         {
             throw VideoStagesInvariant.Failure(
-                "VideoStages: the final video uses global frame trim, but its attached audio "
+                "the final video uses global frame trim, but its attached audio "
                 + "is not a decoded audio stream.");
         }
         if (originalFrames is not > 0 || framesPerSecond is not > 0)
         {
             throw VideoStagesInvariant.Failure(
-                "VideoStages: the final video uses global frame trim, but its frame count or "
+                "the final video uses global frame trim, but its frame count or "
                 + "frame rate is unavailable, so attached audio cannot be trimmed in sync.");
         }
     }

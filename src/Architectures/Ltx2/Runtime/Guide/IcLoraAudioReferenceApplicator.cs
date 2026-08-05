@@ -120,13 +120,13 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         if (entry.Drive.Source != IcLoraMediaSourceKind.Upload)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: IC-LoRA entry {entry.EntryIndex} has no supported audio drive source.");
+                $"IC-LoRA entry {entry.EntryIndex} has no supported audio drive source.");
         }
         UploadedMediaSpec media = entry.Drive.Upload;
         if (string.IsNullOrWhiteSpace(media?.Data))
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: IC-LoRA entry {entry.EntryIndex} requires audio or video Drive Media.");
+                $"IC-LoRA entry {entry.EntryIndex} requires audio or video Drive Media.");
         }
         if (entry.Drive.MediaKind == IcLoraDriveMediaKind.Audio)
         {

@@ -74,7 +74,7 @@ internal sealed class MiniMaxGenerationSession(
                 sourceInstallPlan,
                 includeSourceAudio: clip.Audio.Base.Kind == AudioSourceKind.Native)
                 ?? throw VideoStagesInvariant.Failure(
-                    $"VideoStages: clip {clip.ClipId} source video could not be installed.");
+                    $"clip {clip.ClipId} source video could not be installed.");
             PrepareInitVideoAudio(clip);
             g.CurrentVae = null;
         }
@@ -94,7 +94,7 @@ internal sealed class MiniMaxGenerationSession(
         {
             g.CurrentMedia = rootSources.Media?.Duplicate()
                 ?? throw VideoStagesInvariant.Failure(
-                    $"VideoStages: clip {clip.ClipId} has no host image to generate from.");
+                    $"clip {clip.ClipId} has no host image to generate from.");
             g.CurrentVae = rootSources.Vae?.Duplicate();
             _entryFirstFrame = g.CurrentMedia;
         }
@@ -630,7 +630,7 @@ internal sealed class MiniMaxGenerationSession(
                 null,
                 sectionId: sectionId)
             ?? throw VideoStagesInvariant.Failure(
-                $"VideoStages: clip {clip.ClipId} could not resolve MiniMax H3 video model "
+                $"clip {clip.ClipId} could not resolve MiniMax H3 video model "
                     + $"'{stage.ResolvedModel.ModelName}'.");
         return new WorkflowGenerator.ImageToVideoGenInfo
         {

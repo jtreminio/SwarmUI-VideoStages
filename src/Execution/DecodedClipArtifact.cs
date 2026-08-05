@@ -33,7 +33,7 @@ internal sealed record DecodedOutputHandle(
         path is { Count: 2 }
             ? new((string)path[0], (int)path[1], DecodedMediaKind.Audio)
             : throw VideoStagesInvariant.Failure(
-                "VideoStages: decoded audio path is not a node output.");
+                "decoded audio path is not a node output.");
 
     internal INodeOutput Resolve(WorkflowBridge bridge) =>
         bridge.ResolvePath(new JArray(NodeId, SlotIndex));
@@ -97,19 +97,19 @@ internal sealed record DecodedClipArtifact(
         if (!artifact.HasMedia)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: clip {clip.ClipId} did not produce decoded video media.");
+                $"clip {clip.ClipId} did not produce decoded video media.");
         }
         if (artifact.Media.DataType != WGNodeData.DT_VIDEO)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: clip {clip.ClipId} did not produce decoded video media; "
+                $"clip {clip.ClipId} did not produce decoded video media; "
                 + $"received '{artifact.Media.DataType ?? "unknown"}'.");
         }
         if (artifact.Media.AttachedAudio is MediaRef attachedAudio
             && attachedAudio.DataType != WGNodeData.DT_AUDIO)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: clip {clip.ClipId} did not produce decoded attached audio; "
+                $"clip {clip.ClipId} did not produce decoded attached audio; "
                 + $"received '{attachedAudio.DataType ?? "unknown"}'.");
         }
         if (artifact.Media.Width is not > 0
@@ -119,7 +119,7 @@ internal sealed record DecodedClipArtifact(
             || artifact.Media.FPS.Value<int>() <= 0)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: clip {clip.ClipId} decoded media is missing literal dimensions, fps, or frames.");
+                $"clip {clip.ClipId} decoded media is missing literal dimensions, fps, or frames.");
         }
         DecodedClipArtifact decoded = new(
             DecodedOutputHandle.From(artifact.Media.Output, DecodedMediaKind.Video),

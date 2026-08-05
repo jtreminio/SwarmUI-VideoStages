@@ -24,7 +24,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
         if (resolvedOutputs.Count != clipArtifacts.Count)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: timeline assembly could resolve only {resolvedOutputs.Count} of "
+                $"timeline assembly could resolve only {resolvedOutputs.Count} of "
                 + $"{clipArtifacts.Count} planned clip video outputs.");
         }
 
@@ -76,7 +76,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             if (clips[i].Frames <= handle)
             {
                 throw VideoStagesInvariant.Failure(
-                    $"VideoStages: clip {clips[i].ClipId} cannot discard its {handle}-frame "
+                    $"clip {clips[i].ClipId} cannot discard its {handle}-frame "
                     + "Continue handle after a runtime fallback.");
             }
             ImageFromBatchNode trim = bridge.AddNode(new ImageFromBatchNode().With(

@@ -86,7 +86,7 @@ internal sealed class TimelineAssemblySession
         if (clipOutputs.Count != _plan.Clips.Count)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: timeline assembly expected {_plan.Clips.Count} clip outputs "
+                $"timeline assembly expected {_plan.Clips.Count} clip outputs "
                 + $"but received {clipOutputs.Count}.");
         }
         TimelineMergeResult result = _merger.Merge(clipOutputs, _effectiveBoundaries);

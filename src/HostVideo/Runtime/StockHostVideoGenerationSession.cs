@@ -78,7 +78,7 @@ internal sealed class StockHostVideoGenerationSession(
                 sourceInstallPlan,
                 includeSourceAudio: false)
                 ?? throw VideoStagesInvariant.Failure(
-                    $"VideoStages: clip {clip.ClipId} source video could not be installed.");
+                    $"clip {clip.ClipId} source video could not be installed.");
             g.CurrentVae = null;
         }
         else
@@ -104,7 +104,7 @@ internal sealed class StockHostVideoGenerationSession(
             {
                 g.CurrentMedia = rootSources.Media?.Duplicate()
                     ?? throw VideoStagesInvariant.Failure(
-                        $"VideoStages: clip {clip.ClipId} has no host image to generate from.");
+                        $"clip {clip.ClipId} has no host image to generate from.");
                 g.CurrentVae = rootSources.Vae?.Duplicate();
             }
         }
@@ -364,7 +364,7 @@ internal sealed class StockHostVideoGenerationSession(
             || lowSampler.FindInput("latent_image")?.Connection is not INodeOutput highLatent)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: stage {stage.StageId} could not publish its "
+                $"stage {stage.StageId} could not publish its "
                     + "sampling-continuation intermediate.");
         }
         WGNodeData highMedia = new(
@@ -544,7 +544,7 @@ internal sealed class StockHostVideoGenerationSession(
         if (!valid)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: clip {clip.ClipId} stage {stage.StageId} could not create a "
+                $"clip {clip.ClipId} stage {stage.StageId} could not create a "
                     + $"valid {width}x{height}, {frames}-frame {architectureLabel} "
                     + "text-video latent.");
         }
@@ -563,7 +563,7 @@ internal sealed class StockHostVideoGenerationSession(
         StageCorePlan core = stage.Core;
         T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId)
             ?? throw VideoStagesInvariant.Failure(
-                $"VideoStages: clip {clip.ClipId} could not resolve {architectureLabel} "
+                $"clip {clip.ClipId} could not resolve {architectureLabel} "
                     + "video model "
                 + $"'{stage.ResolvedModel.ModelName}'.");
         T2IModel continuationModel = null;
@@ -577,7 +577,7 @@ internal sealed class StockHostVideoGenerationSession(
             if (continuationModel is null)
             {
                 throw VideoStagesInvariant.Failure(
-                    $"VideoStages: clip {clip.ClipId} could not resolve {architectureLabel} "
+                    $"clip {clip.ClipId} could not resolve {architectureLabel} "
                         + $"video model '{continuation.ResolvedModel.ModelName}'.");
             }
         }

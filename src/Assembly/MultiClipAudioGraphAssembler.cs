@@ -44,7 +44,7 @@ internal static class MultiClipAudioGraphAssembler
             if (output is null)
             {
                 throw VideoStagesInvariant.Failure(
-                    $"VideoStages: clip {clip.ClipId} decoded audio could not be resolved "
+                    $"clip {clip.ClipId} decoded audio could not be resolved "
                     + "for timeline assembly.");
             }
             outputs.Add(output);

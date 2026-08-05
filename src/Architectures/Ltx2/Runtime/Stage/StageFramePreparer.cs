@@ -26,7 +26,7 @@ internal sealed class StageFramePreparer(
 
         WGNodeData currentMedia = g.CurrentMedia
             ?? throw VideoStagesInvariant.Failure(
-                $"VideoStages: stage {stage.StageId} has no input media.");
+                $"stage {stage.StageId} has no input media.");
         JArray priorOutputPath = CopyPath(currentMedia.Path);
         LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
         bool replacesTextToVideoRoot = root.ReplacesTextToVideoRootStage(
@@ -41,7 +41,7 @@ internal sealed class StageFramePreparer(
         if (sourceMedia is null)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: stage {stage.StageId} could not resolve its source media.");
+                $"stage {stage.StageId} could not resolve its source media.");
         }
 
         WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
@@ -78,7 +78,7 @@ internal sealed class StageFramePreparer(
         if (videoModel is null)
         {
             throw VideoStagesInvariant.Failure(
-                $"VideoStages: stage {stage.StageId} could not resolve LTX video model "
+                $"stage {stage.StageId} could not resolve LTX video model "
                 + $"'{stage.ResolvedModel.ModelName}'.");
         }
         bool sourceIsVideo = sourceMedia.DataType == WGNodeData.DT_VIDEO;
