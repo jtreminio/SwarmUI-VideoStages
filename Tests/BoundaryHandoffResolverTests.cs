@@ -88,7 +88,7 @@ public class BoundaryHandoffResolverTests
         (new BoundaryHandoffResolver(
                 g,
                 new ContinuityGuideBuilder(g)),
-            new TimelineAssemblySession(g, new MultiClipParallelMerger(g), plan),
+            new TimelineAssemblySession(g, new TimelineMerger(g), plan),
             new ClipContext(plan, plan.Clips[1], null, null));
 
     public static TheoryData<string> MissingCarryPrerequisites() =>

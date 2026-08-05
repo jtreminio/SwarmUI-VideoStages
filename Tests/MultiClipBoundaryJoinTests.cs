@@ -71,18 +71,14 @@ public class MultiClipBoundaryJoinTests
     private static int CountOf<T>(WorkflowBridge bridge) where T : ComfyNode =>
         bridge.Graph.NodesOfType<T>().Count;
 
-    private static MultiClipParallelMerger Merger(WorkflowGenerator generator) =>
+    private static TimelineMerger Merger(WorkflowGenerator generator) =>
         new(generator);
 
-    private static BoundaryBudgetResolution MergeAndPublish(
+    private static void MergeAndPublish(
         WorkflowGenerator generator,
         IReadOnlyList<DecodedClipArtifact> artifacts,
-        IReadOnlyList<BoundaryPlan> boundaries)
-    {
-        TimelineMergeResult result = Merger(generator).Merge(artifacts, boundaries);
-        result.Artifact.PublishTo(generator);
-        return result.Boundaries;
-    }
+        IReadOnlyList<BoundaryPlan> boundaries) =>
+        Merger(generator).Merge(artifacts, boundaries).PublishTo(generator);
 
     private static List<DecodedClipArtifact> Artifacts(
         IReadOnlyList<WGNodeData> clips)
@@ -127,13 +123,13 @@ public class MultiClipBoundaryJoinTests
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17], T2IModelClassSorter.CompatLtxv2);
 
-        TimelineMergeResult result =
+        RuntimeArtifact artifact =
             Merger(g).Merge(Artifacts(clips), PlansFor(clips, ["cut"]));
 
-        Assert.NotNull(result.Artifact);
-        Assert.True(result.Artifact.HasMedia);
-        Assert.Equal(34, result.Artifact.Media.Frames);
-        Assert.NotNull(result.Artifact.Media.AttachedAudio);
+        Assert.NotNull(artifact);
+        Assert.True(artifact.HasMedia);
+        Assert.Equal(34, artifact.Media.Frames);
+        Assert.NotNull(artifact.Media.AttachedAudio);
         Assert.Null(g.CurrentMedia);
     }
 
@@ -192,7 +188,7 @@ public class MultiClipBoundaryJoinTests
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => MergeAndPublish(g, Artifacts(clips), PlansFor(clips, ["cut"])));
 
-        Assert.Contains("only 1 of 2 planned clip video outputs", error.Message);
+        Assert.Contains("clip 1 left no video output in the workflow", error.Message);
         Assert.Null(g.CurrentMedia);
     }
 
@@ -297,15 +293,8 @@ public class MultiClipBoundaryJoinTests
             MinFrames = 8,
         };
 
-        BoundaryBudgetResolution result = MergeAndPublish(
-            g,
-            artifacts,
-            [boundary]);
+        MergeAndPublish(g, artifacts, [boundary]);
 
-        Assert.True(result.Degraded);
-        BoundaryPlan resolved = Assert.Single(result.Boundaries);
-        Assert.Equal(BoundaryJoinType.Cut, resolved.Effective);
-        Assert.Equal(BoundaryFallbackReason.InsufficientFrameBudget, resolved.Fallback);
         Assert.Contains(
             Assert.IsType<List<string>>(g.UserInput.ExtraMeta["parser_warnings"]),
             warning => warning.Contains(
@@ -383,15 +372,12 @@ public class MultiClipBoundaryJoinTests
     {
         (WorkflowGenerator g, List<WGNodeData> clips) =
             BuildClips([17, 17, 17, 17], T2IModelClassSorter.CompatLtxv2);
-        BoundaryBudgetResolution resolution = MergeAndPublish(g,
+        MergeAndPublish(g,
             Artifacts(clips),
             PlansFor(
                 clips,
                 ["crossfade", "cut", "crossfade", "cut"]));
 
-        Assert.False(resolution.Degraded);
-        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[0].Effective);
-        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[2].Effective);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         Assert.Equal(2, CountOf<ImageCompositeMaskedNode>(bridge));
         Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
@@ -624,12 +610,10 @@ public class MultiClipBoundaryJoinTests
         List<DecodedClipArtifact> artifacts = Artifacts(clips);
         artifacts[2] = artifacts[2] with { Frames = 4 };
         artifacts[3] = artifacts[3] with { Frames = 4 };
-        BoundaryBudgetResolution resolution = MergeAndPublish(g,
+        MergeAndPublish(g,
             artifacts,
             PlansFor(clips, ["crossfade", "cut", "crossfade", "cut"]));
 
-        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[0].Effective);
-        Assert.Equal(BoundaryJoinType.Cut, resolution.Boundaries[2].Effective);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         Assert.Equal(1, CountOf<ImageCompositeMaskedNode>(bridge));
     }
@@ -642,12 +626,10 @@ public class MultiClipBoundaryJoinTests
             T2IModelClassSorter.CompatLtxv2,
             widths: [512, 512, 1024],
             heights: [512, 512, 1024]);
-        BoundaryBudgetResolution resolution = MergeAndPublish(g,
+        MergeAndPublish(g,
             Artifacts(clips),
             PlansFor(clips, ["crossfade", "cut", "cut"]));
 
-        Assert.False(resolution.Degraded);
-        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[0].Effective);
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         Assert.Equal(1, CountOf<ImageCompositeMaskedNode>(bridge));
         ImageScaleNode conform = Assert.Single(bridge.Graph.NodesOfType<ImageScaleNode>());

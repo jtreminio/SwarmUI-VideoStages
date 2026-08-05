@@ -7,18 +7,18 @@ namespace VideoStages;
 
 /// <summary>
 /// Assembles the final timeline from planned boundaries and runtime downgrades.
-/// <see cref="MultiClipParallelMerger"/> builds the graph.
+/// <see cref="TimelineMerger"/> builds the graph.
 /// </summary>
 internal sealed class TimelineAssemblySession
 {
     private readonly WorkflowGenerator _generator;
-    private readonly MultiClipParallelMerger _merger;
+    private readonly TimelineMerger _merger;
     private readonly VideoExecutionPlan _plan;
     private readonly List<BoundaryPlan> _effectiveBoundaries;
 
     public TimelineAssemblySession(
         WorkflowGenerator generator,
-        MultiClipParallelMerger merger,
+        TimelineMerger merger,
         VideoExecutionPlan plan)
     {
         _generator = generator;
@@ -87,8 +87,7 @@ internal sealed class TimelineAssemblySession
                 $"timeline assembly expected {_plan.Clips.Count} clip outputs "
                 + $"but received {clipOutputs.Count}.");
         }
-        TimelineMergeResult result = _merger.Merge(clipOutputs, _effectiveBoundaries);
-        return result.Artifact;
+        return _merger.Merge(clipOutputs, _effectiveBoundaries);
     }
 
     /// <summary>

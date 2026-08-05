@@ -124,7 +124,7 @@ internal sealed class VideoArchitectureExecutionHost
             return;
         }
         RootRuntimeSession rootSession = RootRuntimeSession.Capture(_generator, _plan);
-        MultiClipParallelMerger merger = new(_generator);
+        TimelineMerger merger = new(_generator);
         AudioRuntimeSources preparedAudioSources = new AudioRuntimeSourceResolver(
             _generator,
             new AudioHandler(_generator)).Resolve(_plan);

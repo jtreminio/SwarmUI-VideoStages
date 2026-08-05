@@ -1,31 +1,31 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
-using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
 namespace VideoStages;
 
-internal sealed record TimelineMergeResult(
-    BoundaryBudgetResolution Boundaries,
-    RuntimeArtifact Artifact);
-
-internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
+/// <summary>
+/// Builds the timeline's single video and audio output from the clips that ran. Conforms geometry,
+/// re-resolves boundaries against real clip lengths, discards pre-roll a degraded boundary left
+/// behind, then hands each stream to its joiner.
+/// </summary>
+internal sealed class TimelineMerger(WorkflowGenerator g)
 {
-    internal TimelineMergeResult Merge(
+    internal RuntimeArtifact Merge(
         IReadOnlyList<DecodedClipArtifact> clipArtifacts,
         IReadOnlyList<BoundaryPlan> boundaries)
     {
         using WorkflowBridge bridge = BridgeSync.For(g);
-        List<INodeOutput> resolvedOutputs =
-            ResolveOutputs(bridge, clipArtifacts.Select(clip => clip.Video.ToPath()));
-        if (resolvedOutputs.Count != clipArtifacts.Count)
+        List<INodeOutput> resolvedOutputs = new(clipArtifacts.Count);
+        foreach (DecodedClipArtifact clip in clipArtifacts)
         {
-            throw Invariant.Failure(
-                $"timeline assembly could resolve only {resolvedOutputs.Count} of "
-                + $"{clipArtifacts.Count} planned clip video outputs.");
+            resolvedOutputs.Add(bridge.ResolvePath(clip.Video.ToPath())
+                ?? throw Invariant.Failure(
+                    $"clip {clip.ClipId} left no video output in the workflow, so the timeline "
+                    + "cannot be assembled."));
         }
 
         // Conform before overlap planning so every downstream graph uses the same geometry.
@@ -64,6 +64,8 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             }
         }
 
+        // A Continue boundary that degraded to a cut leaves pre-roll frames in the incoming clip
+        // that nothing consumes; they would play as duplicates of the previous clip's tail.
         List<DecodedClipArtifact> clips = [.. generatedClips];
         List<INodeOutput> videoOutputs = [.. generatedVideoOutputs];
         for (int i = 0; i < discardedHandles.Length; i++)
@@ -86,7 +88,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             videoOutputs[i] = trim.IMAGE;
             clips[i] = clips[i] with { Frames = clips[i].Frames - handle };
         }
-        int sumFrames = clips.Sum(clip => clip.Frames);
         INodeOutput mergedVideo = DecodedVideoJoiner.Merge(
             bridge,
             clips,
@@ -113,7 +114,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             DataType = WGNodeData.DT_VIDEO,
             Width = conform.Target.Width,
             Height = conform.Target.Height,
-            Frames = sumFrames - (overlapPlan?.RemovedFrames ?? 0),
+            Frames = clips.Sum(clip => clip.Frames) - (overlapPlan?.RemovedFrames ?? 0),
             FPS = conform.Target.FramesPerSecond
         };
         if (mergedAudio is not null)
@@ -124,24 +125,6 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
                 DataType = WGNodeData.DT_AUDIO,
             };
         }
-        return new(
-            runtimeBoundaries,
-            new(
-                mergedMedia,
-                MediaRef.FromWGNodeData(g.CurrentVae, bridge)));
-    }
-
-    private static List<INodeOutput> ResolveOutputs(WorkflowBridge bridge, IEnumerable<JArray> paths)
-    {
-        List<INodeOutput> outputs = [];
-        foreach (JArray path in paths)
-        {
-            INodeOutput output = bridge.ResolvePath(path);
-            if (output is not null)
-            {
-                outputs.Add(output);
-            }
-        }
-        return outputs;
+        return new(mergedMedia, MediaRef.FromWGNodeData(g.CurrentVae, bridge));
     }
 }
