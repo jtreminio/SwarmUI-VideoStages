@@ -19,12 +19,4 @@ internal static class ReferenceFraming
             Constants.ReferenceFramingFitGreen => ReferenceFramingMode.FitGreen,
             _ => ReferenceFramingMode.Crop,
         };
-
-    internal static string ToWireValue(ReferenceFramingMode value) => value switch
-    {
-        ReferenceFramingMode.Stretch => Constants.ReferenceFramingStretch,
-        ReferenceFramingMode.Fit => Constants.ReferenceFramingFit,
-        ReferenceFramingMode.FitGreen => Constants.ReferenceFramingFitGreen,
-        _ => Constants.ReferenceFramingCrop,
-    };
 }

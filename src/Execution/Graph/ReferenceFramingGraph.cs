@@ -59,7 +59,7 @@ internal static class ReferenceFramingGraph
                 .ToPath();
         }
 
-        string wireMethod = ReferenceFraming.ToWireValue(method);
+        string wireMethod = ToWireValue(method);
         SwarmFrameImageNode existing = bridge.Graph
             .NodesOfType<SwarmFrameImageNode>()
             .FirstOrDefault(candidate =>
@@ -100,8 +100,16 @@ internal static class ReferenceFramingGraph
         return bridge.NodeAt<SwarmFrameImageNode>(imagePath) is SwarmFrameImageNode frame
             && frame.Width.LiteralAsInt() == width
             && frame.Height.LiteralAsInt() == height
-            && frame.Method.LiteralAsString() == ReferenceFraming.ToWireValue(method);
+            && frame.Method.LiteralAsString() == ToWireValue(method);
     }
+
+    private static string ToWireValue(ReferenceFramingMode method) => method switch
+    {
+        ReferenceFramingMode.Stretch => Constants.ReferenceFramingStretch,
+        ReferenceFramingMode.Fit => Constants.ReferenceFramingFit,
+        ReferenceFramingMode.FitGreen => Constants.ReferenceFramingFitGreen,
+        _ => Constants.ReferenceFramingCrop,
+    };
 
     private static bool HasSource(INodeInput input, JArray sourcePath) =>
         input.Connection is INodeOutput source
