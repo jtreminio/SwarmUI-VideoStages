@@ -13,7 +13,6 @@ internal sealed record StageParserDefaults(
     string Sampler,
     string Scheduler);
 
-/// <summary>Parses and normalizes one authored generation stage.</summary>
 internal static class VideoStageSpecParser
 {
     private const double DefaultControl = 0.5;
@@ -40,8 +39,9 @@ internal static class VideoStageSpecParser
     public static StageSpec? Parse(
         JObject stage,
         int clipIndex,
+        int stageId,
         int rawStageIndex,
-        int stageIndex,
+        int clipStageIndex,
         StageParserDefaults defaults,
         int clipRefCount,
         bool isTextToVideoRootWorkflow,
@@ -65,7 +65,7 @@ internal static class VideoStageSpecParser
         string upscaleMethod = VideoStagesJsonReader.GetOptionalString(
             stage, "upscaleMethod", defaults.UpscaleMethod, location, allowEmpty: false, warn);
 
-        bool isGenerationFirstStage = stageIndex == 0 && !initVideoClip;
+        bool isGenerationFirstStage = clipStageIndex == 0 && !initVideoClip;
         if (isGenerationFirstStage)
         {
             control = FirstStageControl;
@@ -78,7 +78,7 @@ internal static class VideoStageSpecParser
         }
 
         return new StageSpec(
-            Id: rawStageIndex,
+            Id: stageId,
             Control: control,
             Upscale: upscale,
             UpscaleMethod: upscaleMethod,
@@ -95,9 +95,11 @@ internal static class VideoStageSpecParser
                 VideoStagesJsonReader.GetString(stage, "imageReference"),
                 clipIndex,
                 rawStageIndex,
-                stageIndex,
+                clipStageIndex,
                 isTextToVideoRootWorkflow,
                 warn),
+            ClipStageIndex: clipStageIndex,
+            ClipStageRawIndex: rawStageIndex,
             ControlNetStrength: ParseControlNetStrength(stage, location, warn),
             IcLoraStrengths: ParseIcLoraStrengths(stage),
             ImageRefStrengths: ParseRefStrengths(stage, clipRefCount),

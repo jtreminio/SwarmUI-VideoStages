@@ -3,10 +3,6 @@ using VideoStages.Planning;
 
 namespace VideoStages;
 
-/// <summary>
-/// Compatibility facade for VideoStages prompt-tag processing, prompt selection, and scoped LoRA selection.
-/// Each operation delegates to a component that owns one prompt-processing responsibility.
-/// </summary>
 internal static class PromptParser
 {
     public const string OverridesKey = "videostages_overrides";

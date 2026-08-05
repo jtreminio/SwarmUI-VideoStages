@@ -88,7 +88,7 @@ internal static class VideoClipPromptSyntax
         return prefix.Equals(TagName, StringComparison.OrdinalIgnoreCase);
     }
 
-    public static string SanitizeOverrideToken(string value) =>
+    public static string SanitizeOverrideText(string value) =>
         (value ?? "").Replace("<", "").Replace(">", "").Replace("|", "").Replace(CidMarker, "")
             .Replace("\n", " ").Replace("\r", " ").Trim();
 

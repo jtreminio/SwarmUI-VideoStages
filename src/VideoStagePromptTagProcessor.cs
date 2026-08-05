@@ -3,7 +3,6 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages;
 
-/// <summary>Processes value-carrying VideoStages prompt tags and records their normalized metadata.</summary>
 internal static class VideoStagePromptTagProcessor
 {
     private static readonly HashSet<string> TopLevelFields =
@@ -75,7 +74,10 @@ internal static class VideoStagePromptTagProcessor
             context.TrackWarning($"VideoStages: top-level override '{field}' has no value; ignoring.");
             return "";
         }
-        StashOverride(context, $"t|{VideoClipPromptSyntax.SanitizeOverrideToken(field)}|{VideoClipPromptSyntax.SanitizeOverrideToken(value)}");
+        PromptParser.VideoStageTagData overrides = GetOverrides(context);
+        overrides?.TopLevelOverrides.Add((
+            VideoClipPromptSyntax.SanitizeOverrideText(field),
+            VideoClipPromptSyntax.SanitizeOverrideText(value)));
         return "";
     }
 
@@ -111,10 +113,10 @@ internal static class VideoStagePromptTagProcessor
                 context.TrackWarning($"VideoStages: <videoclip[{string.Join(',', tokens)}]> override has a non-numeric clip index; ignoring.");
                 return;
             }
-            StashOverride(
-                context,
-                $"c|{clip}|{VideoClipPromptSyntax.SanitizeOverrideToken(tokens[1])}"
-                + $"|{VideoClipPromptSyntax.SanitizeOverrideToken(value)}");
+            PromptParser.VideoStageTagData overrides = GetOverrides(context);
+            overrides?.ClipOverrides.GetOrCreate(clip, () => []).Add((
+                VideoClipPromptSyntax.SanitizeOverrideText(tokens[1]),
+                VideoClipPromptSyntax.SanitizeOverrideText(value)));
             return;
         }
         if (tokens.Length == 3)
@@ -124,24 +126,29 @@ internal static class VideoStagePromptTagProcessor
                 context.TrackWarning($"VideoStages: <videoclip[{string.Join(',', tokens)}]> override requires numeric clip and stage indices; ignoring.");
                 return;
             }
-            StashOverride(
-                context,
-                $"s|{clip}|{stage}|{VideoClipPromptSyntax.SanitizeOverrideToken(tokens[2])}"
-                + $"|{VideoClipPromptSyntax.SanitizeOverrideToken(value)}");
+            PromptParser.VideoStageTagData overrides = GetOverrides(context);
+            overrides?.StageOverrides.GetOrCreate((clip, stage), () => []).Add((
+                VideoClipPromptSyntax.SanitizeOverrideText(tokens[2]),
+                VideoClipPromptSyntax.SanitizeOverrideText(value)));
             return;
         }
         context.TrackWarning($"VideoStages: <videoclip[{string.Join(',', tokens)}]> override has an unsupported bracket arity; ignoring.");
     }
 
-    private static void StashOverride(T2IPromptHandling.PromptTagContext context, string encoded)
+    private static PromptParser.VideoStageTagData GetOverrides(
+        T2IPromptHandling.PromptTagContext context)
     {
         if (context.Input?.ExtraMeta is null)
         {
-            return;
+            return null;
         }
-        List<string> overrides = context.Input.ExtraMeta.GetOrCreate(
-            PromptParser.OverridesKey,
-            () => new List<string>()) as List<string>;
-        overrides.Add(encoded);
+        if (context.Input.ExtraMeta.GetValueOrDefault(PromptParser.OverridesKey)
+            is PromptParser.VideoStageTagData overrides)
+        {
+            return overrides;
+        }
+        overrides = new();
+        context.Input.ExtraMeta[PromptParser.OverridesKey] = overrides;
+        return overrides;
     }
 }

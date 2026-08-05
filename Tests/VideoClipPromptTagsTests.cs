@@ -4,13 +4,9 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// Tests <c>&lt;videoclip&gt;</c> and <c>&lt;videostages&gt;</c> tag parsing, prose ownership, and metadata restoration.
-/// </summary>
 [Collection("VideoStagesTests")]
 public class VideoClipPromptTagsTests
 {
-    /// <summary>Normalizes an authored prompt and returns the processed prompt and input.</summary>
     private static (string Prompt, T2IParamInput Input) Normalize(string authoringPrompt, string videoStagesJson = null)
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
@@ -105,6 +101,52 @@ public class VideoClipPromptTagsTests
         (string field, string value) = Assert.Single(Tags("<videostages[width]:1280>").TopLevelOverrides);
         Assert.Equal("width", field);
         Assert.Equal("1280", value);
+    }
+
+    [Fact]
+    public void Repeated_extraction_copies_typed_overrides_once()
+    {
+        (string prompt, T2IParamInput input) = Normalize(
+            "<videoclip[0,duration]:5.5>");
+
+        PromptParser.VideoStageTagData first = PromptParser.ExtractTagData(prompt, input);
+        PromptParser.VideoStageTagData second = PromptParser.ExtractTagData(prompt, input);
+        PromptParser.VideoStageTagData cloned = PromptParser.ExtractTagData(
+            prompt,
+            input.Clone());
+
+        PromptParser.VideoStageTagData stored =
+            Assert.IsType<PromptParser.VideoStageTagData>(
+                input.ExtraMeta[PromptParser.OverridesKey]);
+        Assert.NotSame(stored, first);
+        Assert.NotSame(stored, second);
+        Assert.NotSame(stored, cloned);
+        Assert.NotSame(first, second);
+        Assert.NotSame(first, cloned);
+        Assert.NotSame(second, cloned);
+        Assert.Single(first.ClipOverrides[0]);
+        Assert.Single(second.ClipOverrides[0]);
+        Assert.Single(cloned.ClipOverrides[0]);
+        first.ClipOverrides[0].Add(("duration", "9"));
+        Assert.Single(stored.ClipOverrides[0]);
+        Assert.Single(second.ClipOverrides[0]);
+        Assert.Single(cloned.ClipOverrides[0]);
+    }
+
+    [Fact]
+    public void Restored_override_metadata_does_not_block_new_tags()
+    {
+        _ = WorkflowTestHarness.VideoStagesSteps();
+        T2IParamInput input = new(null);
+        input.ExtraMeta[PromptParser.OverridesKey] = "serialized metadata";
+        input.Set(T2IParamTypes.Prompt, "<videoclip[0,duration]:5.5>");
+
+        input.ApplyLateSpecialLogic();
+
+        PromptParser.VideoStageTagData stored =
+            Assert.IsType<PromptParser.VideoStageTagData>(
+                input.ExtraMeta[PromptParser.OverridesKey]);
+        Assert.Single(stored.ClipOverrides[0]);
     }
 
     [Fact]

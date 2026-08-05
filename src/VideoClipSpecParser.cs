@@ -9,10 +9,13 @@ internal sealed record VideoClipParseContext(
     PromptParser.VideoStageTagData Tags,
     Action<string> Warn = null);
 
-/// <summary>Parses one authored clip.</summary>
 internal static class VideoClipSpecParser
 {
-    public static ClipSpec Parse(JObject clipObject, int clipIndex, VideoClipParseContext context)
+    public static ClipSpec Parse(
+        JObject clipObject,
+        int clipIndex,
+        int firstStageId,
+        VideoClipParseContext context)
     {
         string location = $"Clip {clipIndex}";
         double duration = VideoStagesJsonReader.GetOptionalDouble(
@@ -65,7 +68,12 @@ internal static class VideoClipSpecParser
         InitVideoSpec initVideo = ClipTimelineSpecParser.ParseInitVideo(
             clipObject, duration, context.Fps, clipIndex, context.Warn);
         List<StageSpec> stages = ParseStages(
-            rawStages, clipIndex, references.Count, initVideo is not null, context);
+            rawStages,
+            clipIndex,
+            firstStageId,
+            references.Count,
+            initVideo is not null,
+            context);
         ApplyRetake(stages, clipObject, clipIndex, duration, initVideo is not null, context);
 
         return new ClipSpec(
@@ -138,6 +146,7 @@ internal static class VideoClipSpecParser
     private static List<StageSpec> ParseStages(
         IReadOnlyList<JObject> rawStages,
         int clipIndex,
+        int firstStageId,
         int referenceCount,
         bool initVideoClip,
         VideoClipParseContext context)
@@ -153,13 +162,14 @@ internal static class VideoClipSpecParser
             StageSpec parsed = VideoStageSpecParser.Parse(
                 stage,
                 clipIndex,
-                stageIndex,
-                stages.Count,
-                context.StageDefaults,
-                referenceCount,
-                context.IsTextToVideoRootWorkflow,
-                initVideoClip,
-                context.Warn);
+                stageId: firstStageId + stages.Count,
+                rawStageIndex: stageIndex,
+                clipStageIndex: stages.Count,
+                defaults: context.StageDefaults,
+                clipRefCount: referenceCount,
+                isTextToVideoRootWorkflow: context.IsTextToVideoRootWorkflow,
+                initVideoClip: initVideoClip,
+                warn: context.Warn);
             if (parsed is not null)
             {
                 stages.Add(parsed);

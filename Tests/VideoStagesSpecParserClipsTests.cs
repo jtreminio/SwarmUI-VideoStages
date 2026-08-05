@@ -238,6 +238,21 @@ public class VideoStagesSpecParserClipsTests
     }
 
     [Fact]
+    public void ParseClips_StageOverride_CanReviveRawSkippedStage()
+    {
+        JObject skipped = MakeStage("model-b");
+        skipped["skipped"] = true;
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [MakeStage("model-a"), skipped])));
+
+        ClipSpec parsed = Assert.Single(VideoStagesSpecParser.Parse(BuildParser(
+            json,
+            "<videoclip[0,1,skipped]:false>")).Clips);
+
+        Assert.Equal(["model-a", "model-b"], parsed.Stages.Select(stage => stage.Model));
+    }
+
+    [Fact]
     public void ParseClips_NumericOverrides_AreCultureInvariant()
     {
         // Culture-sensitive parsing can interpret "5.5" as 55 on comma-decimal locales.
@@ -543,12 +558,6 @@ public class VideoStagesSpecParserClipsTests
         Assert.Equal(Constants.AudioSourceUpload, config.Clips[0].AudioSource);
     }
 
-    /// <summary>
-    /// The gate lives in the reader, below the parser: with the group's Enabled flag absent the
-    /// document is never read at all, so the root dimensions the JSON declares are not merely
-    /// overridden later — they are never produced. Asserted on a clipless document, which no
-    /// generated workflow can express because a timeline with no clips builds nothing to look at.
-    /// </summary>
     [Fact]
     public void ReadDocument_GroupToggleOff_YieldsNoRootDimensionsOrEntries()
     {
@@ -835,6 +844,30 @@ public class VideoStagesSpecParserClipsTests
         Assert.Contains(
             Assert.IsType<List<string>>(parser.UserInput.ExtraMeta["parser_warnings"]),
             warning => warning.Contains("Clip 0 stage 0 has no model and was ignored"));
+    }
+
+    [Fact]
+    public void ParseClips_AssignsFinalStageIdentityWhileCompactingMissingModels()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [
+                MakeStage("model-a"),
+                MakeStage(""),
+                MakeStage("model-b"),
+            ]),
+            MakeClip(stages: [MakeStage("model-c")])));
+
+        VideoStagesSpec spec = VideoStagesSpecParser.Parse(BuildParser(json));
+
+        Assert.Collection(
+            spec.Clips[0].Stages,
+            stage => Assert.Equal((0, 0, 0),
+                (stage.Id, stage.ClipStageIndex, stage.ClipStageRawIndex)),
+            stage => Assert.Equal((1, 1, 2),
+                (stage.Id, stage.ClipStageIndex, stage.ClipStageRawIndex)));
+        StageSpec secondClip = Assert.Single(spec.Clips[1].Stages);
+        Assert.Equal((2, 0, 0),
+            (secondClip.Id, secondClip.ClipStageIndex, secondClip.ClipStageRawIndex));
     }
 
     [Fact]

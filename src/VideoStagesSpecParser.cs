@@ -5,9 +5,6 @@ using VideoStages.Planning;
 
 namespace VideoStages;
 
-/// <summary>
-/// Parses an authored Video Stages document into its runtime specification.
-/// </summary>
 internal static class VideoStagesSpecParser
 {
     public static VideoStagesSpec Parse(WorkflowGenerator g)
@@ -52,7 +49,7 @@ internal static class VideoStagesSpecParser
             warn);
 
         List<ClipSpec> clips = [];
-        int globalStageIndex = 0;
+        int nextStageId = 0;
         for (int clipIndex = 0; clipIndex < document.Entries.Count; clipIndex++)
         {
             JObject clipObject = document.Entries[clipIndex];
@@ -68,7 +65,11 @@ internal static class VideoStagesSpecParser
                 continue;
             }
 
-            ClipSpec clip = VideoClipSpecParser.Parse(clipObject, clipIndex, context);
+            ClipSpec clip = VideoClipSpecParser.Parse(
+                clipObject,
+                clipIndex,
+                nextStageId,
+                context);
             if (clip.Stages.Count == 0
                 && clip.InitVideo is null
                 && clip.AuthoredStages.Count == 0)
@@ -76,19 +77,8 @@ internal static class VideoStagesSpecParser
                 continue;
             }
 
-            List<StageSpec> activeStages = [];
-            for (int clipStageIndex = 0; clipStageIndex < clip.Stages.Count; clipStageIndex++)
-            {
-                StageSpec stage = clip.Stages[clipStageIndex];
-                activeStages.Add(stage with
-                {
-                    Id = globalStageIndex++,
-                    ClipStageIndex = clipStageIndex,
-                    // The authored stage position (including skipped stages), used by IC-LoRA targets.
-                    ClipStageRawIndex = stage.Id,
-                });
-            }
-            clips.Add(clip with { Stages = activeStages });
+            nextStageId += clip.Stages.Count;
+            clips.Add(clip);
         }
 
         return new VideoStagesSpec(
