@@ -7,7 +7,6 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
 using Xunit;
 
@@ -412,7 +411,7 @@ public class DecisionOwnerRegressionTests
             0,
             25,
             ArchitectureEntryMode.InitVideo,
-            new("data", "source.mp4", 0, 512, 512, 24),
+            new("data:video/mp4;base64,QUJD", "source.mp4", 0, 512, 512, 24),
             noStages,
             Audio: null)
         {
@@ -565,7 +564,7 @@ public class DecisionOwnerRegressionTests
         id,
         25,
         ArchitectureEntryMode.InitVideo,
-        new("data", $"source-{id}.mp4", 0, 512, 512, 24),
+        new("data:video/mp4;base64,QUJD", $"source-{id}.mp4", 0, 512, 512, 24),
         Stages: [],
         Audio: null)
     {

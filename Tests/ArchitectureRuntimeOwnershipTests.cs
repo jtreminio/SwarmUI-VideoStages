@@ -1,7 +1,6 @@
 using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures;
@@ -292,7 +291,7 @@ public class ArchitectureRuntimeOwnershipTests
             25,
             entryMode,
             entryMode == ArchitectureEntryMode.InitVideo
-                ? new("data", "source.mp4", 0, 512, 512, 24)
+                ? new("data:video/mp4;base64,QUJD", "source.mp4", 0, 512, 512, 24)
                 : null,
             [stage],
             Audio: new(

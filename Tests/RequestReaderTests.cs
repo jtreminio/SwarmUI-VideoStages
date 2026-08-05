@@ -5,8 +5,6 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
-using VideoStages.Architectures.Abstractions;
-using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 
@@ -600,18 +598,18 @@ public class RequestReaderTests
         Assert.Equal("first.wav", clips[0].UploadedAudio.FileName);
         Assert.Equal("second.wav", clips[1].UploadedAudio.FileName);
 
-        AudioFile firstAudio = EmbeddedMediaMaterializer.MaterializeAudio(
-            generator,
+        AudioFile firstAudio = UploadedMedia.GetAudio(
+            generator.UserInput,
             clips[0].UploadedAudio);
-        AudioFile secondAudio = EmbeddedMediaMaterializer.MaterializeAudio(
-            generator,
+        AudioFile secondAudio = UploadedMedia.GetAudio(
+            generator.UserInput,
             clips[1].UploadedAudio);
         Assert.Equal("first.wav", firstAudio.SourceFilePath);
         Assert.Equal("second.wav", secondAudio.SourceFilePath);
     }
 
     [Fact]
-    public void UploadedAudio_InputPath_WithoutSession_ReturnsNull()
+    public void UploadedAudio_InputPath_WithoutSession_IsReportedNotDropped()
     {
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
@@ -628,11 +626,16 @@ public class RequestReaderTests
 
         Assert.Equal("inputs/_comfy1/clip_part02.wav", clip.UploadedAudio.Data);
 
-        AudioFile audio = EmbeddedMediaMaterializer.MaterializeAudio(
-            generator,
-            clip.UploadedAudio);
+        bool loaded = UploadedMedia.TryGetAudio(
+            generator.UserInput,
+            clip.UploadedAudio.Data,
+            clip.UploadedAudio.FileName,
+            out AudioFile audio,
+            out string error);
 
+        Assert.False(loaded);
         Assert.Null(audio);
+        Assert.Contains("no session is available", error, StringComparison.Ordinal);
     }
 
     [Fact]

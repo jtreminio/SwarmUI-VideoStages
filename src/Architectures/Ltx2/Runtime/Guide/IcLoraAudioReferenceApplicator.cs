@@ -152,13 +152,9 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
 
     private JArray LoadUploadedAudio(UploadedMediaSpec media)
     {
-        AudioFile uploaded = EmbeddedMediaMaterializer.MaterializeAudio(
-            g,
+        AudioFile uploaded = UploadedMedia.GetAudio(
+            g.UserInput,
             media);
-        if (uploaded is null)
-        {
-            return null;
-        }
         return new JArray(g.CreateAudioLoadNode(uploaded, "${vsicloraaudio}"), 0);
     }
 }

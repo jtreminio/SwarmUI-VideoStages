@@ -62,7 +62,7 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
                 }
                 continue;
             }
-            AudioFile file = EmbeddedMediaMaterializer.MaterializeAudio(g, segment.UploadedMedia);
+            AudioFile file = UploadedMedia.GetAudio(g.UserInput, segment.UploadedMedia);
             if (file is null)
             {
                 continue;

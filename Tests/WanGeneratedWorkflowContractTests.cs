@@ -1,6 +1,5 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
-using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -497,15 +496,15 @@ public class WanGeneratedWorkflowContractTests
     }
 
     /// <summary>
-    /// An unusable first-frame reference warns and drops back to the plain empty latent rather
-    /// than failing the request or leaving a half-built donor behind.
+    /// An unusable first-frame reference blocks the request at preflight. Silently falling back to
+    /// the empty latent would generate a clip that ignores the frame it was authored to start on.
     /// </summary>
     [Theory]
     [InlineData(false, "missing inline data and a file name")]
-    [InlineData(true, "Ignoring invalid WAN first-frame reference payload")]
-    public async Task An_unusable_first_frame_reference_warns_and_falls_back_to_the_empty_latent(
+    [InlineData(true, "not a readable image")]
+    public async Task An_unusable_first_frame_reference_rejects_the_request(
         bool malformed,
-        string expectedWarning)
+        string expectedError)
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.Create();
         JObject reference = MakeRef("Upload");
@@ -520,26 +519,10 @@ public class WanGeneratedWorkflowContractTests
         JObject clip = MakeClip(fixture.Stage(steps: 10));
         clip["refs"] = new JArray(reference);
 
-        (JObject workflow, WorkflowGenerator generator) =
-            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
-                fixture.Post(MakeDocument(clip)));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+        SwarmReadableErrorException error = await Assert.ThrowsAsync<SwarmReadableErrorException>(
+            () => fixture.GenerateAsync(MakeDocument(clip)));
 
-        EmptyHunyuanLatentVideoNode latent = Assert.Single(
-            bridge.Graph.NodesOfType<EmptyHunyuanLatentVideoNode>());
-        Assert.Equal(25, latent.Length.LiteralAsInt());
-        SwarmKSamplerNode stage = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
-        Assert.Same(latent, stage.LatentImage.Connection?.Node);
-        Assert.Empty(bridge.Graph.NodesOfType<WanImageToVideoNode>());
-        Assert.Empty(bridge.Graph.NodesOfType<WanFirstLastFrameToVideoNode>());
-        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
-        Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains(expectedWarning, StringComparison.Ordinal));
-
-        live.AssertAllLive(latent, stage);
-        AssertShippable(bridge, workflow, live);
+        Assert.Contains(expectedError, error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -596,11 +579,11 @@ public class WanGeneratedWorkflowContractTests
     }
 
     /// <summary>
-    /// One bad reference does not take the other down with it: the malformed first frame is warned
-    /// about and dropped, and the clip still conditions on its valid last frame.
+    /// A malformed first reference fails the whole request even when the clip's other reference is
+    /// fine: preflight refuses to generate a clip that silently drops an authored keyframe.
     /// </summary>
     [Fact]
-    public async Task A_malformed_first_reference_degrades_to_last_only_conditioning()
+    public async Task A_malformed_first_reference_rejects_the_request()
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.Create();
         JObject clip = MakeClip(fixture.Stage(steps: 10));
@@ -608,32 +591,13 @@ public class WanGeneratedWorkflowContractTests
             UploadedReference("not-valid-base64"),
             UploadedReference("TEFTVA==", fromEnd: true));
 
-        (JObject workflow, WorkflowGenerator generator) =
-            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
-                fixture.Post(MakeDocument(clip)));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+        SwarmReadableErrorException error = await Assert.ThrowsAsync<SwarmReadableErrorException>(
+            () => fixture.GenerateAsync(MakeDocument(clip)));
 
-        WanFirstLastFrameToVideoNode conditioning = Assert.Single(
-            bridge.Graph.NodesOfType<WanFirstLastFrameToVideoNode>());
-        Assert.False(conditioning.StartImage.HasValue);
-        SwarmLoadImageB64Node upload = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
-        Assert.Equal("TEFTVA==", upload.ImageBase64.LiteralAsString());
-        Assert.NotNull(conditioning.EndImage.Connection);
-        // Exactly one: the valid last reference must not draw a warning of its own, which is the
-        // whole "does not take the other down with it" claim.
-        Assert.Single(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains("reference", StringComparison.Ordinal));
-        Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains(
-                "Ignoring invalid WAN first-frame reference payload",
-                StringComparison.Ordinal));
-
-        live.AssertAllLive(upload, conditioning, StageSampler(bridge, 0));
-        AssertShippable(bridge, workflow, live);
+        Assert.Contains("first frame image", error.Message, StringComparison.Ordinal);
+        // The valid last reference must not contribute an error of its own, which is the whole
+        // "only the broken one is at fault" claim.
+        Assert.DoesNotContain("last frame image", error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2532,16 +2496,13 @@ public class WanGeneratedWorkflowContractTests
     /// <c>Base</c> reference is dropped during planning and an upload with no payload is refused at
     /// runtime; either way the request's own end image is what conditions the clip.
     /// </summary>
-    [Theory]
-    [InlineData("Base", "WAN final-frame reference uses source 'Base'")]
-    [InlineData("Upload", "Upload WAN final-frame reference is missing")]
-    public async Task An_unusable_last_reference_leaves_the_global_end_image_in_place(
-        string source,
-        string expectedWarning)
+    [Fact]
+    public async Task An_unusable_last_reference_leaves_the_global_end_image_in_place()
     {
+        const string expectedWarning = "WAN final-frame reference uses source 'Base'";
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage(control: 1, steps: 10));
-        clip["refs"] = new JArray(MakeRef(source, fromEnd: true));
+        clip["refs"] = new JArray(MakeRef("Base", fromEnd: true));
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
@@ -2560,9 +2521,8 @@ public class WanGeneratedWorkflowContractTests
         Assert.True(ReachesUpstream(
             bridge, conditioning.StartImage.Connection?.Node, fixture.BaseSampler(bridge).Id));
         Assert.False(ReachesUpstream(bridge, conditioning.StartImage.Connection?.Node, endImage.Id));
-        // The two arms are unusable for different reasons — planning drops the Base one, runtime
-        // refuses the payload-less Upload — and each says so in its own words, once. A second
-        // reference warning would mean the request's own end image was questioned too.
+        // Planning drops the Base reference and says so once. A second reference warning would
+        // mean the request's own end image was questioned too.
         Assert.Single(
             RequestWarnings(generator.UserInput),
             warning => warning.Contains("reference", StringComparison.Ordinal)
@@ -2570,6 +2530,27 @@ public class WanGeneratedWorkflowContractTests
 
         live.AssertAllLive(endImage, conditioning, StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// A final-frame upload with no payload at all is a blocking preflight error, not a quiet
+    /// handover to the request's own end image.
+    /// </summary>
+    [Fact]
+    public async Task A_payload_less_last_reference_upload_rejects_the_request()
+    {
+        using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
+        JObject clip = MakeClip(fixture.Stage(control: 1, steps: 10));
+        clip["refs"] = new JArray(MakeRef("Upload", fromEnd: true));
+
+        SwarmReadableErrorException error = await Assert.ThrowsAsync<SwarmReadableErrorException>(
+            () => ComfyWorkflowApiTestHarness.GenerateAsync(
+                fixture.ImageToVideoPost(
+                    MakeDocument(clip), post => post["videoendimage"] = EndImagePayload)));
+
+        Assert.Contains("last frame image", error.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "missing inline data and a file name", error.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

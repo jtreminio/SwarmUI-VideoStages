@@ -25,7 +25,7 @@ internal sealed class InitVideoClipInstaller(WorkflowGenerator g)
         {
             return null;
         }
-        ImageFile video = EmbeddedMediaMaterializer.MaterializeInitVideo(g, source);
+        ImageFile video = UploadedMedia.GetInitVideo(g.UserInput, source);
         if (video is null)
         {
             return null;

@@ -5,10 +5,8 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Generated;
 using VideoStages.Planning;
 using Xunit;
-using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
@@ -137,8 +135,12 @@ public sealed class LtxIcLoraTests
             warning => warning.Contains("none is available for the selected model"));
     }
 
+    /// <summary>
+    /// Invalid drive audio is a blocking preflight error, and the runtime path it guards treats
+    /// reaching it with the same payload as a bug rather than dropping the reference.
+    /// </summary>
     [Fact]
-    public void Invalid_uploaded_audio_warns_and_drops_the_reference()
+    public void Invalid_uploaded_audio_blocks_the_request_at_preflight()
     {
         WorkflowGenerator generator = RuntimeGenerator();
         using WorkflowBridge bridge = BridgeSync.For(generator);
@@ -148,13 +150,18 @@ public sealed class LtxIcLoraTests
             IcLoraDriveMediaKind.Audio,
             data: "not-base64");
 
-        WGNodeData resolved = new IcLoraAudioReferenceApplicator(generator).ResolveDriveAudio(
-            bridge,
-            plan,
-            incomingMedia: null);
+        PlanDiagnostic blocking = new UploadedMediaPreflight(generator.UserInput).AudioDiagnostic(
+                plan.Drive.Upload.Data, plan.Drive.Upload.FileName, clipId: 0);
 
-        Assert.Null(resolved);
-        Assert.NotEmpty(RequestWarnings(generator.UserInput));
+        Assert.NotNull(blocking);
+        Assert.Equal(PlanDiagnosticSeverity.Error, blocking.Severity);
+        Assert.Contains("not readable", blocking.Message, StringComparison.Ordinal);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            new IcLoraAudioReferenceApplicator(generator).ResolveDriveAudio(
+                bridge,
+                plan,
+                incomingMedia: null));
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
     }
 

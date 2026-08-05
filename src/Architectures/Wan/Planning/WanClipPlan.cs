@@ -7,7 +7,7 @@ namespace VideoStages.Architectures.Wan.Planning;
 internal sealed record WanClipPayload(
     NativeFrameReferencePlan FirstFrameReference = null,
     NativeFrameReferencePlan LastFrameReference = null) :
-    IArchitectureClipPayload
+    IArchitectureClipPayload, INativeFrameReferenceClipPayload
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;
 

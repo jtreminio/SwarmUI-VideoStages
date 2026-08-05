@@ -117,8 +117,8 @@ internal sealed class AudioRuntimeSourceResolver(
             {
                 continue;
             }
-            AudioFile uploaded = EmbeddedMediaMaterializer.MaterializeAudio(
-                g,
+            AudioFile uploaded = UploadedMedia.GetAudio(
+                g.UserInput,
                 clip.Audio.Base.UploadedMedia);
             if (uploaded is null)
             {

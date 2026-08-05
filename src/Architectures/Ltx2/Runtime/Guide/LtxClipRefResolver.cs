@@ -128,7 +128,7 @@ internal sealed class LtxClipRefResolver(
     {
         if (reference.SourceKind == ImageReferenceSourceKind.Upload)
         {
-            return MaterializeUploadedRefImage(reference);
+            return GetRefImage(reference);
         }
 
         StageRefStore.StageRef stageRef = reference.SourceKind switch
@@ -156,13 +156,13 @@ internal sealed class LtxClipRefResolver(
         return guideMediaResolver.ResolveGuideMedia(stageRef, postVideoChain);
     }
 
-    private WGNodeData MaterializeUploadedRefImage(ImageReferencePlan reference)
+    private WGNodeData GetRefImage(ImageReferencePlan reference)
     {
-        ImageFile img = ImageReference.MaterializeUploadedRefImage(
-            g,
+        ImageFile img = UploadedMedia.GetRefImage(
+            g.UserInput,
             reference.InlineData,
             reference.UploadFileName,
             "clip reference image");
-        return img is null ? null : g.LoadImage(img, "${videostagesrefimage}", false);
+        return g.LoadImage(img, "${videostagesrefimage}", false);
     }
 }

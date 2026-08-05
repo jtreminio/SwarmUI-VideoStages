@@ -205,7 +205,7 @@ internal sealed record MiniMaxClipPayload(
     bool ReuseAudio,
     NativeFrameReferencePlan FirstFrameReference,
     NativeFrameReferencePlan LastFrameReference) :
-    IArchitectureClipPayload
+    IArchitectureClipPayload, INativeFrameReferenceClipPayload
 {
     public ArchitectureId ArchitectureId => MiniMaxArchitectureModule.ArchitectureId;
 

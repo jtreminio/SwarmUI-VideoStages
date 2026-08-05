@@ -14,7 +14,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         ArchitectureRequestPreflightContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return Ltx2RequestPreflight.Resolve(generator.Features, context.Plan);
+        return Ltx2RequestPreflight.Resolve(generator, context.Plan);
     }
 
     public void CaptureControlNetPreprocessors(bool ownsHostRoot) =>

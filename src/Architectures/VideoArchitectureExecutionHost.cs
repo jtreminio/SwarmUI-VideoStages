@@ -1,10 +1,10 @@
 using ComfyTyped.Core;
-using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
+using VideoStages.HostVideo;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures;
@@ -71,8 +71,11 @@ internal sealed class VideoArchitectureExecutionHost
     /// </summary>
     internal IReadOnlyList<PlanDiagnostic> CollectPreflightDiagnostics()
     {
+        UploadedMediaPreflight media = new(_generator.UserInput);
         List<PlanDiagnostic> diagnostics = [
-            .. new TimelineFrameInterpolator(_generator).Preflight(_plan)
+            .. new TimelineFrameInterpolator(_generator).Preflight(_plan),
+            .. media.Preflight(_plan),
+            .. NativeFrameReferences.PreflightUploads(media, _plan)
         ];
         ArchitectureRequestPreflightContext context = new(_plan, _rootOwner);
         foreach (IArchitectureGenerationSessionProvider provider in _activeProviders)

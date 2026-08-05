@@ -12,6 +12,13 @@ internal sealed record NativeFrameReferencePlan(
     string UploadFileName,
     string InlineData);
 
+/// <summary>Implemented by every clip payload whose architecture conditions on native keyframes.</summary>
+internal interface INativeFrameReferenceClipPayload
+{
+    NativeFrameReferencePlan FirstFrameReference { get; }
+    NativeFrameReferencePlan LastFrameReference { get; }
+}
+
 /// <summary>
 /// Shared compilation and materialization for architectures whose host graph conditions on a
 /// first and/or final frame image rather than on arbitrary mid-clip references.
@@ -136,6 +143,39 @@ internal static class NativeFrameReferences
         return (first, last);
     }
 
+    /// <summary>
+    /// Reports every clip whose authored first/last frame upload cannot be loaded, so an unreadable
+    /// keyframe blocks the request instead of silently dropping the frame it conditions on.
+    /// </summary>
+    internal static IEnumerable<PlanDiagnostic> PreflightUploads(
+        UploadedMediaPreflight media,
+        VideoExecutionPlan plan)
+    {
+        foreach (ClipPlan clip in plan.Clips)
+        {
+            if (clip.ArchitecturePayload is not INativeFrameReferenceClipPayload payload)
+            {
+                continue;
+            }
+            foreach ((NativeFrameReferencePlan reference, string edge) in
+                new[] { (payload.FirstFrameReference, "first"), (payload.LastFrameReference, "last") })
+            {
+                if (reference is null || !StringUtils.Equals(reference.Source, "Upload"))
+                {
+                    continue;
+                }
+                if (media.ImageDiagnostic(
+                    reference.InlineData,
+                    reference.UploadFileName,
+                    $"clip {clip.ClipId} {edge} frame image",
+                    clip.ClipId) is { } unreadable)
+                {
+                    yield return unreadable;
+                }
+            }
+        }
+    }
+
     internal static Image MaterializeUpload(
         WorkflowGenerator generator,
         NativeFrameReferencePlan reference,
@@ -153,8 +193,8 @@ internal static class NativeFrameReferences
                     + "by the native image input; ignoring it for this generation.");
             return null;
         }
-        ImageFile image = ImageReference.MaterializeUploadedRefImage(
-            generator,
+        ImageFile image = UploadedMedia.GetRefImage(
+            generator.UserInput,
             reference.InlineData,
             reference.UploadFileName,
             descriptor);

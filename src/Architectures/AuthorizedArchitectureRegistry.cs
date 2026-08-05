@@ -60,7 +60,7 @@ internal static class AuthorizedArchitectureRegistryExtensions
     /// <para>
     /// A session without a user carries no authorization context, and the unfiltered registry is
     /// returned. This is deliberate and follows the host convention already used for session-owned
-    /// media (<see cref="UploadedMediaResolver"/>): a sessionless generator is an internal or test
+    /// media (<see cref="UploadedMedia"/>): a sessionless generator is an internal or test
     /// caller, not an unauthenticated request. Both production entry points — the catalog API route
     /// and plan compilation — are reached only with a real request session.
     /// </para>

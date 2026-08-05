@@ -1,6 +1,8 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.Wan.Planning;
+using VideoStages.HostVideo;
 using VideoStages.HostVideo.Runtime;
 using VideoStages.Planning;
 
