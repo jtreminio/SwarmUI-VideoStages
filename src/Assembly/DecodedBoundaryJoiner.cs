@@ -5,7 +5,8 @@ using VideoStages.Generated;
 
 namespace VideoStages;
 
-internal static class DecodedCrossfadeAssembler
+/// <summary>Joins overlapped boundaries in pixel space, after decode.</summary>
+internal static class DecodedBoundaryJoiner
 {
     internal static INodeOutput MergeOverlaps(
         WorkflowBridge bridge,

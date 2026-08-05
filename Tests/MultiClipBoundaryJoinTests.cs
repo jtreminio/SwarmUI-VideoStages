@@ -14,7 +14,7 @@ namespace VideoStages.Tests;
 
 /// <summary>Graph-shape tests for neutral multi-clip assembly.</summary>
 [Collection("VideoStagesTests")]
-public class MultiClipCrossfadeMergerTests
+public class MultiClipBoundaryJoinTests
 {
     private const int Fps = 24;
     private static readonly ArchitectureId TestArchitecture = new("test");

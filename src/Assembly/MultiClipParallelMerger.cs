@@ -94,7 +94,7 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
 
         INodeOutput mergedVideo = overlapPlan is null
             ? MultiClipVideoGraphAssembler.MergeCut(bridge, videoOutputs)
-            : DecodedCrossfadeAssembler.MergeOverlaps(
+            : DecodedBoundaryJoiner.MergeOverlaps(
                 bridge,
                 clips,
                 videoOutputs,
