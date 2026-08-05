@@ -56,42 +56,6 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         return diagnostics;
     }
 
-    internal void Apply()
-    {
-        if (!TryResolveConfiguration(out Configuration config, out string error))
-        {
-            if (error is null)
-            {
-                return;
-            }
-            throw Invariant.Failure(error);
-        }
-        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        RuntimeArtifact current = RuntimeArtifact.Capture(
-            g,
-            bridge);
-        RuntimeArtifact result = Apply(current, config, bridge);
-        if (!ReferenceEquals(result, current))
-        {
-            WGNodeData attachedAudio = g.CurrentMedia?.AttachedAudio;
-            result.PublishTo(g);
-            g.CurrentMedia.AttachedAudio = attachedAudio;
-        }
-    }
-
-    internal RuntimeArtifact Apply(RuntimeArtifact artifact)
-    {
-        ArgumentNullException.ThrowIfNull(artifact);
-        if (!TryResolveConfiguration(out Configuration config, out string error))
-        {
-            return error is null
-                ? artifact
-                : throw Invariant.Failure(error);
-        }
-        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        return Apply(artifact, config, bridge);
-    }
-
     internal RuntimeArtifact Apply(RuntimeArtifact artifact, VideoExecutionPlan plan)
     {
         ArgumentNullException.ThrowIfNull(artifact);
@@ -108,15 +72,6 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
         {
             return artifact;
         }
-        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        return Apply(artifact, config, bridge);
-    }
-
-    private RuntimeArtifact Apply(
-        RuntimeArtifact artifact,
-        Configuration config,
-        WorkflowBridge bridge)
-    {
         MediaRef media = artifact.Media;
         if (media?.DataType != WGNodeData.DT_VIDEO
             || media.Output is not INodeOutput videoOutput)
