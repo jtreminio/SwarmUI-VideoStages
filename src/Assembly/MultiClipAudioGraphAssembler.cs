@@ -10,14 +10,10 @@ internal static class MultiClipAudioGraphAssembler
     private const long SilenceSampleRate = 44100;
     private const long SilenceChannels = 2;
 
-    internal sealed record TimelineAudioPreflight(
-        IReadOnlyList<INodeOutput> DecodedOutputs,
-        bool HasAudio);
+    internal sealed record TimelineAudioPreflight(IReadOnlyList<INodeOutput> DecodedOutputs);
 
     /// <summary>
     /// Resolves every architecture-neutral decoded audio handle without mutating the graph.
-    /// Missing entries remain null and are materialized as silence only after the whole timeline
-    /// has passed preflight.
     /// </summary>
     internal static TimelineAudioPreflight PreflightTimelineAudio(
         WorkflowBridge bridge,
@@ -27,7 +23,7 @@ internal static class MultiClipAudioGraphAssembler
         ArgumentNullException.ThrowIfNull(clips);
         if (!clips.Any(clip => clip?.Audio is not null))
         {
-            return new([], HasAudio: false);
+            return new([]);
         }
 
         List<INodeOutput> outputs = new(clips.Count);
@@ -49,12 +45,13 @@ internal static class MultiClipAudioGraphAssembler
             }
             outputs.Add(output);
         }
-        return new(outputs, HasAudio: true);
+        return new(outputs);
     }
 
     /// <summary>
-    /// Produces one audio input per clip from an already validated preflight. Clips without audio
-    /// receive duration-matched silence so one silent clip cannot erase the timeline's audio.
+    /// Returns one audio input per clip, or nothing when the preflight found no audio anywhere.
+    /// Clips without audio receive duration-matched silence so one silent clip cannot erase the
+    /// timeline's audio.
     /// </summary>
     internal static IReadOnlyList<INodeOutput> MaterializeTimelineAudio(
         WorkflowBridge bridge,
@@ -64,7 +61,7 @@ internal static class MultiClipAudioGraphAssembler
         ArgumentNullException.ThrowIfNull(bridge);
         ArgumentNullException.ThrowIfNull(clips);
         ArgumentNullException.ThrowIfNull(preflight);
-        if (!preflight.HasAudio)
+        if (preflight.DecodedOutputs.Count == 0)
         {
             return [];
         }
@@ -96,7 +93,7 @@ internal static class MultiClipAudioGraphAssembler
 
     /// <summary>
     /// Concatenates clip audio on the resolved video-overlap timeline. Continue pre-roll is a hidden
-    /// incoming handle; crossfades retain their existing outgoing-trim behavior.
+    /// incoming handle; crossfades trim the outgoing side.
     /// </summary>
     public static INodeOutput Merge(
         WorkflowBridge bridge,
