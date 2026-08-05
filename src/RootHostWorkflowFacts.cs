@@ -1,11 +1,23 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 
 namespace VideoStages;
 
-/// <summary>Host workflow facts used before an architecture runtime is selected.</summary>
 internal static class RootHostWorkflowFacts
 {
+    internal static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep { get; private set; }
+
+    internal static void CaptureCoreImageToVideoStep(
+        IEnumerable<WorkflowGenerator.WorkflowGenStep> steps)
+    {
+        CoreImageToVideoStep = ResolveCoreImageToVideoStep(steps, out string diagnostic);
+        if (diagnostic is not null)
+        {
+            Logs.Warning(diagnostic);
+        }
+    }
+
     internal static WorkflowGenerator.WorkflowGenStep
         ResolveCoreImageToVideoStep(
             IEnumerable<WorkflowGenerator.WorkflowGenStep> steps,
@@ -49,7 +61,7 @@ internal static class RootHostWorkflowFacts
         WorkflowGenerator generator,
         VideoStagesSpec spec)
     {
-        if (VideoStagesExtension.CoreImageToVideoStep is null
+        if (CoreImageToVideoStep is null
             || !spec.Clips.Any(clip => clip.Stages.Count > 0))
         {
             return false;
@@ -58,6 +70,6 @@ internal static class RootHostWorkflowFacts
             T2IParamTypes.VideoModel,
             out T2IModel _);
         return !hasNativeVideoModel
-            || WorkflowGenerator.Steps.Contains(VideoStagesExtension.CoreImageToVideoStep);
+            || WorkflowGenerator.Steps.Contains(CoreImageToVideoStep);
     }
 }

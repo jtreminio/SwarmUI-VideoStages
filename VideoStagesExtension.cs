@@ -16,7 +16,6 @@ public class VideoStagesExtension : Extension
     public static int SectionIdForClip(int clipIndex) => Constants.SectionID_VideoClip + 1 + clipIndex;
     public static T2IRegisteredParam<bool> Enabled;
     public static T2IRegisteredParam<string> Data;
-    public static WorkflowGenerator.WorkflowGenStep CoreImageToVideoStep;
 
     public override void OnPreInit()
     {
@@ -44,14 +43,7 @@ public class VideoStagesExtension : Extension
         VideoArchitectureManifest.RegisterProductionApiRoutes();
         AttachPromptMetadataRestorer("prompt");
         AttachPromptMetadataRestorer("negativeprompt");
-        CoreImageToVideoStep =
-            RootHostWorkflowFacts.ResolveCoreImageToVideoStep(
-                WorkflowGenerator.Steps,
-                out string coreImageToVideoDiagnostic);
-        if (coreImageToVideoDiagnostic is not null)
-        {
-            Logs.Warning(coreImageToVideoDiagnostic);
-        }
+        RootHostWorkflowFacts.CaptureCoreImageToVideoStep(WorkflowGenerator.Steps);
         VideoArchitectureManifest.RegisterProductionHostHandlers();
 
         WorkflowGenerator.AddStep(
