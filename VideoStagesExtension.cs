@@ -18,8 +18,8 @@ public class VideoStagesExtension : Extension
     public override void OnPreInit()
     {
         PromptRegion.RegisterCustomPrefix("videoclip");
-        T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = PromptParser.ProcessVideoClipTag;
-        T2IPromptHandling.PromptTagBasicProcessors["videostages"] = PromptParser.ProcessVideoStagesTag;
+        T2IPromptHandling.PromptTagBasicProcessors["videoclip"] = PromptTags.ProcessVideoClip;
+        T2IPromptHandling.PromptTagBasicProcessors["videostages"] = PromptTags.ProcessVideoStages;
         T2IPromptHandling.PromptTagLengthEstimators["videoclip"] = (_, _) => "<break>";
         T2IPromptHandling.PromptTagLengthEstimators["videostages"] = (_, _) => "";
         StyleSheetFiles.Add("Assets/video-stages.css");
@@ -108,7 +108,6 @@ public class VideoStagesExtension : Extension
 
     }
 
-    /// <summary>Restores the user's videoclip tags before saving parsed prompt metadata.</summary>
     private static void AttachPromptMetadataRestorer(string paramId)
     {
         if (!T2IParamTypes.Types.TryGetValue(paramId, out T2IParamType type))
@@ -119,8 +118,8 @@ public class VideoStagesExtension : Extension
         T2IParamTypes.Types[paramId] = type with
         {
             MetadataFormat = existing is null
-                ? PromptParser.RestoreTagsForMetadata
-                : val => existing(PromptParser.RestoreTagsForMetadata(val)),
+                ? PromptSyntax.RestoreForMetadata
+                : val => existing(PromptSyntax.RestoreForMetadata(val)),
         };
     }
 

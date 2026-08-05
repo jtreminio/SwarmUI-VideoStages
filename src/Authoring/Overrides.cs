@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 
 namespace VideoStages;
 
-internal static class PromptOverrideApplier
+internal static class Overrides
 {
     private enum OverrideKind { String, Int, Double, Bool }
 
@@ -38,13 +38,13 @@ internal static class PromptOverrideApplier
         };
 
     public static (int? Width, int? Height, int? FPS) ApplyTopLevel(
-        PromptParser.VideoStageTagData tags,
+        PromptTags.Directives directives,
         int? width,
         int? height,
         int? fps,
         Action<string> warn = null)
     {
-        foreach ((string field, string value) in tags.TopLevelOverrides)
+        foreach ((string field, string value) in directives.TopLevelOverrides)
         {
             if (!int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) || parsed <= 0)
             {
@@ -62,10 +62,10 @@ internal static class PromptOverrideApplier
 
     public static void ApplyClipAndStage(
         List<JObject> rawEntries,
-        PromptParser.VideoStageTagData tags,
+        PromptTags.Directives directives,
         Action<string> warn = null)
     {
-        foreach ((int clipIndex, List<(string Field, string Value)> overrides) in tags.ClipOverrides)
+        foreach ((int clipIndex, List<(string Field, string Value)> overrides) in directives.ClipOverrides)
         {
             if (clipIndex < 0 || clipIndex >= rawEntries.Count)
             {
@@ -85,7 +85,7 @@ internal static class PromptOverrideApplier
                     warn);
             }
         }
-        foreach (((int clipIndex, int stageIndex), List<(string Field, string Value)> overrides) in tags.StageOverrides)
+        foreach (((int clipIndex, int stageIndex), List<(string Field, string Value)> overrides) in directives.StageOverrides)
         {
             if (clipIndex < 0 || clipIndex >= rawEntries.Count)
             {
@@ -164,5 +164,4 @@ internal static class PromptOverrideApplier
         List<JObject> stages = [.. array.OfType<JObject>()];
         return stageIndex >= 0 && stageIndex < stages.Count ? stages[stageIndex] : null;
     }
-
 }

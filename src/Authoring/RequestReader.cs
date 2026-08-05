@@ -28,7 +28,7 @@ internal static class RequestReader
         StageDefaults StageDefaults,
         bool IsTextToVideoRootWorkflow,
         int Fps,
-        PromptParser.VideoStageTagData Tags,
+        PromptTags.Directives Directives,
         Action<string> Warn);
 
     public static VideoStagesSpec Read(WorkflowGenerator g)
@@ -37,15 +37,15 @@ internal static class RequestReader
         Action<string> warn =
             warning => PlanDiagnosticReporter.TrackRequestWarning(g.UserInput, warning);
         AuthoringDocument document = DocumentJson.Read(g);
-        PromptParser.VideoStageTagData tags = DocumentJson.IsActive(g)
-            ? PromptParser.ExtractTagData(
+        PromptTags.Directives directives = DocumentJson.IsActive(g)
+            ? PromptTags.Read(
                 g.UserInput.Get(T2IParamTypes.Prompt, ""),
                 g.UserInput)
-            : new PromptParser.VideoStageTagData();
+            : new PromptTags.Directives();
 
-        (int? rawWidth, int? rawHeight, int? rawFps) = PromptOverrideApplier.ApplyTopLevel(
-            tags, document.Width, document.Height, document.Fps, warn);
-        PromptOverrideApplier.ApplyClipAndStage(document.Clips, tags, warn);
+        (int? rawWidth, int? rawHeight, int? rawFps) = Overrides.ApplyTopLevel(
+            directives, document.Width, document.Height, document.Fps, warn);
+        Overrides.ApplyClipAndStage(document.Clips, directives, warn);
 
         int width = ResolveWidth(g, rawWidth);
         int height = ResolveHeight(g, rawHeight);
@@ -70,7 +70,7 @@ internal static class RequestReader
             ReadDefaults(g),
             isTextToVideo,
             fps,
-            tags,
+            directives,
             warn);
 
         List<ClipSpec> clips = [];
@@ -198,7 +198,7 @@ internal static class RequestReader
             ImageRefs: references,
             Stages: stages,
             Loras: Loras.ReadNormal(clipObject, context.Warn),
-            PromptWindows: SortWindows(context.Tags.ClipWindows.GetValueOrDefault(clipIndex)),
+            PromptWindows: SortWindows(context.Directives.ClipWindows.GetValueOrDefault(clipIndex)),
             BoundaryOut: BoundaryPolicy.NormalizeAuthoredMode(
                 DocumentJson.GetString(clipObject, "boundaryOut")),
             BoundaryOutOverlap: Math.Max(

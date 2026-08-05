@@ -26,7 +26,7 @@ internal sealed class StageModelLoadScope : IDisposable
         ArgumentNullException.ThrowIfNull(stage);
         _generator = generator;
         _loaderKey = $"modelloader_{stage.ResolvedModel.ModelName}_image2video";
-        _promptLoras = PromptParser.ApplyLoraScope(
+        _promptLoras = VideoScopedLoraSelector.Apply(
             generator.UserInput,
             clip.ClipId,
             stageSectionId,

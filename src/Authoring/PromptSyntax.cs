@@ -4,8 +4,7 @@ using FreneticUtilities.FreneticExtensions;
 
 namespace VideoStages;
 
-/// <summary>Owns the concrete authoring and processed-marker syntax for <c>videoclip</c> prompt tags.</summary>
-internal static class VideoClipPromptSyntax
+internal static class PromptSyntax
 {
     public const string TagName = "videoclip";
     public const string CidMarker = "//cid=";

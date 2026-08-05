@@ -5,7 +5,7 @@ using Xunit;
 namespace VideoStages.Tests;
 
 [Collection("VideoStagesTests")]
-public class VideoClipPromptTagsTests
+public class PromptTagsTests
 {
     private static (string Prompt, T2IParamInput Input) Normalize(string authoringPrompt, string videoStagesJson = null)
     {
@@ -20,10 +20,10 @@ public class VideoClipPromptTagsTests
         return (input.Get(T2IParamTypes.Prompt, ""), input);
     }
 
-    private static PromptParser.VideoStageTagData Tags(string authoringPrompt)
+    private static PromptTags.Directives ReadDirectives(string authoringPrompt)
     {
         (string prompt, T2IParamInput input) = Normalize(authoringPrompt);
-        return PromptParser.ExtractTagData(prompt, input);
+        return PromptTags.Read(prompt, input);
     }
 
     // --- Windows (seconds) ---
@@ -31,8 +31,8 @@ public class VideoClipPromptTagsTests
     [Fact]
     public void Clip_window_tag_parses_clip_level_window()
     {
-        PromptParser.VideoStageTagData data = Tags("<videoclip[0]:1-2>win");
-        PromptWindowSpec window = Assert.Single(data.ClipWindows[0]);
+        PromptTags.Directives directives = ReadDirectives("<videoclip[0]:1-2>win");
+        PromptWindowSpec window = Assert.Single(directives.ClipWindows[0]);
         Assert.Equal("win", window.Prompt);
         Assert.Equal(1.0, window.Start);
         Assert.Equal(1.0, window.Duration);
@@ -42,22 +42,21 @@ public class VideoClipPromptTagsTests
     public void Stage_scoped_window_is_invalid_and_swallows_its_prose()
     {
         (string prompt, T2IParamInput input) = Normalize("<videoclip[0,1]:5-10>oops");
-        PromptParser.VideoStageTagData data = PromptParser.ExtractTagData(prompt, input);
-        Assert.Empty(data.ClipWindows);
+        PromptTags.Directives directives = PromptTags.Read(prompt, input);
+        Assert.Empty(directives.ClipWindows);
         Assert.Equal("", new PromptRegion(prompt).GlobalPrompt.Trim());
     }
 
     [Fact]
     public void Window_with_end_before_start_is_not_a_window()
     {
-        Assert.Empty(Tags("<videoclip[0]:5-2>x").ClipWindows);
+        Assert.Empty(ReadDirectives("<videoclip[0]:5-2>x").ClipWindows);
     }
 
     [Fact]
     public void Window_with_comma_value_is_not_a_window()
     {
-        // The obsolete ,skip suffix is invalid.
-        Assert.Empty(Tags("<videoclip[0]:0-1,skip>x").ClipWindows);
+        Assert.Empty(ReadDirectives("<videoclip[0]:0-1,skip>x").ClipWindows);
     }
 
     [Theory]
@@ -66,13 +65,13 @@ public class VideoClipPromptTagsTests
     public void Window_with_non_finite_bound_is_not_a_window(string authoringPrompt)
     {
         // NumberStyles.Float accepts these values, but the frontend's Number.isFinite gate does not.
-        Assert.Empty(Tags(authoringPrompt).ClipWindows);
+        Assert.Empty(ReadDirectives(authoringPrompt).ClipWindows);
     }
 
     [Fact]
     public void Window_with_finite_bounds_is_a_window()
     {
-        PromptWindowSpec window = Assert.Single(Tags("<videoclip[0]:0-5>x").ClipWindows[0]);
+        PromptWindowSpec window = Assert.Single(ReadDirectives("<videoclip[0]:0-5>x").ClipWindows[0]);
         Assert.Equal(0.0, window.Start);
         Assert.Equal(5.0, window.Duration);
     }
@@ -82,7 +81,7 @@ public class VideoClipPromptTagsTests
     [Fact]
     public void Clip_scalar_override_parses()
     {
-        (string field, string value) = Assert.Single(Tags("<videoclip[0,duration]:5.5>").ClipOverrides[0]);
+        (string field, string value) = Assert.Single(ReadDirectives("<videoclip[0,duration]:5.5>").ClipOverrides[0]);
         Assert.Equal("duration", field);
         Assert.Equal("5.5", value);
     }
@@ -90,7 +89,7 @@ public class VideoClipPromptTagsTests
     [Fact]
     public void Stage_scalar_override_parses()
     {
-        (string field, string value) = Assert.Single(Tags("<videoclip[0,1,control]:0.5>").StageOverrides[(0, 1)]);
+        (string field, string value) = Assert.Single(ReadDirectives("<videoclip[0,1,control]:0.5>").StageOverrides[(0, 1)]);
         Assert.Equal("control", field);
         Assert.Equal("0.5", value);
     }
@@ -98,7 +97,7 @@ public class VideoClipPromptTagsTests
     [Fact]
     public void Top_level_override_parses()
     {
-        (string field, string value) = Assert.Single(Tags("<videostages[width]:1280>").TopLevelOverrides);
+        (string field, string value) = Assert.Single(ReadDirectives("<videostages[width]:1280>").TopLevelOverrides);
         Assert.Equal("width", field);
         Assert.Equal("1280", value);
     }
@@ -109,15 +108,15 @@ public class VideoClipPromptTagsTests
         (string prompt, T2IParamInput input) = Normalize(
             "<videoclip[0,duration]:5.5>");
 
-        PromptParser.VideoStageTagData first = PromptParser.ExtractTagData(prompt, input);
-        PromptParser.VideoStageTagData second = PromptParser.ExtractTagData(prompt, input);
-        PromptParser.VideoStageTagData cloned = PromptParser.ExtractTagData(
+        PromptTags.Directives first = PromptTags.Read(prompt, input);
+        PromptTags.Directives second = PromptTags.Read(prompt, input);
+        PromptTags.Directives cloned = PromptTags.Read(
             prompt,
             input.Clone());
 
-        PromptParser.VideoStageTagData stored =
-            Assert.IsType<PromptParser.VideoStageTagData>(
-                input.ExtraMeta[PromptParser.OverridesKey]);
+        PromptTags.Directives stored =
+            Assert.IsType<PromptTags.Directives>(
+                input.ExtraMeta[PromptTags.OverridesKey]);
         Assert.NotSame(stored, first);
         Assert.NotSame(stored, second);
         Assert.NotSame(stored, cloned);
@@ -138,21 +137,21 @@ public class VideoClipPromptTagsTests
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
         T2IParamInput input = new(null);
-        input.ExtraMeta[PromptParser.OverridesKey] = "serialized metadata";
+        input.ExtraMeta[PromptTags.OverridesKey] = "serialized metadata";
         input.Set(T2IParamTypes.Prompt, "<videoclip[0,duration]:5.5>");
 
         input.ApplyLateSpecialLogic();
 
-        PromptParser.VideoStageTagData stored =
-            Assert.IsType<PromptParser.VideoStageTagData>(
-                input.ExtraMeta[PromptParser.OverridesKey]);
+        PromptTags.Directives stored =
+            Assert.IsType<PromptTags.Directives>(
+                input.ExtraMeta[PromptTags.OverridesKey]);
         Assert.Single(stored.ClipOverrides[0]);
     }
 
     [Fact]
     public void Unknown_top_level_override_field_is_dropped()
     {
-        Assert.Empty(Tags("<videostages[bogus]:1280>").TopLevelOverrides);
+        Assert.Empty(ReadDirectives("<videostages[bogus]:1280>").TopLevelOverrides);
     }
 
     // --- Prose ownership ---
@@ -163,7 +162,7 @@ public class VideoClipPromptTagsTests
         (string prompt, _) = Normalize("A cat <videoclip[0,duration]:20> playing");
         Assert.Equal("A cat  playing", new PromptRegion(prompt).GlobalPrompt.Trim());
         Assert.DoesNotContain("videoclip", prompt);
-        (string field, string value) = Assert.Single(Tags("A cat <videoclip[0,duration]:20> playing").ClipOverrides[0]);
+        (string field, string value) = Assert.Single(ReadDirectives("A cat <videoclip[0,duration]:20> playing").ClipOverrides[0]);
         Assert.Equal("duration", field);
         Assert.Equal("20", value);
     }
@@ -171,8 +170,8 @@ public class VideoClipPromptTagsTests
     [Fact]
     public void Invalid_window_swallows_its_own_prose_without_polluting_the_prior_window()
     {
-        PromptParser.VideoStageTagData data = Tags("<videoclip[0]:1-2>keep <videoclip[0]:1-1>drop");
-        PromptWindowSpec window = Assert.Single(data.ClipWindows[0]);
+        PromptTags.Directives directives = ReadDirectives("<videoclip[0]:1-2>keep <videoclip[0]:1-1>drop");
+        PromptWindowSpec window = Assert.Single(directives.ClipWindows[0]);
         Assert.Equal("keep", window.Prompt);
     }
 
@@ -193,7 +192,7 @@ public class VideoClipPromptTagsTests
             "a young woman, smiling at the viewer<videoclip[0]:0.5-4>she says \"hi\"<videoclip[0]:4-9.5>she giggles";
         (string processed, _) = Normalize(authored);
         Assert.NotEqual(authored, processed);
-        Assert.Equal(authored, PromptParser.RestoreTagsForMetadata(processed));
+        Assert.Equal(authored, PromptSyntax.RestoreForMetadata(processed));
     }
 
     [Fact]
@@ -201,7 +200,7 @@ public class VideoClipPromptTagsTests
     {
         string authored = "base prose<videoclip[1]>clip prose";
         (string processed, _) = Normalize(authored);
-        Assert.Equal(authored, PromptParser.RestoreTagsForMetadata(processed));
+        Assert.Equal(authored, PromptSyntax.RestoreForMetadata(processed));
     }
 
     [Fact]
@@ -213,7 +212,7 @@ public class VideoClipPromptTagsTests
         (string processed, _) = Normalize(authored, videoStagesJson);
 
         Assert.Contains($"//cid={VideoStagesExtension.SectionIdForStage(0)}", processed);
-        Assert.Equal(authored, PromptParser.RestoreTagsForMetadata(processed));
+        Assert.Equal(authored, PromptSyntax.RestoreForMetadata(processed));
     }
 
     [Fact]
@@ -221,13 +220,13 @@ public class VideoClipPromptTagsTests
     {
         string authored = "base prose<videoclip>shared prose";
         (string processed, _) = Normalize(authored);
-        Assert.Equal(authored, PromptParser.RestoreTagsForMetadata(processed));
+        Assert.Equal(authored, PromptSyntax.RestoreForMetadata(processed));
     }
 
     [Fact]
     public void Metadata_restore_leaves_unmatched_markers_untouched()
     {
         string marker = $"<videoclip//cid={Constants.SectionID_VideoClipUnmatched}>";
-        Assert.Equal(marker, PromptParser.RestoreTagsForMetadata(marker));
+        Assert.Equal(marker, PromptSyntax.RestoreForMetadata(marker));
     }
 }

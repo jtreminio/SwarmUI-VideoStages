@@ -4,7 +4,6 @@ using VideoStages.Planning;
 
 namespace VideoStages;
 
-/// <summary>Resolves one compiled clip/stage prompt against the host's original prompt text.</summary>
 internal sealed class PlannedStagePromptResolver(WorkflowGenerator g)
 {
     public (string Positive, string Negative) Resolve(ClipPlan clip, StagePlan stage)
@@ -14,26 +13,37 @@ internal sealed class PlannedStagePromptResolver(WorkflowGenerator g)
 
         string positive = g.UserInput.Get(T2IParamTypes.Prompt, "");
         string negative = g.UserInput.Get(T2IParamTypes.NegativePrompt, "");
-        string originalPositive = PromptParser.GetOriginalPrompt(
+        string originalPositive = GetOriginal(
             g.UserInput,
             T2IParamTypes.Prompt.Type.ID,
             positive);
-        string originalNegative = PromptParser.GetOriginalPrompt(
+        string originalNegative = GetOriginal(
             g.UserInput,
             T2IParamTypes.NegativePrompt.Type.ID,
             negative);
         return (
-            PromptParser.ExtractPrompt(
+            PromptText.ResolveForTarget(
                 positive,
                 originalPositive,
                 clip.ClipId,
                 stage.StageId,
                 stage.ClipStageIndex),
-            PromptParser.ExtractPrompt(
+            PromptText.ResolveForTarget(
                 negative,
                 originalNegative,
                 clip.ClipId,
                 stage.StageId,
                 stage.ClipStageIndex));
+    }
+
+    private static string GetOriginal(T2IParamInput input, string paramId, string fallback)
+    {
+        if (input.ExtraMeta is not null
+            && input.ExtraMeta.TryGetValue($"original_{paramId}", out object original)
+            && original is string prompt)
+        {
+            return prompt;
+        }
+        return fallback ?? "";
     }
 }
