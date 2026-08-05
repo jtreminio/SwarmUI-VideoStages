@@ -76,10 +76,7 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
                 $"global frame trim removes all {knownFrames} frames of the final video.");
         }
         MediaRef attachedAudio = media.AttachedAudio;
-        ValidateAttachedAudio(
-            attachedAudio,
-            originalFrames,
-            framesPerSecond);
+        ValidateAttachedAudio(attachedAudio, framesPerSecond);
         SwarmTrimFramesNode trim = bridge.AddNode(new SwarmTrimFramesNode().With(
             TrimStart: trimStartFrames,
             TrimEnd: trimEndFrames));
@@ -124,13 +121,15 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
             return null;
         }
 
-        int keptFrames = TrimmedFrameCount(
+        int? keptFrames = TrimmedFrameCount(
             originalFrames,
             trimStartFrames,
-            trimEndFrames) ?? 0;
+            trimEndFrames);
         TrimAudioDurationNode audioTrim = bridge.AddNode(new TrimAudioDurationNode().With(
             StartIndex: Math.Max(0, trimStartFrames) / (double)framesPerSecond.Value,
-            Duration: keptFrames / (double)framesPerSecond.Value));
+            Duration: keptFrames is int kept
+                ? kept / (double)framesPerSecond.Value
+                : 86400));
         audioTrim.Audio.ConnectToUntyped(audio.Output);
         return new MediaRef
         {
@@ -140,10 +139,7 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
         };
     }
 
-    private static void ValidateAttachedAudio(
-        MediaRef audio,
-        int? originalFrames,
-        int? framesPerSecond)
+    private static void ValidateAttachedAudio(MediaRef audio, int? framesPerSecond)
     {
         if (audio is null)
         {
@@ -156,11 +152,11 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
                 "the final video uses global frame trim, but its attached audio "
                 + "is not a decoded audio stream.");
         }
-        if (originalFrames is not > 0 || framesPerSecond is not > 0)
+        if (framesPerSecond is not > 0)
         {
             throw Invariant.Failure(
-                "the final video uses global frame trim, but its frame count or "
-                + "frame rate is unavailable, so attached audio cannot be trimmed in sync.");
+                "the final video uses global frame trim, but its frame rate is "
+                + "unavailable, so attached audio cannot be trimmed in sync.");
         }
     }
 

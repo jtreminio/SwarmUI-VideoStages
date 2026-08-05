@@ -22,7 +22,7 @@ namespace VideoStages.Tests;
 public class MiniMaxRuntimeFlowTests
 {
     [Fact]
-    public void Audio_derived_duration_refuses_multi_clip_and_global_trim_requests()
+    public void Audio_derived_duration_refuses_multi_clip_but_allows_global_trim()
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
         JObject dynamicClip = MakeClip(1.0, fixture.Stage());
@@ -48,7 +48,7 @@ public class MiniMaxRuntimeFlowTests
             diagnostics,
             diagnostic => diagnostic.Code
                 == "minimax.audio-derived-duration.multi-clip-unsupported");
-        Assert.Contains(
+        Assert.DoesNotContain(
             diagnostics,
             diagnostic => diagnostic.Code
                 == "minimax.audio-derived-duration.trim-unsupported");

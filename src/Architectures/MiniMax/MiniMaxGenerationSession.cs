@@ -364,7 +364,7 @@ internal sealed class MiniMaxGenerationSession(
         {
             Width = (int)genInfo.Width,
             Height = (int)genInfo.Height,
-            Frames = frames,
+            Frames = framesConnection is null ? frames : null,
             FPS = genInfo.VideoFPS,
         };
     }

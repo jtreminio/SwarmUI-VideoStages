@@ -52,14 +52,6 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
                 "MiniMax audio-derived duration currently requires a single-clip timeline.",
                 dynamicLengthClip.ClipId));
         }
-        if (dynamicLengthClip is not null && new GlobalVideoFrameTrimmer(generator).IsRequested)
-        {
-            diagnostics.Add(new(
-                PlanDiagnosticSeverity.Error,
-                "minimax.audio-derived-duration.trim-unsupported",
-                "MiniMax audio-derived duration cannot be combined with global frame trim.",
-                dynamicLengthClip.ClipId));
-        }
         return diagnostics;
     }
 
