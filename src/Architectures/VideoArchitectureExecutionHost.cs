@@ -153,13 +153,15 @@ internal sealed class VideoArchitectureExecutionHost
                         OwnsGeneratedRoot = _rootOwner == provider.ArchitectureId,
                     });
                 ArgumentNullException.ThrowIfNull(session);
-                if (!sessions.TryAdd(session.ArchitectureId, session))
+                if (session.ArchitectureId != provider.ArchitectureId)
                 {
                     TryDispose(session);
                     throw VideoStagesInvariant.Failure(
-                        $"Duplicate runtime session for architecture "
+                        $"Generation runtime provider for architecture "
+                            + $"'{provider.ArchitectureId}' created a session for architecture "
                             + $"'{session.ArchitectureId}'.");
                 }
+                sessions.Add(provider.ArchitectureId, session);
             }
             sessionConstructionCompleted = true;
             ClipPlan previousClip = null;

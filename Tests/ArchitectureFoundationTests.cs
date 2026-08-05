@@ -1069,6 +1069,39 @@ public class ArchitectureFoundationTests
     }
 
     [Fact]
+    public void Execution_host_rejects_sessions_created_for_another_architecture()
+    {
+        VideoStagesSpec spec = Spec(
+            GeneratedClip(0, Stage(0, "ltx-model")),
+            GeneratedClip(1, Stage(1, "fake-model")));
+        VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
+            spec,
+            RootEnvironment.FromSpec(spec),
+            ArchitecturePlanResolver.Resolve(spec, new FakeRegistry()));
+        TrackingSession mismatched = new(
+            new("fake"),
+            new InvalidOperationException("session disposal failed"));
+        bool secondProviderCalled = false;
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
+            RunSessions(
+                plan,
+                [
+                    new SessionProvider(new("ltx2"), () => mismatched),
+                    new SessionProvider(new("fake"), () =>
+                    {
+                        secondProviderCalled = true;
+                        return new TrackingSession(new("ltx2"));
+                    }),
+                ]));
+
+        Assert.Contains("provider for architecture 'ltx2'", error.Message);
+        Assert.Contains("session for architecture 'fake'", error.Message);
+        Assert.True(mismatched.Disposed);
+        Assert.False(secondProviderCalled);
+    }
+
+    [Fact]
     public void Execution_host_disposes_partial_sessions_when_construction_fails()
     {
         VideoStagesSpec spec = Spec(
