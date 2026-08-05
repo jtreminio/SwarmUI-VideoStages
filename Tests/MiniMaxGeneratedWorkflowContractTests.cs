@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Generated;
 using Xunit;
@@ -12,15 +13,8 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// MiniMax H3 — the joint audio/video latent, its 17k+5 frame grid, keyframe references, stage
-/// chaining and the published tail — generated through the real Comfy API POST path.
-/// <para>
-/// Stages are selected with <c>StageSampler(bridge, stageId)</c>, which keys on the seed
-/// <c>Seed + 42 + StageId</c>. Node ids are allocation order, not stage order, so indexing an
-/// id-sorted sampler list would silently check the wrong stage. Reachability upstream from a stage
-/// sampler proves nothing about stage membership either, because a refining stage re-encodes its
-/// predecessor's output and so reaches that predecessor's whole branch.
-/// </para>
+/// MiniMax H3 generated-graph contracts. Stages are identified by sampler seed because node order
+/// and upstream reachability do not identify a refining stage.
 /// </summary>
 [Collection("VideoStagesTests")]
 public class MiniMaxGeneratedWorkflowContractTests
@@ -118,7 +112,6 @@ public class MiniMaxGeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        // Identify stages by seed rather than by count: a real graph may carry other samplers.
         SwarmKSamplerNode first = StageSampler(bridge, 0);
         SwarmKSamplerNode second = StageSampler(bridge, 1);
         SwarmKSamplerNode third = StageSampler(bridge, 2);
@@ -1042,9 +1035,6 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertAcyclic(bridge);
     }
 
-    /// <summary>
-    /// The only assertion anywhere that <c>preserveAttachedAudio</c> reaches the published save.
-    /// </summary>
     [Fact]
     public async Task Native_audio_reaches_the_published_video_save()
     {
@@ -1219,7 +1209,7 @@ public class MiniMaxGeneratedWorkflowContractTests
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
             fixture.Post(MakeDocument(clip)),
-            extraSteps: [SeedControlNetAudioCaptures(1)]);
+            extraSteps: SeedControlNetCoreBranches(1));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -1267,7 +1257,7 @@ public class MiniMaxGeneratedWorkflowContractTests
                 fixture.Post(MakeDocument(clip)),
                 extraSteps: capturedTracks == 0
                     ? null
-                    : [SeedControlNetAudioCaptures(capturedTracks)]);
+                    : SeedControlNetCoreBranches(capturedTracks));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -1477,23 +1467,45 @@ public class MiniMaxGeneratedWorkflowContractTests
     /// <summary>Nothing resolves or downloads this; the loader only names it.</summary>
     private const string UpscaleModelFileName = "unit-test-upscaler.pth";
 
-    /// <summary>
-    /// Stands in for core's ControlNet chain, which no MiniMax POST shape builds: the extension
-    /// reads captures out of <c>NodeHelpers</c>, so the seeded node plus its key is the whole
-    /// contract. Priority 11.05 is after core's root graph is dropped and before the stages run.
-    /// </summary>
-    private static WorkflowGenerator.WorkflowGenStep SeedControlNetAudioCaptures(int count) =>
+    /// <summary>Seeds the core ControlNet branches no MiniMax POST shape builds.</summary>
+    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> SeedControlNetCoreBranches(
+        int count) =>
+    [
+        new(g =>
+        {
+            UnitTestStubs.EnsureComfyControlNetParamsRegistered();
+            T2IModelHandler handler = new() { ModelType = "ControlNet" };
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            for (int index = 0; index < count; index++)
+            {
+                T2IModel model = TestStubModel.Create(
+                    handler,
+                    $"UnitTest_MiniMax_ControlNet_{index}.safetensors");
+                g.UserInput.Set(T2IParamTypes.Controlnets[index].Strength, 0.8);
+                g.UserInput.Set(T2IParamTypes.Controlnets[index].Model, model);
+                GetVideoComponentsNode components = bridge.AddNode(
+                    new GetVideoComponentsNode(),
+                    $"90{index + 1}");
+                ControlNetLoaderNode loader = bridge.AddNode(
+                    new ControlNetLoaderNode().With(
+                        ControlNetName: model.ToString(g.ModelFolderFormat)),
+                    $"91{index + 1}");
+                ControlNetApplyAdvancedNode apply = new();
+                apply.ControlNet.ConnectTo(loader.CONTROLNET);
+                apply.Image.ConnectTo(components.Images);
+                bridge.AddNode(apply, $"92{index + 1}");
+            }
+        }, Constants.WorkflowStepPriority.ControlNetPreprocessors - 0.01),
         new(g =>
         {
             using WorkflowBridge bridge = BridgeSync.For(g);
             for (int index = 0; index < count; index++)
             {
-                string nodeId = $"90{index + 1}";
-                bridge.AddNode(new GetVideoComponentsNode(), nodeId);
-                g.NodeHelpers[ControlNetCaptureKeys.Audio(index)] =
-                    new JArray(nodeId, 1).ToString(Newtonsoft.Json.Formatting.None);
+                VideoGraphHelpers.RemoveNode(g, bridge, $"92{index + 1}");
+                VideoGraphHelpers.RemoveNode(g, bridge, $"91{index + 1}");
             }
-        }, 11.05);
+        }, Constants.WorkflowStepPriority.ControlNetPreprocessors + 0.01),
+    ];
 
     /// <summary>Stands in for the sibling extension that publishes AceStepFun tracks.</summary>
     private static WorkflowGenerator.WorkflowGenStep SeedAceStepFunAudioTrack(int trackIndex) =>

@@ -1,7 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -30,23 +29,46 @@ public class LtxControlNetAudioSourceTests
         return generator;
     }
 
-    private static void AddGetVideoComponentsStub(JObject workflow, string nodeId)
+    private static ControlNetCoreMediaCapture CaptureAudio(
+        WorkflowGenerator generator,
+        params (int Index, string NodeId)[] sources)
     {
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        bridge.AddNode(new GetVideoComponentsNode(), nodeId);
+        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
+        T2IModelHandler handler = new() { ModelType = "ControlNet" };
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        foreach ((int index, string nodeId) in sources)
+        {
+            T2IModel model = TestStubModel.Create(
+                handler,
+                $"UnitTest_ControlNet_{index}.safetensors");
+            generator.UserInput.Set(T2IParamTypes.Controlnets[index].Strength, 0.8);
+            generator.UserInput.Set(T2IParamTypes.Controlnets[index].Model, model);
+            GetVideoComponentsNode components = bridge.AddNode(
+                new GetVideoComponentsNode(),
+                nodeId);
+            string loaderId = (int.Parse(nodeId) + 1).ToString();
+            ControlNetLoaderNode loader = bridge.AddNode(
+                new ControlNetLoaderNode().With(
+                    ControlNetName: model.ToString(generator.ModelFolderFormat)),
+                loaderId);
+            ControlNetApplyAdvancedNode apply = new();
+            apply.ControlNet.ConnectTo(loader.CONTROLNET);
+            apply.Image.ConnectTo(components.Images);
+            bridge.AddNode(apply, (int.Parse(nodeId) + 2).ToString());
+        }
+        ControlNetCoreMediaCapture capture = new(generator);
+        capture.Capture();
+        return capture;
     }
 
     [Fact]
     public void TryGetCapturedControlNetAudio_returns_audio_when_captured()
     {
         JObject workflow = [];
-        AddGetVideoComponentsStub(workflow, "301");
         WorkflowGenerator generator = CreateGenerator(workflow);
-        generator.NodeHelpers["videostages.controlnet.audio.0"] =
-            new JArray("301", 1).ToString(Formatting.None);
+        ControlNetCoreMediaCapture capture = CaptureAudio(generator, (0, "301"));
 
-        bool ok = new ControlNetAudioCapture(generator)
-            .TryGetCapturedAudio(0, out WGNodeData audio);
+        bool ok = capture.TryGetCapturedAudio(0, out WGNodeData audio);
 
         Assert.True(ok);
         Assert.NotNull(audio);
@@ -60,7 +82,7 @@ public class LtxControlNetAudioSourceTests
         JObject workflow = [];
         WorkflowGenerator generator = CreateGenerator(workflow);
 
-        bool ok = new ControlNetAudioCapture(generator)
+        bool ok = new ControlNetCoreMediaCapture(generator)
             .TryGetCapturedAudio(1, out WGNodeData audio);
 
         Assert.False(ok);
@@ -72,11 +94,10 @@ public class LtxControlNetAudioSourceTests
     {
         JObject workflow = [];
         WorkflowGenerator generator = CreateGenerator(workflow);
-        generator.NodeHelpers["videostages.controlnet.audio.0"] =
-            new JArray("301", 1).ToString(Formatting.None);
+        ControlNetCoreMediaCapture capture = CaptureAudio(generator, (0, "301"));
+        workflow.Remove("301");
 
-        bool ok = new ControlNetAudioCapture(generator)
-            .TryGetCapturedAudio(0, out WGNodeData audio);
+        bool ok = capture.TryGetCapturedAudio(0, out WGNodeData audio);
 
         Assert.False(ok);
         Assert.Null(audio);
@@ -86,30 +107,21 @@ public class LtxControlNetAudioSourceTests
     public void TryGetCapturedControlNetAudio_resolves_per_index_for_each_controlnet_source()
     {
         JObject workflow = [];
-        AddGetVideoComponentsStub(workflow, "301");
-        AddGetVideoComponentsStub(workflow, "701");
         WorkflowGenerator generator = CreateGenerator(workflow);
-        generator.NodeHelpers["videostages.controlnet.audio.0"] =
-            new JArray("301", 1).ToString(Formatting.None);
-        generator.NodeHelpers["videostages.controlnet.audio.2"] =
-            new JArray("701", 1).ToString(Formatting.None);
+        ControlNetCoreMediaCapture capture = CaptureAudio(
+            generator,
+            (0, "301"),
+            (2, "701"));
 
-        ControlNetAudioCapture applicator = new(generator);
-
-        Assert.True(applicator.TryGetCapturedAudio(0, out WGNodeData a0));
+        Assert.True(capture.TryGetCapturedAudio(0, out WGNodeData a0));
         Assert.True(JToken.DeepEquals(a0.Path, new JArray("301", 1)));
 
-        Assert.False(applicator.TryGetCapturedAudio(1, out WGNodeData _));
+        Assert.False(capture.TryGetCapturedAudio(1, out WGNodeData _));
 
-        Assert.True(applicator.TryGetCapturedAudio(2, out WGNodeData a2));
+        Assert.True(capture.TryGetCapturedAudio(2, out WGNodeData a2));
         Assert.True(JToken.DeepEquals(a2.Path, new JArray("701", 1)));
     }
 
-    /// <summary>
-    /// The video-upstream gate is what declines the audio, not the capture loop giving up on this
-    /// ControlNet: the image and apply captures for the same index are still recorded. Asserting
-    /// only the audio key's absence would pass under a pipeline that never ran at all.
-    /// </summary>
     [Fact]
     public void Capture_omits_audio_when_no_GetVideoComponents_upstream_of_controlnet()
     {
@@ -172,9 +184,7 @@ public class LtxControlNetAudioSourceTests
             SwarmLoadVideoB64Node videoLoad = new SwarmLoadVideoB64Node().With(VideoBase64: "unit-test-video");
             bridge.AddNode(videoLoad, "300");
 
-            // Untyped adapter stand-in for "video without GetVideoComponents wrapping" — keeps the
-            // ControlNet image upstream traceable to a SwarmLoadVideoB64Node so the existing video
-            // gate trips, while ensuring no GetVideoComponentsNode is on the upstream path.
+            // The video gate passes, but no GetVideoComponents node exists to supply audio.
             UnknownNode adapter = bridge.AddStub("UnitTest_VideoToImage", "301").WithOutputs(WGNodeData.DT_IMAGE);
             adapter.GetInput("video").ConnectToUntyped(videoLoad.VIDEO);
 

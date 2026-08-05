@@ -209,46 +209,34 @@ public class DecisionOwnerRegressionTests
     [Fact]
     public void Captured_control_image_reads_as_absent_once_its_node_is_removed()
     {
-        JObject workflow = [];
-        WorkflowGenerator generator = Generator(workflow);
-        string nodeId;
-        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
-        {
-            nodeId = bridge.AddStub("UnitTest_ControlImage", "310")
-                .WithOutputs(WGNodeData.DT_IMAGE).Id;
-        }
-        VideoGraphHelpers.CachePath(
-            generator, ControlNetCaptureKeys.Image(0), new JArray(nodeId, 0));
-        Assert.True(ControlNetCoreMediaCapture.TryGetCapturedControlImage(generator, 0, out _));
+        using SwarmUiTestContext testContext = new();
+        WorkflowGenerator generator = GeneratorWithVideoControlNet();
+        ControlNetCoreMediaCapture capture = new(generator);
+        capture.Capture();
+        Assert.True(capture.TryGetCapturedControlImage(0, out WGNodeData captured));
+        string nodeId = captured.Path[0].Value<string>();
 
-        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
+        using (WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow))
         {
             VideoGraphHelpers.RemoveNode(generator, bridge, nodeId);
         }
 
-        Assert.False(
-            ControlNetCoreMediaCapture.TryGetCapturedControlImage(
-                generator, 0, out WGNodeData image));
+        Assert.False(capture.TryGetCapturedControlImage(0, out WGNodeData image));
         Assert.Null(image);
-        Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Image(0)));
     }
 
     [Fact]
     public void InitVideo_only_timeline_runs_the_controlnet_capture_host_phase()
     {
-        WorkflowGenerator generator = Generator();
-        // Stale captures from a previous pass; running the capture re-evaluates and clears them.
-        generator.NodeHelpers[ControlNetCaptureKeys.Image(0)] = new JArray("1", 0).ToString(
-            Formatting.None);
-        generator.NodeHelpers[ControlNetCaptureKeys.Audio(0)] = new JArray("1", 1).ToString(
-            Formatting.None);
+        using SwarmUiTestContext testContext = new();
+        WorkflowGenerator generator = GeneratorWithVideoControlNet();
         VideoExecutionPlan plan = InitVideoOnlyPlan();
         VideoExecutionPlanContext request = BoundContext(generator, plan);
 
         request.CaptureControlNetPreprocessors();
 
-        Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Image(0)));
-        Assert.False(generator.NodeHelpers.ContainsKey(ControlNetCaptureKeys.Audio(0)));
+        Assert.True(
+            new ControlNetCoreMediaCapture(generator).TryGetCapturedAudio(0, out _));
     }
 
     [Fact]
@@ -271,16 +259,10 @@ public class DecisionOwnerRegressionTests
         Assert.Equal(8, hostResize.ExtraInputs["resize_type.multiple"]?.Value<int>());
         Assert.Equal(hostResize.Id, apply.Image.Connection?.Node.Id);
         Assert.Empty(bridge.Graph.NodesOfType<ImageFromBatchNode>());
-        Assert.True(
-            ControlNetCoreMediaCapture.TryGetCapturedControlImage(
-                generator,
-                0,
-                out WGNodeData raw));
+        ControlNetCoreMediaCapture captures = new(generator);
+        Assert.True(captures.TryGetCapturedControlImage(0, out WGNodeData raw));
         Assert.True(JToken.DeepEquals(raw.Path, new JArray(hostResize.Id, 0)));
-        Assert.True(
-            new ControlNetAudioCapture(generator).TryGetCapturedAudio(
-                0,
-                out WGNodeData audio));
+        Assert.True(captures.TryGetCapturedAudio(0, out WGNodeData audio));
         Assert.True(JToken.DeepEquals(audio.Path, new JArray("301", 1)));
         Assert.False(
             new LtxControlNetMediaNormalizer(generator)
@@ -308,10 +290,8 @@ public class DecisionOwnerRegressionTests
         request.CaptureControlNetPreprocessors();
 
         Assert.True(
-            ControlNetCoreMediaCapture.TryGetCapturedControlImage(
-                generator,
-                0,
-                out WGNodeData raw));
+            new ControlNetCoreMediaCapture(generator)
+                .TryGetCapturedControlImage(0, out WGNodeData raw));
         LtxControlNetMediaNormalizer normalizer = new(generator);
         Assert.True(
             normalizer.TryGetNormalizedControlImage(
@@ -373,10 +353,8 @@ public class DecisionOwnerRegressionTests
         request.CaptureControlNetPreprocessors();
 
         Assert.True(
-            ControlNetCoreMediaCapture.TryGetCapturedControlImage(
-                generator,
-                0,
-                out WGNodeData raw));
+            new ControlNetCoreMediaCapture(generator)
+                .TryGetCapturedControlImage(0, out WGNodeData raw));
         Assert.True(
             new LtxControlNetMediaNormalizer(generator).TryGetNormalizedControlImage(
                 0,
@@ -632,9 +610,6 @@ public class DecisionOwnerRegressionTests
                 new Dictionary<BoundaryJoinType, RuleDecision>()));
     }
 
-    /// <summary>
-    /// A foreign architecture that owns the host root and supplies its own ControlNet branch.
-    /// </summary>
     private sealed class ForeignRootAdapter(
         WorkflowGenerator generator,
         ArchitectureId architectureId) :

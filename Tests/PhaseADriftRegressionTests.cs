@@ -33,13 +33,18 @@ public class PhaseADriftRegressionTests
     }
 
     [Fact]
-    public void ControlNet_discovery_recognizes_anima_model_patch_apply()
+    public void ControlNet_capture_skips_image_only_apply_and_recognizes_later_anima_video_apply()
     {
+        using SwarmUiTestContext _ = new();
+        UnitTestStubs.EnsureComfyControlNetParamsRegistered();
         T2IModelHandler handler = new() { ModelType = "ControlNet" };
         T2IModel model = TestStubModel.Create(handler, "UnitTest_Anima_ControlNet.safetensors");
+        T2IParamInput input = new(null);
+        input.Set(T2IParamTypes.Controlnets[0].Strength, 0.8);
+        input.Set(T2IParamTypes.Controlnets[0].Model, model);
         WorkflowGenerator generator = new()
         {
-            UserInput = new T2IParamInput(null),
+            UserInput = input,
             ModelFolderFormat = "/",
             Workflow = new JObject(),
         };
@@ -49,20 +54,23 @@ public class PhaseADriftRegressionTests
             new ModelPatchLoaderNode().With(Name: model.ToString(generator.ModelFolderFormat)),
             "1");
         UnknownNode image = bridge.AddStub("UnitTestImage", "2").WithOutputs(WGNodeData.DT_IMAGE);
-        UnknownNode apply = bridge.AddStub("AnimaLLLiteApply", "3").WithOutputs(WGNodeData.DT_MODEL);
-        apply.GetInput("model_patch").ConnectToUntyped(loader.MODELPATCH);
-        apply.GetInput("image").ConnectToUntyped(image.GetOutput(0));
+        UnknownNode imageApply = bridge.AddStub("AnimaLLLiteApply", "3")
+            .WithOutputs(WGNodeData.DT_MODEL);
+        imageApply.GetInput("model_patch").ConnectToUntyped(loader.MODELPATCH);
+        imageApply.GetInput("image").ConnectToUntyped(image.GetOutput(0));
+        GetVideoComponentsNode video = bridge.AddNode(new GetVideoComponentsNode(), "4");
+        UnknownNode videoApply = bridge.AddStub("AnimaLLLiteApply", "5")
+            .WithOutputs(WGNodeData.DT_MODEL);
+        videoApply.GetInput("model_patch").ConnectToUntyped(loader.MODELPATCH);
+        videoApply.GetInput("image").ConnectToUntyped(video.Images);
 
-        bool found = new ControlNetGraphDiscovery(generator).TryFindCoreApply(
-            bridge,
-            model,
-            new HashSet<string>(),
-            out (string Id, JObject Node) applyNode,
-            out JArray controlImage);
+        ControlNetCoreMediaCapture capture = new(generator);
+        capture.Capture();
 
-        Assert.True(found);
-        Assert.Equal("3", applyNode.Id);
-        Assert.Equal(new JArray("2", 0), controlImage);
+        Assert.True(capture.TryGetCapturedControlImage(0, out WGNodeData controlImage));
+        Assert.Equal(WorkflowBridge.ToPath(video.Images), controlImage.Path);
+        Assert.True(capture.TryGetCapturedApplyImageInput(bridge, 0, out JArray applyImage));
+        Assert.Equal(WorkflowBridge.ToPath(video.Images), applyImage);
     }
 
     [Fact]

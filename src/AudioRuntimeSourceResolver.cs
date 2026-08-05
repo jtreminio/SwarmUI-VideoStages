@@ -25,7 +25,7 @@ internal sealed class AudioRuntimeSourceResolver(
     private Dictionary<int, WGNodeData> ResolveIndexedSources(VideoExecutionPlan plan)
     {
         Dictionary<int, WGNodeData> sources = [];
-        ControlNetAudioCapture controlNet = new(g);
+        ControlNetCoreMediaCapture controlNet = new(g);
         foreach (ClipPlan clip in plan.Clips)
         {
             switch (clip.Audio.Base.Kind)
@@ -80,7 +80,7 @@ internal sealed class AudioRuntimeSourceResolver(
 
     private int? ResolveControlNetSourceIndex(
         ClipPlan clip,
-        ControlNetAudioCapture controlNet)
+        ControlNetCoreMediaCapture controlNet)
     {
         if (clip.ArchitecturePayload is IArchitectureControlNetSourcePlan
                 { ControlNetSourceIndex: int plannedIndex })
@@ -89,7 +89,7 @@ internal sealed class AudioRuntimeSourceResolver(
         }
 
         List<int> capturedIndices = [];
-        for (int index = 0; index <= 2; index++)
+        foreach (int index in ControlNetCoreMediaCapture.Indices)
         {
             if (controlNet.TryGetCapturedAudio(index, out WGNodeData _))
             {

@@ -135,8 +135,7 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
     private double ResolveControlNetGuideStrength(int? controlNetIndex)
     {
         if (controlNetIndex is int index
-            && index >= 0
-            && index < T2IParamTypes.Controlnets.Length
+            && ControlNetCoreMediaCapture.IsValidIndex(index)
             && g.UserInput.TryGet(
                 T2IParamTypes.Controlnets[index].Strength,
                 out double slotStrength))

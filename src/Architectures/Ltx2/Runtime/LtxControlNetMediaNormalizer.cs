@@ -19,12 +19,10 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
             return;
         }
         using WorkflowBridge bridge = BridgeSync.For(g);
-        for (int index = 0; index <= 2; index++)
+        ControlNetCoreMediaCapture captures = new(g);
+        foreach (int index in ControlNetCoreMediaCapture.Indices)
         {
-            if (!ControlNetCoreMediaCapture.TryGetCapturedControlImage(
-                    g,
-                    index,
-                    out WGNodeData captured)
+            if (!captures.TryGetCapturedControlImage(index, out WGNodeData captured)
                 || captured.Path is not JArray { Count: 2 } capturedPath)
             {
                 Clear(index);
@@ -35,7 +33,11 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
                 g,
                 ImageKey(index),
                 normalized);
-            if (ownsHostRoot && TryGetApplyImageInput(bridge, index, out JArray applyImage))
+            if (ownsHostRoot
+                && captures.TryGetCapturedApplyImageInput(
+                    bridge,
+                    index,
+                    out JArray applyImage))
             {
                 EnsureSingleFrameWrap(bridge, applyImage, normalized);
             }
@@ -48,7 +50,7 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
     {
         controlImage = null;
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
-        if (!ControlNetCaptureKeys.IsValidIndex(index)
+        if (!ControlNetCoreMediaCapture.IsValidIndex(index)
             || !VideoGraphHelpers.TryGetCachedPath(
                 g,
                 bridge,
@@ -64,7 +66,7 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
     internal bool TryCreateFrameCount(int index, out JArray framesConnection)
     {
         framesConnection = null;
-        if (!ControlNetCaptureKeys.IsValidIndex(index))
+        if (!ControlNetCoreMediaCapture.IsValidIndex(index))
         {
             return false;
         }
@@ -108,23 +110,6 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
             return WorkflowBridge.ToPath(imageIn);
         }
         return new JArray(imagePath[0], imagePath[1]);
-    }
-
-    private bool TryGetApplyImageInput(
-        WorkflowBridge bridge,
-        int index,
-        out JArray controlImage)
-    {
-        controlImage = null;
-        return g.NodeHelpers.TryGetValue(
-                ControlNetCaptureKeys.Apply(index),
-                out string applyId)
-            && bridge.Graph.GetNode(applyId) is not null
-            && g.Workflow[applyId] is JObject applyNode
-            && VideoGraphHelpers.TryGetInputRef(
-                applyNode,
-                "image",
-                out controlImage);
     }
 
     private void Clear(int index)

@@ -461,12 +461,7 @@ internal static class IcLoraPlanCompiler
         }
         if (ControlNetSourcePlan.TryParseIndex(compact, out int sourceIndex))
         {
-            return sourceIndex switch
-            {
-                1 => Constants.ControlNetSourceTwo,
-                2 => Constants.ControlNetSourceThree,
-                _ => Constants.ControlNetSourceOne,
-            };
+            return ControlNetSourcePlan.Format(sourceIndex);
         }
         return source?.Trim() ?? "";
     }
