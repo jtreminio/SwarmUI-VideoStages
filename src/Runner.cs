@@ -7,16 +7,15 @@ namespace VideoStages;
 //
 // #  Pri    Phase                                         Reads                                          Writes / clears
 // -  -----  --------------------------------------------  ---------------------------------------------  ----------------------------------------------------
-// 1  -6.0   PreflightRequest                              compiled plan, backend features               — (must stay non-mutating)
+// 1  -6.0   PreflightRequest                              compiled plan, backend features                — (must stay non-mutating)
 // 2  -5.9   CaptureCoreVideoControlNetPreprocessors       core ControlNet graph                          captures raw image/audio/apply facts,
 //                                                                                                        then fans out architecture interpretation
 // 3  -4.2   CaptureBase                                   —                                              architecture reference capture
 // 4   5.89  CaptureRefiner                                —                                              architecture reference capture
-// 5  10.95  CapturePreCoreVideoMedia                      eligible generated-root media/VAE, graph       in-memory root snapshot
+// 5  10.95  CapturePreCoreVideoMedia                      eligible generated-root media/VAE, graph        in-memory root snapshot
 // 6  11.05  DropCoreImageToVideoOutput                    captured root state                            restores root and prunes core video pass
-// 7  11.4   ApplyRootAudioMaskDimensionsAfterNativeVideo  —                                              —
-// 8  11.5   RunConfiguredStages                           architecture references,                     executes planned architecture sessions
-//                                                         videostages.controlnet.fullimage.{i}
+// 7  11.4   ApplyRootAudioMaskDimensionsAfterNativeVideo  root stage resolution, graph                   resizes audio SolidMask nodes to root dims
+// 8  11.5   RunConfiguredStages                           architecture references, phase 2 captures      executes planned architecture sessions
 //
 // Phase 1 is the only place a request may be rejected for a missing dependency: every later phase
 // mutates the host graph, so a failure past it leaves the user with a broken workflow.
@@ -24,7 +23,7 @@ public static class Runner
 {
     public static void PreflightRequest(WorkflowGenerator g)
     {
-        if (!IsExtensionActive(g))
+        if (!DocumentJson.IsActive(g))
         {
             return;
         }
@@ -102,22 +101,16 @@ public static class Runner
         context.RunConfiguredStages();
     }
 
-    private static bool IsExtensionActive(WorkflowGenerator g) => DocumentJson.IsActive(g);
-
     private static bool TryGetActiveExecution(
         WorkflowGenerator g,
         out VideoExecutionPlanContext context)
     {
-        if (!IsExtensionActive(g))
+        if (!DocumentJson.IsActive(g))
         {
             context = null;
             return false;
         }
         context = g.GetVideoExecutionPlanContext();
-        if (context is null)
-        {
-            return false;
-        }
-        return true;
+        return context is not null;
     }
 }
