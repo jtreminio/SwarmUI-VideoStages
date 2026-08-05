@@ -87,13 +87,11 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
             clips[i] = clips[i] with { Frames = clips[i].Frames - handle };
         }
         int sumFrames = clips.Sum(clip => clip.Frames);
-        INodeOutput mergedVideo = overlapPlan is null
-            ? MultiClipVideoGraphAssembler.MergeCut(bridge, videoOutputs)
-            : DecodedBoundaryJoiner.MergeOverlaps(
-                bridge,
-                clips,
-                videoOutputs,
-                overlapPlan);
+        INodeOutput mergedVideo = DecodedBoundaryJoiner.Merge(
+            bridge,
+            clips,
+            videoOutputs,
+            overlapPlan);
 
         IReadOnlyList<INodeOutput> audioOutputs =
             MultiClipAudioGraphAssembler.TrimDiscardedHandles(

@@ -5,15 +5,24 @@ using VideoStages.Generated;
 
 namespace VideoStages;
 
-/// <summary>Joins overlapped boundaries in pixel space, after decode.</summary>
+/// <summary>Joins clips into one image batch, blending overlapped boundaries in pixel space.</summary>
 internal static class DecodedBoundaryJoiner
 {
-    internal static INodeOutput MergeOverlaps(
+    /// <summary>
+    /// Concatenates clip video on the resolved boundary timeline. Overlapped boundaries trim both
+    /// sides and splice in a ramp-masked blend of the frames they removed.
+    /// </summary>
+    internal static INodeOutput Merge(
         WorkflowBridge bridge,
         IReadOnlyList<DecodedClipArtifact> clips,
         IReadOnlyList<INodeOutput> videoOutputs,
         BoundaryOverlapPlan plan)
     {
+        if (plan is null)
+        {
+            return Concat(bridge, videoOutputs);
+        }
+
         Dictionary<int, INodeOutput> rampMasks = [];
         INodeOutput RampMaskFor(int frames)
         {
@@ -56,7 +65,35 @@ internal static class DecodedBoundaryJoiner
             }
         }
 
-        return MultiClipVideoGraphAssembler.MergeCut(bridge, segments);
+        return Concat(bridge, segments);
+    }
+
+    /// <summary>
+    /// Batches every segment into one image stream, cascading through further batch nodes whenever
+    /// the count exceeds what a single node's input list holds.
+    /// </summary>
+    private static INodeOutput Concat(WorkflowBridge bridge, IReadOnlyList<INodeOutput> outputs)
+    {
+        if (outputs.Count == 1)
+        {
+            return outputs[0];
+        }
+
+        List<INodeOutput> layer = [.. outputs];
+        while (true)
+        {
+            BatchImagesNodeNode node = bridge.AddNode(new BatchImagesNodeNode());
+            int taken = Math.Min(layer.Count, node.Images.Max);
+            for (int i = 0; i < taken; i++)
+            {
+                node.Images.AddFromUntyped(layer[i]);
+            }
+            if (taken == layer.Count)
+            {
+                return node.IMAGE;
+            }
+            layer = [node.IMAGE, .. layer.Skip(taken)];
+        }
     }
 
     private static INodeOutput SliceImageFrames(
