@@ -42,16 +42,16 @@ internal static class RootHostWorkflowFacts
         return null;
     }
 
-    internal static bool IsTextToVideoRootWorkflow(WorkflowGenerator generator)
+    internal static bool IsTextToVideoRootWorkflow(T2IParamInput input)
     {
-        if (generator.UserInput.TryGet(
+        if (input.TryGet(
                 T2IParamTypes.VideoModel,
                 out T2IModel existingVideoModel)
             && existingVideoModel is not null)
         {
             return false;
         }
-        return generator.UserInput.TryGet(
+        return input.TryGet(
                 T2IParamTypes.Model,
                 out T2IModel textToVideoModel)
             && textToVideoModel?.ModelClass?.CompatClass?.IsText2Video == true;

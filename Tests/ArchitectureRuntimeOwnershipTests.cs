@@ -17,7 +17,10 @@ public class ArchitectureRuntimeOwnershipTests
     [Fact]
     public void Request_context_caches_root_owner()
     {
-        VideoExecutionPlanContext context = new(MixedInitVideoLeadingPlan());
+        // Root-owner resolution happens in the constructor, so this context is never prepared.
+        VideoExecutionPlanContext context = new(
+            MixedInitVideoLeadingPlan(),
+            () => throw new InvalidOperationException("This test never prepares the context."));
 
         Assert.Equal(
             new ArchitectureId("future-arch"),

@@ -31,26 +31,26 @@ internal static class RequestReader
         PromptTags.Directives Directives,
         Action<string> Warn);
 
-    public static VideoStagesSpec Read(WorkflowGenerator g)
+    public static VideoStagesSpec Read(T2IParamInput input)
     {
-        LegacyVideoSwapRequestSnapshot legacyVideoSwap = CaptureLegacyVideoSwap(g.UserInput);
+        LegacyVideoSwapRequestSnapshot legacyVideoSwap = CaptureLegacyVideoSwap(input);
         Action<string> warn =
-            warning => PlanDiagnosticReporter.TrackRequestWarning(g.UserInput, warning);
-        AuthoringDocument document = DocumentJson.Read(g);
-        PromptTags.Directives directives = DocumentJson.IsActive(g)
+            warning => PlanDiagnosticReporter.TrackRequestWarning(input, warning);
+        AuthoringDocument document = DocumentJson.Read(input);
+        PromptTags.Directives directives = DocumentJson.IsActive(input)
             ? PromptTags.Read(
-                g.UserInput.Get(T2IParamTypes.Prompt, ""),
-                g.UserInput)
+                input.Get(T2IParamTypes.Prompt, ""),
+                input)
             : new PromptTags.Directives();
 
         (int? rawWidth, int? rawHeight, int? rawFps) = Overrides.ApplyTopLevel(
             directives, document.Width, document.Height, document.Fps, warn);
         Overrides.ApplyClipAndStage(document.Clips, directives, warn);
 
-        int width = ResolveWidth(g, rawWidth);
-        int height = ResolveHeight(g, rawHeight);
-        int fps = ResolveFps(g, rawFps);
-        bool isTextToVideo = RootHostWorkflowFacts.IsTextToVideoRootWorkflow(g);
+        int width = ResolveWidth(input, rawWidth);
+        int height = ResolveHeight(input, rawHeight);
+        int fps = ResolveFps(input, rawFps);
+        bool isTextToVideo = RootHostWorkflowFacts.IsTextToVideoRootWorkflow(input);
         bool hasConfiguredResolution = rawWidth is > 0 && rawHeight is > 0;
         if (document.Clips.Count == 0)
         {
@@ -67,7 +67,7 @@ internal static class RequestReader
         }
 
         ClipReadContext context = new(
-            ReadDefaults(g),
+            ReadDefaults(input),
             isTextToVideo,
             fps,
             directives,
@@ -334,23 +334,23 @@ internal static class RequestReader
             LoraWeights: Loras.ReadWeights(stage));
     }
 
-    private static StageDefaults ReadDefaults(WorkflowGenerator g)
+    private static StageDefaults ReadDefaults(T2IParamInput input)
     {
-        int steps = g.UserInput.TryGet(T2IParamTypes.VideoSteps, out int explicitVideoSteps)
+        int steps = input.TryGet(T2IParamTypes.VideoSteps, out int explicitVideoSteps)
             ? explicitVideoSteps
-            : g.UserInput.Get(T2IParamTypes.Steps, 8, autoFixDefault: true);
-        double cfgScale = g.UserInput.TryGet(T2IParamTypes.VideoCFG, out double explicitVideoCfg)
+            : input.Get(T2IParamTypes.Steps, 8, autoFixDefault: true);
+        double cfgScale = input.TryGet(T2IParamTypes.VideoCFG, out double explicitVideoCfg)
             ? explicitVideoCfg
-            : g.UserInput.Get(T2IParamTypes.CFGScale, 1, autoFixDefault: true);
+            : input.Get(T2IParamTypes.CFGScale, 1, autoFixDefault: true);
         string sampler = ComfyUIBackendExtension.SamplerParam is null
             ? "euler"
-            : g.UserInput.Get(
+            : input.Get(
                 ComfyUIBackendExtension.SamplerParam,
                 "euler",
                 autoFixDefault: true);
         string scheduler = ComfyUIBackendExtension.SchedulerParam is null
             ? "normal"
-            : g.UserInput.Get(
+            : input.Get(
                 ComfyUIBackendExtension.SchedulerParam,
                 "normal",
                 autoFixDefault: true);
@@ -584,19 +584,19 @@ internal static class RequestReader
         return defaultReference;
     }
 
-    private static int ResolveWidth(WorkflowGenerator g, int? authoredWidth) =>
-        authoredWidth is > 0 ? authoredWidth.Value : g.UserInput.GetImageWidth();
+    private static int ResolveWidth(T2IParamInput input, int? authoredWidth) =>
+        authoredWidth is > 0 ? authoredWidth.Value : input.GetImageWidth();
 
-    private static int ResolveHeight(WorkflowGenerator g, int? authoredHeight) =>
-        authoredHeight is > 0 ? authoredHeight.Value : g.UserInput.GetImageHeight();
+    private static int ResolveHeight(T2IParamInput input, int? authoredHeight) =>
+        authoredHeight is > 0 ? authoredHeight.Value : input.GetImageHeight();
 
-    private static int ResolveFps(WorkflowGenerator g, int? authoredFps)
+    private static int ResolveFps(T2IParamInput input, int? authoredFps)
     {
         if (authoredFps is > 0)
         {
             return authoredFps.Value;
         }
-        return g.UserInput.TryGet(T2IParamTypes.VideoFPS, out int videoFps) && videoFps > 0
+        return input.TryGet(T2IParamTypes.VideoFPS, out int videoFps) && videoFps > 0
             ? videoFps
             : 24;
     }

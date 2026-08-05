@@ -23,7 +23,7 @@ public static class Runner
 {
     public static void PreflightRequest(WorkflowGenerator g)
     {
-        if (!DocumentJson.IsActive(g))
+        if (!DocumentJson.IsActive(g.UserInput))
         {
             return;
         }
@@ -105,7 +105,7 @@ public static class Runner
         WorkflowGenerator g,
         out VideoExecutionPlanContext context)
     {
-        if (!DocumentJson.IsActive(g))
+        if (!DocumentJson.IsActive(g.UserInput))
         {
             context = null;
             return false;

@@ -1,7 +1,7 @@
 using System.Globalization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 
 namespace VideoStages;
@@ -29,13 +29,13 @@ internal static class DocumentJson
     /// contract fixture test to prove no reader names a key the frontend never emits.</summary>
     internal static Action<JObject, string, bool> KeyProbe;
 
-    public static bool IsActive(WorkflowGenerator g) =>
-        g.UserInput.TryGetRaw(VideoStagesExtension.Enabled.Type, out _)
-        && !string.IsNullOrWhiteSpace(GetData(g));
+    public static bool IsActive(T2IParamInput input) =>
+        input.TryGetRaw(VideoStagesExtension.Enabled.Type, out _)
+        && !string.IsNullOrWhiteSpace(GetData(input));
 
-    public static AuthoringDocument Read(WorkflowGenerator g)
+    public static AuthoringDocument Read(T2IParamInput input)
     {
-        string json = IsActive(g) ? GetData(g) : null;
+        string json = IsActive(input) ? GetData(input) : null;
         if (string.IsNullOrWhiteSpace(json))
         {
             return new AuthoringDocument(null, null, null, [], []);
@@ -75,8 +75,8 @@ internal static class DocumentJson
         }
     }
 
-    private static string GetData(WorkflowGenerator g) =>
-        g.UserInput.Get(VideoStagesExtension.Data, "");
+    private static string GetData(T2IParamInput input) =>
+        input.Get(VideoStagesExtension.Data, "");
 
     private static int ValidateSchemaVersion(JObject obj)
     {

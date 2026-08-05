@@ -41,9 +41,7 @@ public class AudioSourceParamTests
         _ = WorkflowTestHarness.VideoStagesSteps();
         T2IParamInput input = new(null);
         Fixtures.SetVideoStagesConfig(input, BuildConfigJson(value));
-        WorkflowGenerator generator = new() { UserInput = input };
-
-        ClipSpec clip = Assert.Single(RequestReader.Read(generator).Clips);
+        ClipSpec clip = Assert.Single(RequestReader.Read(input).Clips);
 
         Assert.Equal(value, clip.AudioSource);
     }

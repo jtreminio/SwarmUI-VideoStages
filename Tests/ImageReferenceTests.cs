@@ -36,13 +36,7 @@ public class ImageReferenceTests
 
     private static List<StageSpec> ParseStages(T2IParamInput input)
     {
-        WorkflowGenerator generator = new()
-        {
-            UserInput = input,
-            Features = [],
-            ModelFolderFormat = "/"
-        };
-        return [.. RequestReader.Read(generator).Clips.SelectMany(c => c.Stages)];
+        return [.. RequestReader.Read(input).Clips.SelectMany(c => c.Stages)];
     }
 
     private static List<StageSpec> ParseStages(string stagesJson)

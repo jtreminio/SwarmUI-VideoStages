@@ -98,7 +98,7 @@ public class AuthoringDocumentContractTests
         VideoStagesSpec spec;
         try
         {
-            spec = RequestReader.Read(new WorkflowGenerator { UserInput = input });
+            spec = RequestReader.Read(input);
         }
         finally
         {
@@ -228,7 +228,7 @@ public class AuthoringDocumentContractTests
         T2IParamInput input = new(null);
         Fixtures.SetVideoStagesConfig(input, document.ToString());
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => RequestReader.Read(new WorkflowGenerator { UserInput = input }));
+            () => RequestReader.Read(input));
         Assert.Contains("document version", error.Message);
     }
 
@@ -246,8 +246,7 @@ public class AuthoringDocumentContractTests
         Fixtures.SetVideoStagesConfig(input, "{}");
         input.Set(VideoStagesExtension.Data, document.ToString());
 
-        VideoStagesSpec spec = RequestReader.Read(
-            new WorkflowGenerator { UserInput = input });
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         Assert.Equal("ltx2", spec.Clips[0].AuthoredArchitectureHint);
     }
@@ -262,7 +261,7 @@ public class AuthoringDocumentContractTests
         Fixtures.SetVideoStagesConfig(input, "{}");
         input.Set(VideoStagesExtension.Data, document.ToString());
         Assert.Throws<SwarmUserErrorException>(
-            () => RequestReader.Read(new WorkflowGenerator { UserInput = input }));
+            () => RequestReader.Read(input));
     }
 
     [Fact]
@@ -274,7 +273,7 @@ public class AuthoringDocumentContractTests
         Fixtures.SetVideoStagesConfig(input, document.ToString());
 
         Exception error = Record.Exception(
-            () => RequestReader.Read(new WorkflowGenerator { UserInput = input }));
+            () => RequestReader.Read(input));
 
         Assert.False(error is OverflowException);
     }

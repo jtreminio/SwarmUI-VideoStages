@@ -72,19 +72,15 @@ public class RequestReaderTests
         return input;
     }
 
-    private static WorkflowGenerator BuildGenerator(string json)
-    {
-        T2IParamInput input = BuildInputWithJson(json);
-        return new() { UserInput = input };
-    }
+    private static T2IParamInput BuildGenerator(string json) => BuildInputWithJson(json);
 
     // ApplyLateSpecialLogic converts authored tags into processed markers.
-    private static WorkflowGenerator BuildGenerator(string json, string prompt)
+    private static T2IParamInput BuildGenerator(string json, string prompt)
     {
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.Prompt, prompt);
         input.ApplyLateSpecialLogic();
-        return new() { UserInput = input };
+        return input;
     }
 
     private static string ClipWindowTag(string prompt, double start, double duration, int clip = 0)
@@ -94,8 +90,8 @@ public class RequestReaderTests
         return $"<videoclip[{clip}]:{s}-{e}>{prompt}";
     }
 
-    private static List<StageSpec> FlattenedActiveStages(WorkflowGenerator generator) =>
-        [.. RequestReader.Read(generator).Clips.SelectMany(c => c.Stages)];
+    private static List<StageSpec> FlattenedActiveStages(T2IParamInput input) =>
+        [.. RequestReader.Read(input).Clips.SelectMany(c => c.Stages)];
 
     private static ClipSpec ReadSingleClip(JObject clip)
     {
@@ -283,15 +279,15 @@ public class RequestReaderTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: Constants.AudioSourceNative);
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        WorkflowGenerator generator =
+        T2IParamInput input =
             BuildGenerator(json, "<videoclip[0,bogusfield]:whatever>");
 
         ClipSpec parsed = Assert.Single(
-            RequestReader.Read(generator).Clips);
+            RequestReader.Read(input).Clips);
 
         Assert.Equal(Constants.AudioSourceNative, parsed.AudioSource);
         Assert.Contains(
-            Assert.IsType<List<string>>(generator.UserInput.ExtraMeta["parser_warnings"]),
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
             warning => warning.Contains(
                 "ignoring unknown or non-overridable clip 0 field 'bogusfield'",
                 StringComparison.Ordinal));
@@ -338,9 +334,9 @@ public class RequestReaderTests
                 stages: [MakeStage("model-b"), MakeStage("model-c")],
                 duration: 6.0)
         ));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        IReadOnlyList<ClipSpec> clips = RequestReader.Read(generator).Clips;
+        IReadOnlyList<ClipSpec> clips = RequestReader.Read(input).Clips;
 
         Assert.Equal(2, clips.Count);
         Assert.Equal(0, clips[0].Id);
@@ -447,13 +443,13 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 icLoras: new JArray(entry))));
 
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
         IcLoraSpec parsed = Assert.Single(
-            Assert.Single(RequestReader.Read(generator).Clips).IcLoras);
+            Assert.Single(RequestReader.Read(input).Clips).IcLoras);
 
         Assert.Equal(IcLoraDriveData.None, parsed.DriveData);
         Assert.Contains(
-            Assert.IsType<List<string>>(generator.UserInput.ExtraMeta["parser_warnings"]),
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
             warning => warning.Contains("unsupported DriveData 'future-stream'"));
     }
 
@@ -472,13 +468,13 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 icLoras: new JArray(entry))));
 
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
         IcLoraSpec parsed = Assert.Single(
-            Assert.Single(RequestReader.Read(generator).Clips).IcLoras);
+            Assert.Single(RequestReader.Read(input).Clips).IcLoras);
 
         Assert.Null(parsed.DriveMediaKinds);
         Assert.Contains(
-            Assert.IsType<List<string>>(generator.UserInput.ExtraMeta["parser_warnings"]),
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
             warning => warning.Contains("DriveMediaKinds must be an array"));
     }
 
@@ -492,15 +488,15 @@ public class RequestReaderTests
             ["driveData"] = nameof(IcLoraDriveData.Visual),
             ["driveMediaKinds"] = new JArray(123, "Image", "image", "future"),
         };
-        WorkflowGenerator generator = BuildGenerator(JsonConvert.SerializeObject(new JArray(
+        T2IParamInput input = BuildGenerator(JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [MakeStage("model-a")],
                 icLoras: new JArray(entry)))));
 
         IcLoraSpec parsed = Assert.Single(
-            Assert.Single(RequestReader.Read(generator).Clips).IcLoras);
+            Assert.Single(RequestReader.Read(input).Clips).IcLoras);
         List<string> warnings =
-            Assert.IsType<List<string>>(generator.UserInput.ExtraMeta["parser_warnings"]);
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
 
         Assert.Equal(["image"], parsed.DriveMediaKinds);
         Assert.Equal(3, warnings.Count(warning => warning.Contains("DriveMediaKinds")));
@@ -545,9 +541,9 @@ public class RequestReaderTests
                     stages: [MakeStage("model-a")],
                     audioSource: Constants.AudioSourceUpload)
             ]));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        VideoStagesSpec config = RequestReader.Read(generator);
+        VideoStagesSpec config = RequestReader.Read(input);
 
         Assert.Equal(1344, config.Width);
         Assert.Equal(832, config.Height);
@@ -561,7 +557,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(MakeRootConfig(800, 600));
         T2IParamInput enabled = BuildInputWithJson(json);
         AuthoringDocument enabledDocument =
-            DocumentJson.Read(new() { UserInput = enabled });
+            DocumentJson.Read(enabled);
         Assert.Equal(800, enabledDocument.Width);
         Assert.Equal(600, enabledDocument.Height);
 
@@ -569,7 +565,7 @@ public class RequestReaderTests
         disabled.Remove(VideoStagesExtension.Enabled);
 
         AuthoringDocument document =
-            DocumentJson.Read(new() { UserInput = disabled });
+            DocumentJson.Read(disabled);
 
         Assert.Null(document.Width);
         Assert.Null(document.Height);
@@ -590,19 +586,19 @@ public class RequestReaderTests
                 audioSource: Constants.AudioSourceUpload,
                 uploadedAudio: UploadedAudio(fileName: "second.wav"))
         ));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        IReadOnlyList<ClipSpec> clips = RequestReader.Read(generator).Clips;
+        IReadOnlyList<ClipSpec> clips = RequestReader.Read(input).Clips;
 
         Assert.Equal(2, clips.Count);
         Assert.Equal("first.wav", clips[0].UploadedAudio.FileName);
         Assert.Equal("second.wav", clips[1].UploadedAudio.FileName);
 
         AudioFile firstAudio = UploadedMedia.GetAudio(
-            generator.UserInput,
+            input,
             clips[0].UploadedAudio);
         AudioFile secondAudio = UploadedMedia.GetAudio(
-            generator.UserInput,
+            input,
             clips[1].UploadedAudio);
         Assert.Equal("first.wav", firstAudio.SourceFilePath);
         Assert.Equal("second.wav", secondAudio.SourceFilePath);
@@ -620,14 +616,14 @@ public class RequestReaderTests
                     ["data"] = "inputs/_comfy1/clip_part02.wav",
                     ["fileName"] = "clip_part02.wav",
                 })));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        ClipSpec clip = RequestReader.Read(generator).Clips.Single();
+        ClipSpec clip = RequestReader.Read(input).Clips.Single();
 
         Assert.Equal("inputs/_comfy1/clip_part02.wav", clip.UploadedAudio.Data);
 
         bool loaded = UploadedMedia.TryGetAudio(
-            generator.UserInput,
+            input,
             clip.UploadedAudio.Data,
             clip.UploadedAudio.FileName,
             out AudioFile audio,
@@ -645,9 +641,9 @@ public class RequestReaderTests
             MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")]),
             MakeClip(stages: [MakeStage("model-c")])
         ));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        List<StageSpec> stages = FlattenedActiveStages(generator);
+        List<StageSpec> stages = FlattenedActiveStages(input);
 
         Assert.Equal(3, stages.Count);
         Assert.Equal(0, stages[0].Id);
@@ -672,9 +668,9 @@ public class RequestReaderTests
             MakeClip(stages: [clipZeroStageZero, clipZeroStageOne]),
             MakeClip(stages: [clipOneStageZero])
         ));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        List<StageSpec> stages = FlattenedActiveStages(generator);
+        List<StageSpec> stages = FlattenedActiveStages(input);
 
         Assert.Equal(3, stages.Count);
         Assert.Equal(1.0, stages[0].Control);
@@ -693,13 +689,14 @@ public class RequestReaderTests
             MakeClip( stages: [MakeStage("model-skipped-clip")], skipped: true),
             MakeClip( stages: [MakeStage("model-c")])
         ));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        List<StageSpec> stages = FlattenedActiveStages(generator);
+        List<StageSpec> stages = FlattenedActiveStages(input);
 
         Assert.Single(stages);
         Assert.Equal("model-a", stages[0].Model);
-        ClipSpec firstClip = generator.GetVideoStagesSpec().Clips[0];
+        ClipSpec firstClip = new WorkflowGenerator { UserInput = input }
+            .GetVideoStagesSpec().Clips[0];
         Assert.Collection(
             firstClip.AuthoredStages,
             stage =>
@@ -735,8 +732,7 @@ public class RequestReaderTests
             ]));
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.VideoFPS, 24);
-        WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         ClipSpec clip = Assert.Single(spec.Clips);
         StageSpec stage = Assert.Single(clip.Stages);
@@ -765,9 +761,9 @@ public class RequestReaderTests
                     clipLengthFromAudio: true,
                     clipLengthFromControlNet: true)
             ]));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         ClipSpec clip = Assert.Single(spec.Clips);
         Assert.True(clip.ClipLengthFromAudio);
@@ -787,8 +783,7 @@ public class RequestReaderTests
             ]));
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.VideoFPS, 24);
-        WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         ClipSpec clip = Assert.Single(spec.Clips);
         Assert.Equal(1536, spec.Width);
@@ -811,8 +806,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(config);
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.VideoFPS, 24);
-        WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         ClipSpec clip = Assert.Single(spec.Clips);
         Assert.Equal(129, clip.Frames);
@@ -828,9 +822,9 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip( stages: [brokenStage, MakeStage("model-a")])
         ));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        ClipSpec clip = Assert.Single(RequestReader.Read(generator).Clips);
+        ClipSpec clip = Assert.Single(RequestReader.Read(input).Clips);
 
         StageSpec stage = Assert.Single(clip.Stages);
         Assert.Equal("model-a", stage.Model);
@@ -838,7 +832,7 @@ public class RequestReaderTests
         Assert.Equal(0, stage.ClipStageIndex);
         Assert.True(clip.AuthoredStages[0].Skipped);
         Assert.Contains(
-            Assert.IsType<List<string>>(generator.UserInput.ExtraMeta["parser_warnings"]),
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
             warning => warning.Contains("Clip 0 stage 0 has no model and was ignored"));
     }
 
@@ -879,9 +873,9 @@ public class RequestReaderTests
                     ["driveSource"] = Constants.IcLoraSourceUpload,
                 }))
         ));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        ClipSpec clip = Assert.Single(RequestReader.Read(generator).Clips);
+        ClipSpec clip = Assert.Single(RequestReader.Read(input).Clips);
 
         Assert.Equal(2, Assert.Single(clip.IcLoras).Stage);
     }
@@ -893,11 +887,11 @@ public class RequestReaderTests
         {
             ["model"] = "model-a"
         }));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        Assert.Empty(RequestReader.Read(generator).Clips);
+        Assert.Empty(RequestReader.Read(input).Clips);
         Assert.Contains(
-            Assert.IsType<List<string>>(generator.UserInput.ExtraMeta["parser_warnings"]),
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
             warning => warning.Contains("Entry 0 has no stages array and was ignored"));
     }
 
@@ -906,29 +900,29 @@ public class RequestReaderTests
     {
         JObject skipped = new() { ["skipped"] = true };
         JObject malformed = new() { ["model"] = "unused" };
-        WorkflowGenerator generator = BuildGenerator(JsonConvert.SerializeObject(
+        T2IParamInput input = BuildGenerator(JsonConvert.SerializeObject(
             new JArray(MakeClip(stages: [MakeStage("model-a")]), skipped, malformed)));
 
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         Assert.Single(spec.Clips);
-        Assert.False(generator.UserInput.ExtraMeta.ContainsKey("parser_warnings"));
+        Assert.False(input.ExtraMeta.ContainsKey("parser_warnings"));
     }
 
     [Fact]
     public void ReadClips_EmptyJson_ReturnsEmpty()
     {
-        WorkflowGenerator generator = BuildGenerator("[]");
-        Assert.Empty(RequestReader.Read(generator).Clips);
-        Assert.Empty(FlattenedActiveStages(generator));
+        T2IParamInput input = BuildGenerator("[]");
+        Assert.Empty(RequestReader.Read(input).Clips);
+        Assert.Empty(FlattenedActiveStages(input));
     }
 
     [Fact]
     public void ReadClips_InvalidJson_ThrowsUserError()
     {
-        WorkflowGenerator generator = BuildGenerator("not json at all");
+        T2IParamInput input = BuildGenerator("not json at all");
         SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(
-            () => RequestReader.Read(generator));
+            () => RequestReader.Read(input));
         Assert.Contains("Could not parse Video Stages JSON", ex.Message);
     }
 
@@ -941,9 +935,9 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 refs: [brokenRef, MakeRef("Base")])
         ));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        IReadOnlyList<ClipSpec> clips = RequestReader.Read(generator).Clips;
+        IReadOnlyList<ClipSpec> clips = RequestReader.Read(input).Clips;
 
         Assert.Single(clips);
         Assert.Single(clips[0].ImageRefs);
@@ -966,8 +960,7 @@ public class RequestReaderTests
             ]));
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.VideoFPS, 24);
-        WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         Assert.Equal(800, spec.Width);
         Assert.Equal(600, spec.Height);
@@ -991,8 +984,7 @@ public class RequestReaderTests
             ]));
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.VideoFPS, 24);
-        WorkflowGenerator generator = new() { UserInput = input };
-        ClipSpec clip = Assert.Single(RequestReader.Read(generator).Clips);
+        ClipSpec clip = Assert.Single(RequestReader.Read(input).Clips);
 
         Assert.Equal(expectedFrames, clip.Frames);
     }
@@ -1010,9 +1002,9 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        ClipSpec clip = RequestReader.Read(generator).Clips.Single();
+        ClipSpec clip = RequestReader.Read(input).Clips.Single();
         Assert.Equal("Upload", clip.ImageRefs[0].Source);
         Assert.Equal("ref.png", clip.ImageRefs[0].UploadFileName);
     }
@@ -1035,9 +1027,9 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        ClipSpec clip = RequestReader.Read(generator).Clips.Single();
+        ClipSpec clip = RequestReader.Read(input).Clips.Single();
         ImageRefSpec r = clip.ImageRefs[0];
         Assert.Equal("Upload", r.Source);
         Assert.Equal(imageData, r.Data);
@@ -1062,9 +1054,9 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        ImageRefSpec r = RequestReader.Read(generator).Clips.Single().ImageRefs[0];
+        ImageRefSpec r = RequestReader.Read(input).Clips.Single().ImageRefs[0];
         Assert.Equal("data:image/png;base64,TkVTVA==", r.Data);
         Assert.Equal("nested.png", r.UploadFileName);
     }
@@ -1079,9 +1071,9 @@ public class RequestReaderTests
                 stages: [stage],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 9)])));
 
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        ClipSpec clip = Assert.Single(RequestReader.Read(generator).Clips);
+        ClipSpec clip = Assert.Single(RequestReader.Read(input).Clips);
         StageSpec flattened = Assert.Single(clip.Stages);
         Assert.Equal(2, clip.ImageRefs.Count);
         Assert.Equal(2, flattened.ImageRefStrengths.Count);
@@ -1097,9 +1089,9 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [stage])));
 
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        StageSpec flattened = Assert.Single(FlattenedActiveStages(generator));
+        StageSpec flattened = Assert.Single(FlattenedActiveStages(input));
         Assert.Equal(0.35, flattened.ControlNetStrength);
     }
 
@@ -1111,9 +1103,9 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [stage])));
 
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        StageSpec flattened = Assert.Single(FlattenedActiveStages(generator));
+        StageSpec flattened = Assert.Single(FlattenedActiveStages(input));
         Assert.Equal([0.25, 0.75], flattened.IcLoraStrengths);
     }
 
@@ -1126,9 +1118,9 @@ public class RequestReaderTests
                 stages: [stage],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 2)])));
 
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        StageSpec flattened = Assert.Single(FlattenedActiveStages(generator));
+        StageSpec flattened = Assert.Single(FlattenedActiveStages(input));
         Assert.Equal(2, flattened.ImageRefStrengths.Count);
         Assert.All(
             flattened.ImageRefStrengths,
@@ -1146,8 +1138,7 @@ public class RequestReaderTests
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.Width, 1024);
         input.Set(T2IParamTypes.Height, 768);
-        WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         Assert.Equal(1024, spec.Width);
         Assert.Equal(720, spec.Height);
@@ -1164,8 +1155,7 @@ public class RequestReaderTests
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.Width, 1024);
         input.Set(T2IParamTypes.Height, 768);
-        WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         Assert.Equal(1280, spec.Width);
         Assert.Equal(768, spec.Height);
@@ -1184,8 +1174,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(root);
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.VideoFPS, 30);
-        WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         Assert.Equal(30, spec.FPS);
     }
@@ -1200,8 +1189,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(root);
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.VideoFPS, 30);
-        WorkflowGenerator generator = new() { UserInput = input };
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         Assert.Equal(30, spec.FPS);
     }
@@ -1214,9 +1202,9 @@ public class RequestReaderTests
             ["clips"] = new JArray(MakeClip(stages: [MakeStage("model-a")])),
         };
         string json = JsonConvert.SerializeObject(root);
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         Assert.Equal(512, spec.Width);
         Assert.Equal(512, spec.Height);
@@ -1228,9 +1216,9 @@ public class RequestReaderTests
     {
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")])));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         Assert.Equal(1.0, spec.Clips[0].Stages[0].Control);
     }
@@ -1250,9 +1238,9 @@ public class RequestReaderTests
             ["startSeconds"] = 0.0,
         };
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         Assert.Equal(0.3, spec.Clips[0].Stages[0].Control);
         Assert.Equal(2.0, spec.Clips[0].Stages[0].Upscale);
@@ -1270,13 +1258,13 @@ public class RequestReaderTests
             ["startSeconds"] = 1e20,
         };
 
-        WorkflowGenerator generator = BuildGenerator(JsonConvert.SerializeObject(new JArray(clip)));
+        T2IParamInput input = BuildGenerator(JsonConvert.SerializeObject(new JArray(clip)));
 
-        ClipSpec parsed = Assert.Single(RequestReader.Read(generator).Clips);
+        ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips);
 
         Assert.Null(parsed.InitVideo);
         Assert.Contains(
-            Assert.IsType<List<string>>(generator.UserInput.ExtraMeta["parser_warnings"]),
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
             warning => warning.Contains("InitVideo start")
                 && warning.Contains("representable frame range"));
     }
@@ -1293,9 +1281,9 @@ public class RequestReaderTests
 
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [MakeStage("model-a"), stage1, stage2, stage3])));
-        WorkflowGenerator generator = new() { UserInput = BuildInputWithJson(json) };
+        T2IParamInput input = BuildInputWithJson(json);
 
-        VideoStagesSpec spec = RequestReader.Read(generator);
+        VideoStagesSpec spec = RequestReader.Read(input);
 
         Assert.Equal(1.25, spec.Clips[0].Stages[1].Upscale);
         Assert.Equal(1.0, spec.Clips[0].Stages[2].Upscale);
@@ -1315,9 +1303,9 @@ public class RequestReaderTests
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         clip["boundaryOut"] = raw;
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        ClipSpec parsed = RequestReader.Read(generator).Clips.Single();
+        ClipSpec parsed = RequestReader.Read(input).Clips.Single();
 
         Assert.Equal(expected, parsed.BoundaryOut);
     }
@@ -1327,9 +1315,9 @@ public class RequestReaderTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        ClipSpec parsed = RequestReader.Read(generator).Clips.Single();
+        ClipSpec parsed = RequestReader.Read(input).Clips.Single();
 
         Assert.Equal(Constants.BoundaryOutCut, parsed.BoundaryOut);
         Assert.False(parsed.BoundaryOutCarryAudio);
@@ -1342,15 +1330,15 @@ public class RequestReaderTests
         clip["boundaryOut"] = Constants.BoundaryOutCrossfade;
         clip["boundaryOutCarryAudio"] = true;
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        WorkflowGenerator generator = BuildGenerator(json);
+        T2IParamInput input = BuildGenerator(json);
 
-        ClipSpec parsed = RequestReader.Read(generator).Clips.Single();
+        ClipSpec parsed = RequestReader.Read(input).Clips.Single();
 
         Assert.True(parsed.BoundaryOutCarryAudio);
     }
 
     // Adds a source video while leaving FPS unset to exercise the 24 FPS fallback.
-    private static WorkflowGenerator BuildInitVideoGenerator(string json)
+    private static T2IParamInput BuildInitVideoGenerator(string json)
     {
         JArray clips = JArray.Parse(json);
         foreach (JObject clip in clips.Cast<JObject>())
@@ -1384,14 +1372,14 @@ public class RequestReaderTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         clip["duration"] = -1;
-        WorkflowGenerator generator = BuildInitVideoGenerator(
+        T2IParamInput input = BuildInitVideoGenerator(
             JsonConvert.SerializeObject(new JArray(clip)));
 
-        ClipSpec parsed = Assert.Single(RequestReader.Read(generator).Clips);
+        ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips);
 
         Assert.Null(parsed.Frames);
         Assert.Contains(
-            Assert.IsType<List<string>>(generator.UserInput.ExtraMeta["parser_warnings"]),
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
             warning => warning.Contains("duration must be finite and non-negative")
                 && warning.Contains("ignoring it"));
     }
@@ -1403,13 +1391,13 @@ public class RequestReaderTests
         clip["duration"] = int.MaxValue;
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        WorkflowGenerator generator = BuildInitVideoGenerator(json);
+        T2IParamInput input = BuildInitVideoGenerator(json);
 
-        ClipSpec parsed = Assert.Single(RequestReader.Read(generator).Clips);
+        ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips);
 
         Assert.Null(parsed.Frames);
         Assert.Contains(
-            Assert.IsType<List<string>>(generator.UserInput.ExtraMeta["parser_warnings"]),
+            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
             warning => warning.Contains("duration at 24 fps exceeds")
                 && warning.Contains("was ignored"));
     }

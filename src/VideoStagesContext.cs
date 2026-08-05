@@ -21,10 +21,10 @@ internal static class VideoStagesContext
     private static readonly ConditionalWeakTable<T2IParamInput, VideoStagesSpec> PromptParseCache = new();
 
     public static VideoStagesSpec GetVideoStagesSpec(this WorkflowGenerator g) =>
-        Cache.GetValue(g, RequestReader.Read);
+        Cache.GetValue(g, generator => RequestReader.Read(generator.UserInput));
 
     public static VideoStagesSpec GetVideoStagesSpecForPromptParse(T2IParamInput input) =>
-        PromptParseCache.GetValue(input, ParseForPromptTag);
+        PromptParseCache.GetValue(input, RequestReader.Read);
 
     public static VideoExecutionPlanContext? GetVideoExecutionPlanContext(this WorkflowGenerator g) =>
         PlanCache.GetValue(g, CompilePlan);
@@ -48,7 +48,7 @@ internal static class VideoStagesContext
         context = null;
         if (generator is null
             || genInfo.ContextID != T2IParamInput.SectionID_Video
-            || !DocumentJson.IsActive(generator))
+            || !DocumentJson.IsActive(generator.UserInput))
         {
             return false;
         }
@@ -60,17 +60,6 @@ internal static class VideoStagesContext
         g.GetVideoExecutionPlanContext()
         ?? throw VideoStagesInvariant.Failure(
             "VideoStages has no executable clips in the active timeline.");
-
-    private static VideoStagesSpec ParseForPromptTag(T2IParamInput input)
-    {
-        WorkflowGenerator generator = new()
-        {
-            UserInput = input,
-            Features = [],
-            ModelFolderFormat = "/"
-        };
-        return RequestReader.Read(generator);
-    }
 
     private static VideoExecutionPlanContext CompilePlan(WorkflowGenerator g)
     {
@@ -119,14 +108,11 @@ internal sealed class VideoExecutionPlanContext
     private VideoArchitectureExecutionHost _executionHost;
     private ExceptionDispatchInfo _failure;
 
-    internal VideoExecutionPlanContext(VideoExecutionPlan plan) : this(plan, null)
-    {
-    }
-
     internal VideoExecutionPlanContext(
         VideoExecutionPlan plan,
         Func<VideoArchitectureExecutionHost> createExecutionHost)
     {
+        ArgumentNullException.ThrowIfNull(createExecutionHost);
         Plan = plan ?? throw new ArgumentNullException(nameof(plan));
         RootOwnerArchitectureId = ArchitectureRootOwnerResolver.TryResolve(
             plan,
@@ -168,9 +154,7 @@ internal sealed class VideoExecutionPlanContext
                 PlanDiagnosticReporter.ThrowIfBlocking(
                     Plan.Diagnostics,
                     "VideoStages could not create a valid architecture execution plan");
-                _executionHost = _createExecutionHost?.Invoke()
-                    ?? throw VideoStagesInvariant.Failure(
-                        "This video execution plan context has no runtime provider binding.");
+                _executionHost = _createExecutionHost();
                 if (!ReferenceEquals(Plan, _executionHost.Plan))
                 {
                     throw VideoStagesInvariant.Failure(
