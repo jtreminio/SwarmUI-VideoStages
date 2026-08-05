@@ -2,9 +2,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.33530.505
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7557}") = "SwarmUI-VideoStages", "SwarmUI-VideoStages.csproj", "{E01C4940-371A-4EB8-A54F-4ECCB06C64AC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SwarmUI-VideoStages", "SwarmUI-VideoStages.csproj", "{E01C4940-371A-4EB8-A54F-4ECCB06C64AC}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7557}") = "SwarmUI-VideoStages.Tests", "Tests\SwarmUI-VideoStages.Tests.csproj", "{A47D35F7-C8F5-4E97-8CD1-A6DFB4EF5A6A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SwarmUI-VideoStages.Tests", "Tests\SwarmUI-VideoStages.Tests.csproj", "{A47D35F7-C8F5-4E97-8CD1-A6DFB4EF5A6A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
