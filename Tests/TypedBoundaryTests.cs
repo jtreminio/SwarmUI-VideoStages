@@ -17,20 +17,6 @@ public class TypedBoundaryTests
         NodeRegistrations.EnsureRegistered();
     }
 
-    // ── Shared workflow builder ────────────────────────────────────
-
-    /// <summary>
-    /// Builds a realistic LTX workflow matching the pattern TryCapture expects:
-    ///
-    ///   CheckpointLoader("1") ─┐
-    ///   AudioVAELoader("2") ───┤
-    ///                          ▼
-    ///                   KSampler("3") → av_latent
-    ///                          │
-    ///              LTXVSeparateAVLatent("4")
-    ///                ├── slot 0: video_latent ──► VAEDecode("5") ──► SwarmSaveAnimationWS("7")
-    ///                └── slot 1: audio_latent ──► LTXVAudioVAEDecode("6")
-    /// </summary>
     private static JObject BuildLtxWorkflow()
     {
         return new JObject
@@ -114,9 +100,27 @@ public class TypedBoundaryTests
         };
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  MediaRef tests
-    // ═══════════════════════════════════════════════════════════════
+    private static WorkflowGenerator CreateGeneratorWithCurrentMedia(
+        JObject workflow,
+        string mediaNodeId = "5",
+        string audioVaeNodeId = null)
+    {
+        WorkflowGenerator generator = CreateGenerator(workflow);
+        generator.CurrentMedia = new WGNodeData(
+            new JArray(mediaNodeId, 0), generator, WGNodeData.DT_VIDEO, null)
+        {
+            Width = 1280,
+            Height = 720,
+            Frames = 97,
+            FPS = 24
+        };
+        if (audioVaeNodeId is not null)
+        {
+            generator.CurrentAudioVae = new WGNodeData(
+                new JArray(audioVaeNodeId, 0), generator, WGNodeData.DT_AUDIOVAE, null);
+        }
+        return generator;
+    }
 
     [Fact]
     public void MediaRef_FromWGNodeData_ResolvesTypedOutput()
@@ -289,40 +293,9 @@ public class TypedBoundaryTests
         Assert.Same(mediaRef.AttachedAudio.Output, cloned.AttachedAudio.Output);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  LtxPostVideoChainInspector tests
-    // ═══════════════════════════════════════════════════════════════
-
-    [Fact]
-    public void TryCapture_FindsDecodeChain()
-    {
-        JObject workflow = BuildLtxWorkflow();
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        // CurrentMedia points to the save node's input (VAEDecode output)
-        INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
-        MediaRef currentMedia = new()
-        {
-            Output = decodeOutput,
-            DataType = WGNodeData.DT_VIDEO,
-            Width = 1280,
-            Height = 720
-        };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            bridge, currentMedia, currentAudioVae: null, useReusedAudio: false);
-
-        Assert.NotNull(capture);
-        Assert.Equal("5", capture.DecodeId);
-        Assert.Equal("4", capture.SeparateId);
-        Assert.Equal("6", capture.AudioDecodeId);
-        Assert.False(capture.HasPostDecodeWrappers);
-    }
-
     [Fact]
     public void TryCapture_NoDecodeUpstream_ReturnsNull()
     {
-        // Workflow with no VAEDecode: just a KSampler output
         JObject workflow = new()
         {
             ["1"] = new JObject
@@ -331,12 +304,8 @@ public class TypedBoundaryTests
                 ["inputs"] = new JObject { ["seed"] = 42 }
             }
         };
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        INodeOutput output = bridge.ResolvePath(new JArray("1", 0));
-        MediaRef media = new() { Output = output, DataType = WGNodeData.DT_VIDEO };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            bridge, media, currentAudioVae: null, useReusedAudio: false);
+        WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow, "1");
+        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
 
         Assert.Null(capture);
     }
@@ -344,7 +313,6 @@ public class TypedBoundaryTests
     [Fact]
     public void TryCapture_NoSeparateNode_ReturnsNull()
     {
-        // VAEDecode whose samples DON'T come from LTXVSeparateAVLatent
         JObject workflow = new()
         {
             ["1"] = new JObject
@@ -362,12 +330,8 @@ public class TypedBoundaryTests
                 }
             }
         };
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        INodeOutput output = bridge.ResolvePath(new JArray("2", 0));
-        MediaRef media = new() { Output = output, DataType = WGNodeData.DT_VIDEO };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            bridge, media, currentAudioVae: null, useReusedAudio: false);
+        WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow, "2");
+        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
 
         Assert.Null(capture);
     }
@@ -375,7 +339,6 @@ public class TypedBoundaryTests
     [Fact]
     public void TryCapture_NoAudioDecode_FallsBackToCurrentAudioVae()
     {
-        // Full chain but without audio decode node
         JObject workflow = new()
         {
             ["1"] = new JObject
@@ -414,36 +377,23 @@ public class TypedBoundaryTests
                     ["vae"] = new JArray("1", 2)
                 }
             },
-            // Audio VAE loader exists but no audio decode
             ["2"] = new JObject
             {
                 ["class_type"] = LTXVAudioVAELoaderNode.ClassType,
                 ["inputs"] = new JObject { ["audio_vae_name"] = "audio.safetensors" }
             }
         };
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
-        MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO };
-
-        // Provide audio VAE as fallback
-        INodeOutput audioVaeOutput = bridge.ResolvePath(new JArray("2", 0));
-        MediaRef audioVae = new() { Output = audioVaeOutput, DataType = WGNodeData.DT_AUDIOVAE };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            bridge, media, currentAudioVae: audioVae, useReusedAudio: false);
+        WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(
+            workflow, audioVaeNodeId: "2");
+        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
 
         Assert.NotNull(capture);
-        Assert.Null(capture.AudioDecodeId);
-        Assert.NotNull(capture.AudioVaeSource);
-        Assert.Equal("2", capture.AudioVaeSource.Node.Id);
     }
 
     [Fact]
     public void TryCapture_WithPostDecodeWrappers_DetectsCorrectly()
     {
         JObject workflow = BuildLtxWorkflow();
-        // Splice a scale between the decode and the save so the current media is no longer the
-        // decode itself — the only shape that sets HasPostDecodeWrappers.
         workflow["8"] = new JObject
         {
             ["class_type"] = ImageScaleNode.ClassType,
@@ -457,99 +407,20 @@ public class TypedBoundaryTests
             }
         };
         ((JObject)workflow["7"]!)["inputs"]!["images"] = new JArray("8", 0);
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        MediaRef media = new()
-        {
-            Output = bridge.ResolvePath(new JArray("8", 0)),
-            DataType = WGNodeData.DT_VIDEO
-        };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            bridge, media, currentAudioVae: null, useReusedAudio: false);
+        WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow, "8");
+        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
 
         Assert.NotNull(capture);
         Assert.True(capture.HasPostDecodeWrappers);
-        Assert.Equal("5", capture.DecodeId);
-        Assert.Equal("4", capture.SeparateId);
-        Assert.Equal("6", capture.AudioDecodeId);
+        Assert.Equal("5", capture.VideoDecodeNodeId);
     }
 
     [Fact]
     public void TryCapture_TerminalSaveNodeOutput_ReturnsNull()
     {
         JObject workflow = BuildLtxWorkflow();
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        // The save node is terminal, so slot 0 never resolves and the capture has no anchor node.
-        MediaRef media = new()
-        {
-            Output = bridge.ResolvePath(new JArray("7", 0)),
-            DataType = WGNodeData.DT_VIDEO
-        };
-
-        Assert.Null(media.Output);
-        Assert.Null(LtxPostVideoChainInspector.TryCapture(
-            bridge, media, currentAudioVae: null, useReusedAudio: false));
-    }
-
-    [Fact]
-    public void TryCapture_CapturesCorrectNodeIds()
-    {
-        JObject workflow = BuildLtxWorkflow();
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
-        MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            bridge, media, currentAudioVae: null, useReusedAudio: false);
-
-        Assert.NotNull(capture);
-        // Verify the audio VAE source comes from audio decode's connection
-        Assert.Equal("2", capture.AudioVaeSource.Node.Id); // AudioVAELoader
-        Assert.Equal(0, capture.AudioVaeSource.SlotIndex);
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  LtxPostChainRebuilder.SpliceCurrentOutput tests
-    // ═══════════════════════════════════════════════════════════════
-
-    [Fact]
-    public void Splice_CreatesNewSeparateNode()
-    {
-        JObject workflow = BuildLtxWorkflow();
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
-        MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO, Width = 1280, Height = 720 };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            bridge, media, currentAudioVae: null, useReusedAudio: false);
-
-        // Simulate generation: add a new KSampler that produced stage output
-        var newKSampler = bridge.AddNode(new KSamplerNode());
-        INodeOutput stageOutput = newKSampler.LATENT;
-        MediaRef stageOutputRef = new() { Output = stageOutput, DataType = WGNodeData.DT_LATENT_AUDIOVIDEO };
-
-        INodeOutput vaeOutput = bridge.ResolvePath(new JArray("1", 2));
-        MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
-
-        var config = new LtxDecodeConfig(UseTiledDecode: false);
-
-        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutput(
-            bridge, capture, stageOutputRef, vaeRef, config);
-
-        Assert.NotNull(result);
-
-        // Verify a new LTXVSeparateAVLatent was created in the JObject
-        int separateCount = 0;
-        foreach (JProperty prop in workflow.Properties())
-        {
-            if (prop.Value is JObject obj && $"{obj["class_type"]}" == LTXVSeparateAVLatentNode.ClassType)
-                separateCount++;
-        }
-        Assert.Equal(2, separateCount); // original + new
+        WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow, "7");
+        Assert.Null(LtxPostVideoChainCapture.TryCapture(generator));
     }
 
     [Fact]
@@ -558,36 +429,23 @@ public class TypedBoundaryTests
         JObject workflow = BuildLtxWorkflow();
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
-        MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO, Width = 1280, Height = 720 };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            bridge, media, currentAudioVae: null, useReusedAudio: false);
+        WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
+        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
 
         var newKSampler = bridge.AddNode(new KSamplerNode());
-        MediaRef stageOutputRef = new() { Output = newKSampler.LATENT, DataType = WGNodeData.DT_LATENT_AUDIOVIDEO };
-        INodeOutput vaeOutput = bridge.ResolvePath(new JArray("1", 2));
-        MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
+        generator.CurrentMedia = new WGNodeData(
+            new JArray(newKSampler.Id, 0), generator, WGNodeData.DT_LATENT_AUDIOVIDEO, null);
+        WGNodeData vae = new(new JArray("1", 2), generator, WGNodeData.DT_VAE, null);
 
-        var config = new LtxDecodeConfig(UseTiledDecode: false);
+        capture.SpliceCurrentOutput(vae);
 
-        LtxPostChainRebuilder.SpliceCurrentOutput(
-            bridge,
-            capture,
-            stageOutputRef,
-            vaeRef,
-            config);
-
-        // After splice, decode("5") should point to the NEW separate's video output (slot 0)
         JObject decodeNode = workflow["5"] as JObject;
         JArray samplesRef = decodeNode?["inputs"]?["samples"] as JArray;
         Assert.NotNull(samplesRef);
 
-        // The new separate should NOT be "4" (the original)
         string newSeparateId = $"{samplesRef[0]}";
         Assert.NotEqual("4", newSeparateId);
 
-        // The new separate node should exist and be LTXVSeparateAVLatent
         JObject newSeparateNode = workflow[newSeparateId] as JObject;
         Assert.NotNull(newSeparateNode);
         Assert.Equal(LTXVSeparateAVLatentNode.ClassType, $"{newSeparateNode["class_type"]}");
@@ -599,34 +457,23 @@ public class TypedBoundaryTests
         JObject workflow = BuildLtxWorkflow();
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
-        MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO, Width = 1280, Height = 720 };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            bridge, media, currentAudioVae: null, useReusedAudio: false);
+        WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
+        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
 
         var newKSampler = bridge.AddNode(new KSamplerNode());
-        MediaRef stageOutputRef = new() { Output = newKSampler.LATENT, DataType = WGNodeData.DT_LATENT_AUDIOVIDEO };
-        INodeOutput vaeOutput = bridge.ResolvePath(new JArray("1", 2));
-        MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
+        generator.CurrentMedia = new WGNodeData(
+            new JArray(newKSampler.Id, 0), generator, WGNodeData.DT_LATENT_AUDIOVIDEO, null);
+        WGNodeData vae = new(new JArray("1", 2), generator, WGNodeData.DT_VAE, null);
 
-        var config = new LtxDecodeConfig(UseTiledDecode: false);
+        capture.SpliceCurrentOutput(vae);
 
-        LtxPostChainRebuilder.SpliceCurrentOutput(
-            bridge,
-            capture,
-            stageOutputRef,
-            vaeRef,
-            config);
-
-        // Audio decode("6") should now point to the new separate's audio output (slot 1)
         JObject audioDecodeNode = workflow["6"] as JObject;
         JArray audioSamplesRef = audioDecodeNode?["inputs"]?["samples"] as JArray;
         Assert.NotNull(audioSamplesRef);
 
         string newSeparateId = $"{audioSamplesRef[0]}";
         Assert.NotEqual("4", newSeparateId);
-        Assert.Equal(1, audioSamplesRef[1].Value<int>()); // audio slot
+        Assert.Equal(1, audioSamplesRef[1].Value<int>());
     }
 
     [Fact]
@@ -635,29 +482,16 @@ public class TypedBoundaryTests
         JObject workflow = BuildLtxWorkflow();
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
-        MediaRef media = new()
-        {
-            Output = decodeOutput,
-            DataType = WGNodeData.DT_VIDEO,
-            Width = 1280,
-            Height = 720,
-            Frames = 97,
-            FPS = 24
-        };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            bridge, media, currentAudioVae: null, useReusedAudio: false);
+        WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
+        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
 
         var newKSampler = bridge.AddNode(new KSamplerNode());
-        MediaRef stageOutputRef = new() { Output = newKSampler.LATENT, DataType = WGNodeData.DT_LATENT_AUDIOVIDEO };
-        INodeOutput vaeOutput = bridge.ResolvePath(new JArray("1", 2));
-        MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
+        generator.CurrentMedia = new WGNodeData(
+            new JArray(newKSampler.Id, 0), generator, WGNodeData.DT_LATENT_AUDIOVIDEO, null);
+        WGNodeData vae = new(new JArray("1", 2), generator, WGNodeData.DT_VAE, null);
 
-        var config = new LtxDecodeConfig(UseTiledDecode: false);
-
-        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutput(
-            bridge, capture, stageOutputRef, vaeRef, config);
+        capture.SpliceCurrentOutput(vae);
+        WGNodeData result = generator.CurrentMedia;
 
         Assert.NotNull(result);
         Assert.Equal(1280, result.Width);
@@ -665,55 +499,6 @@ public class TypedBoundaryTests
         Assert.Equal(97, result.Frames);
         Assert.Equal(24, result.FPS);
     }
-
-    [Fact]
-    public void Splice_UpdatesJObjectAfterSync()
-    {
-        JObject workflow = BuildLtxWorkflow();
-        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
-        MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO, Width = 1280, Height = 720 };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            bridge, media, currentAudioVae: null, useReusedAudio: false);
-
-        var newKSampler = bridge.AddNode(new KSamplerNode());
-        MediaRef stageOutputRef = new() { Output = newKSampler.LATENT, DataType = WGNodeData.DT_LATENT_AUDIOVIDEO };
-        INodeOutput vaeOutput = bridge.ResolvePath(new JArray("1", 2));
-        MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
-
-        var config = new LtxDecodeConfig(UseTiledDecode: false);
-
-        LtxPostChainRebuilder.SpliceCurrentOutput(
-            bridge,
-            capture,
-            stageOutputRef,
-            vaeRef,
-            config);
-
-        // The new separate node should have av_latent pointing to the new KSampler
-        string newSeparateId = null;
-        foreach (JProperty prop in workflow.Properties())
-        {
-            if (prop.Name != "4" && prop.Value is JObject obj
-                && $"{obj["class_type"]}" == LTXVSeparateAVLatentNode.ClassType)
-            {
-                newSeparateId = prop.Name;
-                break;
-            }
-        }
-        Assert.NotNull(newSeparateId);
-
-        JObject newSep = workflow[newSeparateId] as JObject;
-        JArray avLatentRef = newSep?["inputs"]?["av_latent"] as JArray;
-        Assert.NotNull(avLatentRef);
-        Assert.Equal(newKSampler.Id, $"{avLatentRef[0]}");
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  LtxPostChainRebuilder.AttachDecodedLtxAudio tests
-    // ═══════════════════════════════════════════════════════════════
 
     [Fact]
     public void AttachAudio_CreatesDecodeNodeInWorkflow()
@@ -732,7 +517,6 @@ public class TypedBoundaryTests
         Assert.NotNull(media.AttachedAudio);
         Assert.Equal(WGNodeData.DT_AUDIO, media.AttachedAudio.DataType);
 
-        // The new audio decode should exist in the JObject
         string audioNodeId = media.AttachedAudio.Output.Node.Id;
         JObject audioNode = workflow[audioNodeId] as JObject;
         Assert.NotNull(audioNode);
@@ -761,32 +545,14 @@ public class TypedBoundaryTests
         Assert.Null(media.AttachedAudio);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  Integration: Full capture → splice lifecycle
-    // ═══════════════════════════════════════════════════════════════
-
     [Fact]
     public void FullStage_TryCapture_Then_Splice_ProducesValidWorkflow()
     {
         JObject workflow = BuildLtxWorkflow();
-
-        // PRE-GEN: Capture on original workflow
-        WorkflowBridge preGenBridge = WorkflowBridge.Create(workflow);
-        INodeOutput decodeOutput = preGenBridge.ResolvePath(new JArray("5", 0));
-        MediaRef media = new()
-        {
-            Output = decodeOutput,
-            DataType = WGNodeData.DT_VIDEO,
-            Width = 1280,
-            Height = 720,
-            Frames = 97,
-            FPS = 24
-        };
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            preGenBridge, media, currentAudioVae: null, useReusedAudio: false);
+        WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
+        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
         Assert.NotNull(capture);
 
-        // SIMULATE GENERATION: Add new nodes to JObject directly (as g.CreateImageToVideo would)
         workflow["50"] = new JObject
         {
             ["class_type"] = SwarmKSamplerNode.ClassType,
@@ -804,83 +570,23 @@ public class TypedBoundaryTests
                 ["denoise"] = 1.0
             }
         };
+        generator.CurrentMedia = new WGNodeData(
+            new JArray("50", 0), generator, WGNodeData.DT_LATENT_AUDIOVIDEO, null);
+        WGNodeData vae = new(new JArray("1", 2), generator, WGNodeData.DT_VAE, null);
 
-        // POST-GEN: Create fresh bridge, re-resolve capture, splice
-        WorkflowBridge postGenBridge = WorkflowBridge.Create(workflow);
+        capture.SpliceCurrentOutput(vae);
 
-        // Verify we can re-resolve the captured node IDs
-        ComfyNode resolvedDecode = postGenBridge.Graph.GetNode(capture.DecodeId);
-        Assert.NotNull(resolvedDecode);
-        Assert.Equal("5", resolvedDecode.Id);
-
-        ComfyNode resolvedSeparate = postGenBridge.Graph.GetNode(capture.SeparateId);
-        Assert.NotNull(resolvedSeparate);
-        Assert.Equal("4", resolvedSeparate.Id);
-
-        // Splice with new stage output
-        INodeOutput stageOutput = postGenBridge.ResolvePath(new JArray("50", 0));
-        MediaRef stageOutputRef = new() { Output = stageOutput, DataType = WGNodeData.DT_LATENT_AUDIOVIDEO };
-        INodeOutput vaeOutput = postGenBridge.ResolvePath(new JArray("1", 2));
-        MediaRef vaeRef = new() { Output = vaeOutput, DataType = WGNodeData.DT_VAE };
-
-        var config = new LtxDecodeConfig(UseTiledDecode: false);
-
-        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutput(
-            postGenBridge, capture, stageOutputRef, vaeRef, config);
-        Assert.NotNull(result);
-
-        // Verify workflow integrity: decode now points to new separate
+        Assert.Equal("5", $"{generator.CurrentMedia.Path[0]}");
         JArray decSamples = workflow["5"]?["inputs"]?["samples"] as JArray;
         Assert.NotNull(decSamples);
         string newSepId = $"{decSamples[0]}";
         Assert.NotEqual("4", newSepId);
 
-        // New separate's av_latent points to stage output (node "50")
         JObject newSep = workflow[newSepId] as JObject;
         JArray avLatent = newSep?["inputs"]?["av_latent"] as JArray;
         Assert.Equal("50", $"{avLatent[0]}");
     }
 
-    [Fact]
-    public void PostGenBridge_ResolvesPreGenCaptureIds()
-    {
-        JObject workflow = BuildLtxWorkflow();
-        WorkflowBridge preGenBridge = WorkflowBridge.Create(workflow);
-
-        INodeOutput decodeOutput = preGenBridge.ResolvePath(new JArray("5", 0));
-        MediaRef media = new() { Output = decodeOutput, DataType = WGNodeData.DT_VIDEO };
-
-        LtxChainCapture capture = LtxPostVideoChainInspector.TryCapture(
-            preGenBridge, media, currentAudioVae: null, useReusedAudio: false);
-
-        // Add nodes (simulating generation)
-        workflow["60"] = new JObject
-        {
-            ["class_type"] = SwarmKSamplerNode.ClassType,
-            ["inputs"] = new JObject { ["seed"] = 99 }
-        };
-
-        // New bridge sees both old and new nodes
-        WorkflowBridge postGenBridge = WorkflowBridge.Create(workflow);
-
-        Assert.NotNull(postGenBridge.Graph.GetNode(capture.DecodeId));
-        Assert.NotNull(postGenBridge.Graph.GetNode(capture.SeparateId));
-        Assert.NotNull(postGenBridge.Graph.GetNode(capture.AudioDecodeId));
-        Assert.NotNull(postGenBridge.Graph.GetNode("60")); // new node visible
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  Audio injection typed query tests
-    // ═══════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Builds a workflow with LTXVConcatAVLatent connected to LTXVEmptyLatentAudio:
-    ///
-    ///   KSampler("1") → video_latent ─┐
-    ///   LTXVEmptyLatentAudio("2") ─────┤ audio_latent
-    ///                                  ▼
-    ///                        LTXVConcatAVLatent("3")
-    /// </summary>
     private static JObject BuildAudioInjectionWorkflow()
     {
         return new JObject
@@ -935,7 +641,6 @@ public class TypedBoundaryTests
     public void AudioInjection_IgnoresNonEmptyAudioSources()
     {
         JObject workflow = BuildAudioInjectionWorkflow();
-        // Change the audio_latent source to point to a non-empty-audio node
         ((JObject)workflow["3"]!)["inputs"]!["audio_latent"] = new JArray("1", 0);
 
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -954,7 +659,6 @@ public class TypedBoundaryTests
     public void AudioInjection_FindsMultipleConcatNodes()
     {
         JObject workflow = BuildAudioInjectionWorkflow();
-        // Add a second concat+empty pair
         workflow["12"] = new JObject
         {
             ["class_type"] = LTXVEmptyLatentAudioNode.ClassType,
@@ -996,44 +700,33 @@ public class TypedBoundaryTests
         JObject workflow = BuildAudioInjectionWorkflow();
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // The typed query finds the concat node, and we can still get the mutable
-        // JArray from the JObject for in-place replacement
         LTXVConcatAVLatentNode concat = bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>().First();
         JArray audioLatent = workflow[concat.Id]?["inputs"]?["audio_latent"] as JArray;
 
         Assert.NotNull(audioLatent);
         Assert.Equal("2", $"{audioLatent[0]}");
 
-        // Mutate in-place (simulates ReplaceAudioLatentConnections)
         audioLatent[0] = "99";
         audioLatent[1] = 0;
 
-        // JObject reflects the change
         JArray afterMutation = workflow["3"]?["inputs"]?["audio_latent"] as JArray;
         Assert.Equal("99", $"{afterMutation[0]}");
     }
-
-    // ═══════════════════════════════════════════════════════════════
-    //  BridgeSync tests
-    // ═══════════════════════════════════════════════════════════════
 
     [Fact]
     public void SyncLastId_AfterBridgeOps_CoversBridgeIds()
     {
         JObject workflow = BuildLtxWorkflow();
         WorkflowGenerator g = CreateGenerator(workflow);
-        g.LastID = 100; // SwarmUI default
+        g.LastID = 100;
 
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        // Bridge adds nodes with auto IDs (will be >= 100 since workflow has keys 1-7)
         bridge.AddNode(new KSamplerNode());
         bridge.AddNode(new KSamplerNode());
 
-        // Before sync, g.LastID might be behind
         BridgeSync.SyncLastId(g);
 
-        // Now g.LastID should be past all existing keys
         foreach (JProperty prop in workflow.Properties())
         {
             if (int.TryParse(prop.Name, out int n))

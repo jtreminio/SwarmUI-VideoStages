@@ -134,7 +134,7 @@ internal sealed class LtxStageExecutor
                 ComfyNode sourceNode = bridge.ResolvePath(effectiveSourceMedia.Path)?.Node;
                 forceDedicatedOutput = sourceNode is not null
                     && bridge.Graph.FindNearestUpstream<IVaeDecode>(sourceNode)?.Id
-                        == postVideoChain.State.VideoDecodeNodeId;
+                        == postVideoChain.VideoDecodeNodeId;
             }
 
             sampler.Execute(genInfo, stageFrame);

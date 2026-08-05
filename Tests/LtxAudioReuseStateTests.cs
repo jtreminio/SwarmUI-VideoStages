@@ -85,7 +85,6 @@ public class LtxAudioReuseStateTests
         Assert.Equal("200", $"{remembered[0]}");
         Assert.Equal(0L, (long)remembered[1]);
 
-        // Stage 1 captures only — it must not rebuild AttachedAudio (that's stage 2+'s job).
         Assert.Same(mediaBefore, g.CurrentMedia);
         Assert.Same(attachedBefore, g.CurrentMedia.AttachedAudio);
     }
@@ -138,25 +137,15 @@ public class LtxAudioReuseStateTests
         VideoExecutionPlan plan = Plan(clip);
         ClipPlan plannedClip = plan.Clips[0];
         Ltx2ClipAudioReuseState audioReuse = new();
-        LtxPostVideoChainState captured = new(
-            CurrentOutputMedia: null,
-            AvLatentPath: null,
-            AudioLatentPath: new JArray("captured", 1),
-            VideoVaePath: null,
-            AudioVaePath: null,
-            VideoDecodeNodeId: null,
-            AudioDecodeNodeId: null,
-            DecodeOutputPath: null,
-            HasPostDecodeWrappers: false,
-            UseReusedAudioLatent: false);
+        JArray capturedAudioPath = new("captured", 1);
 
         LtxAudioReuseState.CompletePostVideoChainCapture(
             audioReuse,
             plannedClip.Stages[1],
-            captured);
+            capturedAudioPath);
 
         Assert.True(audioReuse.TryGetPath(out JArray remembered));
         Assert.Equal(new JArray("captured", 1), remembered);
-        Assert.NotSame(captured.AudioLatentPath, remembered);
+        Assert.NotSame(capturedAudioPath, remembered);
     }
 }

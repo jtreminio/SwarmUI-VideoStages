@@ -10,16 +10,22 @@ internal sealed class LtxAudioReferenceResolver
 {
     private readonly WorkflowGenerator g;
     private readonly Ltx2ClipAudioReuseState audioReuse;
-    private readonly LtxPostVideoChainState state;
+    private readonly WGNodeData currentOutputMedia;
+    private readonly JArray audioLatentPath;
+    private readonly bool useReusedAudioLatent;
 
     public LtxAudioReferenceResolver(
         WorkflowGenerator generator,
         Ltx2ClipAudioReuseState audioReuse,
-        LtxPostVideoChainState state)
+        WGNodeData currentOutputMedia,
+        JArray audioLatentPath,
+        bool useReusedAudioLatent)
     {
         g = generator;
         this.audioReuse = audioReuse;
-        this.state = state;
+        this.currentOutputMedia = currentOutputMedia;
+        this.audioLatentPath = audioLatentPath?.DeepClone() as JArray;
+        this.useReusedAudioLatent = useReusedAudioLatent;
     }
 
     public void AttachSourceAudio(WGNodeData media)
@@ -47,7 +53,7 @@ internal sealed class LtxAudioReferenceResolver
 
     internal WGNodeData CreateSourceAudioReference()
     {
-        if (state.UseReusedAudioLatent
+        if (useReusedAudioLatent
             && audioReuse is not null
             && audioReuse.TryGetPath(out JArray reusedAudioLatentPath))
         {
@@ -58,7 +64,7 @@ internal sealed class LtxAudioReferenceResolver
                 ResolveAudioCompat());
         }
 
-        if (state.CurrentOutputMedia?.AttachedAudio is WGNodeData
+        if (currentOutputMedia?.AttachedAudio is WGNodeData
             {
                 DataType: var attachedType,
                 Path: JArray { Count: 2 },
@@ -69,20 +75,20 @@ internal sealed class LtxAudioReferenceResolver
             return CloneAudioReference(preparedAudioLatent);
         }
 
-        if (ReferencesCapturedDecodedAudio(state.CurrentOutputMedia?.AttachedAudio))
+        if (ReferencesCapturedDecodedAudio(currentOutputMedia?.AttachedAudio))
         {
             // Reuse the separator's native audio latent instead of decoding and re-encoding it.
             return new WGNodeData(
-                state.AudioLatentPath?.DeepClone() as JArray,
+                audioLatentPath?.DeepClone() as JArray,
                 g,
                 WGNodeData.DT_LATENT_AUDIO,
                 ResolveAudioCompat());
         }
 
-        if (IsExplicitUploadAudio(state.CurrentOutputMedia?.AttachedAudio))
+        if (IsExplicitUploadAudio(currentOutputMedia?.AttachedAudio))
         {
-            JArray currentAudioLatentPath = state.AudioLatentPath?.DeepClone() as JArray;
-            if (state.CurrentOutputMedia.AttachedAudio?.Path is JArray { Count: 2 } explicitUploadPath
+            JArray currentAudioLatentPath = audioLatentPath?.DeepClone() as JArray;
+            if (currentOutputMedia.AttachedAudio?.Path is JArray { Count: 2 } explicitUploadPath
                 && IsAudioLatentDerivedFromUpload(currentAudioLatentPath, $"{explicitUploadPath[0]}"))
             {
                 return new WGNodeData(
@@ -91,11 +97,11 @@ internal sealed class LtxAudioReferenceResolver
                     WGNodeData.DT_LATENT_AUDIO,
                     ResolveAudioCompat());
             }
-            return CloneAudioReference(state.CurrentOutputMedia.AttachedAudio);
+            return CloneAudioReference(currentOutputMedia.AttachedAudio);
         }
 
         return new WGNodeData(
-            state.AudioLatentPath?.DeepClone() as JArray,
+            audioLatentPath?.DeepClone() as JArray,
             g,
             WGNodeData.DT_LATENT_AUDIO,
             ResolveAudioCompat());
@@ -103,7 +109,7 @@ internal sealed class LtxAudioReferenceResolver
 
     private bool ReferencesCapturedDecodedAudio(WGNodeData audio)
     {
-        if (state.AudioLatentPath is not { Count: 2 }
+        if (audioLatentPath is not { Count: 2 }
             || !LtxDecodedAudioHandoff.TryResolveNativeLatent(
                 g,
                 audio,
@@ -112,7 +118,7 @@ internal sealed class LtxAudioReferenceResolver
             return false;
         }
 
-        return JToken.DeepEquals(nativePath, state.AudioLatentPath);
+        return JToken.DeepEquals(nativePath, audioLatentPath);
     }
 
     private bool IsExplicitUploadAudio(WGNodeData audio)

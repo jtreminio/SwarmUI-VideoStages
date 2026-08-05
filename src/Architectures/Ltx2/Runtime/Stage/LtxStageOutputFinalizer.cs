@@ -22,9 +22,7 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
         {
             if (requiresDedicatedOutput)
             {
-                LtxPostVideoChainSplicer.SpliceCurrentOutputToDedicatedBranch(
-                    postVideoChain,
-                    g,
+                postVideoChain.SpliceCurrentOutputToDedicatedBranch(
                     genInfo.Vae,
                     outputWidth,
                     outputHeight,
@@ -33,7 +31,7 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
             }
             else
             {
-                LtxPostVideoChainSplicer.SpliceCurrentOutput(postVideoChain, g, genInfo.Vae);
+                postVideoChain.SpliceCurrentOutput(genInfo.Vae);
             }
 
             if (!requiresDedicatedOutput && postVideoChain.HasPostDecodeWrappers)

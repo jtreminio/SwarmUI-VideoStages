@@ -7,7 +7,6 @@ using SwarmUI.Text2Image;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>VAE decode tiling defaults for explicit settings and LTX-2 generation.</summary>
 internal static class LtxDecodeDefaults
 {
     internal const int TileSize = 256;
@@ -20,9 +19,6 @@ internal static class LtxDecodeDefaults
     internal const int Ltx2TemporalOverlap = 16;
 }
 
-/// <summary>
-/// Shared VAE decode configuration for rebuilt and ad-hoc decode paths.
-/// </summary>
 internal sealed record LtxDecodeConfig(
     bool UseTiledDecode,
     int TileSize = LtxDecodeDefaults.TileSize,
@@ -63,14 +59,14 @@ internal sealed record LtxDecodeConfig(
     }
 }
 
-/// <summary>
-/// Rebuilds decode branches and retargets consumers after a stage replaces the AV latent.
-/// </summary>
 internal static class LtxPostChainRebuilder
 {
     public static MediaRef SpliceCurrentOutput(
         WorkflowBridge bridge,
-        LtxChainCapture capture,
+        MediaRef currentOutputMedia,
+        ComfyNode decode,
+        LTXVSeparateAVLatentNode oldSeparate,
+        ComfyNode audioDecode,
         MediaRef stageOutput,
         MediaRef vae,
         LtxDecodeConfig decodeConfig)
@@ -78,7 +74,10 @@ internal static class LtxPostChainRebuilder
         ArgumentNullException.ThrowIfNull(bridge);
         if (!TryValidateCurrentOutputRecipe(
             bridge,
-            capture,
+            currentOutputMedia,
+            decode,
+            oldSeparate,
+            audioDecode,
             stageOutput,
             vae,
             decodeConfig,
@@ -99,16 +98,16 @@ internal static class LtxPostChainRebuilder
 
         RetargetCapturedAudioDecode(
             bridge,
-            capture,
             recipe.OldSeparate,
             recipe.AudioDecode,
             newSeparate);
-        return capture.CurrentOutputMedia.Clone();
+        return currentOutputMedia.Clone();
     }
 
     public static MediaRef SpliceCurrentOutputToDedicatedBranch(
         WorkflowBridge bridge,
-        LtxChainCapture capture,
+        MediaRef currentOutputMedia,
+        INodeOutput audioVaeSource,
         MediaRef stageOutput,
         MediaRef vae,
         LtxDecodeConfig decodeConfig,
@@ -120,7 +119,8 @@ internal static class LtxPostChainRebuilder
         ArgumentNullException.ThrowIfNull(bridge);
         if (!TryValidateDedicatedBranchRecipe(
             bridge,
-            capture,
+            currentOutputMedia,
+            audioVaeSource,
             stageOutput,
             vae,
             decodeConfig,
@@ -143,18 +143,16 @@ internal static class LtxPostChainRebuilder
         {
             Output = dedicatedDecode.Outputs[0],
             DataType = WGNodeData.DT_VIDEO,
-            Compat = vae?.Compat ?? capture.CurrentOutputMedia.Compat,
+            Compat = vae?.Compat ?? currentOutputMedia.Compat,
             Width = outputWidth,
             Height = outputHeight,
-            Frames = outputFrames ?? capture.CurrentOutputMedia.Frames,
-            FPS = outputFps ?? capture.CurrentOutputMedia.FPS,
+            Frames = outputFrames ?? currentOutputMedia.Frames,
+            FPS = outputFps ?? currentOutputMedia.FPS,
             AttachedAudio = new MediaRef
             {
                 Output = dedicatedAudioDecode.Audio,
                 DataType = WGNodeData.DT_AUDIO,
-                Compat = capture.AudioVaeSource?.Node is not null
-                    ? capture.CurrentOutputMedia.Compat
-                    : null
+                Compat = currentOutputMedia.Compat
             }
         };
     }
@@ -232,8 +230,7 @@ internal static class LtxPostChainRebuilder
         LtxDecodeConfig decodeConfig)
     {
         INodeOutput oldImageOutput = oldDecode.Outputs[0];
-        // Deliberately not routed through VideoGraphHelpers.RemoveNode: the replacement decode is
-        // re-added under the same id below, so cached references to it stay valid.
+        // Keep the decode id so existing consumers and cached references stay valid.
         bridge.RemoveNode(oldDecode.Id);
 
         ComfyNode newDecode = AddDecode(
@@ -248,12 +245,11 @@ internal static class LtxPostChainRebuilder
 
     private static void RetargetCapturedAudioDecode(
         WorkflowBridge bridge,
-        LtxChainCapture capture,
         LTXVSeparateAVLatentNode oldSeparate,
         ComfyNode audioDecode,
         LTXVSeparateAVLatentNode newSeparate)
     {
-        if (capture.AudioDecodeId is null)
+        if (audioDecode is null)
         {
             return;
         }
@@ -267,46 +263,46 @@ internal static class LtxPostChainRebuilder
 
     private static bool TryValidateCurrentOutputRecipe(
         WorkflowBridge bridge,
-        LtxChainCapture capture,
+        MediaRef currentOutputMedia,
+        ComfyNode decode,
+        LTXVSeparateAVLatentNode oldSeparate,
+        ComfyNode audioDecode,
         MediaRef stageOutput,
         MediaRef vae,
         LtxDecodeConfig decodeConfig,
         out CurrentOutputSpliceRecipe recipe)
     {
         recipe = null;
-        if (capture?.CurrentOutputMedia?.Output is null
+        if (currentOutputMedia?.Output is null
             || stageOutput?.Output is null
             || vae?.Output is null
             || decodeConfig is null
-            || string.IsNullOrWhiteSpace(capture.DecodeId)
-            || string.IsNullOrWhiteSpace(capture.SeparateId)
-            || !IsOutputInGraph(bridge, capture.CurrentOutputMedia.Output)
+            || decode is null
+            || oldSeparate is null
+            || !IsOutputInGraph(bridge, currentOutputMedia.Output)
             || !IsOutputInGraph(bridge, stageOutput.Output)
             || !IsOutputInGraph(bridge, vae.Output))
         {
             return false;
         }
 
-        if (bridge.Graph.GetNode(capture.DecodeId) is not ComfyNode decode
+        if (bridge.Graph.GetNode(decode.Id) is not ComfyNode
             || decode is not IVaeDecode vaeDecode
             || decode.Outputs.Count == 0
-            || bridge.Graph.GetNode<LTXVSeparateAVLatentNode>(capture.SeparateId)
-                is not LTXVSeparateAVLatentNode oldSeparate
+            || bridge.Graph.GetNode<LTXVSeparateAVLatentNode>(oldSeparate.Id) is null
             || vaeDecode.Samples.Connection?.Node?.Id != oldSeparate.Id)
         {
             return false;
         }
 
-        ComfyNode audioDecode = null;
-        if (capture.AudioDecodeId is not null)
+        if (audioDecode is not null)
         {
-            if (bridge.Graph.GetNode(capture.AudioDecodeId) is not ComfyNode resolvedAudioDecode
-                || resolvedAudioDecode.FindInput("samples")?.Connection?.Node?.Id
+            if (bridge.Graph.GetNode(audioDecode.Id) is not ComfyNode
+                || audioDecode.FindInput("samples")?.Connection?.Node?.Id
                     != oldSeparate.Id)
             {
                 return false;
             }
-            audioDecode = resolvedAudioDecode;
         }
 
         recipe = new(
@@ -320,21 +316,22 @@ internal static class LtxPostChainRebuilder
 
     private static bool TryValidateDedicatedBranchRecipe(
         WorkflowBridge bridge,
-        LtxChainCapture capture,
+        MediaRef currentOutputMedia,
+        INodeOutput audioVaeSource,
         MediaRef stageOutput,
         MediaRef vae,
         LtxDecodeConfig decodeConfig,
         out DedicatedBranchSpliceRecipe recipe)
     {
         recipe = null;
-        if (capture?.CurrentOutputMedia is null
+        if (currentOutputMedia is null
             || stageOutput?.Output is null
             || vae?.Output is null
-            || capture.AudioVaeSource is null
+            || audioVaeSource is null
             || decodeConfig is null
             || !IsOutputInGraph(bridge, stageOutput.Output)
             || !IsOutputInGraph(bridge, vae.Output)
-            || !IsOutputInGraph(bridge, capture.AudioVaeSource))
+            || !IsOutputInGraph(bridge, audioVaeSource))
         {
             return false;
         }
@@ -342,7 +339,7 @@ internal static class LtxPostChainRebuilder
         recipe = new(
             stageOutput.Output,
             vae.Output,
-            capture.AudioVaeSource);
+            audioVaeSource);
         return true;
     }
 

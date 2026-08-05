@@ -58,15 +58,15 @@ internal static class LtxAudioReuseState
     internal static void CompletePostVideoChainCapture(
         Ltx2ClipAudioReuseState audioReuse,
         StagePlan stage,
-        LtxPostVideoChainState captured)
+        JArray audioLatentPath)
     {
         if (audioReuse is null
-            || captured is null
+            || audioLatentPath is null
             || stage?.RequireLtx2Payload().AudioAction != StageAudioAction.CaptureForReuse)
         {
             return;
         }
-        audioReuse.Remember(captured.AudioLatentPath?.DeepClone() as JArray);
+        audioReuse.Remember(audioLatentPath.DeepClone() as JArray);
     }
 }
 
