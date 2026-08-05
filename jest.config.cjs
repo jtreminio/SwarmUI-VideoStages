@@ -15,6 +15,7 @@ module.exports = {
     ],
     coverageDirectory: "<rootDir>/coverage",
     coverageReporters: ["json", "json-summary", "text-summary"],
+    reporters: ["summary"],
     setupFiles: ["<rootDir>/scripts/jest.setup.js"],
     setupFilesAfterEnv: ["<rootDir>/scripts/jest.setupAfterEnv.js"],
     testEnvironment: "jsdom",

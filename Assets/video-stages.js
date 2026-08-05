@@ -2555,6 +2555,7 @@
       controlType: "depth",
       allowedControlTypes: ["none", "canny", "depth", "normal"],
       weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors`,
+      dimensionDownscaleFactor: 2,
       note: "Structural control from depth/canny/normal signals; pick the control type to render. Dims snap to multiples of 64."
     },
     {
@@ -2564,6 +2565,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors`,
+      dimensionDownscaleFactor: 2,
       note: "Feed an LTXVDrawTracks-rendered track video (e.g. saved from the official workflow) — hand-made dot videos don't match the training format. Dims snap to multiples of 64."
     },
     {
@@ -2601,6 +2603,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors`,
+      dimensionDownscaleFactor: 2,
       note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
     },
     {
@@ -2610,6 +2613,7 @@
       strength: 1,
       controlType: "none",
       weightsUrl: `${HF}/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors`,
+      dimensionDownscaleFactor: 4,
       note: "Apply on a refine stage with Upscale ×4 and source Incoming media. Dims snap to multiples of 128."
     },
     {
@@ -2756,22 +2760,23 @@
   };
 
   // frontend/architectures/ltx2/dimensionPolicy.ts
-  var presetFactors = /* @__PURE__ */ new Map([
-    ["union-control", 2],
-    ["motion-track-control", 2],
-    ["pixel-spatial-upscaler-x2", 2],
-    ["pixel-spatial-upscaler-x4", 4]
-  ]);
   var normalizeModelName = (value) => {
     const normalized = `${value ?? ""}`.trim().replaceAll("\\", "/");
     const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
     return basename.replace(/\.safetensors$/i, "").toLowerCase();
   };
+  var presetFactors = /* @__PURE__ */ new Map();
   var curatedModelFactors = /* @__PURE__ */ new Map();
-  for (const [presetId, factor] of presetFactors) {
-    const preset = findIcLoraPreset(presetId);
-    for (const name of preset ? [icLoraAutoModelName(preset), icLoraLegacyAutoModelName(preset)] : []) {
-      curatedModelFactors.set(normalizeModelName(name), factor);
+  for (const preset of IC_LORA_PRESETS) {
+    const factor = preset.dimensionDownscaleFactor;
+    if (factor) {
+      presetFactors.set(preset.id, factor);
+      for (const name of [
+        icLoraAutoModelName(preset),
+        icLoraLegacyAutoModelName(preset)
+      ]) {
+        curatedModelFactors.set(normalizeModelName(name), factor);
+      }
     }
   }
   var icLoraDimensionFactor = (entry) => {
