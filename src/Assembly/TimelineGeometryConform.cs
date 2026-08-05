@@ -32,8 +32,7 @@ internal static class TimelineGeometryConform
         IReadOnlyList<BoundaryPlan> Boundaries,
         IReadOnlyList<PlanDiagnostic> Diagnostics);
 
-    /// <summary>The timeline minimum: the smallest width, height, and fps any clip returned.</summary>
-    internal static TimelineGeometry ResolveTarget(IReadOnlyList<DecodedClipArtifact> clips) =>
+    private static TimelineGeometry ResolveTarget(IReadOnlyList<DecodedClipArtifact> clips) =>
         new(
             clips.Min(clip => clip.Width),
             clips.Min(clip => clip.Height),

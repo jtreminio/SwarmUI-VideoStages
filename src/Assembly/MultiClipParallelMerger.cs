@@ -132,15 +132,14 @@ internal sealed class MultiClipParallelMerger(WorkflowGenerator g)
                 overlapPlan)
             : null;
 
-        DecodedClipArtifact template = clips[0];
         MediaRef mergedMedia = new()
         {
             Output = mergedVideo,
             DataType = WGNodeData.DT_VIDEO,
-            Width = template.Width,
-            Height = template.Height,
+            Width = conform.Target.Width,
+            Height = conform.Target.Height,
             Frames = sumFrames - (overlapPlan?.RemovedFrames ?? 0),
-            FPS = template.FramesPerSecond
+            FPS = conform.Target.FramesPerSecond
         };
         if (mergedAudio is not null)
         {
