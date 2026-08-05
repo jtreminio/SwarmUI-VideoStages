@@ -11,16 +11,6 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// Stage-to-stage chaining on LTX-2 — guide selection, latent handoff, upscale dispatch, audio
-/// carry-over and the published tail — generated through the real Comfy API POST path.
-/// <para>
-/// Shape matters here. Under image-to-video, a clip with no <c>initVideo</c> has core's LTX root
-/// pruned at 11.05 and the root reverts to the base image, which stage 0 injects as its guide
-/// unless an authored ref suppresses it; under text-to-video there is no base image at all. Each
-/// test picks the shape that makes its subject observable.
-/// </para>
-/// </summary>
 [Collection("VideoStagesTests")]
 public class Ltx2StageChainContractTests
 {
@@ -30,11 +20,6 @@ public class Ltx2StageChainContractTests
         Assert.IsType<ImageScaleNode>(
             Assert.IsType<LTXVPreprocessNode>(guide.Image.Connection?.Node).Image.Connection?.Node);
 
-    /// <summary>
-    /// Stage 0 of an image-to-video request injects the host base image as its guide. "Exactly
-    /// once" is the contract: the reference resolves to media the stage is already building from,
-    /// so a second preprocess/in-place pair on top of it would be pure waste.
-    /// </summary>
     [Fact]
     public async Task Stage_zero_injects_the_host_base_image_as_its_guide_exactly_once()
     {
@@ -57,7 +42,6 @@ public class Ltx2StageChainContractTests
         SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.Same(guide, JointLatentOf(sampler).VideoLatent.Connection?.Node);
 
-        // The extension publishes its own save off a retargeted split, not off the raw sampler.
         LTXVSeparateAVLatentNode output = OutputOf(bridge, sampler);
         SwarmSaveAnimationWSNode save = live.FinalVideoSave();
         VAEDecodeTiledNode videoDecode = Assert.IsType<VAEDecodeTiledNode>(
@@ -75,11 +59,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Two trimmers can reach this graph — core's own priority-10 step and the extension's
-    /// <c>GlobalVideoFrameTrimmer</c> — so the count is the point: zero frames must produce no
-    /// wrapper at all, and a real trim must produce one, not two stacked.
-    /// </summary>
     [Theory]
     [InlineData(0, 0)]
     [InlineData(2, 1)]
@@ -150,14 +129,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A stage-level <c>Base</c> reference carries no strength of its own — <c>refStrengths</c>
-    /// only indexes clip refs — so the guide runs at the architecture default of 1.0. That is also
-    /// <c>LTXVImgToVideoInplace</c>'s codegen default and cannot be authored differently here, so
-    /// the strength alone proves little; the wiring assertions are what make the test falsifiable.
-    /// <see cref="Primary_ref_strength_scales_the_in_place_guide_and_zero_removes_it"/> is the
-    /// control that an authored strength does reach this input.
-    /// </summary>
     [Fact]
     public async Task Stage_guide_uses_the_core_default_strength_without_a_ref_override()
     {
@@ -171,10 +142,7 @@ public class Ltx2StageChainContractTests
         LTXVImgToVideoInplaceNode guide = Assert.Single(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
         Assert.Equal(1.0, guide.Strength.LiteralAsDouble());
-        // LtxConditioningPipeline passes bypass:false at every call site and never true, so this
-        // pins the architecture's choice, not a branch — a guide is either built or absent.
         Assert.Equal(false, guide.Bypass.LiteralValue);
-        // The strength is only worth anything if this guide is the one the stage samples.
         SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.Same(guide, JointLatentOf(sampler).VideoLatent.Connection?.Node);
         Assert.Same(BaseImage(bridge), FramingOf(guide).Image.Connection?.Node);
@@ -183,10 +151,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A first-frame clip reference routes to the in-place branch, where its authored strength is
-    /// the guide's strength and zero means "no guide": the stage samples the bare empty latent.
-    /// </summary>
     [Theory]
     [InlineData(0.35, true)]
     [InlineData(0.0, false)]
@@ -218,8 +182,6 @@ public class Ltx2StageChainContractTests
             Assert.IsType<EmptyLTXVLatentVideoNode>(videoLatent?.Node);
             Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
             Assert.Empty(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
-            // A dropped ref must not fall back to the add-guide branch either; that would thread
-            // conditioning into the sampler without touching the latent path asserted above.
             Assert.Empty(bridge.Graph.NodesOfType<LTXVAddGuideNode>());
             Assert.Empty(bridge.Graph.NodesOfType<LTXVCropGuidesNode>());
         }
@@ -228,10 +190,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A reference at a frame offset routes to <c>LTXVAddGuide</c> instead, which the crop node
-    /// must later undo. Zero strength drops the pair.
-    /// </summary>
     [Theory]
     [InlineData(0.55, 1)]
     [InlineData(0.0, 0)]
@@ -251,19 +209,12 @@ public class Ltx2StageChainContractTests
 
         Assert.Equal(expectedGuides, bridge.Graph.NodesOfType<LTXVAddGuideNode>().Count);
         Assert.Equal(expectedGuides, bridge.Graph.NodesOfType<LTXVCropGuidesNode>().Count);
-        // A frame offset never falls back to the in-place branch.
         Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
 
         live.AssertAllLive(StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Not a tautology: <c>LTXVAddGuide</c> takes conditioning as input and hands conditioning back
-    /// out, so it could just as easily have been wired to the raw text encoders. Reading the
-    /// <c>LTXVConditioning</c> outputs pins that the frame-rate conditioning runs first, and the
-    /// sampler reading the guide's outputs pins that it runs after.
-    /// </summary>
     [Fact]
     public async Task Add_guide_threads_conditioning_between_ltxv_conditioning_and_the_crop()
     {
@@ -290,7 +241,6 @@ public class Ltx2StageChainContractTests
         Assert.Same(addGuide.Negative, sampler.Negative.Connection);
         Assert.Same(addGuide.Latent, JointLatentOf(sampler).VideoLatent.Connection);
 
-        // The guide frames are cropped back off before the video is decoded.
         LTXVCropGuidesNode crop = Assert.Single(bridge.Graph.NodesOfType<LTXVCropGuidesNode>());
         Assert.Same(addGuide.Positive, crop.PositiveInput.Connection);
         Assert.Same(addGuide.Negative, crop.NegativeInput.Connection);
@@ -303,11 +253,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A plain latent scale is a pure latent-space handoff in both directions: the next stage
-    /// consumes the scaled latent straight off the previous stage's split, with no pixel round
-    /// trip and no latent-model upsampler.
-    /// </summary>
     [Theory]
     [InlineData(2.0)]
     [InlineData(0.5)]
@@ -336,9 +281,7 @@ public class Ltx2StageChainContractTests
             JointLatentOf(second).VideoLatent.Connection?.Node);
         Assert.Same(scaler.LATENT, guide.LatentInput.Connection);
 
-        // Each AV latent must be split exactly once, or the video and audio decodes end up reading
-        // different separators. Core only collapses a split sitting over a concat, so two splits
-        // over one sampler output would survive it — this is the extension's contract, not core's.
+        // One split per AV latent keeps video and audio decodes paired.
         IReadOnlyList<LTXVSeparateAVLatentNode> splits =
             [.. bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>()];
         Assert.Equal(
@@ -349,10 +292,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// After a latent-model upscale the next stage refines the upscaled latent and takes its guide
-    /// from a decode of that same latent, re-framed to the new resolution — not from the old one.
-    /// </summary>
     [Fact]
     public async Task A_latent_model_upscale_carries_both_the_latent_and_the_guide_forward()
     {
@@ -393,11 +332,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A pixel upscale has no scaffolding on the latent path, so a stage that asks for one after a
-    /// latent-model upscale keeps the resolution it inherited: the latent passes through untouched
-    /// and nothing is scaled to 2048.
-    /// </summary>
     [Fact]
     public async Task A_pixel_upscale_after_a_latent_model_upscale_is_ignored()
     {
@@ -421,8 +355,7 @@ public class Ltx2StageChainContractTests
             JointLatentOf(last).VideoLatent.Connection?.Node);
         Assert.Same(OutputOf(bridge, upscaling).VideoLatent, lastGuide.LatentInput.Connection);
 
-        // The framing scale is the positive control: it exists, and it sits at the resolution the
-        // latent-model upscale produced rather than the 2048 the pixel upscale asked for.
+        // The framing scale proves the requested 2048 pixel scale is absent.
         Assert.Equal(UpscaledEdge, FramingOf(lastGuide).Width.LiteralAsInt());
         Assert.DoesNotContain(
             bridge.Graph.NodesOfType<ImageScaleNode>(),
@@ -433,11 +366,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A <c>Generated</c> reference on a later stage names the latent that stage is already
-    /// refining, so the guide is redundant and must be skipped entirely — the joint latent is wired
-    /// straight from the previous stage's split.
-    /// </summary>
     [Fact]
     public async Task A_generated_reference_on_a_later_stage_skips_the_guide_entirely()
     {
@@ -450,7 +378,6 @@ public class Ltx2StageChainContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        // Only stage 0's host-base-image injection; stage 1 adds none of its own.
         Assert.Single(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
         Assert.Single(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
 
@@ -471,11 +398,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// The latent handoff between stages is prepared before the alt image-to-video pre-handlers
-    /// run. A handler that re-points the current media at a pixel node invalidates it, and the next
-    /// stage must fall back to re-encoding those pixels rather than reusing the stale latent.
-    /// </summary>
     [Fact]
     public async Task A_prehandler_pixel_wrapper_invalidates_the_prepared_latent_handoff()
     {
@@ -535,11 +457,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(result, workflow, live);
     }
 
-    /// <summary>
-    /// Stages inside a clip hand latents to each other; only the clip's last stage is decoded, and
-    /// the clips meet as pixels at the batch node. A cut boundary keeps the second clip's chain
-    /// independent of the first.
-    /// </summary>
     [Fact]
     public async Task Each_clip_decodes_only_at_its_terminal_stage()
     {
@@ -547,15 +464,29 @@ public class Ltx2StageChainContractTests
         JObject first = MakeClip(1.0, fixture.Stage(control: 0.5), fixture.Stage(control: 0.5));
         first["boundaryOut"] = Constants.BoundaryOutCut;
         JObject second = MakeClip(1.0, fixture.Stage(control: 0.5), fixture.Stage(control: 0.5));
+        int[] audioDecodeCountsBeforeCleanup = null;
+        WorkflowGenerator.WorkflowGenStep inspectDedicatedBranches = new(g =>
+        {
+            using WorkflowBridge current = WorkflowBridge.Create(g.Workflow);
+            audioDecodeCountsBeforeCleanup = new[] { 1, 3 }
+                .Select(stageId => OutputOf(current, StageSampler(current, stageId)))
+                .Select(output => current.Graph.NodesOfType<LTXVAudioVAEDecodeNode>()
+                    .Count(decode => ReferenceEquals(
+                        decode.Samples.Connection,
+                        output.AudioLatent)))
+                .ToArray();
+        }, Constants.WorkflowStepPriority.RunConfiguredStages + 0.01);
 
-        JObject workflow = await fixture.GenerateAsync(MakeDocument(first, second));
+        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+            fixture.Post(MakeDocument(first, second)),
+            extraSteps: [inspectDedicatedBranches]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
+        Assert.Equal([1, 1], audioDecodeCountsBeforeCleanup);
         SwarmKSamplerNode[] stages =
             [.. Enumerable.Range(0, 4).Select(id => StageSampler(bridge, id))];
 
-        // Within a clip the handoff is the raw latent split — no decode, no re-encode.
         Assert.Same(
             OutputOf(bridge, stages[0]).VideoLatent,
             JointLatentOf(stages[1]).VideoLatent.Connection);
@@ -575,6 +506,19 @@ public class Ltx2StageChainContractTests
             decodes,
             decode => ReferenceEquals(
                 decode.Samples.Connection, OutputOf(bridge, stages[3]).VideoLatent));
+        IReadOnlyList<LTXVAudioVAEDecodeNode> audioDecodes =
+            [.. bridge.Graph.NodesOfType<LTXVAudioVAEDecodeNode>()];
+        Assert.Equal(2, audioDecodes.Count);
+        foreach (VAEDecodeTiledNode decode in decodes)
+        {
+            LTXVSeparateAVLatentNode output = Assert.IsType<LTXVSeparateAVLatentNode>(
+                decode.Samples.Connection?.Node);
+            Assert.Single(
+                audioDecodes,
+                audioDecode => ReferenceEquals(
+                    audioDecode.Samples.Connection,
+                    output.AudioLatent));
+        }
 
         BatchImagesNodeNode batch = Assert.Single(
             bridge.Graph.NodesOfType<BatchImagesNodeNode>());
@@ -584,11 +528,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// <c>PreviousStage</c> and <c>Stage0</c> name the same stage for stage 1, so the two must
-    /// build the same graph. Audio meanwhile advances stage by stage: stage 0 starts from an empty
-    /// audio latent and stage 1 continues from what stage 0 produced.
-    /// </summary>
     [Theory]
     [InlineData("PreviousStage")]
     [InlineData("Stage0")]
@@ -608,9 +547,6 @@ public class Ltx2StageChainContractTests
         SwarmKSamplerNode second = StageSampler(bridge, 1);
         LTXVSeparateAVLatentNode firstOutput = OutputOf(bridge, first);
 
-        // Both stages carry the clip's one prompt, so they carry one conditioning between them.
-        // What advances per stage is the latent, which the rest of this asserts: the second stage
-        // guides off the first's video and carries the first's audio forward.
         Assert.Same(
             Assert.Single(bridge.Graph.NodesOfType<LTXVConditioningNode>()),
             first.Positive.Connection?.Node);
@@ -641,11 +577,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Audio normally advances with the video, each stage re-sampling what the last produced.
-    /// <c>reuseAudio</c> freezes it after the first stage instead, so every later stage conditions
-    /// on the same audio track. Three stages are the minimum that tells the two apart.
-    /// </summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -678,12 +609,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// After stage 0 runs, the live generated media has moved on to stage 0's output. An authored
-    /// <c>Base</c> reference on stage 1 must not follow it — it stays on the host base image, and
-    /// because stage 0's guide resolved to that same image the preprocess is deduplicated rather
-    /// than rebuilt. <c>PreviousStage</c> is the control that does follow the live media.
-    /// </summary>
     [Theory]
     [InlineData("Base", false, 1)]
     [InlineData("PreviousStage", true, 2)]
@@ -709,26 +634,17 @@ public class Ltx2StageChainContractTests
         Assert.NotNull(guideImage);
 
         Assert.Equal(followsLiveMedia, ReachesUpstream(bridge, guideImage, first.Id));
-        // Both arms trace to the base image; only the live-media one goes through stage 0 to reach it.
         Assert.True(ReachesUpstream(bridge, guideImage, BaseImage(bridge).Id));
         Assert.Equal(
             expectedPreprocessNodes,
             bridge.Graph.NodesOfType<LTXVPreprocessNode>().Count);
 
-        // Whichever guide it picks, stage 1 still refines stage 0's latent.
         Assert.Same(OutputOf(bridge, first).VideoLatent, secondGuide.LatentInput.Connection);
 
         live.AssertAllLive(first, second, secondGuide);
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Between core's base pass and the stage runner the live VAE is the host checkpoint's, and the
-    /// captured <c>Generated</c> reference carries it: under production steps core's video root is
-    /// pruned at 11.05, so the reference reverts to the base image rather than staying an LTX chain.
-    /// Neither leaks into the stages — every LTX node in both stages encodes and decodes through the
-    /// architecture's own video VAE loader, and the live VAE is that loader again by the end.
-    /// </summary>
     [Fact]
     public async Task A_generated_reference_keeps_the_host_vae_out_of_the_ltx_stage_chain()
     {
@@ -746,8 +662,7 @@ public class Ltx2StageChainContractTests
         VAELoaderNode ltxVae = Assert.Single(bridge.Graph.NodesOfType<VAELoaderNode>());
         CheckpointLoaderSimpleNode hostCheckpoint = Assert.Single(
             bridge.Graph.NodesOfType<CheckpointLoaderSimpleNode>());
-        // Positive control: two distinct VAEs really are in play, and core's base decode uses the
-        // host's.
+        // The host and LTX VAEs are deliberately distinct.
         Assert.Same(hostCheckpoint, BaseImage(bridge).Vae.Connection?.Node);
 
         Assert.Equal(hostCheckpoint.Id, $"{new StageRefStore(generator).Generated.Vae.Path[0]}");
@@ -763,13 +678,7 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    // ---- pixel upscale over a sibling extension's audio track ---------------------------
 
-    /// <summary>
-    /// Plants the AceStepFun audio decode a sibling extension publishes at its reserved node id.
-    /// Nothing in core or VideoStages produces one, so a clip naming <c>audio0</c> has no other
-    /// source. Priority 11.05 puts it in place before the stage runner reads it.
-    /// </summary>
     private static WorkflowGenerator.WorkflowGenStep PublishAceStepFunAudioTrackStep(int track) =>
         new(g =>
         {
@@ -777,7 +686,6 @@ public class Ltx2StageChainContractTests
             bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(track));
         }, Constants.WorkflowStepPriority.DropCoreImageToVideoOutput);
 
-    /// <summary>No sampler may be reachable from its own inputs.</summary>
     private static void AssertNoStageFeedsItself(WorkflowBridge bridge)
     {
         Assert.All(bridge.Graph.NodesOfType<SwarmKSamplerNode>(), sampler => Assert.False(
@@ -786,12 +694,6 @@ public class Ltx2StageChainContractTests
                 + "back into itself."));
     }
 
-    /// <summary>
-    /// A pixel upscale re-encodes the previous stage's decoded frames, so the retargeted post-chain
-    /// decodes sit downstream of the stage that a later stage reads from. The clip's length is
-    /// driven by the sibling extension's audio track, and that measurement must be taken off the
-    /// track itself: reading it off the retargeted audio decode would close a cycle.
-    /// </summary>
     [Theory]
     [InlineData(2)]
     [InlineData(3)]
@@ -821,8 +723,7 @@ public class Ltx2StageChainContractTests
             bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
         Assert.Same(track, length.AudioInput.Connection?.Node);
 
-        // The pixel upscale is what makes the cycle possible; without it there is nothing to
-        // prove. It is the uncropped 1.5x scale — the cropped 768 one is the next stage's framing.
+        // The uncropped 1.5x scale creates the cycle-prone pixel path.
         Assert.Single(
             bridge.Graph.NodesOfType<ImageScaleNode>(),
             scale => scale.Width.LiteralAsInt() == 768
@@ -833,13 +734,7 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    // ---- Base2Edit stage references -----------------------------------------------------
 
-    /// <summary>
-    /// Publishes a Base2Edit edit-stage image the way the sibling extension does — a real image node
-    /// plus the <c>b2e.published.edit.{n}</c> handoff — between the drop of core's video root and
-    /// the stage runner. No production step writes that key, so the reference has no other source.
-    /// </summary>
     private static WorkflowGenerator.WorkflowGenStep PublishBase2EditImageStep(int editStageIndex) =>
         new(g =>
         {
@@ -875,12 +770,6 @@ public class Ltx2StageChainContractTests
             g.NodeHelpers[$"b2e.published.edit.{editStageIndex}"] = payload.ToString(Formatting.None);
         }, Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);
 
-    /// <summary>
-    /// A clip reference naming a published Base2Edit edit stage guides the stage from that image at
-    /// the authored ref strength. Image-to-video, because a Base2Edit reference is rejected outright
-    /// on a text-to-video request; the stage's own image reference is stripped so the published
-    /// image is the only guide source in the graph.
-    /// </summary>
     [Fact]
     public async Task Native_ltx_stage_can_use_base2edit_edit_stage_as_clip_ref_image()
     {
@@ -910,11 +799,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Nothing publishes a Base2Edit stage in a plain VideoStages request, so a reference to one
-    /// warns by index and the clip generates without a guide rather than failing. Both an in-range
-    /// and an out-of-range index take the same branch — the key is simply absent.
-    /// </summary>
     [Theory]
     [InlineData("edit0", "Base2Edit stage 0 does not exist")]
     [InlineData("edit99", "Base2Edit stage 99 does not exist")]

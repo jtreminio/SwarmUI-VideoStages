@@ -135,11 +135,7 @@ internal static class LtxPostChainRebuilder
         ComfyNode dedicatedDecode =
             AddDecode(bridge, recipe.VaeOutput, newSeparate.VideoLatent, decodeConfig);
 
-        LTXVAudioVAEDecodeNode dedicatedAudioDecode = bridge.AddNode(
-            new LTXVAudioVAEDecodeNode().With(Samples: newSeparate.AudioLatent));
-        dedicatedAudioDecode.AudioVae.ConnectToUntyped(recipe.AudioVaeOutput);
-
-        return new MediaRef
+        MediaRef result = new()
         {
             Output = dedicatedDecode.Outputs[0],
             DataType = WGNodeData.DT_VIDEO,
@@ -148,13 +144,17 @@ internal static class LtxPostChainRebuilder
             Height = outputHeight,
             Frames = outputFrames ?? currentOutputMedia.Frames,
             FPS = outputFps ?? currentOutputMedia.FPS,
-            AttachedAudio = new MediaRef
-            {
-                Output = dedicatedAudioDecode.Audio,
-                DataType = WGNodeData.DT_AUDIO,
-                Compat = currentOutputMedia.Compat
-            }
         };
+        AttachDecodedLtxAudio(
+            bridge,
+            result,
+            new MediaRef
+            {
+                Output = recipe.AudioVaeOutput,
+                DataType = WGNodeData.DT_AUDIOVAE,
+                Compat = currentOutputMedia.Compat
+            });
+        return result;
     }
 
     public static void AttachDecodedLtxAudio(
@@ -179,9 +179,17 @@ internal static class LtxPostChainRebuilder
             return;
         }
 
-        LTXVAudioVAEDecodeNode audioDecode = bridge.AddNode(
-            new LTXVAudioVAEDecodeNode().With(Samples: separate.AudioLatent));
-        audioDecode.AudioVae.ConnectFrom(audioVae);
+        LTXVAudioVAEDecodeNode audioDecode = bridge.Graph
+            .NodesOfType<LTXVAudioVAEDecodeNode>()
+            .FirstOrDefault(node =>
+                ReferenceEquals(node.Samples.Connection, separate.AudioLatent)
+                && ReferenceEquals(node.AudioVae.Connection, audioVae.Output));
+        if (audioDecode is null)
+        {
+            audioDecode = bridge.AddNode(
+                new LTXVAudioVAEDecodeNode().With(Samples: separate.AudioLatent));
+            audioDecode.AudioVae.ConnectFrom(audioVae);
+        }
 
         currentMedia.AttachedAudio = new MediaRef
         {

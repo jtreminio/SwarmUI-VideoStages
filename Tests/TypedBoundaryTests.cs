@@ -501,7 +501,7 @@ public class TypedBoundaryTests
     }
 
     [Fact]
-    public void AttachAudio_CreatesDecodeNodeInWorkflow()
+    public void AttachAudio_ReusesExistingDecodeNode()
     {
         JObject workflow = BuildLtxWorkflow();
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -516,11 +516,92 @@ public class TypedBoundaryTests
 
         Assert.NotNull(media.AttachedAudio);
         Assert.Equal(WGNodeData.DT_AUDIO, media.AttachedAudio.DataType);
+        Assert.Equal("6", media.AttachedAudio.Output.Node.Id);
+        Assert.Single(bridge.Graph.NodesOfType<LTXVAudioVAEDecodeNode>());
+    }
 
-        string audioNodeId = media.AttachedAudio.Output.Node.Id;
-        JObject audioNode = workflow[audioNodeId] as JObject;
-        Assert.NotNull(audioNode);
-        Assert.Equal(LTXVAudioVAEDecodeNode.ClassType, $"{audioNode["class_type"]}");
+    [Fact]
+    public void AttachAudio_CreatesDecodeNodeWhenMissing()
+    {
+        JObject workflow = BuildLtxWorkflow();
+        workflow.Remove("6");
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        MediaRef media = new()
+        {
+            Output = bridge.ResolvePath(new JArray("5", 0)),
+            DataType = WGNodeData.DT_VIDEO,
+        };
+        MediaRef audioVae = new()
+        {
+            Output = bridge.ResolvePath(new JArray("2", 0)),
+            DataType = WGNodeData.DT_AUDIOVAE,
+        };
+
+        LtxPostChainRebuilder.AttachDecodedLtxAudio(bridge, media, audioVae);
+
+        LTXVAudioVAEDecodeNode audioDecode = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVAudioVAEDecodeNode>());
+        Assert.Same(audioDecode.Audio, media.AttachedAudio.Output);
+        Assert.Same(audioDecode.AudioVae.Connection, audioVae.Output);
+    }
+
+    [Fact]
+    public void AttachAudio_DoesNotReuseADecoderWithAnotherAudioVae()
+    {
+        JObject workflow = BuildLtxWorkflow();
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        UnknownNode requestedAudioVae = bridge.AddStub("UnitTest_AudioVae", "alternate-audio-vae")
+            .WithOutputs(WGNodeData.DT_AUDIOVAE);
+        MediaRef media = new()
+        {
+            Output = bridge.ResolvePath(new JArray("5", 0)),
+            DataType = WGNodeData.DT_VIDEO,
+        };
+        MediaRef audioVae = new()
+        {
+            Output = requestedAudioVae.GetOutput(0),
+            DataType = WGNodeData.DT_AUDIOVAE,
+        };
+
+        LtxPostChainRebuilder.AttachDecodedLtxAudio(bridge, media, audioVae);
+
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXVAudioVAEDecodeNode>().Count);
+        LTXVAudioVAEDecodeNode selected = Assert.IsType<LTXVAudioVAEDecodeNode>(
+            media.AttachedAudio.Output.Node);
+        Assert.Same(requestedAudioVae.GetOutput(0), selected.AudioVae.Connection);
+    }
+
+    [Fact]
+    public void AttachAudio_ReplacesAnUnrelatedDecodedAttachment()
+    {
+        JObject workflow = BuildLtxWorkflow();
+        workflow.Remove("6");
+        WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        UnknownNode upload = bridge.AddStub("UnitTest_UploadAudio", "upload")
+            .WithOutputs(WGNodeData.DT_AUDIO);
+        MediaRef media = new()
+        {
+            Output = bridge.ResolvePath(new JArray("5", 0)),
+            DataType = WGNodeData.DT_VIDEO,
+            AttachedAudio = new MediaRef
+            {
+                Output = upload.GetOutput(0),
+                DataType = WGNodeData.DT_AUDIO,
+            },
+        };
+        MediaRef audioVae = new()
+        {
+            Output = bridge.ResolvePath(new JArray("2", 0)),
+            DataType = WGNodeData.DT_AUDIOVAE,
+        };
+
+        LtxPostChainRebuilder.AttachDecodedLtxAudio(bridge, media, audioVae);
+
+        LTXVAudioVAEDecodeNode audioDecode = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVAudioVAEDecodeNode>());
+        Assert.Same(audioDecode.Audio, media.AttachedAudio.Output);
+        Assert.NotSame(upload.GetOutput(0), media.AttachedAudio.Output);
     }
 
     [Fact]

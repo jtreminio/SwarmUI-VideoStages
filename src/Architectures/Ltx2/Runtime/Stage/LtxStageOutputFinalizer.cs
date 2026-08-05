@@ -92,7 +92,6 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
 
         LtxPostChainRebuilder.AttachDecodedLtxAudio(bridge, currentMedia, audioVae);
 
-        // FromWGNodeData preserves latent attachments, so require decoded audio explicitly.
         if (currentMedia.AttachedAudio is MediaRef attachedAudio
             && attachedAudio.DataType == WGNodeData.DT_AUDIO)
         {
