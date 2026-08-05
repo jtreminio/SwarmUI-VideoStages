@@ -42,7 +42,7 @@ internal static class ImageReferencePlanCompiler
         {
             return (ImageReferenceSourceKind.Refiner, null);
         }
-        if (ImageReference.TryParseBase2EditStageIndex(rawSource, out int editStage))
+        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(rawSource, out int editStage))
         {
             return (ImageReferenceSourceKind.Base2Edit, editStage);
         }

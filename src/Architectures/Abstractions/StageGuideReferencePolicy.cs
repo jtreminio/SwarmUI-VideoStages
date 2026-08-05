@@ -66,11 +66,11 @@ internal readonly record struct StageGuideReferencePolicy
         {
             return new(StageGuideReferenceKind.PreviousStage, null);
         }
-        if (ImageReference.TryParseExplicitStageIndex(raw, out int stageIndex))
+        if (ImageReferenceSyntax.TryParseExplicitStageIndex(raw, out int stageIndex))
         {
             return new(StageGuideReferenceKind.ExplicitStage, stageIndex);
         }
-        if (ImageReference.TryParseBase2EditStageIndex(raw, out int editStageIndex))
+        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(raw, out int editStageIndex))
         {
             return new(StageGuideReferenceKind.Base2Edit, editStageIndex);
         }

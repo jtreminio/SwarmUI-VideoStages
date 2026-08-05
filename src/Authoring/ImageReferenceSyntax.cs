@@ -1,7 +1,7 @@
 namespace VideoStages;
 
 /// <summary>Parses and formats the authored stage-reference source syntax (<c>Stage3</c>, <c>edit2</c>).</summary>
-public static class ImageReference
+public static class ImageReferenceSyntax
 {
     private const string VideoStagePrefix = "Stage";
     private const string Base2EditStagePrefix = "edit";
@@ -11,6 +11,8 @@ public static class ImageReference
 
     public static bool TryParseBase2EditStageIndex(string rawValue, out int stageIndex) =>
         TryParseNonNegativeIndexAfterPrefix(StringUtils.Compact(rawValue), Base2EditStagePrefix, out stageIndex);
+
+    public static string FormatExplicitStageIndex(int stageIndex) => $"{VideoStagePrefix}{stageIndex}";
 
     public static string FormatBase2EditStageIndex(int stageIndex) => $"{Base2EditStagePrefix}{stageIndex}";
 

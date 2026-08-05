@@ -13,7 +13,7 @@ public class ImageReferenceSyntaxTests
     [InlineData("Stage00", 0)]
     public void Explicit_stage_reference_parses_expected_index(string rawValue, int expectedIndex)
     {
-        Assert.True(ImageReference.TryParseExplicitStageIndex(rawValue, out int actualIndex));
+        Assert.True(ImageReferenceSyntax.TryParseExplicitStageIndex(rawValue, out int actualIndex));
         Assert.Equal(expectedIndex, actualIndex);
     }
 
@@ -26,7 +26,7 @@ public class ImageReferenceSyntaxTests
     [InlineData("Staging")]
     public void Invalid_stage_reference_is_rejected(string rawValue)
     {
-        Assert.False(ImageReference.TryParseExplicitStageIndex(rawValue, out int actualIndex));
+        Assert.False(ImageReferenceSyntax.TryParseExplicitStageIndex(rawValue, out int actualIndex));
         Assert.Equal(-1, actualIndex);
     }
 
@@ -36,7 +36,7 @@ public class ImageReferenceSyntaxTests
     [InlineData("EDIT12", 12)]
     public void Base2Edit_stage_reference_parses_expected_index(string rawValue, int expectedIndex)
     {
-        Assert.True(ImageReference.TryParseBase2EditStageIndex(rawValue, out int actualIndex));
+        Assert.True(ImageReferenceSyntax.TryParseBase2EditStageIndex(rawValue, out int actualIndex));
         Assert.Equal(expectedIndex, actualIndex);
     }
 
@@ -49,7 +49,7 @@ public class ImageReferenceSyntaxTests
     [InlineData("Edit Stage 0")]
     public void Invalid_base2edit_stage_reference_is_rejected(string rawValue)
     {
-        Assert.False(ImageReference.TryParseBase2EditStageIndex(rawValue, out int actualIndex));
+        Assert.False(ImageReferenceSyntax.TryParseBase2EditStageIndex(rawValue, out int actualIndex));
         Assert.Equal(-1, actualIndex);
     }
 

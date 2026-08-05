@@ -560,11 +560,11 @@ internal static class RequestReader
         {
             return stageIndex == 0 ? defaultReference : DefaultPreviousStageReference;
         }
-        if (ImageReference.TryParseExplicitStageIndex(compact, out int explicitStage))
+        if (ImageReferenceSyntax.TryParseExplicitStageIndex(compact, out int explicitStage))
         {
             if (explicitStage < stageIndex)
             {
-                return $"Stage{explicitStage}";
+                return ImageReferenceSyntax.FormatExplicitStageIndex(explicitStage);
             }
             DocumentJson.Warn(
                 warn,
@@ -572,9 +572,9 @@ internal static class RequestReader
                 + $"(must reference a strictly previous stage). Using '{defaultReference}' instead.");
             return defaultReference;
         }
-        if (ImageReference.TryParseBase2EditStageIndex(compact, out int editStage))
+        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(compact, out int editStage))
         {
-            return ImageReference.FormatBase2EditStageIndex(editStage);
+            return ImageReferenceSyntax.FormatBase2EditStageIndex(editStage);
         }
 
         DocumentJson.Warn(
