@@ -1,8 +1,11 @@
+using Newtonsoft.Json.Linq;
 using System.IO;
+using SwarmUI.Accounts;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Utils;
 using SwarmUI.Text2Image;
+using SwarmUI.WebAPI;
 using VideoStages.Architectures;
 
 namespace VideoStages;
@@ -30,11 +33,15 @@ public class VideoStagesExtension : Extension
     {
         Logs.Info("VideoStages Extension initializing...");
         ComfyTyped.Generated.NodeRegistrations.EnsureRegistered();
-        VideoStages.Generated.NodeRegistrations.EnsureRegistered();
+        Generated.NodeRegistrations.EnsureRegistered();
         VideoArchitectureManifest.RegisterProductionDependencies();
         RegisterParameters();
         RegisterComfyNodes();
-        VideoStagesApi.Register();
+        API.RegisterAPICall(
+            VideoStagesGetArchitectureCatalog,
+            false,
+            Permissions.FundamentalGenerateTabAccess);
+        VideoArchitectureManifest.RegisterProductionApiRoutes();
         AttachPromptMetadataRestorer("prompt");
         AttachPromptMetadataRestorer("negativeprompt");
         CoreImageToVideoStep =
@@ -130,4 +137,8 @@ public class VideoStagesExtension : Extension
         ComfyUISelfStartBackend.CustomNodePaths.Add(nodeFolder);
         Logs.Init($"VideoStages: added {nodeFolder} to ComfyUI CustomNodePaths");
     }
+
+    public static Task<JObject> VideoStagesGetArchitectureCatalog(Session session)
+        => Task.FromResult(ArchitectureCatalogSerializer.Serialize(
+            VideoArchitectureRegistry.Production.ForSession(session)));
 }

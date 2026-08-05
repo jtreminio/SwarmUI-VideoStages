@@ -1257,7 +1257,7 @@ public class ArchitectureFoundationTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        JObject catalog = await VideoStagesApi.VideoStagesGetArchitectureCatalog(null);
+        JObject catalog = await VideoStagesExtension.VideoStagesGetArchitectureCatalog(null);
 
         Assert.Equal(2, catalog.Value<int>("schemaVersion"));
         Assert.Equal(["schemaVersion", "architectures", "models"], Keys(catalog));
@@ -1379,7 +1379,7 @@ public class ArchitectureFoundationTests
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
-        JObject catalog = await VideoStagesApi.VideoStagesGetArchitectureCatalog(
+        JObject catalog = await VideoStagesExtension.VideoStagesGetArchitectureCatalog(
             RestrictedSession(models.VideoModel.Name));
 
         Assert.DoesNotContain(
