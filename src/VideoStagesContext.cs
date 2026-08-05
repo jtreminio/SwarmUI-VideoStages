@@ -21,7 +21,7 @@ internal static class VideoStagesContext
     private static readonly ConditionalWeakTable<T2IParamInput, VideoStagesSpec> PromptParseCache = new();
 
     public static VideoStagesSpec GetVideoStagesSpec(this WorkflowGenerator g) =>
-        Cache.GetValue(g, VideoStagesSpecParser.Parse);
+        Cache.GetValue(g, RequestReader.Read);
 
     public static VideoStagesSpec GetVideoStagesSpecForPromptParse(T2IParamInput input) =>
         PromptParseCache.GetValue(input, ParseForPromptTag);
@@ -69,7 +69,7 @@ internal static class VideoStagesContext
             Features = [],
             ModelFolderFormat = "/"
         };
-        return VideoStagesSpecParser.Parse(generator);
+        return RequestReader.Read(generator);
     }
 
     private static VideoExecutionPlanContext CompilePlan(WorkflowGenerator g)

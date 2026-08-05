@@ -175,7 +175,7 @@ export const normalizeClip = (
             ? effectiveFps
             : defaults.fps,
     );
-    // A initVideoClip clip's duration IS its used source range.
+    // An init-video clip uses its selected source range as its duration.
     const rawDuration =
         initVideo?.lengthSeconds ??
         numberOr(rawClip.duration, defaults.frames / fps);
@@ -240,7 +240,7 @@ export const normalizeClip = (
     // Preserved exactly as authored: a source that cannot supply a length is
     // reported by architecture diagnostics, never silently erased here. Only
     // the mutual exclusion between the two flags is enforced, with ControlNet
-    // precedence matching VideoClipSpecParser and AudioLengthPlanCompiler.
+    // precedence matching RequestReader and AudioLengthPlanCompiler.
     const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
     const clipLengthFromAudio =
         !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;

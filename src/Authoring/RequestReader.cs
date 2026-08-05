@@ -1,0 +1,634 @@
+using System.Globalization;
+using Newtonsoft.Json.Linq;
+using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Text2Image;
+using VideoStages.Planning;
+
+namespace VideoStages;
+
+internal static class RequestReader
+{
+    private const double DefaultControl = 0.5;
+    private const double FirstStageControl = 1.0;
+    private const double DefaultUpscale = 1.0;
+    private const string DefaultUpscaleMethod = "pixel-lanczos";
+    private const string DefaultGeneratedReference = "Generated";
+    private const string DefaultPreviousStageReference = "PreviousStage";
+
+    private sealed record StageDefaults(
+        double Control,
+        double Upscale,
+        string UpscaleMethod,
+        int Steps,
+        double CfgScale,
+        string Sampler,
+        string Scheduler);
+
+    private sealed record ClipReadContext(
+        StageDefaults StageDefaults,
+        bool IsTextToVideoRootWorkflow,
+        int Fps,
+        PromptParser.VideoStageTagData Tags,
+        Action<string> Warn);
+
+    public static VideoStagesSpec Read(WorkflowGenerator g)
+    {
+        LegacyVideoSwapRequestSnapshot legacyVideoSwap = CaptureLegacyVideoSwap(g.UserInput);
+        Action<string> warn =
+            warning => PlanDiagnosticReporter.TrackRequestWarning(g.UserInput, warning);
+        VideoStagesJsonDocument document = VideoStagesJsonReader.ReadDocument(g);
+        PromptParser.VideoStageTagData tags = VideoStagesPromptSection.IsActive(g)
+            ? PromptParser.ExtractTagData(
+                g.UserInput.Get(T2IParamTypes.Prompt, ""),
+                g.UserInput)
+            : new PromptParser.VideoStageTagData();
+
+        (int? rawWidth, int? rawHeight, int? rawFps) = PromptOverrideApplier.ApplyTopLevel(
+            tags, document.Width, document.Height, document.Fps, warn);
+        PromptOverrideApplier.ApplyClipAndStage(document.Entries, tags, warn);
+
+        int width = ResolveWidth(g, rawWidth);
+        int height = ResolveHeight(g, rawHeight);
+        int fps = ResolveFps(g, rawFps);
+        bool isTextToVideo = RootHostWorkflowFacts.IsTextToVideoRootWorkflow(g);
+        bool hasConfiguredResolution = rawWidth is > 0 && rawHeight is > 0;
+        if (document.Entries.Count == 0)
+        {
+            return new VideoStagesSpec(
+                width,
+                height,
+                fps,
+                isTextToVideo,
+                [],
+                hasConfiguredResolution)
+            {
+                LegacyVideoSwap = legacyVideoSwap,
+            };
+        }
+
+        ClipReadContext context = new(
+            ReadDefaults(g),
+            isTextToVideo,
+            fps,
+            tags,
+            warn);
+
+        List<ClipSpec> clips = [];
+        int nextStageId = 0;
+        for (int clipIndex = 0; clipIndex < document.Entries.Count; clipIndex++)
+        {
+            JObject clipObject = document.Entries[clipIndex];
+            if (VideoStagesJsonReader.GetOptionalBool(clipObject, "skipped", false))
+            {
+                break;
+            }
+            if (VideoStagesJsonReader.GetArray(clipObject, "stages") is null)
+            {
+                VideoStagesJsonReader.Warn(
+                    warn,
+                    $"VideoStages: Entry {clipIndex} has no stages array and was ignored.");
+                continue;
+            }
+
+            ClipSpec clip = ReadClip(
+                clipObject,
+                clipIndex,
+                nextStageId,
+                context);
+            if (clip.Stages.Count == 0
+                && clip.InitVideo is null
+                && clip.AuthoredStages.Count == 0)
+            {
+                continue;
+            }
+
+            nextStageId += clip.Stages.Count;
+            clips.Add(clip);
+        }
+
+        return new VideoStagesSpec(
+            width,
+            height,
+            fps,
+            isTextToVideo,
+            clips,
+            hasConfiguredResolution,
+            TimelineAudioSegmentSpecParser.Parse(
+                document.AudioTracks,
+                document.Entries,
+                warn))
+        {
+            LegacyVideoSwap = legacyVideoSwap,
+        };
+    }
+
+    private static ClipSpec ReadClip(
+        JObject clipObject,
+        int clipIndex,
+        int firstStageId,
+        ClipReadContext context)
+    {
+        string location = $"Clip {clipIndex}";
+        double duration = VideoStagesJsonReader.GetOptionalDouble(
+            clipObject, "duration", 0, location, context.Warn);
+        string audioSource = NormalizeAudioSource(
+            VideoStagesJsonReader.GetString(clipObject, "audioSource"));
+        bool saveAudioTrack = VideoStagesJsonReader.GetOptionalBool(
+            clipObject, "saveAudioTrack", false);
+        bool clipLengthFromAudio = VideoStagesJsonReader.GetOptionalBool(
+            clipObject, "clipLengthFromAudio", false);
+        bool clipLengthFromControlNet = VideoStagesJsonReader.GetOptionalBool(
+            clipObject, "clipLengthFromControlNet", false);
+        bool reuseAudio = VideoStagesJsonReader.GetOptionalBool(
+            clipObject, "reuseAudio", false);
+        if (!double.IsFinite(duration) || duration < 0)
+        {
+            VideoStagesJsonReader.Warn(
+                context.Warn,
+                $"VideoStages: {location} duration must be finite and non-negative; ignoring it.");
+            duration = 0;
+        }
+
+        int? clipFrames = null;
+        if (duration > 0)
+        {
+            try
+            {
+                clipFrames = ClipTimelineSpecParser.CalculateStructuralFrameCount(
+                    duration,
+                    context.Fps);
+            }
+            catch (OverflowException)
+            {
+                VideoStagesJsonReader.Warn(
+                    context.Warn,
+                    $"VideoStages: {location} duration at {context.Fps} fps exceeds the "
+                        + "supported frame range and was ignored.");
+            }
+        }
+
+        IReadOnlyList<IcLoraSpec> icLoras =
+            VideoStageResourceParser.ParseIcLoras(clipObject, context.Warn);
+        List<JObject> rawStages = VideoStagesJsonReader.GetObjectArray(clipObject, "stages");
+        IReadOnlyList<ImageRefSpec> references =
+            VideoStageResourceParser.ParseImageReferences(
+                clipObject,
+                clipIndex,
+                context.Warn);
+        InitVideoSpec initVideo = ClipTimelineSpecParser.ParseInitVideo(
+            clipObject, duration, context.Fps, clipIndex, context.Warn);
+        List<StageSpec> stages = ReadStages(
+            rawStages,
+            clipIndex,
+            firstStageId,
+            references.Count,
+            initVideo is not null,
+            context);
+        ApplyRetake(stages, clipObject, clipIndex, duration, initVideo is not null, context);
+
+        return new ClipSpec(
+            Id: clipIndex,
+            Frames: clipFrames,
+            AudioSource: audioSource,
+            IcLoras: icLoras,
+            SaveAudioTrack: saveAudioTrack,
+            ClipLengthFromAudio: clipLengthFromAudio,
+            ClipLengthFromControlNet: clipLengthFromControlNet,
+            ReuseAudio: reuseAudio,
+            UploadedAudio: VideoStagesJsonReader.GetEmbeddedUpload(
+                clipObject, UploadContainers.ClipAudio),
+            ImageRefs: references,
+            Stages: stages,
+            Loras: VideoStageResourceParser.ParseLoras(clipObject, context.Warn),
+            PromptWindows: SortWindows(context.Tags.ClipWindows.GetValueOrDefault(clipIndex)),
+            BoundaryOut: BoundaryPolicy.NormalizeAuthoredMode(
+                VideoStagesJsonReader.GetString(clipObject, "boundaryOut")),
+            BoundaryOutOverlap: Math.Max(
+                0,
+                VideoStagesJsonReader.GetOptionalInt(
+                    clipObject,
+                    "boundaryOutOverlap",
+                    0,
+                    location,
+                    context.Warn)),
+            InitVideo: initVideo,
+            BoundaryOutCarryAudio: VideoStagesJsonReader.GetOptionalBool(
+                clipObject,
+                "boundaryOutCarryAudio",
+                false),
+            ReferenceFraming: ReferenceFraming.Parse(
+                VideoStagesJsonReader.GetString(clipObject, "refFraming")))
+        {
+            AuthoredArchitectureHint = VideoStagesJsonReader.GetString(
+                clipObject,
+                "architectureHint")?.Trim().ToLowerInvariant(),
+            AuthoredModelProfileHint = VideoStagesJsonReader.GetString(
+                clipObject,
+                "modelProfileId")?.Trim().ToLowerInvariant(),
+            AuthoredStages = ProjectAuthoredStages(rawStages),
+        };
+    }
+
+    private static List<StageSpec> ReadStages(
+        IReadOnlyList<JObject> rawStages,
+        int clipIndex,
+        int firstStageId,
+        int referenceCount,
+        bool initVideoClip,
+        ClipReadContext context)
+    {
+        List<StageSpec> stages = [];
+        for (int stageIndex = 0; stageIndex < rawStages.Count; stageIndex++)
+        {
+            JObject stage = rawStages[stageIndex];
+            if (VideoStagesJsonReader.GetOptionalBool(stage, "skipped", false))
+            {
+                break;
+            }
+            StageSpec parsed = ReadStage(
+                stage,
+                clipIndex,
+                stageId: firstStageId + stages.Count,
+                rawStageIndex: stageIndex,
+                clipStageIndex: stages.Count,
+                defaults: context.StageDefaults,
+                clipRefCount: referenceCount,
+                isTextToVideoRootWorkflow: context.IsTextToVideoRootWorkflow,
+                initVideoClip: initVideoClip,
+                warn: context.Warn);
+            if (parsed is not null)
+            {
+                stages.Add(parsed);
+            }
+        }
+        return stages;
+    }
+
+    private static StageSpec? ReadStage(
+        JObject stage,
+        int clipIndex,
+        int stageId,
+        int rawStageIndex,
+        int clipStageIndex,
+        StageDefaults defaults,
+        int clipRefCount,
+        bool isTextToVideoRootWorkflow,
+        bool initVideoClip,
+        Action<string> warn)
+    {
+        string location = $"Clip {clipIndex} stage {rawStageIndex}";
+        string model = VideoStagesJsonReader.GetString(stage, "model")?.Trim();
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            VideoStagesJsonReader.Warn(
+                warn,
+                $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has no model and was ignored.");
+            return null;
+        }
+
+        double control = NormalizeControl(VideoStagesJsonReader.GetOptionalDouble(
+            stage, "control", defaults.Control, location, warn));
+        double upscale = NormalizeUpscale(VideoStagesJsonReader.GetOptionalDouble(
+            stage, "upscale", defaults.Upscale, location, warn));
+        string upscaleMethod = VideoStagesJsonReader.GetOptionalString(
+            stage, "upscaleMethod", defaults.UpscaleMethod, location, allowEmpty: false, warn);
+
+        bool isGenerationFirstStage = clipStageIndex == 0 && !initVideoClip;
+        if (isGenerationFirstStage)
+        {
+            control = FirstStageControl;
+            upscale = DefaultUpscale;
+            upscaleMethod = DefaultUpscaleMethod;
+        }
+        else
+        {
+            upscale = Math.Max(0.25, upscale);
+        }
+
+        return new StageSpec(
+            Id: stageId,
+            Control: control,
+            Upscale: upscale,
+            UpscaleMethod: upscaleMethod,
+            Model: model,
+            Steps: Math.Max(1, VideoStagesJsonReader.GetOptionalInt(
+                stage, "steps", defaults.Steps, location, warn)),
+            CfgScale: NormalizeCfgScale(VideoStagesJsonReader.GetOptionalDouble(
+                stage, "cfgScale", defaults.CfgScale, location, warn)),
+            Sampler: VideoStagesJsonReader.GetOptionalString(
+                stage, "sampler", defaults.Sampler, location, allowEmpty: false, warn),
+            Scheduler: VideoStagesJsonReader.GetOptionalString(
+                stage, "scheduler", defaults.Scheduler, location, allowEmpty: false, warn),
+            ImageReference: NormalizeImageReference(
+                VideoStagesJsonReader.GetString(stage, "imageReference"),
+                clipIndex,
+                rawStageIndex,
+                clipStageIndex,
+                isTextToVideoRootWorkflow,
+                warn),
+            ClipStageIndex: clipStageIndex,
+            ClipStageRawIndex: rawStageIndex,
+            ControlNetStrength: ReadControlNetStrength(stage, location, warn),
+            IcLoraStrengths: ReadIcLoraStrengths(stage),
+            ImageRefStrengths: ReadRefStrengths(stage, clipRefCount),
+            ImageRefWasExplicit: VideoStagesJsonReader.HasProperty(stage, "imageReference"),
+            Loras: VideoStageResourceParser.ParseLoras(stage, warn),
+            LoraWeights: VideoStageResourceParser.ParseLoraWeights(stage));
+    }
+
+    private static StageDefaults ReadDefaults(WorkflowGenerator g)
+    {
+        int steps = g.UserInput.TryGet(T2IParamTypes.VideoSteps, out int explicitVideoSteps)
+            ? explicitVideoSteps
+            : g.UserInput.Get(T2IParamTypes.Steps, 8, autoFixDefault: true);
+        double cfgScale = g.UserInput.TryGet(T2IParamTypes.VideoCFG, out double explicitVideoCfg)
+            ? explicitVideoCfg
+            : g.UserInput.Get(T2IParamTypes.CFGScale, 1, autoFixDefault: true);
+        string sampler = ComfyUIBackendExtension.SamplerParam is null
+            ? "euler"
+            : g.UserInput.Get(
+                ComfyUIBackendExtension.SamplerParam,
+                "euler",
+                autoFixDefault: true);
+        string scheduler = ComfyUIBackendExtension.SchedulerParam is null
+            ? "normal"
+            : g.UserInput.Get(
+                ComfyUIBackendExtension.SchedulerParam,
+                "normal",
+                autoFixDefault: true);
+
+        return new StageDefaults(
+            NormalizeControl(DefaultControl),
+            NormalizeUpscale(DefaultUpscale),
+            DefaultUpscaleMethod,
+            Math.Max(1, steps),
+            NormalizeCfgScale(cfgScale),
+            sampler,
+            scheduler);
+    }
+
+    private static LegacyVideoSwapRequestSnapshot CaptureLegacyVideoSwap(T2IParamInput input)
+    {
+        T2IModel swapModel = input.Get(T2IParamTypes.VideoSwapModel, null);
+        bool hasExplicitPercent =
+            input.TryGet(T2IParamTypes.VideoSwapPercent, out double swapPercent);
+        bool hasSwapSectionOverrides =
+            input.SectionParamOverrides.TryGetValue(
+                T2IParamInput.SectionID_VideoSwap,
+                out T2IParamSet swapSection)
+            && swapSection.ValuesInput.Count > 0;
+        return new(
+            swapModel?.Name,
+            hasExplicitPercent,
+            hasExplicitPercent ? swapPercent : null,
+            hasSwapSectionOverrides);
+    }
+
+    private static IReadOnlyList<AuthoredStageModelSpec> ProjectAuthoredStages(
+        IReadOnlyList<JObject> rawStages)
+    {
+        int firstSkipped = -1;
+        List<AuthoredStageModelSpec> authored = [];
+        for (int rawIndex = 0; rawIndex < rawStages.Count; rawIndex++)
+        {
+            JObject stage = rawStages[rawIndex];
+            if (firstSkipped < 0
+                && VideoStagesJsonReader.GetOptionalBool(stage, "skipped", false))
+            {
+                firstSkipped = rawIndex;
+            }
+            string model = VideoStagesJsonReader.GetString(stage, "model");
+            authored.Add(new(
+                rawIndex,
+                model,
+                VideoStagesJsonReader.GetString(stage, "modelProfileId")?.Trim().ToLowerInvariant(),
+                firstSkipped >= 0 || string.IsNullOrWhiteSpace(model)));
+        }
+        return authored;
+    }
+
+    private static void ApplyRetake(
+        List<StageSpec> stages,
+        JObject clipObject,
+        int clipIndex,
+        double duration,
+        bool hasInitVideo,
+        ClipReadContext context)
+    {
+        if (!hasInitVideo || stages.Count == 0)
+        {
+            return;
+        }
+
+        RetakeWindowSpec retake = ClipTimelineSpecParser.ParseRetake(
+            clipObject, context.Fps, clipIndex, duration, context.Warn);
+        if (retake is not null)
+        {
+            stages[^1] = stages[^1] with { RetakeWindow = retake };
+        }
+    }
+
+    private static double? ReadControlNetStrength(
+        JObject stage,
+        string location,
+        Action<string> warn)
+    {
+        if (!VideoStagesJsonReader.HasProperty(stage, "controlNetStrength"))
+        {
+            return null;
+        }
+        double value = VideoStagesJsonReader.GetOptionalDouble(
+            stage,
+            "controlNetStrength",
+            Constants.DefaultStageControlNetStrength,
+            location,
+            warn);
+        return ClampUnitOrDefault(value, Constants.DefaultStageControlNetStrength);
+    }
+
+    private static IReadOnlyList<double> ReadIcLoraStrengths(JObject stage)
+    {
+        if (VideoStagesJsonReader.GetArray(stage, "icLoraStrengths") is not JArray array)
+        {
+            return [];
+        }
+        List<double> strengths = [];
+        foreach (JToken entry in array)
+        {
+            if (entry.Type is JTokenType.Float or JTokenType.Integer)
+            {
+                strengths.Add(ClampUnitOrDefault(
+                    entry.Value<double>(),
+                    Constants.DefaultStageControlNetStrength));
+            }
+            else if (entry.Type == JTokenType.String
+                && double.TryParse(
+                    $"{entry}".Trim(),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out double parsed))
+            {
+                strengths.Add(ClampUnitOrDefault(
+                    parsed,
+                    Constants.DefaultStageControlNetStrength));
+            }
+        }
+        return strengths.AsReadOnly();
+    }
+
+    private static IReadOnlyList<double> ReadRefStrengths(JObject stage, int clipRefCount)
+    {
+        if (clipRefCount <= 0)
+        {
+            return [];
+        }
+
+        List<double> strengths = [];
+        if (VideoStagesJsonReader.GetArray(stage, "refStrengths") is JArray array)
+        {
+            foreach (JToken entry in array)
+            {
+                if (entry.Type is JTokenType.Float or JTokenType.Integer)
+                {
+                    strengths.Add(ClampUnitOrDefault(
+                        entry.Value<double>(), Constants.DefaultStageRefStrength));
+                }
+                else if (entry.Type == JTokenType.String
+                    && double.TryParse(
+                        $"{entry}".Trim(),
+                        NumberStyles.Float,
+                        CultureInfo.InvariantCulture,
+                        out double parsed))
+                {
+                    strengths.Add(ClampUnitOrDefault(parsed, Constants.DefaultStageRefStrength));
+                }
+            }
+        }
+
+        while (strengths.Count < clipRefCount)
+        {
+            strengths.Add(Constants.DefaultStageRefStrength);
+        }
+        if (strengths.Count > clipRefCount)
+        {
+            strengths.RemoveRange(clipRefCount, strengths.Count - clipRefCount);
+        }
+        return strengths;
+    }
+
+    private static string NormalizeImageReference(
+        string rawValue,
+        int clipIndex,
+        int rawStageIndex,
+        int stageIndex,
+        bool isTextToVideoRootWorkflow,
+        Action<string> warn)
+    {
+        if (isTextToVideoRootWorkflow)
+        {
+            if (!string.IsNullOrWhiteSpace(rawValue)
+                && !StringUtils.Equals(StringUtils.Compact(rawValue), DefaultGeneratedReference))
+            {
+                VideoStagesJsonReader.Warn(
+                    warn,
+                    $"VideoStages: Clip {clipIndex} stage {rawStageIndex} uses ImageReference '{rawValue}' on a text-to-video workflow. "
+                    + $"Using '{DefaultGeneratedReference}' instead.");
+            }
+            return DefaultGeneratedReference;
+        }
+
+        string defaultReference = stageIndex == 0
+            ? DefaultGeneratedReference
+            : DefaultPreviousStageReference;
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return defaultReference;
+        }
+
+        string compact = StringUtils.Compact(rawValue);
+        if (StringUtils.Equals(compact, DefaultGeneratedReference))
+        {
+            return DefaultGeneratedReference;
+        }
+        if (StringUtils.Equals(compact, "Base"))
+        {
+            return "Base";
+        }
+        if (StringUtils.Equals(compact, "Refiner"))
+        {
+            return "Refiner";
+        }
+        if (StringUtils.Equals(compact, DefaultPreviousStageReference))
+        {
+            return stageIndex == 0 ? defaultReference : DefaultPreviousStageReference;
+        }
+        if (ImageReference.TryParseExplicitStageIndex(compact, out int explicitStage))
+        {
+            if (explicitStage < stageIndex)
+            {
+                return $"Stage{explicitStage}";
+            }
+            VideoStagesJsonReader.Warn(
+                warn,
+                $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has invalid ImageReference '{rawValue}' "
+                + $"(must reference a strictly previous stage). Using '{defaultReference}' instead.");
+            return defaultReference;
+        }
+        if (ImageReference.TryParseBase2EditStageIndex(compact, out int editStage))
+        {
+            return ImageReference.FormatBase2EditStageIndex(editStage);
+        }
+
+        VideoStagesJsonReader.Warn(
+            warn,
+            $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has invalid ImageReference '{rawValue}'. "
+            + $"Using '{defaultReference}' instead.");
+        return defaultReference;
+    }
+
+    private static int ResolveWidth(WorkflowGenerator g, int? authoredWidth) =>
+        authoredWidth is > 0 ? authoredWidth.Value : g.UserInput.GetImageWidth();
+
+    private static int ResolveHeight(WorkflowGenerator g, int? authoredHeight) =>
+        authoredHeight is > 0 ? authoredHeight.Value : g.UserInput.GetImageHeight();
+
+    private static int ResolveFps(WorkflowGenerator g, int? authoredFps)
+    {
+        if (authoredFps is > 0)
+        {
+            return authoredFps.Value;
+        }
+        return g.UserInput.TryGet(T2IParamTypes.VideoFPS, out int videoFps) && videoFps > 0
+            ? videoFps
+            : 24;
+    }
+
+    private static string NormalizeAudioSource(string audioSource) =>
+        string.IsNullOrWhiteSpace(audioSource)
+            ? Constants.AudioSourceNative
+            : audioSource.Trim();
+
+    private static IReadOnlyList<PromptWindowSpec> SortWindows(List<PromptWindowSpec> windows) =>
+        windows is not { Count: > 0 } ? [] : [.. windows.OrderBy(window => window.Start)];
+
+    private static double ClampUnitOrDefault(double value, double fallback) =>
+        IsFinite(value) ? Math.Clamp(value, 0.0, 1.0) : fallback;
+
+    private static double NormalizeControl(double control) =>
+        TruncateToDecimals(Math.Clamp(control, 0, 1), 2);
+
+    private static double NormalizeUpscale(double upscale) =>
+        Math.Round(upscale * 4, MidpointRounding.AwayFromZero) / 4;
+
+    private static double NormalizeCfgScale(double cfgScale) =>
+        TruncateToDecimals(cfgScale, 1);
+
+    private static double TruncateToDecimals(double value, int decimals)
+    {
+        double factor = Math.Pow(10, decimals);
+        return Math.Truncate(value * factor) / factor;
+    }
+
+    private static bool IsFinite(double value) =>
+        !double.IsNaN(value) && !double.IsInfinity(value);
+}

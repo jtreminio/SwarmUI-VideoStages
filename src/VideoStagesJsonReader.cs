@@ -26,7 +26,7 @@ internal static class VideoStagesJsonReader
 
     private const int ArchitectureHintLegacySchemaVersion = 5;
 
-    /// <summary>Test-only observer of every document key lookup the parser performs, used by the
+    /// <summary>Test-only observer of every document key lookup the request reader performs, used by the
     /// contract fixture test to prove no reader names a key the frontend never emits.</summary>
     internal static Action<JObject, string, bool> KeyProbe;
 

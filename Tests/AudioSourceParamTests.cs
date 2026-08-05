@@ -43,7 +43,7 @@ public class AudioSourceParamTests
         Fixtures.SetVideoStagesConfig(input, BuildConfigJson(value));
         WorkflowGenerator generator = new() { UserInput = input };
 
-        ClipSpec clip = Assert.Single(VideoStagesSpecParser.Parse(generator).Clips);
+        ClipSpec clip = Assert.Single(RequestReader.Read(generator).Clips);
 
         Assert.Equal(value, clip.AudioSource);
     }

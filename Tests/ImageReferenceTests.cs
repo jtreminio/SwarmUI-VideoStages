@@ -42,7 +42,7 @@ public class ImageReferenceTests
             Features = [],
             ModelFolderFormat = "/"
         };
-        return [.. VideoStagesSpecParser.Parse(generator).Clips.SelectMany(c => c.Stages)];
+        return [.. RequestReader.Read(generator).Clips.SelectMany(c => c.Stages)];
     }
 
     private static List<StageSpec> ParseStages(string stagesJson)

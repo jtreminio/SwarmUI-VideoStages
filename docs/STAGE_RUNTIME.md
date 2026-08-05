@@ -13,7 +13,7 @@ contracts, see [`ARCHITECTURE.md`](../ARCHITECTURE.md).
 
 ```text
 hidden authoring document + host request
-    → VideoStagesSpecParser
+    → RequestReader
     → ArchitecturePlanResolver
     → resolved temporal-grid projection
     → VideoExecutionPlanCompiler
@@ -41,7 +41,7 @@ The stages before runtime are:
 
 1. `VideoStagesJsonReader` accepts authoring schema v6. It has one bounded v5
    migration that renames the old `architecture` key to `architectureHint`.
-2. `VideoStagesSpecParser` parses common document data and prompt-section
+2. `RequestReader` reads common document data and prompt-section
    overrides.
 3. `ArchitecturePlanResolver` resolves every authored stage model—including
    skipped stages—through the session-authorized backend registry. Resolved
@@ -271,7 +271,7 @@ Diagnostics divide responsibility:
 
 | Validation concern | Owner and phase |
 |---|---|
-| JSON version, types, IDs, common structural shape | `VideoStagesJsonReader` / `VideoStagesSpecParser` |
+| JSON version, types, IDs, common structural shape | `VideoStagesJsonReader` / `RequestReader` |
 | Model resolution, clip lock, entry mode, common timing/boundary/audio topology | `ArchitecturePlanResolver` / `VideoExecutionPlanCompiler` |
 | Unsupported optional authored features | Common capability validation; warn and omit from the compiled plan |
 | Architecture-specific options and semantic conflicts | Selected module's graph-free compiler |

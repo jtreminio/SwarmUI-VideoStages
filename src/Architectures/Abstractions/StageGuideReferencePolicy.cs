@@ -16,10 +16,6 @@ internal readonly record struct StageGuideReferenceSelection(
     StageGuideReferenceKind Kind,
     int? ReferencedStageIndex);
 
-/// <summary>
-/// Declares which effective, parser-normalized stage guide selectors an architecture consumes.
-/// Selector syntax and stage-order validity remain owned by <see cref="VideoStageSpecParser"/>.
-/// </summary>
 internal readonly record struct StageGuideReferencePolicy
 {
     private const StageGuideReferenceKind AllKnownKinds =

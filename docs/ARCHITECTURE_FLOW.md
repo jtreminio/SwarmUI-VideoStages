@@ -29,7 +29,7 @@ classes whose stock video graph branches have been verified.
 | Catalog loading and feature policy | Common frontend | `getArchitectureCatalogSnapshot`, `loadAuthoritativeArchitectureCatalog`, `refreshAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
 | Architecture-specific authoring behavior | Frontend architecture-gated helpers | `behaviorRegistry.ts`, `authoringPanels.ts`, architecture ID identity modules |
 | Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `ModelsAPI.DoModelDownloadWS` |
-| Document parsing and product planning | Common backend | `VideoStagesSpecParser`, `ArchitecturePlanResolver`, `VideoExecutionPlanCompiler` |
+| Request reading and product planning | Common backend | `RequestReader`, `ArchitecturePlanResolver`, `VideoExecutionPlanCompiler` |
 | Model-family planning and execution | Selected backend module | `IVideoArchitectureModule.ValidateAndCompileClip`, `IVideoGenerationSession` |
 | Runtime dispatch and timeline assembly | Common backend | `VideoArchitectureExecutionHost`, `TimelineAssemblySession` |
 | Final host publication | SwarmUI adapter | `RootRuntimeSession`, `OutputPublisher` |
@@ -310,7 +310,7 @@ The first `Runner` lookup builds and caches one plan per `WorkflowGenerator` thr
 `VideoStagesContext`:
 
 ```text
-VideoStagesJsonReader / VideoStagesSpecParser
+VideoStagesJsonReader / RequestReader
     → ArchitecturePlanResolver
     → EffectiveVideoRequestProjector (first step inside VideoExecutionPlanCompiler)
     → common + architecture plan compilation
@@ -319,8 +319,8 @@ VideoStagesJsonReader / VideoStagesSpecParser
 
 `VideoStagesJsonReader` requires schema version 6 after applying its only
 bounded migration: a version-5 clip's `architecture` field becomes
-`architectureHint`. `VideoStagesSpecParser` applies prompt overrides and parses
-clips, authored stages, source media, dimensions, FPS, and timeline audio into
+`architectureHint`. `RequestReader` applies prompt overrides and reads clips,
+authored stages, source media, dimensions, FPS, and timeline audio into
 `VideoStagesSpec`.
 
 ### B2. Select `ArchitectureId`, project, and compile typed payloads

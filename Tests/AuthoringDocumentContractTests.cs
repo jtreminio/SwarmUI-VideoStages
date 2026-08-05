@@ -98,7 +98,7 @@ public class AuthoringDocumentContractTests
         VideoStagesSpec spec;
         try
         {
-            spec = VideoStagesSpecParser.Parse(new WorkflowGenerator { UserInput = input });
+            spec = RequestReader.Read(new WorkflowGenerator { UserInput = input });
         }
         finally
         {
@@ -184,8 +184,8 @@ public class AuthoringDocumentContractTests
         Assert.Equal("canny", icLora.ControlType);
         Assert.Equal("drive.mp4", icLora.DriveMedia.FileName);
 
-        // The authored stage 1 is skipped, so only stage 0 survives; a initVideoClip clip keeps its
-        // authored stage-0 control instead of the forced full-generation value.
+        // The authored stage 1 is skipped, so only stage 0 survives. With init video, stage 0 keeps
+        // its authored control instead of the forced full-generation value.
         StageSpec stage = Assert.Single(clip.Stages);
         Assert.Equal("ltx-2.3.safetensors", stage.Model);
         Assert.Equal(12, stage.Steps);
@@ -228,7 +228,7 @@ public class AuthoringDocumentContractTests
         T2IParamInput input = new(null);
         Fixtures.SetVideoStagesConfig(input, document.ToString());
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
-            () => VideoStagesSpecParser.Parse(new WorkflowGenerator { UserInput = input }));
+            () => RequestReader.Read(new WorkflowGenerator { UserInput = input }));
         Assert.Contains("document version", error.Message);
     }
 
@@ -246,7 +246,7 @@ public class AuthoringDocumentContractTests
         Fixtures.SetVideoStagesConfig(input, "{}");
         input.Set(VideoStagesExtension.Data, document.ToString());
 
-        VideoStagesSpec spec = VideoStagesSpecParser.Parse(
+        VideoStagesSpec spec = RequestReader.Read(
             new WorkflowGenerator { UserInput = input });
 
         Assert.Equal("ltx2", spec.Clips[0].AuthoredArchitectureHint);
@@ -262,7 +262,7 @@ public class AuthoringDocumentContractTests
         Fixtures.SetVideoStagesConfig(input, "{}");
         input.Set(VideoStagesExtension.Data, document.ToString());
         Assert.Throws<SwarmUserErrorException>(
-            () => VideoStagesSpecParser.Parse(new WorkflowGenerator { UserInput = input }));
+            () => RequestReader.Read(new WorkflowGenerator { UserInput = input }));
     }
 
     [Fact]
@@ -274,7 +274,7 @@ public class AuthoringDocumentContractTests
         Fixtures.SetVideoStagesConfig(input, document.ToString());
 
         Exception error = Record.Exception(
-            () => VideoStagesSpecParser.Parse(new WorkflowGenerator { UserInput = input }));
+            () => RequestReader.Read(new WorkflowGenerator { UserInput = input }));
 
         Assert.False(error is OverflowException);
     }

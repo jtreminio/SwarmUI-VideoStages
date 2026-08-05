@@ -3,8 +3,8 @@ using System.Collections.Immutable;
 namespace VideoStages.Planning;
 
 /// <summary>
-/// The single configuration source allowed to determine clip duration. ControlNet wins when both
-/// duration flags are present, matching the parser and preventing two frame-count nodes from racing.
+/// Selects the only source allowed to determine clip duration. ControlNet wins when both authored
+/// duration flags are set.
 /// </summary>
 internal enum AudioLengthOwner
 {

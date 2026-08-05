@@ -32,19 +32,11 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             new RootVideoStageResizer(generator))
             .ApplyRootAudioMaskDimensionsAfterNativeVideo();
 
-    /// <summary>
-    /// A capture pins the host node it names for the rest of the request — that is what stops a
-    /// timeline stage taking that node over and handing the reference its own output instead. So an
-    /// unwanted capture is not free: it costs the node, and not only to this architecture's clips.
-    /// Capture only a host stage some authored guide or frame reference actually names.
-    /// </summary>
+    // Capturing reserves a host node for the request, so capture only references the plan can use.
     private void CaptureIfReferenced(VideoExecutionPlan plan, StageRefStore.StageKind kind)
     {
         if (plan.Root.DiscardsTextToVideoRoot)
         {
-            // Nothing can consume a host reference here: the spec parser rewrites every stage's
-            // ImageReference to Generated on such a request, and LtxClipRefResolver drops every
-            // non-upload clip ref. Capturing anyway would cost the timeline a node for nothing.
             return;
         }
         (StageGuideReferenceKind guide, ImageReferenceSourceKind reference) = kind switch
