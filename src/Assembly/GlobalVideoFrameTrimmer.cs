@@ -8,7 +8,6 @@ using VideoStages.Execution;
 
 namespace VideoStages;
 
-/// <summary>Applies the host's global frame trim to the authoritative video output.</summary>
 internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
 {
     public bool IsRequested =>
@@ -22,10 +21,18 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
             return;
         }
         using WorkflowBridge bridge = BridgeSync.For(g);
-        ValidateHostInput(bridge);
         RuntimeArtifact current = RuntimeArtifact.Capture(
             g,
             bridge);
+        // Capture nulls audio it cannot resolve, which is indistinguishable downstream from a
+        // video that never had any, so a dropped stream would publish as a silently muted video.
+        if (g.CurrentMedia?.AttachedAudio is not null
+            && current.Media is { AttachedAudio: null })
+        {
+            throw Invariant.Failure(
+                "the attached audio stream required for global frame trim "
+                + "is unavailable in the workflow.");
+        }
         Apply(current, bridge).PublishTo(g);
     }
 
@@ -97,43 +104,6 @@ internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
             },
         };
     }
-
-    /// <summary>
-    /// Validates attached host audio before conversion because an unresolved path would otherwise
-    /// be indistinguishable from intentionally absent audio.
-    /// </summary>
-    private void ValidateHostInput(WorkflowBridge bridge)
-    {
-        WGNodeData audio = g.CurrentMedia?.AttachedAudio;
-        if (audio is null)
-        {
-            return;
-        }
-        if (audio.DataType != WGNodeData.DT_AUDIO
-            || audio.Path is not JArray { Count: 2 } audioPath)
-        {
-            throw Invariant.Failure(
-                "the final video uses global frame trim, but its attached audio "
-                + "is not a decoded audio stream.");
-        }
-        if (g.CurrentMedia.Frames is not > 0
-            || g.CurrentMedia.GetRawFPS() is not > 0)
-        {
-            throw Invariant.Failure(
-                "the final video uses global frame trim, but its frame count or "
-                + "frame rate is unavailable, so attached audio cannot be trimmed in sync.");
-        }
-        ResolveHostOutput(bridge, audioPath, "attached audio");
-    }
-
-    private static INodeOutput ResolveHostOutput(
-        WorkflowBridge bridge,
-        JArray path,
-        string outputKind) =>
-        bridge.ResolvePath(path)
-        ?? throw Invariant.Failure(
-            $"the final {outputKind} stream required for global frame trim "
-            + "is unavailable in the workflow.");
 
     private MediaRef TrimAttachedAudio(
         WorkflowBridge bridge,
