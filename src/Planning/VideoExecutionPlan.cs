@@ -124,7 +124,6 @@ internal enum IntermediateOutputEligibility
 }
 
 internal sealed record StageOutputPlan(
-    bool IsTimelineTerminal,
     IntermediateOutputEligibility IntermediatePolicy,
     bool PreserveConfiguredAudioTrackSave);
 

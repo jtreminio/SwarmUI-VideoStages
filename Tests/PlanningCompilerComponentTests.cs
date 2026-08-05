@@ -480,7 +480,6 @@ public class PlanningCompilerComponentTests
         Assert.Equal(StageInputKind.PreviousStage, plan.Stages[1].Input);
         Assert.False(plan.Stages[1].IsPassthrough);
         Assert.Equal(640, plan.InitVideo.TargetWidth);
-        Assert.True(plan.Stages[1].Output.IsTimelineTerminal);
     }
 
     [Theory]

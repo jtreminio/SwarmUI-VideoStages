@@ -905,6 +905,50 @@ public class Ltx2InitVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
+    /// <summary>
+    /// Trim runs before interpolation. The request's trim counts are source frames, so a trim
+    /// applied after RIFE would cut interpolated frames instead, and would read the doubled frame
+    /// rate when it converted its own trim into an audio offset.
+    /// </summary>
+    [Fact]
+    public async Task A_sourced_only_clip_trims_source_frames_before_it_interpolates()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        const int trimStart = 2;
+        const int trimEnd = 3;
+        const int trimmedFrames = PassthroughFrames - trimStart - trimEnd;
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(MakeDocument(SourcedClip()), post =>
+                {
+                    post["trimvideostartframes"] = trimStart;
+                    post["trimvideoendframes"] = trimEnd;
+                    post["videoframeinterpolationmethod"] = "RIFE";
+                    post["videoframeinterpolationmultiplier"] = 2;
+                }),
+                extraFeatures: ["frameinterps"]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmTrimFramesNode videoTrim =
+            Assert.Single(bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
+        ComfyNode rife = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "RIFE VFI");
+        Assert.Same(videoTrim.IMAGE, rife.FindInput("frames").Connection);
+        Assert.Equal((trimmedFrames * 2) - 1, generator.CurrentMedia.Frames);
+
+        // The audio offset uses the source frame rate, not the interpolated one.
+        TrimAudioDurationNode audioTrim =
+            Assert.IsType<TrimAudioDurationNode>(live.PublishedAudio());
+        Assert.Equal(trimStart / Fps, audioTrim.StartIndex.LiteralAsDouble()!.Value, precision: 6);
+        Assert.Equal(trimmedFrames / Fps, audioTrim.Duration.LiteralAsDouble()!.Value, precision: 6);
+
+        live.AssertAllLive(videoTrim, audioTrim);
+        AssertShippable(bridge, workflow, live);
+    }
+
     [Fact]
     public async Task A_sourced_only_clip_executes_timeline_audio_segments_without_a_sampler()
     {

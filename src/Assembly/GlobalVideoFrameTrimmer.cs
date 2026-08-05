@@ -10,36 +10,14 @@ namespace VideoStages;
 
 internal sealed class GlobalVideoFrameTrimmer(WorkflowGenerator g)
 {
-    public bool IsRequested =>
-        g.UserInput.Get(T2IParamTypes.TrimVideoStartFrames, 0) != 0
-        || g.UserInput.Get(T2IParamTypes.TrimVideoEndFrames, 0) != 0;
-
-    public void Apply()
-    {
-        if (!IsRequested)
-        {
-            return;
-        }
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        RuntimeArtifact current = RuntimeArtifact.Capture(
-            g,
-            bridge);
-        // Capture nulls audio it cannot resolve, which is indistinguishable downstream from a
-        // video that never had any, so a dropped stream would publish as a silently muted video.
-        if (g.CurrentMedia?.AttachedAudio is not null
-            && current.Media is { AttachedAudio: null })
-        {
-            throw Invariant.Failure(
-                "the attached audio stream required for global frame trim "
-                + "is unavailable in the workflow.");
-        }
-        Apply(current, bridge).PublishTo(g);
-    }
+    internal static bool IsRequested(T2IParamInput input) =>
+        input.Get(T2IParamTypes.TrimVideoStartFrames, 0) != 0
+        || input.Get(T2IParamTypes.TrimVideoEndFrames, 0) != 0;
 
     public RuntimeArtifact Apply(RuntimeArtifact artifact)
     {
         ArgumentNullException.ThrowIfNull(artifact);
-        if (!IsRequested)
+        if (!IsRequested(g.UserInput))
         {
             return artifact;
         }

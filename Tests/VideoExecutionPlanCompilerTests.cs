@@ -608,12 +608,6 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(BoundaryJoinType.Crossfade, boundary.Effective);
         Assert.Equal(24, boundary.OverlapFrames);
         Assert.Single(plan.Boundaries);
-        Assert.All(
-            plan.Clips.Select(clip => Assert.Single(clip.Stages).Output),
-            output =>
-            {
-                Assert.False(output.IsTimelineTerminal);
-        });
     }
 
     [Fact]

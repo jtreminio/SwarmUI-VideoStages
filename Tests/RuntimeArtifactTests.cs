@@ -178,14 +178,14 @@ public class RuntimeArtifactTests
         generator.CurrentMedia.FPS = 24;
         generator.CurrentMedia.AttachedAudio =
             Data(generator, "71", WGNodeData.DT_LATENT_AUDIO);
+        RuntimeArtifact artifact = CaptureArtifact(generator, workflow);
         JObject before = (JObject)workflow.DeepClone();
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => new GlobalVideoFrameTrimmer(generator).Apply());
+            () => new GlobalVideoFrameTrimmer(generator).Apply(artifact));
 
         Assert.Contains("is not a decoded audio stream", error.Message);
         Assert.True(JToken.DeepEquals(before, workflow));
-        Assert.Equal(new JArray("70", 0), generator.CurrentMedia.Path);
     }
 
     [Fact]
@@ -204,49 +204,20 @@ public class RuntimeArtifactTests
         generator.CurrentMedia.Height = 512;
         generator.CurrentMedia.Frames = 25;
         generator.CurrentMedia.FPS = 24;
+        RuntimeArtifact artifact = CaptureArtifact(generator, workflow);
         JObject before = (JObject)workflow.DeepClone();
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => new GlobalVideoFrameTrimmer(generator).Apply());
+            () => new GlobalVideoFrameTrimmer(generator).Apply(artifact));
 
         Assert.Contains("no decoded output to trim", error.Message);
         Assert.True(JToken.DeepEquals(before, workflow));
-        Assert.Equal(new JArray("missing-video", 0), generator.CurrentMedia.Path);
     }
 
-    [Fact]
-    public void Global_trim_rejects_unresolved_audio_before_mutating_the_graph()
+    private static RuntimeArtifact CaptureArtifact(WorkflowGenerator generator, JObject workflow)
     {
-        JObject workflow = [];
-        T2IParamInput input = new(null);
-        input.Set(T2IParamTypes.TrimVideoStartFrames, 1);
-        WorkflowGenerator generator = new()
-        {
-            Workflow = workflow,
-            UserInput = input,
-        };
-        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
-        {
-            bridge.AddStub("UnitTestVideo", "80").WithOutputs(WGNodeData.DT_VIDEO);
-        }
-        generator.CurrentMedia = Data(generator, "80", WGNodeData.DT_VIDEO);
-        generator.CurrentMedia.Width = 512;
-        generator.CurrentMedia.Height = 512;
-        generator.CurrentMedia.Frames = 25;
-        generator.CurrentMedia.FPS = 24;
-        generator.CurrentMedia.AttachedAudio =
-            Data(generator, "missing-audio", WGNodeData.DT_AUDIO);
-        JObject before = (JObject)workflow.DeepClone();
-
-        InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => new GlobalVideoFrameTrimmer(generator).Apply());
-
-        Assert.Contains("attached audio stream required for global frame trim", error.Message);
-        Assert.True(JToken.DeepEquals(before, workflow));
-        Assert.Equal(new JArray("80", 0), generator.CurrentMedia.Path);
-        Assert.Equal(
-            new JArray("missing-audio", 0),
-            generator.CurrentMedia.AttachedAudio.Path);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        return RuntimeArtifact.Capture(generator, bridge);
     }
 
     private static ClipPlan Clip() => new(

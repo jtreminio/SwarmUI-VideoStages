@@ -13,7 +13,6 @@ internal sealed class TimelineAssemblySession
 {
     private readonly WorkflowGenerator _generator;
     private readonly MultiClipParallelMerger _merger;
-    private readonly GlobalVideoFrameTrimmer _outputTrimmer;
     private readonly VideoExecutionPlan _plan;
     private readonly List<BoundaryPlan> _effectiveBoundaries;
 
@@ -24,7 +23,6 @@ internal sealed class TimelineAssemblySession
     {
         _generator = generator;
         _merger = merger;
-        _outputTrimmer = new GlobalVideoFrameTrimmer(generator);
         _plan = plan;
         _effectiveBoundaries = [.. plan.Boundaries];
     }
@@ -90,27 +88,18 @@ internal sealed class TimelineAssemblySession
                 + $"but received {clipOutputs.Count}.");
         }
         TimelineMergeResult result = _merger.Merge(clipOutputs, _effectiveBoundaries);
-        return _outputTrimmer.Apply(result.Artifact);
+        return result.Artifact;
     }
 
     /// <summary>
     /// Returns a single clip's decoded artifact as the timeline output, so publication uses the
-    /// clip result instead of ambient media. An init-video-only clip has no stage finalizer, so
-    /// assembly owns its terminal trim.
+    /// clip result instead of ambient media.
     /// </summary>
     public RuntimeArtifact FinalizeSingleClip(DecodedClipArtifact clipOutput)
     {
         ArgumentNullException.ThrowIfNull(clipOutput);
         using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
-        RuntimeArtifact artifact = RuntimeArtifact.FromDecoded(
-            _generator,
-            bridge,
-            clipOutput);
-        if (_plan.Clips[0].Stages.Count == 0)
-        {
-            artifact = _outputTrimmer.Apply(artifact);
-        }
-        return artifact;
+        return RuntimeArtifact.FromDecoded(_generator, bridge, clipOutput);
     }
 
     private int BoundaryIndex(int fromClipId) =>

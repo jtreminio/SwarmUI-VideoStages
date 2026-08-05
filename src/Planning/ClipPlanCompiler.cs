@@ -38,7 +38,6 @@ internal static class ClipPlanCompiler
                     context.Architecture?.Architecture),
                 architectureCompilation?.StagePayloads[stage.ClipStageRawIndex],
                 new StageOutputPlan(
-                    IsTimelineTerminal: isClipTerminal && context.IsLastClip && !context.IsMultiClip,
                     context.FirstStageOrdinal + i < context.TotalStageCount - 1
                         ? IntermediateOutputEligibility.ControlledByHostSetting
                         : IntermediateOutputEligibility.NotEligible,

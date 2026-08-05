@@ -132,8 +132,13 @@ public class StageRunnerCollaboratorTests
         Assert.Contains("produced no media artifact", error.Message);
     }
 
+    /// <summary>
+    /// The global frame trim belongs to the timeline, not to a stage. A stage-level trim would run
+    /// before the timeline mixes authored audio tracks over the clip, publishing audio that is
+    /// longer than, and offset from, the trimmed video.
+    /// </summary>
     [Fact]
-    public void Host_stage_runner_trims_the_terminal_output_before_returning()
+    public void Host_stage_runner_leaves_the_global_trim_to_the_timeline()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
@@ -167,14 +172,11 @@ public class StageRunnerCollaboratorTests
             (plannedClip, stage, continuation, input, sectionId) => false);
 
         using WorkflowBridge outputBridge = WorkflowBridge.Create(generator.Workflow);
-        ComfyNode trim = Assert.Single(
+        Assert.DoesNotContain(
             outputBridge.Graph.Nodes.Values,
             node => node.ClassTypeName == SwarmTrimFramesNode.ClassType);
-        Assert.Equal(trim.Id, $"{generator.CurrentMedia.Path[0]}");
-        Assert.Equal(2, trim.FindInput("trim_start").LiteralAsInt());
-        Assert.Equal(3, trim.FindInput("trim_end").LiteralAsInt());
-        Assert.Equal(20, output.Frames);
-        Assert.Equal(20, generator.CurrentMedia.Frames);
+        Assert.Equal(25, output.Frames);
+        Assert.Equal(25, generator.CurrentMedia.Frames);
     }
 
     [Fact]

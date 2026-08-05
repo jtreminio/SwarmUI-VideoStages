@@ -587,7 +587,6 @@ public class DecisionOwnerRegressionTests
                 IsPassthrough: false,
                 ArchitecturePayload: null,
                 new(
-                    IsTimelineTerminal: true,
                     IntermediateOutputEligibility.NotEligible,
                     PreserveConfiguredAudioTrackSave: false))
         ],

@@ -17,7 +17,6 @@ internal sealed class HostVideoDecodedStageInput
 {
     private readonly WorkflowGenerator _generator;
     private readonly int _framesPerSecond;
-    private readonly GlobalVideoFrameTrimmer _trimmer;
     private readonly string _architectureDisplayLabel;
     /// <summary>Only an architecture whose own output carries decoded audio may keep it.</summary>
     private readonly bool _preserveAttachedAudio;
@@ -27,16 +26,13 @@ internal sealed class HostVideoDecodedStageInput
     internal HostVideoDecodedStageInput(
         WorkflowGenerator generator,
         int framesPerSecond,
-        GlobalVideoFrameTrimmer trimmer,
         string architectureDisplayLabel,
         bool preserveAttachedAudio)
     {
         ArgumentNullException.ThrowIfNull(generator);
-        ArgumentNullException.ThrowIfNull(trimmer);
         ArgumentException.ThrowIfNullOrWhiteSpace(architectureDisplayLabel);
         _generator = generator;
         _framesPerSecond = framesPerSecond;
-        _trimmer = trimmer;
         _architectureDisplayLabel = architectureDisplayLabel;
         _preserveAttachedAudio = preserveAttachedAudio;
     }
@@ -180,7 +176,7 @@ internal sealed class HostVideoDecodedStageInput
     /// </summary>
     private void DropHostStageTrim()
     {
-        if (!_trimmer.IsRequested
+        if (!GlobalVideoFrameTrimmer.IsRequested(_generator.UserInput)
             || _generator.CurrentMedia?.Path is not JArray { Count: 2 } path)
         {
             return;

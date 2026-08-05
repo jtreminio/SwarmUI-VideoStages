@@ -189,7 +189,6 @@ public sealed class LtxIcLoraTests
             IsPassthrough: false,
             ArchitecturePayload: null,
             new StageOutputPlan(
-                IsTimelineTerminal: true,
                 IntermediateOutputEligibility.NotEligible,
                 PreserveConfiguredAudioTrackSave: false));
 

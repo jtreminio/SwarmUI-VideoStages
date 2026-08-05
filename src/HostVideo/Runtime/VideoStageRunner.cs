@@ -14,7 +14,6 @@ internal sealed record HostVideoRootSources(WGNodeData Media, WGNodeData Vae);
 internal sealed class VideoStageRunner : IDisposable
 {
     private readonly WorkflowGenerator _generator;
-    private readonly GlobalVideoFrameTrimmer _trimmer;
     private readonly StageUpscaleGraph _upscaleGraph;
     private readonly HostVideoDecodedStageInput _decodedInput;
     private readonly StageHostExecutionScope _stageScope;
@@ -29,12 +28,10 @@ internal sealed class VideoStageRunner : IDisposable
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentException.ThrowIfNullOrWhiteSpace(architectureDisplayLabel);
         _generator = generator;
-        _trimmer = new(generator);
         _upscaleGraph = new(generator);
         _decodedInput = new(
             generator,
             plan.FramesPerSecond,
-            _trimmer,
             architectureDisplayLabel,
             preserveAttachedAudio);
         _stageScope = new(generator, plan);
@@ -117,11 +114,6 @@ internal sealed class VideoStageRunner : IDisposable
                     $"stage {stage.StageId} consumed no planned continuation.");
             }
             StagePlan outputStage = consumedContinuation ? continuation : stage;
-            if (outputStage.Output.IsTimelineTerminal && _trimmer.IsRequested)
-            {
-                _trimmer.Apply();
-                output = CaptureRuntimeArtifact();
-            }
             _stageScope.PublishIntermediate(
                 outputStage,
                 _generator.CurrentMedia,

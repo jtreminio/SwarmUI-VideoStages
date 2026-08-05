@@ -286,7 +286,6 @@ public class ArchitectureRuntimeOwnershipTests
             IsPassthrough: false,
             payload,
             new(
-                IsTimelineTerminal: false,
                 IntermediateOutputEligibility.NotEligible,
                 PreserveConfiguredAudioTrackSave: false));
         return new(

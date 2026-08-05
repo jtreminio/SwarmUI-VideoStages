@@ -225,6 +225,7 @@ internal sealed class VideoArchitectureExecutionHost
                 }
             }
         }
+        finalArtifact = new GlobalVideoFrameTrimmer(_generator).Apply(finalArtifact);
         finalArtifact = new TimelineFrameInterpolator(_generator).Apply(
             finalArtifact,
             _plan);

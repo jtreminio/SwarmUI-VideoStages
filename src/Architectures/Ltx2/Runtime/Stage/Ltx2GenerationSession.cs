@@ -17,7 +17,6 @@ internal sealed class Ltx2GenerationSession(
     ArchitectureTimelineSessionContext session) : IVideoGenerationSession
 {
     private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
-    private readonly GlobalVideoFrameTrimmer _trimmer = new(g);
     private readonly StageHostExecutionScope _stageScope = new(g, session.Plan);
 
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;
@@ -61,11 +60,6 @@ internal sealed class Ltx2GenerationSession(
             {
                 throw Invariant.Failure(
                     $"stage {stage.StageId} produced no media artifact.");
-            }
-            if (stage.Output.IsTimelineTerminal && _trimmer.IsRequested)
-            {
-                _trimmer.Apply();
-                output = CaptureRuntimeArtifact();
             }
             _stageScope.PublishIntermediate(stage, g.CurrentMedia, g.CurrentVae);
         }

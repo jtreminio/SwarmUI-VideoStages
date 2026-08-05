@@ -1,9 +1,11 @@
+using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Execution;
 using VideoStages.HostVideo;
 using VideoStages.Planning;
 using Xunit;
@@ -146,8 +148,14 @@ public class BackendConsolidationTests
             UserInput = input,
         };
 
+        RuntimeArtifact artifact;
+        using (WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow))
+        {
+            artifact = RuntimeArtifact.Capture(generator, bridge);
+        }
+
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => new GlobalVideoFrameTrimmer(generator).Apply());
+            () => new GlobalVideoFrameTrimmer(generator).Apply(artifact));
 
         Assert.Contains("global frame trim", error.Message);
     }
@@ -162,8 +170,9 @@ public class BackendConsolidationTests
             UserInput = new(null),
         };
 
-        new GlobalVideoFrameTrimmer(generator).Apply();
+        RuntimeArtifact artifact = new(null, null);
 
+        Assert.Same(artifact, new GlobalVideoFrameTrimmer(generator).Apply(artifact));
         Assert.Null(generator.CurrentMedia);
     }
 

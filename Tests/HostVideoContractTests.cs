@@ -704,6 +704,49 @@ public class HostVideoContractTests
     }
 
     /// <summary>
+    /// An authored audio track stays in sync with the request's global frame trim. The overlay bed
+    /// is built from the clip's planned length, so whichever order the two run in, the published
+    /// audio must end up spanning the same frames the published video does.
+    /// </summary>
+    [Fact]
+    public async Task Generic_only_timeline_keeps_authored_audio_in_sync_with_the_global_trim()
+    {
+        using Hunyuan15WorkflowFixture fixture = Hunyuan15WorkflowFixture.CreateWithBaseModel();
+        JObject document = MakeDocument(MakeClip(1.0, fixture.Stage(steps: 8)));
+        document["audioTracks"] = new JArray(
+            AudioTrack("ignored-overlay", 1.0, "overlay.wav", AudioSpan(0, 0.5, 0)));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(document, post =>
+                {
+                    post["trimvideostartframes"] = 2;
+                    post["trimvideoendframes"] = 3;
+                }));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmTrimFramesNode trim = Assert.Single(bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
+        Assert.Equal(2, trim.TrimStart.LiteralAsInt());
+        Assert.Equal(3, trim.TrimEnd.LiteralAsInt());
+        Assert.Equal(20, generator.CurrentMedia.Frames);
+
+        // The bed is still the clip's planned 25 frames; the global trim takes the same 5 frames
+        // off the mixed result that it takes off the video.
+        EmptyAudioNode bed = Assert.Single(bridge.Graph.NodesOfType<EmptyAudioNode>());
+        Assert.Equal(25 / 24d, bed.Duration.LiteralAsDouble() ?? 0, 6);
+        TrimAudioDurationNode audioTrim = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
+            node => node.Audio.Connection?.Node is AudioMergeNode);
+        Assert.Equal(2 / 24d, audioTrim.StartIndex.LiteralAsDouble() ?? 0, 6);
+        Assert.Equal(20 / 24d, audioTrim.Duration.LiteralAsDouble() ?? 0, 6);
+        Assert.Same(audioTrim, live.PublishedAudio());
+
+        live.AssertAllLive(StageSampler(bridge, 0), trim);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
     /// A stage LoRA on the generic runtime loads through core's own model-gen confinement step.
     /// Hunyuan 1.5's compat class does not target the text encoder, so the authored
     /// <c>textEncoderWeight</c> is dropped and the loader is model-only. The stage's LoRAs are
