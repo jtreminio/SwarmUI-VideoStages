@@ -49,7 +49,7 @@ internal static class DocumentJson
                     "VideoStages: The Video Stages document must be a JSON object.");
             }
             int schemaVersion = ValidateSchemaVersion(obj);
-            List<JObject> entries = GetObjectArray(obj, "clips");
+            List<JObject> entries = GetObjectArray(obj, UploadContainers.ClipsCollection);
             if (schemaVersion == ArchitectureHintLegacySchemaVersion)
             {
                 foreach (JObject entry in entries)
@@ -66,7 +66,7 @@ internal static class DocumentJson
                 GetOptionalNullableInt(obj, "height"),
                 GetOptionalNullableInt(obj, "fps"),
                 entries,
-                GetObjectArray(obj, "audioTracks"));
+                GetObjectArray(obj, UploadContainers.AudioTracksCollection));
         }
         catch (JsonException ex)
         {

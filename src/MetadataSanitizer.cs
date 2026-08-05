@@ -4,8 +4,48 @@ using SwarmUI.Utils;
 
 namespace VideoStages;
 
+/// <summary>One step on the way to an upload container: a named property that is either an object
+/// hop or an array whose every element is walked.</summary>
+internal readonly record struct UploadPathStep(string Name, bool IsArray)
+{
+    internal static UploadPathStep Each(string name) => new(name, IsArray: true);
+
+    internal static UploadPathStep Into(string name) => new(name, IsArray: false);
+}
+
+/// <summary>A full document path to an upload container, rooted at the authoring document.</summary>
+internal sealed record UploadContainerPath(
+    IReadOnlyList<UploadPathStep> Steps,
+    string Container);
+
 internal static class MetadataSanitizer
 {
+    /// <summary>Every place an upload can hide. A container missing here is published verbatim,
+    /// so this must cover every <see cref="DocumentJson.GetEmbeddedUpload"/> call site.</summary>
+    private static readonly IReadOnlyList<UploadContainerPath> AllPaths =
+    [
+        new([UploadPathStep.Each(UploadContainers.ClipsCollection)], UploadContainers.ClipAudio),
+        new([UploadPathStep.Each(UploadContainers.ClipsCollection)], UploadContainers.ClipInitVideo),
+        new(
+            [
+                UploadPathStep.Each(UploadContainers.ClipsCollection),
+                UploadPathStep.Each(UploadContainers.IcLorasCollection)
+            ],
+            UploadContainers.IcLoraDriveMedia),
+        new(
+            [
+                UploadPathStep.Each(UploadContainers.ClipsCollection),
+                UploadPathStep.Each(UploadContainers.RefsCollection)
+            ],
+            UploadContainers.RefImage),
+        new(
+            [
+                UploadPathStep.Each(UploadContainers.AudioTracksCollection),
+                UploadPathStep.Into(UploadContainers.AudioTrackSource)
+            ],
+            UploadContainers.ClipAudio),
+    ];
+
     /// <summary>
     /// Published instead of a document the sanitizer could not walk. Returning the original would
     /// publish exactly the base64 uploads this class exists to remove.
@@ -34,7 +74,7 @@ internal static class MetadataSanitizer
         }
         try
         {
-            foreach (UploadContainerPath path in UploadContainers.AllPaths)
+            foreach (UploadContainerPath path in AllPaths)
             {
                 Walk(root, path, stepIndex: 0);
             }
