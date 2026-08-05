@@ -61,7 +61,7 @@ internal static class MetadataSanitizer
             return;
         }
         UploadPathStep step = path.Steps[stepIndex];
-        JToken next = VideoStagesJsonReader.GetToken(parent, step.Name);
+        JToken next = DocumentJson.GetToken(parent, step.Name);
         if (!step.IsArray)
         {
             if (next is JObject child)
@@ -85,7 +85,7 @@ internal static class MetadataSanitizer
 
     private static void StripUploadContainer(JObject parent, string containerKey)
     {
-        if (VideoStagesJsonReader.GetToken(parent, containerKey) is not JObject upload)
+        if (DocumentJson.GetToken(parent, containerKey) is not JObject upload)
         {
             return;
         }

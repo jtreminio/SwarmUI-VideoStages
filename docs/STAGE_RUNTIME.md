@@ -39,7 +39,7 @@ Repeated SwarmUI workflow callbacks therefore observe the same immutable plan.
 
 The stages before runtime are:
 
-1. `VideoStagesJsonReader` accepts authoring schema v6. It has one bounded v5
+1. `DocumentJson` accepts authoring schema v6. It has one bounded v5
    migration that renames the old `architecture` key to `architectureHint`.
 2. `RequestReader` reads common document data and prompt-section
    overrides.
@@ -271,7 +271,7 @@ Diagnostics divide responsibility:
 
 | Validation concern | Owner and phase |
 |---|---|
-| JSON version, types, IDs, common structural shape | `VideoStagesJsonReader` / `RequestReader` |
+| JSON version, types, IDs, common structural shape | `DocumentJson` / `RequestReader` |
 | Model resolution, clip lock, entry mode, common timing/boundary/audio topology | `ArchitecturePlanResolver` / `VideoExecutionPlanCompiler` |
 | Unsupported optional authored features | Common capability validation; warn and omit from the compiled plan |
 | Architecture-specific options and semantic conflicts | Selected module's graph-free compiler |

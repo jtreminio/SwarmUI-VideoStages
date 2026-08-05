@@ -303,21 +303,21 @@ contract only after two implementations reveal one.
 
 The frontend writes the versioned document to
 `VideoStagesExtension.Data` (`input_videostages`) and clip prompt sections to
-the prompt carrier. `VideoStagesPromptSection.IsActive` requires an enabled
+the prompt carrier. `DocumentJson.IsActive` requires an enabled
 group and non-empty Data JSON.
 
 The first `Runner` lookup builds and caches one plan per `WorkflowGenerator` through
 `VideoStagesContext`:
 
 ```text
-VideoStagesJsonReader / RequestReader
+DocumentJson / RequestReader
     → ArchitecturePlanResolver
     → EffectiveVideoRequestProjector (first step inside VideoExecutionPlanCompiler)
     → common + architecture plan compilation
     → VideoExecutionPlanContext
 ```
 
-`VideoStagesJsonReader` requires schema version 6 after applying its only
+`DocumentJson` requires schema version 6 after applying its only
 bounded migration: a version-5 clip's `architecture` field becomes
 `architectureHint`. `RequestReader` applies prompt overrides and reads clips,
 authored stages, source media, dimensions, FPS, and timeline audio into
@@ -667,7 +667,7 @@ Publication ends the timeline; no architecture finalization step follows it.
 
 | Failure | Stopped by |
 |---|---|
-| Malformed JSON or wrong schema | `VideoStagesJsonReader` |
+| Malformed JSON or wrong schema | `DocumentJson` |
 | Unknown model/profile, mixed clip architecture, forged identity | `ArchitecturePlanResolver` diagnostics |
 | Unsupported entry mode or feature | `ArchitectureCapabilityValidator` diagnostics |
 | Invalid LTX option | LTX clip/plan compiler diagnostics |

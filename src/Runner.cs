@@ -102,7 +102,7 @@ public static class Runner
         context.RunConfiguredStages();
     }
 
-    private static bool IsExtensionActive(WorkflowGenerator g) => VideoStagesPromptSection.IsActive(g);
+    private static bool IsExtensionActive(WorkflowGenerator g) => DocumentJson.IsActive(g);
 
     private static bool TryGetActiveExecution(
         WorkflowGenerator g,

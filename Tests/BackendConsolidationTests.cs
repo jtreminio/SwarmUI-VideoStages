@@ -213,14 +213,14 @@ public class BackendConsolidationTests
     {
         Assert.Equal(
             27,
-            ClipTimelineSpecParser.CalculateStructuralFrameCount(1.05, 24));
+            AuthoringTimeline.CalculateStructuralFrameCount(1.05, 24));
     }
 
     [Fact]
     public void Authored_duration_parsing_rejects_unrepresentable_counts()
     {
         Assert.Throws<OverflowException>(
-            () => ClipTimelineSpecParser.CalculateStructuralFrameCount(
+            () => AuthoringTimeline.CalculateStructuralFrameCount(
                 int.MaxValue,
                 1));
     }

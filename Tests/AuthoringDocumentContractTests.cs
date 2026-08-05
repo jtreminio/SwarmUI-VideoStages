@@ -94,7 +94,7 @@ public class AuthoringDocumentContractTests
         T2IParamInput input = new(null);
         Fixtures.SetVideoStagesConfig(input, FixtureJson());
         KeyLog keyLog = new();
-        VideoStagesJsonReader.KeyProbe = keyLog.Observe;
+        DocumentJson.KeyProbe = keyLog.Observe;
         VideoStagesSpec spec;
         try
         {
@@ -102,7 +102,7 @@ public class AuthoringDocumentContractTests
         }
         finally
         {
-            VideoStagesJsonReader.KeyProbe = null;
+            DocumentJson.KeyProbe = null;
             log = keyLog;
         }
         // A carrier the backend cannot see (renamed Enabled/Data param key) parses to an empty spec
@@ -224,7 +224,7 @@ public class AuthoringDocumentContractTests
     public void RejectsAnUnsupportedSchemaVersion()
     {
         JObject document = JObject.Parse(FixtureJson());
-        document["schemaVersion"] = VideoStagesJsonReader.SupportedSchemaVersion - 2;
+        document["schemaVersion"] = DocumentJson.SupportedSchemaVersion - 2;
         T2IParamInput input = new(null);
         Fixtures.SetVideoStagesConfig(input, document.ToString());
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(

@@ -10,7 +10,7 @@ public sealed record LoraRef(
 /// Retake window: regenerate only frames <c>[StartFrame, StartFrame + LengthFrames)</c> of the base
 /// video, preserving the rest. <c>Strength</c> is the requested regeneration strength inside the
 /// window (1.0 = full regeneration); the selected architecture owns how that request is executed.
-/// Frame counts are converted from the per-clip seconds window at parse time using the timeline fps.
+/// Frame counts are converted from the per-clip seconds window while reading the request.
 /// </summary>
 public sealed record RetakeWindowSpec(
     int StartFrame,
@@ -52,21 +52,7 @@ public sealed record StageSpec(
     IReadOnlyList<LoraRef> Loras = null,
     IReadOnlyList<double> LoraWeights = null,
     RetakeWindowSpec RetakeWindow = null
-)
-{
-    public bool IsLatentModelUpscale =>
-        Planning.StageUpscalePlanCompiler.Classify(UpscaleMethod) == Planning.StageUpscaleMode.LatentModel;
-    public bool IsLatentUpscale =>
-        Planning.StageUpscalePlanCompiler.Classify(UpscaleMethod) == Planning.StageUpscaleMode.Latent;
-
-    /// <summary>
-    /// True when the authored stage requests no generation or architecture-owned latent transform.
-    /// Retakes and latent scaling remain active work even when Control is zero.
-    /// </summary>
-    public bool IsPassthrough => Control <= 0
-        && RetakeWindow is null
-        && !(Upscale != 1 && (IsLatentUpscale || IsLatentModelUpscale));
-}
+);
 
 public sealed record ImageRefSpec(
     string Source,
@@ -184,7 +170,7 @@ public sealed record ClipSpec(
     IReadOnlyList<PromptWindowSpec> PromptWindows = null,
     // Cross-clip continuity at THIS clip's outgoing boundary (clip N -> N+1): "cut" (hard concat),
     // "continue" (architecture-owned generation-time continuity), or "crossfade" (pixel dissolve
-    // over an overlap window). Only meaningful for non-final clips in a parallel multi-clip run.
+    // over an overlap window). Only meaningful for non-final clips in a multi-clip request.
     string BoundaryOut = Constants.BoundaryOutCut,
     // Authored boundary overlap in frames; the selected architecture normalizes its own grid:
     // for "continue" the frozen-context length (window = overlap+1), for "crossfade" the requested

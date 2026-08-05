@@ -48,7 +48,7 @@ internal static class VideoStagesContext
         context = null;
         if (generator is null
             || genInfo.ContextID != T2IParamInput.SectionID_Video
-            || !VideoStagesPromptSection.IsActive(generator))
+            || !DocumentJson.IsActive(generator))
         {
             return false;
         }

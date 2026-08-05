@@ -48,7 +48,7 @@ internal static class PromptOverrideApplier
         {
             if (!int.TryParse(value?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) || parsed <= 0)
             {
-                VideoStagesJsonReader.Warn(
+                DocumentJson.Warn(
                     warn,
                     $"VideoStages: ignoring invalid top-level override '{field}' = '{value}'.");
                 continue;
@@ -69,7 +69,7 @@ internal static class PromptOverrideApplier
         {
             if (clipIndex < 0 || clipIndex >= rawEntries.Count)
             {
-                VideoStagesJsonReader.Warn(
+                DocumentJson.Warn(
                     warn,
                     $"VideoStages: clip override targets out-of-range clip {clipIndex}; ignoring.");
                 continue;
@@ -89,7 +89,7 @@ internal static class PromptOverrideApplier
         {
             if (clipIndex < 0 || clipIndex >= rawEntries.Count)
             {
-                VideoStagesJsonReader.Warn(
+                DocumentJson.Warn(
                     warn,
                     $"VideoStages: stage override targets out-of-range clip {clipIndex}; ignoring.");
                 continue;
@@ -97,7 +97,7 @@ internal static class PromptOverrideApplier
             JObject stage = GetStage(rawEntries[clipIndex], stageIndex);
             if (stage is null)
             {
-                VideoStagesJsonReader.Warn(
+                DocumentJson.Warn(
                     warn,
                     $"VideoStages: stage override targets out-of-range stage {stageIndex} on clip {clipIndex}; ignoring.");
                 continue;
@@ -125,7 +125,7 @@ internal static class PromptOverrideApplier
     {
         if (!allowed.TryGetValue(field?.Trim() ?? "", out (string Canonical, OverrideKind Kind) spec))
         {
-            VideoStagesJsonReader.Warn(
+            DocumentJson.Warn(
                 warn,
                 $"VideoStages: ignoring unknown or non-overridable {location} field '{field}'.");
             return;
@@ -147,7 +147,7 @@ internal static class PromptOverrideApplier
                 parsedToken = trimmed;
                 break;
             default:
-                VideoStagesJsonReader.Warn(
+                DocumentJson.Warn(
                     warn,
                     $"VideoStages: ignoring {location} override '{spec.Canonical}' with invalid value '{value}'.");
                 return;
@@ -157,7 +157,7 @@ internal static class PromptOverrideApplier
 
     private static JObject GetStage(JObject clip, int stageIndex)
     {
-        if (VideoStagesJsonReader.GetToken(clip, "stages") is not JArray array)
+        if (DocumentJson.GetToken(clip, "stages") is not JArray array)
         {
             return null;
         }

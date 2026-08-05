@@ -562,21 +562,21 @@ public class RequestReaderTests
     {
         string json = JsonConvert.SerializeObject(MakeRootConfig(800, 600));
         T2IParamInput enabled = BuildInputWithJson(json);
-        VideoStagesJsonDocument enabledDocument =
-            VideoStagesJsonReader.ReadDocument(new() { UserInput = enabled });
+        AuthoringDocument enabledDocument =
+            DocumentJson.Read(new() { UserInput = enabled });
         Assert.Equal(800, enabledDocument.Width);
         Assert.Equal(600, enabledDocument.Height);
 
         T2IParamInput disabled = BuildInputWithJson(json);
         disabled.Remove(VideoStagesExtension.Enabled);
 
-        VideoStagesJsonDocument document =
-            VideoStagesJsonReader.ReadDocument(new() { UserInput = disabled });
+        AuthoringDocument document =
+            DocumentJson.Read(new() { UserInput = disabled });
 
         Assert.Null(document.Width);
         Assert.Null(document.Height);
         Assert.Null(document.Fps);
-        Assert.Empty(document.Entries);
+        Assert.Empty(document.Clips);
     }
 
     [Fact]

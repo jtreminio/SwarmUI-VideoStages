@@ -6,22 +6,21 @@ using SwarmUI.Utils;
 
 namespace VideoStages;
 
-internal sealed record VideoStagesJsonDocument(
+internal sealed record AuthoringDocument(
     int? Width,
     int? Height,
     int? Fps,
-    List<JObject> Entries,
+    List<JObject> Clips,
     List<JObject> AudioTracks);
 
 /// <summary>
-/// Owns JSON value access, invariant scalar conversion, and parse diagnostics for the Video Stages
-/// document. Every key named here is a camelCase key the frontend authoring codec emits; the shared
-/// <c>Tests/fixtures/authoring-document.json</c> contract fixture asserts that pairing.
+/// Owns the Enabled/Data carrier, schema validation and migration, and typed JSON reads for the
+/// authored document. The shared contract fixture checks its keys against the frontend codec.
 /// </summary>
-internal static class VideoStagesJsonReader
+internal static class DocumentJson
 {
-    /// <summary>The single authoring document schema version this build parses. Must match the
-    /// frontend's <c>CURRENT_AUTHORING_SCHEMA_VERSION</c>.</summary>
+    /// <summary>The current authoring schema version. Reading also accepts the bounded version-5
+    /// migration below. Must match the frontend's <c>CURRENT_AUTHORING_SCHEMA_VERSION</c>.</summary>
     public const int SupportedSchemaVersion = 6;
 
     private const int ArchitectureHintLegacySchemaVersion = 5;
@@ -30,12 +29,16 @@ internal static class VideoStagesJsonReader
     /// contract fixture test to prove no reader names a key the frontend never emits.</summary>
     internal static Action<JObject, string, bool> KeyProbe;
 
-    public static VideoStagesJsonDocument ReadDocument(WorkflowGenerator g)
+    public static bool IsActive(WorkflowGenerator g) =>
+        g.UserInput.TryGetRaw(VideoStagesExtension.Enabled.Type, out _)
+        && !string.IsNullOrWhiteSpace(GetData(g));
+
+    public static AuthoringDocument Read(WorkflowGenerator g)
     {
-        string json = VideoStagesPromptSection.IsActive(g) ? VideoStagesPromptSection.GetDataJson(g) : null;
+        string json = IsActive(g) ? GetData(g) : null;
         if (string.IsNullOrWhiteSpace(json))
         {
-            return new VideoStagesJsonDocument(null, null, null, [], []);
+            return new AuthoringDocument(null, null, null, [], []);
         }
 
         try
@@ -58,7 +61,7 @@ internal static class VideoStagesJsonReader
                     entry.Remove("architecture");
                 }
             }
-            return new VideoStagesJsonDocument(
+            return new AuthoringDocument(
                 GetOptionalNullableInt(obj, "width"),
                 GetOptionalNullableInt(obj, "height"),
                 GetOptionalNullableInt(obj, "fps"),
@@ -71,6 +74,9 @@ internal static class VideoStagesJsonReader
                 $"VideoStages: Could not parse Video Stages JSON. {ex.Message}");
         }
     }
+
+    private static string GetData(WorkflowGenerator g) =>
+        g.UserInput.Get(VideoStagesExtension.Data, "");
 
     private static int ValidateSchemaVersion(JObject obj)
     {

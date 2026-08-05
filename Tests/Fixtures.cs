@@ -161,7 +161,7 @@ internal static class Fixtures
     public static JObject MakeRootConfig(int width, int height, params JObject[] clips) =>
         new()
         {
-            ["schemaVersion"] = VideoStagesJsonReader.SupportedSchemaVersion,
+            ["schemaVersion"] = DocumentJson.SupportedSchemaVersion,
             ["width"] = width,
             ["height"] = height,
             ["clips"] = new JArray(clips)
@@ -180,7 +180,7 @@ internal static class Fixtures
     public static JObject MakeDocument(params JObject[] clips) =>
         new()
         {
-            ["schemaVersion"] = VideoStagesJsonReader.SupportedSchemaVersion,
+            ["schemaVersion"] = DocumentJson.SupportedSchemaVersion,
             ["clips"] = new JArray(clips)
         };
 
@@ -234,7 +234,7 @@ internal static class Fixtures
         {
             return json;
         }
-        document["schemaVersion"] ??= VideoStagesJsonReader.SupportedSchemaVersion;
+        document["schemaVersion"] ??= DocumentJson.SupportedSchemaVersion;
         return document.ToString();
     }
 

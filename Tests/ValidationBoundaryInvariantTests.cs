@@ -7,12 +7,12 @@ namespace VideoStages.Tests;
 public sealed class ValidationBoundaryInvariantTests
 {
     [Fact]
-    public void User_facing_exceptions_exist_only_at_parser_and_plan_boundaries()
+    public void User_facing_exceptions_exist_only_at_request_and_plan_boundaries()
     {
         string sourceRoot = Path.GetFullPath(Path.Combine(TestDirectory(), "..", "src"));
         HashSet<string> allowed =
         [
-            Path.Combine(sourceRoot, "VideoStagesJsonReader.cs"),
+            Path.Combine(sourceRoot, "Authoring", "DocumentJson.cs"),
             Path.Combine(sourceRoot, "Planning", "PlanDiagnosticReporter.cs"),
         ];
         string[] offenders = Directory
