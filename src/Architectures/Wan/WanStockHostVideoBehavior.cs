@@ -20,7 +20,10 @@ internal sealed class WanStockHostVideoBehavior(
     {
         NativeFrameReferencePlan reference =
             clip.RequireWanPayload().FirstFrameReference;
-        Image image = MaterializeUpload(reference, "WAN first-frame reference");
+        Image image = NativeFrameReferences.MaterializeUpload(
+            generator,
+            reference,
+            "WAN first-frame reference");
         return image is null
             ? null
             : generator.LoadImage(
@@ -39,7 +42,8 @@ internal sealed class WanStockHostVideoBehavior(
             return null;
         }
         // An unusable authored reference must not suppress the request-level end frame.
-        Image authored = MaterializeUpload(
+        Image authored = NativeFrameReferences.MaterializeUpload(
+            generator,
             clip.RequireWanPayload().LastFrameReference,
             "WAN final-frame reference");
         if (authored is not null)
@@ -240,11 +244,6 @@ internal sealed class WanStockHostVideoBehavior(
                 ? hostFrames
                 : null;
     }
-
-    private Image MaterializeUpload(
-        NativeFrameReferencePlan reference,
-        string descriptor) =>
-        NativeFrameReferences.MaterializeUpload(generator, reference, descriptor);
 
     private void PruneUnusedWan22Latents(ISet<string> preHostNodeIds)
     {
