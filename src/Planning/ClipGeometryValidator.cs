@@ -1,7 +1,7 @@
 namespace VideoStages.Planning;
 
 /// <summary>
-/// Projects final clip dimensions for planning diagnostics. Runtime geometry conforming remains
+/// Warns when clips are planned to finish at different sizes. Runtime geometry conforming remains
 /// the fallback when dimensions cannot be projected.
 /// </summary>
 internal static class ClipGeometryValidator

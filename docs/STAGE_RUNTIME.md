@@ -46,7 +46,7 @@ The stages before runtime are:
 3. `ArchitecturePlanResolver` resolves every authored stage model—including
    skipped stages—through the session-authorized backend registry. Resolved
    stage models own architecture, profile, and feature support. Persisted architecture/profile values are diagnostic hints.
-4. `EffectiveVideoRequestProjector`, called inside
+4. `EffectiveVideoRequestProjection`, called inside
    `VideoExecutionPlanCompiler`, keeps authored data intact while projecting
    resolved temporal grids and reporting stale persisted model hints. Clip and
    stage IDs, raw stage indexes, model names, source identity, and topology stay

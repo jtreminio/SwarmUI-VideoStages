@@ -96,11 +96,7 @@ internal static class PlanDiagnosticReporter
         }
     }
 
-    /// <summary>
-    /// Emits diagnostics through the normal logs and persists warnings in SwarmUI's established
-    /// browser-visible warning metadata. The host serializes <c>parser_warnings</c> with completed
-    /// output metadata and gives that field warning styling in the browser.
-    /// </summary>
+    /// <summary>Routes warnings to the request's own channel instead of the log.</summary>
     internal static void ReportToRequest(
         IEnumerable<PlanDiagnostic> diagnostics,
         T2IParamInput input)

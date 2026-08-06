@@ -31,7 +31,6 @@ public sealed class AudioHandler(WorkflowGenerator g)
         return decode is null ? null : CreateAudioNode(decode.AUDIO);
     }
 
-    /// <summary>Prunes compiled AceStepFun tracks no clip asked to save.</summary>
     internal void PruneAceStepFunUnsavedTracks(IReadOnlyList<ClipPlan> clips)
     {
         HashSet<int> usedTracks = [];

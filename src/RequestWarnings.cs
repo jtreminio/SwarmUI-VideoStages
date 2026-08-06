@@ -3,7 +3,11 @@ using SwarmUI.Utils;
 
 namespace VideoStages;
 
-/// <summary>The host's browser-visible warning channel for one request. Lines are deduplicated.</summary>
+/// <summary>
+/// The host's browser-visible warning channel for one request. Lines are deduplicated. SwarmUI
+/// serializes <c>parser_warnings</c> with completed output metadata and gives that field warning
+/// styling in the browser.
+/// </summary>
 internal static class RequestWarnings
 {
     private const string HostWarningMetadataKey = "parser_warnings";

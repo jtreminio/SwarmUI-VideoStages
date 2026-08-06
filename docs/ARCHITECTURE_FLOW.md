@@ -312,7 +312,7 @@ The first `Runner` lookup builds and caches one plan per `WorkflowGenerator` thr
 ```text
 DocumentJson / RequestReader
     → ArchitecturePlanResolver
-    → EffectiveVideoRequestProjector (first step inside VideoExecutionPlanCompiler)
+    → EffectiveVideoRequestProjection (first step inside VideoExecutionPlanCompiler)
     → common + architecture plan compilation
     → VideoExecutionPlanContext
 ```
@@ -356,7 +356,7 @@ For LTX, `Ltx2ClipPlanCompiler.Compile` produces `Ltx2ClipPayload` and
 LoRA, IC-LoRA, retake, frame references, and stage audio actions. Common
 orchestration reads the required stage core and otherwise carries these values;
 it must not interpret their graph meaning.
-`NormalLoraPlanCompiler` is common graph-free planning shared by LTX, MiniMax,
+`LoraPlanCompiler` is common graph-free planning shared by LTX, MiniMax,
 WAN, and generic host video:
 it resolves each stage's effective clip rows, keeps clip-before-stage ordering,
 and leaves the resulting immutable array inside the selected architecture's
