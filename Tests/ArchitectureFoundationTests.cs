@@ -162,7 +162,7 @@ public class ArchitectureFoundationTests
             ArchitecturePlanResolver.Resolve(Spec(inactive), new FakeRegistry());
 
         EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(Spec(inactive), result);
+            EffectiveVideoRequestProjection.Project(Spec(inactive), result);
         PlanDiagnostic diagnostic = Assert.Single(
             request.Diagnostics,
             item => item.Code == "effective-request.stale-stage-profile-hint");
@@ -363,7 +363,7 @@ public class ArchitectureFoundationTests
             architecture);
 
         BoundaryPlan boundary = Assert.Single(plan.Boundaries);
-        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Cut, boundary.EffectiveJoin);
         Assert.Equal(
             BoundaryFallbackReason.ArchitectureRuleUnsupported,
             boundary.Fallback);

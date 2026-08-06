@@ -75,7 +75,7 @@ public class BoundaryPolicyOwnershipTests
         BoundaryPlan boundary = Assert.Single(
             BoundaryPlanCompiler.Compile(spec.Clips, planned).Boundaries);
 
-        Assert.Equal(BoundaryJoinType.Continue, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Continue, boundary.EffectiveJoin);
         Assert.Equal(
             BoundaryPlanCompiler.NormalizeWindow(continueMode, 22),
             boundary.OverlapFrames);

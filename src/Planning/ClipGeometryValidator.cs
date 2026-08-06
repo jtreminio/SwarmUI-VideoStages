@@ -4,7 +4,7 @@ namespace VideoStages.Planning;
 /// Projects final clip dimensions for planning diagnostics. Runtime geometry conforming remains
 /// the fallback when dimensions cannot be projected.
 /// </summary>
-internal static class ClipGeometryProjection
+internal static class ClipGeometryValidator
 {
     internal static IReadOnlyList<PlanDiagnostic> Validate(
         IReadOnlyList<ClipPlan> clips,

@@ -122,7 +122,7 @@ internal enum StageInputKind
 /// <summary>A normalized outgoing boundary from clip N to clip N + 1.</summary>
 internal sealed record BoundaryPlan(
     int FromClipId,
-    BoundaryJoinType Effective,
+    BoundaryJoinType EffectiveJoin,
     int OverlapFrames,
     int ContinuityWindowFrames,
     BoundaryFallbackReason Fallback)

@@ -27,7 +27,7 @@ public class PlanningCompilerComponentTests
         BoundaryPlanningResult result = BoundaryPlanCompiler.Compile(spec.Clips, plan.Clips);
 
         BoundaryPlan boundary = Assert.Single(result.Boundaries);
-        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Cut, boundary.EffectiveJoin);
         Assert.Equal(BoundaryFallbackReason.TargetHasInitVideo, boundary.Fallback);
         Assert.Equal(0, boundary.OverlapFrames);
         Assert.False(boundary.CarryAudio);
@@ -53,7 +53,7 @@ public class PlanningCompilerComponentTests
         BoundaryPlan boundary = Assert.Single(
             BoundaryPlanCompiler.Compile(spec.Clips, plan.Clips).Boundaries);
 
-        Assert.Equal(BoundaryJoinType.Crossfade, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, boundary.EffectiveJoin);
         Assert.True(boundary.CarryAudio);
     }
 
@@ -92,7 +92,7 @@ public class PlanningCompilerComponentTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
         BoundaryPlan boundary = Assert.Single(plan.Boundaries);
 
-        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Cut, boundary.EffectiveJoin);
         Assert.Equal(BoundaryFallbackReason.TargetHasDerivedDuration, boundary.Fallback);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "boundary-targethasderivedduration");
@@ -113,7 +113,7 @@ public class PlanningCompilerComponentTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
         BoundaryPlan boundary = Assert.Single(plan.Boundaries);
 
-        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Cut, boundary.EffectiveJoin);
         Assert.Equal(BoundaryFallbackReason.TargetHasNoStage, boundary.Fallback);
     }
 
@@ -149,7 +149,7 @@ public class PlanningCompilerComponentTests
         BoundaryPlan boundary = Assert.Single(
             BoundaryPlanCompiler.Compile(spec.Clips, planned).Boundaries);
 
-        Assert.Equal(BoundaryJoinType.Continue, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Continue, boundary.EffectiveJoin);
         Assert.Equal(15, boundary.OverlapFrames);
         Assert.Equal(18, boundary.ContinuityWindowFrames);
         Assert.Equal(5, boundary.FrameStep);
@@ -193,7 +193,7 @@ public class PlanningCompilerComponentTests
         BoundaryPlan boundary = Assert.Single(
             BoundaryPlanCompiler.Compile(spec.Clips, planned).Boundaries);
 
-        Assert.Equal(BoundaryJoinType.Continue, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Continue, boundary.EffectiveJoin);
         Assert.Equal(ContinueBoundaryMode.Reference, boundary.ContinueMode);
         Assert.Equal(0, boundary.OverlapFrames);
         Assert.Equal(15, boundary.ContinuityWindowFrames);
@@ -636,7 +636,7 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
-    public void ClipGeometryProjection_WarnsBeforeGenerationWhenAClipWillBeConformed()
+    public void ClipGeometryValidator_WarnsBeforeGenerationWhenAClipWillBeConformed()
     {
         TimelineSpec spec = new(512, 512, 24, false,
         [
@@ -656,7 +656,7 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
-    public void ClipGeometryProjection_StaysSilentWhenEveryClipEndsAtTheSameSize()
+    public void ClipGeometryValidator_StaysSilentWhenEveryClipEndsAtTheSameSize()
     {
         TimelineSpec spec = new(512, 512, 24, false,
         [
@@ -672,7 +672,7 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
-    public void ClipGeometryProjection_ProjectsStagelessInitVideoClipsInsteadOfGoingSilent()
+    public void ClipGeometryValidator_ProjectsStagelessInitVideoClipsInsteadOfGoingSilent()
     {
         TimelineSpec spec = new(512, 512, 24, false,
         [

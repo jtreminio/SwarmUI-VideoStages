@@ -535,7 +535,7 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, source));
 
         BoundaryPlan boundary = plan.Boundaries[0];
-        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Cut, boundary.EffectiveJoin);
         Assert.Equal(
             BoundaryFallbackReason.ArchitectureRuleUnsupported,
             boundary.Fallback);
@@ -561,7 +561,7 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, next));
 
         Assert.Equal(BoundaryFallbackReason.TargetHasFirstFrameReference, plan.Boundaries[0].Fallback);
-        Assert.Equal(BoundaryJoinType.Cut, plan.Boundaries[0].Effective);
+        Assert.Equal(BoundaryJoinType.Cut, plan.Boundaries[0].EffectiveJoin);
     }
 
     [Fact]
@@ -570,7 +570,7 @@ public class VideoExecutionPlanCompilerTests
         ClipSpec first = GeneratedClip(0, Stage(10)) with { BoundaryOut = Constants.BoundaryOutContinue };
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, GeneratedClip(1, Stage(11))));
 
-        Assert.Equal(BoundaryJoinType.Continue, plan.Boundaries[0].Effective);
+        Assert.Equal(BoundaryJoinType.Continue, plan.Boundaries[0].EffectiveJoin);
     }
 
     [Fact]
@@ -586,7 +586,7 @@ public class VideoExecutionPlanCompilerTests
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, second));
 
-        Assert.Equal(BoundaryJoinType.Cut, plan.Boundaries[0].Effective);
+        Assert.Equal(BoundaryJoinType.Cut, plan.Boundaries[0].EffectiveJoin);
         Assert.Equal(0, plan.Boundaries[0].ContinuityWindowFrames);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "boundary-frame-budget-reconciled");
@@ -604,7 +604,7 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, GeneratedClip(1, Stage(11))));
 
         BoundaryPlan boundary = plan.Boundaries[0];
-        Assert.Equal(BoundaryJoinType.Crossfade, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, boundary.EffectiveJoin);
         Assert.Equal(24, boundary.OverlapFrames);
         Assert.Single(plan.Boundaries);
     }

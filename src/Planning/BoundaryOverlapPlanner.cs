@@ -115,13 +115,13 @@ internal static class BoundaryOverlapPlanner
                 Fallback = BoundaryFallbackReason.InsufficientFrameBudget,
             };
         }
-        int continuityExtra = boundary.Effective == BoundaryJoinType.Continue
+        int continuityExtra = boundary.EffectiveJoin == BoundaryJoinType.Continue
             ? Math.Max(0, boundary.ContinuityWindowFrames - boundary.OverlapFrames)
             : 0;
         return boundary with
         {
             OverlapFrames = nextOverlap,
-            ContinuityWindowFrames = boundary.Effective == BoundaryJoinType.Continue
+            ContinuityWindowFrames = boundary.EffectiveJoin == BoundaryJoinType.Continue
                 ? nextOverlap + continuityExtra
                 : 0,
         };
@@ -239,7 +239,7 @@ internal static class BoundaryOverlapPlanner
         return new(
             Array.AsReadOnly(source.Select(boundary => boundary with
             {
-                Effective = BoundaryJoinType.Cut,
+                EffectiveJoin = BoundaryJoinType.Cut,
                 OverlapFrames = 0,
                 ContinuityWindowFrames = 0,
                 CarryAudio = false,
@@ -252,22 +252,22 @@ internal static class BoundaryOverlapPlanner
     internal static BoundaryPlan DegradeToCut(BoundaryPlan boundary) =>
         boundary with
         {
-            Effective = BoundaryJoinType.Cut,
+            EffectiveJoin = BoundaryJoinType.Cut,
             OverlapFrames = 0,
             ContinuityWindowFrames = 0,
             CarryAudio = false,
         };
 
     private static bool IsOverlapped(BoundaryPlan boundary) =>
-        boundary?.Effective == BoundaryJoinType.Crossfade
+        boundary?.EffectiveJoin == BoundaryJoinType.Crossfade
         || boundary is
         {
-            Effective: BoundaryJoinType.Continue,
+            EffectiveJoin: BoundaryJoinType.Continue,
             ContinueMode: ContinueBoundaryMode.Overlap,
         };
 
     internal static int EffectiveOverlapFrames(BoundaryPlan boundary) =>
-        boundary.Effective switch
+        boundary.EffectiveJoin switch
         {
             BoundaryJoinType.Continue when boundary.ContinueMode == ContinueBoundaryMode.Overlap =>
                 Math.Max(1, boundary.ContinuityWindowFrames),
@@ -278,7 +278,7 @@ internal static class BoundaryOverlapPlanner
     internal static int IncomingHandleFrames(BoundaryPlan boundary) =>
         boundary is
         {
-            Effective: BoundaryJoinType.Continue,
+            EffectiveJoin: BoundaryJoinType.Continue,
             ContinueMode: ContinueBoundaryMode.Overlap,
         }
             ? Math.Max(0, boundary.OverlapFrames)

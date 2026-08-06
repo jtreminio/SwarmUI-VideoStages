@@ -22,7 +22,7 @@ internal static class VideoExecutionPlanCompiler
         ArgumentNullException.ThrowIfNull(architecturePlanning);
 
         EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(
+            EffectiveVideoRequestProjection.Project(
                 spec,
                 rootEnvironment,
                 architecturePlanning);
@@ -126,7 +126,7 @@ internal static class VideoExecutionPlanCompiler
                     acceptedArchitectureCompilation)));
             firstStageOrdinal += activeClips[i].Stages?.Count ?? 0;
         }
-        diagnostics.AddRange(ClipGeometryProjection.Validate(clips, spec.Width, spec.Height));
+        diagnostics.AddRange(ClipGeometryValidator.Validate(clips, spec.Width, spec.Height));
         BoundaryPlanningResult boundaryResult = BoundaryPlanCompiler.Compile(
             activeClips,
             clips);

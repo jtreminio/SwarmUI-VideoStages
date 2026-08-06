@@ -321,7 +321,7 @@ public class MultiClipBoundaryJoinTests
         BoundaryBudgetResolution boundaries = BoundaryPlanFixture.Resolve(
             [17, 25, 17], ["continue", "crossfade", "cut"], [8, 8, 8], [9, 0]);
         Assert.Equal(9, boundaries.Boundaries[0].ContinuityWindowFrames);
-        Assert.Equal(BoundaryJoinType.Crossfade, boundaries.Boundaries[1].Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, boundaries.Boundaries[1].EffectiveJoin);
         MergeAndPublish(g, Artifacts(clips), boundaries.Boundaries);
 
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);

@@ -35,7 +35,7 @@ internal sealed class Boundaries
     {
         int boundaryIndex = BoundaryIndex(fromClipId);
         if (boundaryIndex >= 0
-            && _effectiveBoundaries[boundaryIndex].Effective == BoundaryJoinType.Continue)
+            && _effectiveBoundaries[boundaryIndex].EffectiveJoin == BoundaryJoinType.Continue)
         {
             BoundaryPlan boundary = _effectiveBoundaries[boundaryIndex];
             handleFrames = BoundaryOverlapPlanner.IncomingHandleFrames(boundary);
@@ -53,7 +53,7 @@ internal sealed class Boundaries
         if (boundaryIndex >= 0
             && _effectiveBoundaries[boundaryIndex] is BoundaryPlan
             {
-                Effective: not BoundaryJoinType.Cut,
+                EffectiveJoin: not BoundaryJoinType.Cut,
                 CarryAudio: true,
             } boundary)
         {
@@ -74,7 +74,7 @@ internal sealed class Boundaries
         if (boundaryIndex >= 0
             && _effectiveBoundaries[boundaryIndex] is BoundaryPlan
             {
-                Effective: BoundaryJoinType.Continue,
+                EffectiveJoin: BoundaryJoinType.Continue,
                 ContinueMode: ContinueBoundaryMode.Reference,
             } boundary)
         {
@@ -93,7 +93,7 @@ internal sealed class Boundaries
     {
         int boundaryIndex = BoundaryIndex(fromClipId);
         if (boundaryIndex < 0
-            || _effectiveBoundaries[boundaryIndex].Effective == BoundaryJoinType.Cut)
+            || _effectiveBoundaries[boundaryIndex].EffectiveJoin == BoundaryJoinType.Cut)
         {
             return;
         }

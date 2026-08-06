@@ -12,7 +12,7 @@ internal sealed record EffectiveVideoRequest(
 /// <summary>
 /// Projects resolved temporal grids and reports stale model hints.
 /// </summary>
-internal static class EffectiveVideoRequestProjector
+internal static class EffectiveVideoRequestProjection
 {
     internal static EffectiveVideoRequest Project(
         TimelineSpec authored,

@@ -358,7 +358,7 @@ public class MiniMaxArchitectureTests
         };
 
         PlanDiagnostic diagnostic = Assert.Single(
-            ClipGeometryProjection.Validate([scaled, plain], 512, 512),
+            ClipGeometryValidator.Validate([scaled, plain], 512, 512),
             entry => entry.Code == "clip-geometry-will-conform");
 
         Assert.Equal(0, diagnostic.ClipId);

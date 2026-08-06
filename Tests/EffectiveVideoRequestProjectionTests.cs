@@ -35,7 +35,7 @@ public sealed class EffectiveVideoRequestTests
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = frameGrid };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             Resolve(authored, _ => module, _ => descriptor));
 
@@ -56,7 +56,7 @@ public sealed class EffectiveVideoRequestTests
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             Resolve(authored, _ => module, _ => descriptor));
 
@@ -77,7 +77,7 @@ public sealed class EffectiveVideoRequestTests
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             Resolve(authored, _ => module, _ => descriptor));
 
@@ -110,7 +110,7 @@ public sealed class EffectiveVideoRequestTests
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             Resolve(authored, _ => module, _ => descriptor));
 
@@ -140,7 +140,7 @@ public sealed class EffectiveVideoRequestTests
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             Resolve(authored, _ => module, _ => descriptor));
 
@@ -162,7 +162,7 @@ public sealed class EffectiveVideoRequestTests
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             Resolve(authored, _ => module, _ => descriptor));
 
@@ -185,7 +185,7 @@ public sealed class EffectiveVideoRequestTests
         VideoArchitectureDescriptor descriptor =
             MiniMaxArchitectureModule.Instance.Descriptor;
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             Resolve(authored, _ => MiniMaxArchitectureModule.Instance, _ => descriptor));
 
@@ -207,7 +207,7 @@ public sealed class EffectiveVideoRequestTests
         };
         TimelineSpec authored = Spec(clip);
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             ResolveWan(authored));
 
@@ -235,7 +235,7 @@ public sealed class EffectiveVideoRequestTests
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             Resolve(authored, _ => module, _ => descriptor));
 
@@ -258,7 +258,7 @@ public sealed class EffectiveVideoRequestTests
         TimelineSpec authored = Spec(clip);
         ArchitecturePlanningResult architectures = ResolveWan(authored);
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             architectures);
 
@@ -299,7 +299,7 @@ public sealed class EffectiveVideoRequestTests
         };
 
         EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(authored, blocked);
+            EffectiveVideoRequestProjection.Project(authored, blocked);
 
         Assert.Equal(27, request.Spec.Clips[0].Frames);
     }
@@ -314,7 +314,7 @@ public sealed class EffectiveVideoRequestTests
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             Resolve(authored, _ => module, _ => descriptor));
 
@@ -360,7 +360,7 @@ public sealed class EffectiveVideoRequestTests
         };
         TimelineSpec authored = Spec(clip);
 
-        EffectiveVideoRequest request = EffectiveVideoRequestProjector.Project(
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             ResolveWan(authored));
 
@@ -551,7 +551,7 @@ public sealed class EffectiveVideoRequestTests
             _ => HostVideoArchitectureModule.Instance.Descriptor);
 
         EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(authored, architectures);
+            EffectiveVideoRequestProjection.Project(authored, architectures);
         ClipSpec effective = Assert.Single(request.Spec.Clips);
         IReadOnlyList<PlanDiagnostic> diagnostics =
             ArchitectureCapabilityValidator.Validate(
@@ -611,7 +611,7 @@ public sealed class EffectiveVideoRequestTests
         ArchitecturePlanningResult architectures = ResolveMixed(authored);
 
         EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(authored, architectures);
+            EffectiveVideoRequestProjection.Project(authored, architectures);
         ClipSpec effectiveLeft = request.Spec.Clips[0];
         Assert.Equal(Constants.BoundaryOutCrossfade, ltxClip.BoundaryOut);
         Assert.Equal(16, ltxClip.BoundaryOutOverlap);
@@ -625,7 +625,7 @@ public sealed class EffectiveVideoRequestTests
             RootEnvironment.FromSpec(authored),
             architectures);
         BoundaryPlan boundary = Assert.Single(plan.Boundaries);
-        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Cut, boundary.EffectiveJoin);
         Assert.Equal(
             BoundaryFallbackReason.ArchitectureRuleUnsupported,
             boundary.Fallback);
@@ -695,7 +695,7 @@ public sealed class EffectiveVideoRequestTests
         ArchitecturePlanningResult architectures = ResolveWan(spec);
 
         EffectiveVideoRequest request =
-            EffectiveVideoRequestProjector.Project(spec, architectures);
+            EffectiveVideoRequestProjection.Project(spec, architectures);
 
         Assert.Equal(2, request.Spec.Clips[0].Stages[1].Upscale);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(

@@ -56,8 +56,8 @@ internal sealed class Merger(WorkflowGenerator g)
         int[] discardedHandles = new int[generatedClips.Count];
         for (int i = 0; i < generatedBoundaries.Count; i++)
         {
-            if (generatedBoundaries[i].Effective == BoundaryJoinType.Continue
-                && runtimeBoundaries.Boundaries[i].Effective == BoundaryJoinType.Cut)
+            if (generatedBoundaries[i].EffectiveJoin == BoundaryJoinType.Continue
+                && runtimeBoundaries.Boundaries[i].EffectiveJoin == BoundaryJoinType.Cut)
             {
                 discardedHandles[i + 1] =
                     BoundaryOverlapPlanner.IncomingHandleFrames(generatedBoundaries[i]);

@@ -176,7 +176,7 @@ internal sealed class VideoArchitectureExecutionHost
             {
                 ClipPlan plannedClip = _plan.Clips[clipIndex];
                 bool exposesPrevious = clipIndex > 0
-                    && _plan.Boundaries[clipIndex - 1].Effective != BoundaryJoinType.Cut
+                    && _plan.Boundaries[clipIndex - 1].EffectiveJoin != BoundaryJoinType.Cut
                     && previousClip?.Architecture.Id == plannedClip.Architecture.Id;
                 ArchitectureClipRuntimeContext runtimeContext = new(
                     plannedClip,

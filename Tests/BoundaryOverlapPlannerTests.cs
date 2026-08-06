@@ -40,7 +40,7 @@ public class BoundaryOverlapPlannerTests
             ]);
 
         Assert.Equal(9, resolution.Boundaries[0].ContinuityWindowFrames);
-        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[1].Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[1].EffectiveJoin);
         Assert.Equal(8, resolution.Boundaries[1].OverlapFrames);
     }
 
@@ -52,7 +52,7 @@ public class BoundaryOverlapPlannerTests
             [Boundary(0, BoundaryJoinType.Continue, continuityWindow: 9)]);
         BoundaryPlan boundary = Assert.Single(resolution.Boundaries);
 
-        Assert.Equal(BoundaryJoinType.Cut, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Cut, boundary.EffectiveJoin);
         Assert.Equal(0, boundary.ContinuityWindowFrames);
         Assert.Equal(0, boundary.OverlapFrames);
         Assert.True(resolution.Degraded);
@@ -74,7 +74,7 @@ public class BoundaryOverlapPlannerTests
             ]);
         BoundaryPlan boundary = Assert.Single(resolution.Boundaries);
 
-        Assert.Equal(BoundaryJoinType.Crossfade, boundary.Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, boundary.EffectiveJoin);
         Assert.Equal(9, boundary.OverlapFrames);
         Assert.Equal(0, (boundary.OverlapFrames - boundary.MinFrames) % boundary.FrameStep);
     }
@@ -113,7 +113,7 @@ public class BoundaryOverlapPlannerTests
             [boundary]);
 
         BoundaryPlan planned = Assert.Single(resolution.Boundaries);
-        Assert.Equal(BoundaryJoinType.Continue, planned.Effective);
+        Assert.Equal(BoundaryJoinType.Continue, planned.EffectiveJoin);
         Assert.Equal(39, planned.ContinuityWindowFrames);
         Assert.Equal(0, BoundaryOverlapPlanner.EffectiveOverlapFrames(planned));
         Assert.Equal(0, BoundaryOverlapPlanner.IncomingHandleFrames(planned));
@@ -156,7 +156,7 @@ public class BoundaryOverlapPlannerTests
             BoundaryOverlapPlanner.ValidateRuntime([Clip(1, 5), Clip(2, 5)], [compiled]);
 
         Assert.True(resolution.Degraded);
-        Assert.Equal(BoundaryJoinType.Cut, Assert.Single(resolution.Boundaries).Effective);
+        Assert.Equal(BoundaryJoinType.Cut, Assert.Single(resolution.Boundaries).EffectiveJoin);
         Assert.Contains("runtime clip lengths", resolution.Reason);
     }
 
@@ -174,7 +174,7 @@ public class BoundaryOverlapPlannerTests
             BoundaryOverlapPlanner.ValidateRuntime([Clip(1, 10), Clip(2, 10)], [compiled]);
 
         Assert.True(resolution.Degraded);
-        Assert.Equal(BoundaryJoinType.Cut, Assert.Single(resolution.Boundaries).Effective);
+        Assert.Equal(BoundaryJoinType.Cut, Assert.Single(resolution.Boundaries).EffectiveJoin);
     }
 
     [Fact]
@@ -188,9 +188,9 @@ public class BoundaryOverlapPlannerTests
                 Boundary(2, BoundaryJoinType.Crossfade),
             ]);
 
-        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[0].Effective);
-        Assert.Equal(BoundaryJoinType.Cut, resolution.Boundaries[1].Effective);
-        Assert.Equal(BoundaryJoinType.Cut, resolution.Boundaries[2].Effective);
+        Assert.Equal(BoundaryJoinType.Crossfade, resolution.Boundaries[0].EffectiveJoin);
+        Assert.Equal(BoundaryJoinType.Cut, resolution.Boundaries[1].EffectiveJoin);
+        Assert.Equal(BoundaryJoinType.Cut, resolution.Boundaries[2].EffectiveJoin);
         Assert.Equal(
             BoundaryFallbackReason.InsufficientFrameBudget,
             resolution.Boundaries[2].Fallback);

@@ -164,7 +164,7 @@ public class CrossLanguageMirrorTests
                 b => string.Equals(b, Constants.BoundaryOutCrossfade, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(b, Constants.BoundaryOutContinue, StringComparison.OrdinalIgnoreCase));
             bool actualFallback = resolution.Boundaries.All(
-                boundary => boundary.Effective == BoundaryJoinType.Cut)
+                boundary => boundary.EffectiveJoin == BoundaryJoinType.Cut)
                 && anyRequested;
 
             Assert.Equal(expectedOverlaps, actualOverlaps);
