@@ -34,8 +34,7 @@ internal static class PlanDiagnosticReporter
             $"{context}: {string.Join("; ", errors.Select(error => error.Message))}");
     }
 
-    /// <summary>Renders one diagnostic as the single user-facing line it is worth.</summary>
-    internal static string Format(PlanDiagnostic diagnostic)
+    private static string Format(PlanDiagnostic diagnostic)
     {
         ArgumentNullException.ThrowIfNull(diagnostic);
         List<string> identity = [];
