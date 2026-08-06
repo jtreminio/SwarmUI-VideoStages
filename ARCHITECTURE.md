@@ -75,10 +75,10 @@ them.
 ## The authoring document contract
 
 The timeline rides one hidden `Video Stages` param holding a single JSON
-object: a `schemaVersion` (currently 6), optional root `width`/`height`,
-`clips`, and `audioTracks`. Version 6 is exact. One bounded version-5 migration
-renames the retired clip `architecture` field to `architectureHint`; no other
-version is accepted. Keys are camelCase end to end — the backend readers name
+object: a `schemaVersion` (currently 7), optional root `width`/`height`,
+`clips`, and `audioTracks`. Version 7 is exact. One bounded version-6 migration
+renames the clip `refs` and stage `refStrengths` fields to `frameRefs` and
+`frameRefStrengths`; no other version is accepted. Keys are camelCase end to end — the backend readers name
 exactly the keys
 `frontend/persistence/documentCodec.ts` emits, and nothing relies on lenient key
 matching. `Tests/fixtures/authoring-document.json` is the shared pin: the jest

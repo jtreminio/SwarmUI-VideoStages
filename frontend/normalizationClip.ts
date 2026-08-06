@@ -84,7 +84,7 @@ export const buildDefaultClip = (
     previousClip: Clip | null = null,
 ): Clip => {
     const defaults = getRootDefaults();
-    const refs = includeDefaultRef ? [buildDefaultRef()] : [];
+    const frameRefs = includeDefaultRef ? [buildDefaultRef()] : [];
     const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
     const initialLoraWeights = loras.map(
         (entry, index) =>
@@ -99,11 +99,11 @@ export const buildDefaultClip = (
             getRootDefaults,
             getDefaultStageModel,
             previousClip?.stages[0] ?? null,
-            refs.length,
+            frameRefs.length,
             initialLoraWeights,
         ),
-        refStrengths: buildDefaultStageRefStrengths(
-            refs.length,
+        frameRefStrengths: buildDefaultStageRefStrengths(
+            frameRefs.length,
             includeDefaultRef
                 ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH
                 : STAGE_REF_STRENGTH_DEFAULT,
@@ -152,7 +152,7 @@ export const buildDefaultClip = (
         promptWindows: [],
         retake: null,
         initVideo: null,
-        refs,
+        frameRefs,
         stages: [firstStage],
     };
 };
@@ -183,7 +183,7 @@ export const normalizeClip = (
         Math.max(CLIP_DURATION_MIN, rawDuration),
         fps,
     );
-    const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
+    const refsRaw = Array.isArray(rawClip.frameRefs) ? rawClip.frameRefs : [];
     const clipScopedLoras = normalizeStageLoras(rawClip.loras);
     const loraNames: string[] = [];
     const loraDefaultWeightByName = new Map<string, number>();
@@ -259,7 +259,7 @@ export const normalizeClip = (
         },
         fps,
     );
-    const refs = refsRaw.map((rawRef) =>
+    const frameRefs = refsRaw.map((rawRef) =>
         normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax),
     );
     const stageZero = stages[0] ?? null;
@@ -350,7 +350,7 @@ export const normalizeClip = (
         promptWindows: normalizePromptWindows(rawClip),
         retake,
         initVideo,
-        refs,
+        frameRefs,
         stages,
     };
 };

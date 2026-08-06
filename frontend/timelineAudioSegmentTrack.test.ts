@@ -22,7 +22,7 @@ const PPS = 44;
 const clipRecord = (duration: number): Record<string, unknown> => ({
     duration,
     stages: [{}],
-    refs: [],
+    frameRefs: [],
 });
 
 const makeBody = (): HTMLElement => {
@@ -67,7 +67,7 @@ describe("timeline-wide audio segment gestures", () => {
             });
         }
         return {
-            schemaVersion: 5,
+            schemaVersion: 7,
             clips,
             audioTracks: withTrack
                 ? [

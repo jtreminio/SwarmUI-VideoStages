@@ -42,7 +42,7 @@ describe("buildRefBody", () => {
                 {
                     duration: 5,
                     stages: [{ model: "ltx-2.3.safetensors" }],
-                    refs: [{ source: "Base", frame: 1 }],
+                    frameRefs: [{ source: "Base", frame: 1 }],
                 },
             ],
         });
@@ -96,7 +96,7 @@ describe("buildRefBody", () => {
                 {
                     duration: 5,
                     stages: [{ model: model.value }],
-                    refs: [{ source: "Upload", frame: 1, fromEnd: false }],
+                    frameRefs: [{ source: "Upload", frame: 1, fromEnd: false }],
                 },
             ],
         });
@@ -148,7 +148,7 @@ describe("buildRefBody", () => {
                 {
                     duration: 5,
                     stages: [{ model: model.value }],
-                    refs: [{ source: "Upload", frame: 1, fromEnd: true }],
+                    frameRefs: [{ source: "Upload", frame: 1, fromEnd: true }],
                 },
             ],
         });

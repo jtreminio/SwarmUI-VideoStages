@@ -47,14 +47,14 @@ public sealed record StageSpec(
     int ClipStageRawIndex = 0,
     double? ControlNetStrength = null,
     IReadOnlyList<double> IcLoraStrengths = null,
-    IReadOnlyList<double> ImageRefStrengths = null,
+    IReadOnlyList<double> FrameRefStrengths = null,
     bool ImageRefWasExplicit = false,
     IReadOnlyList<LoraRef> Loras = null,
     IReadOnlyList<double> LoraWeights = null,
     RetakeWindowSpec RetakeWindow = null
 );
 
-public sealed record ImageRefSpec(
+public sealed record FrameRefSpec(
     string Source,
     int Frame,
     bool FromEnd,
@@ -164,7 +164,7 @@ public sealed record ClipSpec(
     bool ClipLengthFromControlNet,
     bool ReuseAudio,
     UploadedMediaSpec UploadedAudio,
-    IReadOnlyList<ImageRefSpec> ImageRefs,
+    IReadOnlyList<FrameRefSpec> FrameRefs,
     IReadOnlyList<StageSpec> Stages,
     IReadOnlyList<LoraRef> Loras = null,
     IReadOnlyList<PromptWindowSpec> PromptWindows = null,

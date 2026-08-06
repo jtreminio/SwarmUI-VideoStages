@@ -33,8 +33,8 @@ import { framesForClip, NEUTRAL_FRAME_GRID } from "./renderUtils";
 import {
     type Clip,
     type ClipLora,
+    type FrameRefImage,
     REF_SOURCE_REFINER,
-    type RefImage,
     type RootDefaults,
     type Stage,
 } from "./types";
@@ -157,7 +157,7 @@ export const buildDefaultStage = (
         loraWeights: previousStage
             ? [...previousStage.loraWeights]
             : [...initialLoraWeights],
-        refStrengths: buildDefaultStageRefStrengths(refCount),
+        frameRefStrengths: buildDefaultStageRefStrengths(refCount),
         upscale: previousStage ? previousStage.upscale : defaults.upscale,
         upscaleMethod: previousStage
             ? previousStage.upscaleMethod
@@ -180,7 +180,7 @@ export const buildDefaultStage = (
 
 export const buildDefaultRef = (
     source: string = REF_SOURCE_REFINER,
-): RefImage => ({
+): FrameRefImage => ({
     source,
     uploadFileName: null,
     uploadedImage: null,
@@ -188,21 +188,21 @@ export const buildDefaultRef = (
     fromEnd: false,
 });
 
-export const appendRefToClip = (clip: Clip, ref: RefImage): void => {
-    clip.refs.push(ref);
+export const appendRefToClip = (clip: Clip, ref: FrameRefImage): void => {
+    clip.frameRefs.push(ref);
     for (const stage of clip.stages) {
-        stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
+        stage.frameRefStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
     }
 };
 
 export const removeRefAt = (clip: Clip, refIdx: number): boolean => {
-    if (refIdx < 0 || refIdx >= clip.refs.length) {
+    if (refIdx < 0 || refIdx >= clip.frameRefs.length) {
         return false;
     }
-    clip.refs.splice(refIdx, 1);
+    clip.frameRefs.splice(refIdx, 1);
     for (const stage of clip.stages) {
-        if (refIdx < stage.refStrengths.length) {
-            stage.refStrengths.splice(refIdx, 1);
+        if (refIdx < stage.frameRefStrengths.length) {
+            stage.frameRefStrengths.splice(refIdx, 1);
         }
     }
     return true;
@@ -403,8 +403,8 @@ export const normalizeStage = (
               )
             : [...fallback.icLoraStrengths],
         loraWeights,
-        refStrengths: normalizeStageRefStrengths(
-            rawStage.refStrengths,
+        frameRefStrengths: normalizeStageRefStrengths(
+            rawStage.frameRefStrengths,
             refCount,
         ),
         upscale: firstStageUpscale.upscale,
@@ -452,7 +452,7 @@ export const normalizeStage = (
 export const normalizeRef = (
     rawRef: Record<string, unknown>,
     frameMax: number | null,
-): RefImage => {
+): FrameRefImage => {
     const fallback = buildDefaultRef();
     const source = textOr(rawRef.source, fallback.source);
     const authoredFrame = Math.max(

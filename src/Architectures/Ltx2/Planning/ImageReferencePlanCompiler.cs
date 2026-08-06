@@ -10,11 +10,11 @@ internal static class ImageReferencePlanCompiler
     {
         ImmutableArray<ImageReferencePlan>.Builder plans =
             ImmutableArray.CreateBuilder<ImageReferencePlan>();
-        IReadOnlyList<ImageRefSpec> references = clip.ImageRefs ?? [];
-        IReadOnlyList<double> strengths = stage.ImageRefStrengths ?? [];
+        IReadOnlyList<FrameRefSpec> references = clip.FrameRefs ?? [];
+        IReadOnlyList<double> strengths = stage.FrameRefStrengths ?? [];
         for (int i = 0; i < references.Count; i++)
         {
-            ImageRefSpec reference = references[i];
+            FrameRefSpec reference = references[i];
             (ImageReferenceSourceKind sourceKind, int? editStage) = CompileSource(reference.Source);
             plans.Add(new ImageReferencePlan(
                 sourceKind,

@@ -110,7 +110,7 @@ export const buildClipBody = (
         }
         body.appendChild(section);
     };
-    appendCapabilitySection("frameReferences", clip.refs.length > 0, () =>
+    appendCapabilitySection("frameReferences", clip.frameRefs.length > 0, () =>
         buildRefSection(
             context,
             clipIdx,

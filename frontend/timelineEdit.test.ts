@@ -6,7 +6,7 @@ import {
     pxToDuration,
     pxToFrame,
 } from "./timelineEdit";
-import type { Clip, RefImage, RootDefaults } from "./types";
+import type { Clip, FrameRefImage, RootDefaults } from "./types";
 
 // Minimal RootDefaults stub — only fps/frames are read by getReferenceFrameMax.
 const rootDefaults = (fps: number, frames = 24): RootDefaults =>
@@ -16,19 +16,19 @@ const rootDefaults = (fps: number, frames = 24): RootDefaults =>
         modelCatalog: testArchitectureCatalog(),
     }) as unknown as RootDefaults;
 
-const ref = (frame: number): RefImage =>
+const ref = (frame: number): FrameRefImage =>
     ({
         source: "refiner",
         uploadFileName: null,
         uploadedImage: null,
         frame,
         fromEnd: false,
-    }) as RefImage;
+    }) as FrameRefImage;
 
-const clip = (duration: number, refs: RefImage[] = []): Clip =>
+const clip = (duration: number, frameRefs: FrameRefImage[] = []): Clip =>
     ({
         duration,
-        refs,
+        frameRefs,
         stages: [{ model: "ltx", skipped: false }],
     }) as unknown as Clip;
 
@@ -165,19 +165,19 @@ describe("clampClipRefsToDuration", () => {
     it("clamps ref frames past the new duration's max down to the max", () => {
         const c = clip(1.8, [ref(1000), ref(10), ref(-5)]);
         clampClipRefsToDuration(c, () => rootDefaults(24));
-        expect(c.refs[0].frame).toBe(49);
-        expect(c.refs[1].frame).toBe(10);
-        expect(c.refs[2].frame).toBe(1); // floored to REF_FRAME_MIN
+        expect(c.frameRefs[0].frame).toBe(49);
+        expect(c.frameRefs[1].frame).toBe(10);
+        expect(c.frameRefs[2].frame).toBe(1); // floored to REF_FRAME_MIN
     });
 });
 
 describe("applyClipDurationResize", () => {
-    it("sets the duration, clamps refs, and reports a change", () => {
+    it("sets the duration, clamps frameRefs, and reports a change", () => {
         const c = clip(5, [ref(1000)]);
         const changed = applyClipDurationResize(c, 1.8, () => rootDefaults(24));
         expect(changed).toBe(true);
         expect(c.duration).toBe(1.8);
-        expect(c.refs[0].frame).toBe(49);
+        expect(c.frameRefs[0].frame).toBe(49);
     });
 
     it("is a no-op when the duration is unchanged (no write signalled)", () => {
@@ -185,6 +185,6 @@ describe("applyClipDurationResize", () => {
         const changed = applyClipDurationResize(c, 2, () => rootDefaults(24));
         expect(changed).toBe(false);
         // Refs are left untouched on a no-op — the caller skips the write entirely.
-        expect(c.refs[0].frame).toBe(1000);
+        expect(c.frameRefs[0].frame).toBe(1000);
     });
 });

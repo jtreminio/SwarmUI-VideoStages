@@ -297,7 +297,7 @@ public class WanArchitectureTests
             GeneratedClip(0, stage with { RetakeWindow = new(0, 8, 1) }),
             "effective-request.unsupported-retake-ignored");
         AssertIgnored(
-            GeneratedClip(0, stage) with { ImageRefs = [new("Generated", 1, false, null)] },
+            GeneratedClip(0, stage) with { FrameRefs = [new("Generated", 1, false, null)] },
             "effective-request.wan-frame-reference-source-ignored");
         AssertIgnored(
             GeneratedClip(0, stage) with { PromptWindows = [new("late", 1, 1)] },
@@ -335,7 +335,7 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            ImageRefs =
+            FrameRefs =
             [
                 new("Upload", 3, false, "middle.png", "middle"),
                 new("Upload", 1, false, "first.png", "first"),
@@ -373,7 +373,7 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-five");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            ImageRefs = [new("Upload", 1, true, "last.png", "last")],
+            FrameRefs = [new("Upload", 1, true, "last.png", "last")],
         };
         TimelineSpec spec = new(512, 512, 24, false, [clip]);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
@@ -403,7 +403,7 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            ImageRefs = [new("Base", 1, false, null)],
+            FrameRefs = [new("Base", 1, false, null)],
         };
         TimelineSpec spec = new(512, 512, 24, true, [clip]);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
@@ -428,7 +428,7 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            ImageRefs =
+            FrameRefs =
             [
                 new(
                     "Upload",
@@ -456,7 +456,7 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-last-only");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            ImageRefs =
+            FrameRefs =
             [
                 new(
                     "Upload",
@@ -493,7 +493,7 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            ImageRefs = [new("Upload", 1, true, "last.png", "last")],
+            FrameRefs = [new("Upload", 1, true, "last.png", "last")],
             AuthoredStages =
             [
                 new(0, stage.Model, null, false),
@@ -529,7 +529,7 @@ public class WanArchitectureTests
         };
         ClipSpec clip = GeneratedClip(0, first, latentTail) with
         {
-            ImageRefs = [new("Upload", 1, true, "last.png", "last")],
+            FrameRefs = [new("Upload", 1, true, "last.png", "last")],
         };
         TimelineSpec spec = new(512, 512, 24, false, [clip]);
 
@@ -562,7 +562,7 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            ImageRefs = [new("Upload", 3, false, "middle.png", "middle")],
+            FrameRefs = [new("Upload", 3, false, "middle.png", "middle")],
         };
 
         VideoExecutionPlan plan = Compile(clip);
@@ -587,7 +587,7 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = InitVideoClip(0, stage) with
         {
-            ImageRefs = [new("Upload", 1, false, "first.png", "first")],
+            FrameRefs = [new("Upload", 1, false, "first.png", "first")],
         };
 
         VideoExecutionPlan plan = Compile(clip);
@@ -610,9 +610,9 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(
             0,
-            stage with { ImageRefStrengths = [Constants.DefaultStageRefStrength / 2] }) with
+            stage with { FrameRefStrengths = [Constants.DefaultStageRefStrength / 2] }) with
         {
-            ImageRefs = [new("Upload", 1, false, "first.png", "first")],
+            FrameRefs = [new("Upload", 1, false, "first.png", "first")],
         };
 
         VideoExecutionPlan plan = Compile(clip);
@@ -635,9 +635,9 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(
             0,
-            stage with { ImageRefStrengths = [Constants.DefaultStageRefStrength] }) with
+            stage with { FrameRefStrengths = [Constants.DefaultStageRefStrength] }) with
         {
-            ImageRefs = [new("Upload", 1, false, "first.png", "first")],
+            FrameRefs = [new("Upload", 1, false, "first.png", "first")],
         };
 
         Assert.DoesNotContain(

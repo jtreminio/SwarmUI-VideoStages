@@ -108,14 +108,14 @@ describe("normalization", () => {
             {
                 duration: 1.05,
                 stages: [{ ...minimalStageRaw, model: "removed-model" }],
-                refs: [{ source: REF_SOURCE_BASE, frame: 33 }],
+                frameRefs: [{ source: REF_SOURCE_BASE, frame: 33 }],
             },
             getRootDefaults,
             getDefaultStageModel,
         );
 
         expect(clip.stages[0].model).toBe("removed-model");
-        expect(clip.refs[0].frame).toBe(33);
+        expect(clip.frameRefs[0].frame).toBe(33);
     });
 
     it("normalizeStageRefStrengthValue accepts 0 without clamping up", () => {
@@ -229,14 +229,14 @@ describe("normalization", () => {
         expect(clip.boundaryOut).toBe("cut");
     });
 
-    it("normalizeClip pads refStrengths for each stage from raw", () => {
+    it("normalizeClip pads frameRefStrengths for each stage from raw", () => {
         const rawClip: Record<string, unknown> = {
             duration: 2,
-            refs: [{ source: REF_SOURCE_BASE, frame: 1 }],
+            frameRefs: [{ source: REF_SOURCE_BASE, frame: 1 }],
             stages: [
                 {
                     model: "ltx",
-                    refStrengths: [0.3],
+                    frameRefStrengths: [0.3],
                 },
             ],
         };
@@ -245,8 +245,8 @@ describe("normalization", () => {
             getRootDefaults,
             getDefaultStageModel,
         );
-        expect(clip.refs).toHaveLength(1);
-        expect(clip.stages[0].refStrengths).toEqual([0.3]);
+        expect(clip.frameRefs).toHaveLength(1);
+        expect(clip.stages[0].frameRefStrengths).toEqual([0.3]);
     });
 
     it("normalizeClip clamps and defaults stage ControlNet strength", () => {
@@ -310,7 +310,7 @@ describe("normalization", () => {
         expect(stage.loraWeights).not.toBe(prev.stages[0].loraWeights);
         expect(clip.boundaryOut).toBe("cut");
         expect(clip.prompt).toBe("");
-        expect(clip.refs).toEqual([]);
+        expect(clip.frameRefs).toEqual([]);
     });
 
     it("normalizeClip ignores removed single-ControlNet IC-LoRA fields", () => {
@@ -747,7 +747,7 @@ describe("normalization", () => {
                 duration: 1.05,
                 audioSource: "Upload",
                 clipLengthFromAudio: true,
-                refs: [{ source: "Base", frame: 100 }],
+                frameRefs: [{ source: "Base", frame: 100 }],
                 stages: [{ model: "ltx-2.3.safetensors" }],
             },
             getRootDefaults,
@@ -755,7 +755,7 @@ describe("normalization", () => {
             24,
         );
 
-        expect(clip.refs[0].frame).toBe(100);
+        expect(clip.frameRefs[0].frame).toBe(100);
         expect(clip.clipLengthFromAudio).toBe(true);
     });
 
@@ -765,7 +765,7 @@ describe("normalization", () => {
                 duration: 1.05,
                 audioSource: "Native",
                 clipLengthFromAudio: true,
-                refs: [{ source: "Base", frame: 100 }],
+                frameRefs: [{ source: "Base", frame: 100 }],
                 stages: [{ model: "ltx-2.3.safetensors" }],
             },
             getRootDefaults,
@@ -775,7 +775,7 @@ describe("normalization", () => {
 
         // The inert flag no longer suppresses grid snapping, so references clamp to the
         // clip's grid-snapped frame count exactly as they would without the flag.
-        expect(clip.refs[0].frame).toBe(
+        expect(clip.frameRefs[0].frame).toBe(
             framesForClip(clip.duration, 24, {
                 frameGrid: 8,
                 frameGridOrigin: 1,
@@ -1027,41 +1027,44 @@ describe("appendRefToClip / removeRefAt", () => {
         normalizeClip(
             {
                 duration: 4,
-                refs: [{ source: REF_SOURCE_REFINER, frame: 2 }],
-                stages: [{ refStrengths: [0.3] }, { refStrengths: [0.7] }],
+                frameRefs: [{ source: REF_SOURCE_REFINER, frame: 2 }],
+                stages: [
+                    { frameRefStrengths: [0.3] },
+                    { frameRefStrengths: [0.7] },
+                ],
             },
             getRootDefaults,
             getDefaultStageModel,
         );
 
-    it("appendRefToClip adds the ref and pads every stage's refStrengths", () => {
+    it("appendRefToClip adds the ref and pads every stage's frameRefStrengths", () => {
         const clip = twoStageClip();
         appendRefToClip(clip, buildDefaultRef(REF_SOURCE_BASE));
-        expect(clip.refs).toHaveLength(2);
-        expect(clip.refs[1].source).toBe(REF_SOURCE_BASE);
-        expect(clip.stages[0].refStrengths).toHaveLength(2);
-        expect(clip.stages[1].refStrengths).toHaveLength(2);
-        expect(clip.stages[0].refStrengths[0]).toBe(0.3);
-        expect(clip.stages[1].refStrengths[0]).toBe(0.7);
-        expect(clip.stages[0].refStrengths[1]).toBe(0.8);
+        expect(clip.frameRefs).toHaveLength(2);
+        expect(clip.frameRefs[1].source).toBe(REF_SOURCE_BASE);
+        expect(clip.stages[0].frameRefStrengths).toHaveLength(2);
+        expect(clip.stages[1].frameRefStrengths).toHaveLength(2);
+        expect(clip.stages[0].frameRefStrengths[0]).toBe(0.3);
+        expect(clip.stages[1].frameRefStrengths[0]).toBe(0.7);
+        expect(clip.stages[0].frameRefStrengths[1]).toBe(0.8);
     });
 
     it("removeRefAt removes the ref and the matching strength from every stage", () => {
         const clip = twoStageClip();
         appendRefToClip(clip, buildDefaultRef(REF_SOURCE_BASE));
         expect(removeRefAt(clip, 0)).toBe(true);
-        expect(clip.refs).toHaveLength(1);
-        expect(clip.refs[0].source).toBe(REF_SOURCE_BASE);
-        expect(clip.stages[0].refStrengths).toEqual([0.8]);
-        expect(clip.stages[1].refStrengths).toEqual([0.8]);
+        expect(clip.frameRefs).toHaveLength(1);
+        expect(clip.frameRefs[0].source).toBe(REF_SOURCE_BASE);
+        expect(clip.stages[0].frameRefStrengths).toEqual([0.8]);
+        expect(clip.stages[1].frameRefStrengths).toEqual([0.8]);
     });
 
     it("removeRefAt returns false and leaves the clip untouched for an out-of-range index", () => {
         const clip = twoStageClip();
         expect(removeRefAt(clip, 5)).toBe(false);
         expect(removeRefAt(clip, -1)).toBe(false);
-        expect(clip.refs).toHaveLength(1);
-        expect(clip.stages[0].refStrengths).toHaveLength(1);
+        expect(clip.frameRefs).toHaveLength(1);
+        expect(clip.stages[0].frameRefStrengths).toHaveLength(1);
     });
 });
 
@@ -1130,7 +1133,7 @@ describe("clip LoRAs with per-stage weights", () => {
         const clip = normalizeClip(
             {
                 duration: 2,
-                refs: [],
+                frameRefs: [],
                 stages: [
                     {
                         model: "ltx",

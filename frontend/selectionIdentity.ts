@@ -75,7 +75,7 @@ const clipItemList = (
         case "clip":
             return { list: clip.stages, index: selection.stageIdx };
         case "ref":
-            return { list: clip.refs, index: selection.refIdx };
+            return { list: clip.frameRefs, index: selection.refIdx };
         case "ic-lora":
             return { list: clip.icLoras, index: selection.entryIdx };
         case "prompt-minor":

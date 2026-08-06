@@ -11,7 +11,7 @@ describe("nondestructive architecture conversion", () => {
     it("retargets models while preserving unsupported authored extras as dormant data", () => {
         const catalog = fakeArchitectureCatalog();
         const clip = minimalClip({
-            refs: [minimalRef()],
+            frameRefs: [minimalRef()],
             promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
             reuseAudio: true,
             clipLengthFromAudio: true,
@@ -54,7 +54,7 @@ describe("nondestructive architecture conversion", () => {
         expect(conversion).not.toBeNull();
         expect(conversion?.removals).toEqual([]);
         expect(conversion?.clip).toMatchObject({
-            refs: before.refs,
+            frameRefs: before.frameRefs,
             promptWindows: before.promptWindows,
             reuseAudio: true,
             clipLengthFromAudio: true,

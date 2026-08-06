@@ -20,7 +20,7 @@ public class MetadataSanitizerTests
                         ["data"] = "data:audio/wav;base64,QUJD",
                         ["fileName"] = "a.wav"
                     },
-                    ["refs"] = new JArray
+                    ["frameRefs"] = new JArray
                     {
                         new JObject
                         {
@@ -51,7 +51,7 @@ public class MetadataSanitizerTests
         JObject clip = (JObject)root["clips"]![0]!;
         Assert.Null(clip["uploadedAudio"]!["data"]);
         Assert.Equal("a.wav", $"{clip["uploadedAudio"]!["fileName"]}");
-        JObject ref0 = (JObject)clip["refs"]![0]!;
+        JObject ref0 = (JObject)clip["frameRefs"]![0]!;
         Assert.Null(ref0["uploadedImage"]!["data"]);
         Assert.Equal("r.png", $"{ref0["uploadedImage"]!["fileName"]}");
         JObject icLora = (JObject)clip["icLoras"]![0]!;

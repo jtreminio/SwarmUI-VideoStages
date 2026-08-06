@@ -58,7 +58,7 @@ interface ClipFixture {
     duration: number;
     skipped?: boolean;
     stages: StageFixture[];
-    refs?: { source: string; frame: number }[];
+    frameRefs?: { source: string; frame: number }[];
     audioSource?: string;
     uploadedAudio?: { data: string; fileName: string };
     controlNetLora?: string;
@@ -105,7 +105,7 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
         control: s.control,
         steps: s.steps,
     })),
-    refs: clip.refs ?? [],
+    frameRefs: clip.frameRefs ?? [],
     promptWindows: [],
     ...(clip.retake ? { retake: clip.retake } : {}),
     ...(clip.initVideo ? { initVideo: clip.initVideo } : {}),
@@ -449,7 +449,7 @@ describe("createTimelineDetailStrip", () => {
             {
                 duration: 4,
                 stages: [{}],
-                refs: [],
+                frameRefs: [],
                 icLoras: [],
                 windows: [],
             },
@@ -540,8 +540,8 @@ describe("createTimelineDetailStrip", () => {
         );
         expect(groups[0].classList.contains("input-group-closed")).toBe(true);
         expect(groups[1].classList.contains("input-group-open")).toBe(true);
-        expect(sliderNumberByLabel("Reference R0")).not.toBeNull();
-        expect(sliderNumberByLabel("Reference R1")).not.toBeNull();
+        expect(sliderNumberByLabel("Frame Ref R0")).not.toBeNull();
+        expect(sliderNumberByLabel("Frame Ref R1")).not.toBeNull();
     });
 
     it("places Count from clip end help before its label", () => {
@@ -549,7 +549,7 @@ describe("createTimelineDetailStrip", () => {
             {
                 duration: 4,
                 stages: [{}],
-                refs: [{ source: "Upload", frame: 0 }],
+                frameRefs: [{ source: "Upload", frame: 0 }],
             },
         ]);
         setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
@@ -2344,7 +2344,7 @@ describe("createTimelineDetailStrip", () => {
         setup([
             {
                 duration: 4,
-                refs: [{ source: "Upload", frame: 0 }],
+                frameRefs: [{ source: "Upload", frame: 0 }],
                 stages: [
                     {
                         loras: [{ name: "lora-x.safetensors", weight: 0.7 }],
@@ -2353,7 +2353,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        for (const label of ["Steps", "CFG Scale", "Reference R0"]) {
+        for (const label of ["Steps", "CFG Scale", "Frame Ref R0"]) {
             expect(
                 sliderNumberByLabel(label)
                     .closest(".vst-stage-slider")
@@ -2475,7 +2475,7 @@ describe("createTimelineDetailStrip", () => {
         document
             .querySelector<HTMLButtonElement>(".vst-detail-add-ref")
             ?.click();
-        expect(committedClips()[0].refs).toHaveLength(1);
+        expect(committedClips()[0].frameRefs).toHaveLength(1);
         expect(getSelection()).toEqual({
             kind: "ref",
             clipIdx: 0,
@@ -2489,7 +2489,7 @@ describe("createTimelineDetailStrip", () => {
             {
                 duration: 5,
                 stages: [{}],
-                refs: [
+                frameRefs: [
                     { source: "Refiner", frame: 1 },
                     { source: "Base", frame: 2 },
                 ],
@@ -2519,8 +2519,8 @@ describe("createTimelineDetailStrip", () => {
         sourceSelect.value = "Upload";
         sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
         expect(saveSpy).toHaveBeenCalled();
-        expect(savedClips(saveSpy)[0].refs[1].source).toBe("Upload");
-        expect(savedClips(saveSpy)[0].refs[0].source).toBe("Refiner");
+        expect(savedClips(saveSpy)[0].frameRefs[1].source).toBe("Upload");
+        expect(savedClips(saveSpy)[0].frameRefs[0].source).toBe("Refiner");
 
         // Rail delete removes the active ref, selects its neighbour, and
         // preserves the dock's scroll position.
@@ -2532,7 +2532,7 @@ describe("createTimelineDetailStrip", () => {
         document
             .querySelector<HTMLElement>(".vst-detail-delete-ref")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(committedClips()[0].refs).toHaveLength(1);
+        expect(committedClips()[0].frameRefs).toHaveLength(1);
         expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 0 });
         expect(detailBody()?.scrollTop).toBe(140);
         expect(refRow(0).dataset.vstRefIndex).toBe("0");
@@ -2553,7 +2553,7 @@ describe("createTimelineDetailStrip", () => {
                 {
                     duration: 5,
                     stages: [{}],
-                    refs: [{ source: "Base", frame: 1 }],
+                    frameRefs: [{ source: "Base", frame: 1 }],
                     icLoras: [
                         {
                             lora: "lora-x.safetensors",
@@ -2592,14 +2592,14 @@ describe("createTimelineDetailStrip", () => {
             {
                 duration: 5,
                 stages: [{}],
-                refs: [{ source: "Base", frame: 1 }],
+                frameRefs: [{ source: "Base", frame: 1 }],
             },
         ]);
         setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
         document
             .querySelector<HTMLElement>(".vst-detail-delete-ref")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(committedClips()[0].refs).toHaveLength(0);
+        expect(committedClips()[0].frameRefs).toHaveLength(0);
         expect(getSelection()).toEqual({
             kind: "clip",
             clipIdx: 0,
@@ -2612,7 +2612,7 @@ describe("createTimelineDetailStrip", () => {
             {
                 duration: 5,
                 stages: [{}],
-                refs: [
+                frameRefs: [
                     { source: "Base", frame: 1 },
                     { source: "Refiner", frame: 2 },
                 ],
@@ -2632,7 +2632,11 @@ describe("createTimelineDetailStrip", () => {
 
     it("clamps an edited ref frame and writes it through saveClips", () => {
         setup([
-            { duration: 5, stages: [{}], refs: [{ source: "Base", frame: 1 }] },
+            {
+                duration: 5,
+                stages: [{}],
+                frameRefs: [{ source: "Base", frame: 1 }],
+            },
         ]);
         setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
         jest.useFakeTimers();
@@ -2652,7 +2656,7 @@ describe("createTimelineDetailStrip", () => {
         input.value = "7";
         input.dispatchEvent(new Event("change", { bubbles: true }));
         jest.advanceTimersByTime(200);
-        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(7);
+        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(7);
     });
 
     it("renders the audio editor and live-applies source + flags", () => {
@@ -3176,7 +3180,7 @@ describe("createTimelineDetailStrip", () => {
             {
                 duration: 4,
                 stages: [{}],
-                refs: [
+                frameRefs: [
                     { source: "Base", frame: 1 },
                     { source: "Refiner", frame: 12 },
                 ],
@@ -3314,7 +3318,11 @@ describe("createTimelineDetailStrip", () => {
 
         it("still REBUILDS on a structure-affecting commit (ref source → Upload)", () => {
             setup([
-                { duration: 4, stages: [{}], refs: [{ source: "", frame: 1 }] },
+                {
+                    duration: 4,
+                    stages: [{}],
+                    frameRefs: [{ source: "", frame: 1 }],
+                },
             ]);
             wireLiveRenders();
             setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
@@ -3696,14 +3704,14 @@ describe("createTimelineDetailStrip", () => {
         const refClip = (): ClipFixture => ({
             duration: 4,
             stages: [{ steps: 8 }],
-            refs: [{ source: "Base", frame: 1 }],
+            frameRefs: [{ source: "Base", frame: 1 }],
         });
 
         it("holds the debounced edit through a drag (no mid-drag save or rebuild)", () => {
             setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
-            const range = rangeByLabel("Reference R0");
+            const range = rangeByLabel("Frame Ref R0");
             // pointerdown latches the drag; streamed inputs sync range → number
             // → our onChange (host enableSliderForBox wiring is live in tests).
             pointer(range, "pointerdown");
@@ -3715,7 +3723,7 @@ describe("createTimelineDetailStrip", () => {
             // is NOT rebuilt out from under the drag gesture.
             jest.advanceTimersByTime(1000);
             expect(saveSpy).not.toHaveBeenCalled();
-            expect(rangeByLabel("Reference R0")).toBe(range);
+            expect(rangeByLabel("Frame Ref R0")).toBe(range);
             jest.useRealTimers();
         });
 
@@ -3723,7 +3731,7 @@ describe("createTimelineDetailStrip", () => {
             setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
-            const range = rangeByLabel("Reference R0");
+            const range = rangeByLabel("Frame Ref R0");
             pointer(range, "pointerdown");
             range.value = "0.4";
             range.dispatchEvent(new Event("input", { bubbles: true }));
@@ -3732,7 +3740,9 @@ describe("createTimelineDetailStrip", () => {
             // Release flushes the held edit exactly once (one save, one repaint).
             pointer(range, "pointerup");
             expect(saveSpy).toHaveBeenCalledTimes(1);
-            expect(savedClips(saveSpy)[0].stages[0].refStrengths[0]).toBe(0.4);
+            expect(savedClips(saveSpy)[0].stages[0].frameRefStrengths[0]).toBe(
+                0.4,
+            );
             jest.advanceTimersByTime(1000);
             expect(saveSpy).toHaveBeenCalledTimes(1);
             jest.useRealTimers();
@@ -3742,7 +3752,7 @@ describe("createTimelineDetailStrip", () => {
             setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
-            const range = rangeByLabel("Reference R0");
+            const range = rangeByLabel("Frame Ref R0");
             pointer(range, "pointerdown");
             range.value = "0.4";
             range.dispatchEvent(new Event("input", { bubbles: true }));
@@ -3862,7 +3872,7 @@ describe("createTimelineDetailStrip", () => {
                 {
                     duration: 10,
                     stages: [{}],
-                    refs: [
+                    frameRefs: [
                         { source: "Base", frame: 1 },
                         { source: "Refiner", frame: 8 },
                     ],
@@ -3888,7 +3898,7 @@ describe("createTimelineDetailStrip", () => {
             expect(body?.querySelectorAll(".vst-ref-tab")).toHaveLength(2);
             expect(
                 body?.querySelector(".vst-detail-add-ref")?.textContent,
-            ).toBe("+ Add Reference Image");
+            ).toBe("+ Add Frame Reference");
             expect(
                 body?.querySelector(".vst-detail-delete-ref")?.textContent,
             ).toBe("×");
@@ -3950,7 +3960,7 @@ describe("createTimelineDetailStrip", () => {
         });
 
         it("adds references at unique rounded ten-percent frame intervals before wrapping", () => {
-            setup([{ duration: 5, stages: [{}], refs: [] }]);
+            setup([{ duration: 5, stages: [{}], frameRefs: [] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
 
             for (let index = 0; index < 12; index++) {
@@ -3961,7 +3971,7 @@ describe("createTimelineDetailStrip", () => {
                 add?.click();
             }
 
-            const frames = committedClips()[0].refs.map(
+            const frames = committedClips()[0].frameRefs.map(
                 (reference) => reference.frame,
             );
             expect(frames).toEqual([
@@ -4708,7 +4718,7 @@ describe("createTimelineDetailStrip", () => {
                         },
                         {},
                     ],
-                    refs: [{ source: "Base", frame: 1 }],
+                    frameRefs: [{ source: "Base", frame: 1 }],
                     windows: [{ start: 1, duration: 2, prompt: "w" }],
                 },
             ]);

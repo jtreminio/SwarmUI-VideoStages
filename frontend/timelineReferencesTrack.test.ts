@@ -49,14 +49,14 @@ interface RefFixture {
 
 interface ClipFixture {
     duration: number;
-    refs?: RefFixture[];
+    frameRefs?: RefFixture[];
 }
 
 const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     duration: clip.duration,
     audioSource: "Native",
     stages: [{ model: "ltx-2.3.safetensors" }],
-    refs: (clip.refs ?? []).map((ref) => ({
+    frameRefs: (clip.frameRefs ?? []).map((ref) => ({
         source: ref.source ?? "Refiner",
         frame: ref.frame ?? 1,
         fromEnd: ref.fromEnd ?? false,
@@ -199,7 +199,9 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     };
 
     it("selects the reference when its thumb is clicked", () => {
-        const body = setup([{ duration: 5, refs: [{ source: "Refiner" }] }]);
+        const body = setup([
+            { duration: 5, frameRefs: [{ source: "Refiner" }] },
+        ]);
         markEl(body, 0, 0).dispatchEvent(
             new MouseEvent("click", { bubbles: true }),
         );
@@ -208,7 +210,9 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     });
 
     it("re-activates an already-selected reference when its thumb is clicked", () => {
-        const body = setup([{ duration: 5, refs: [{ source: "Refiner" }] }]);
+        const body = setup([
+            { duration: 5, frameRefs: [{ source: "Refiner" }] },
+        ]);
         setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
         const observed: unknown[] = [];
         const stop = subscribeSelection((selection) =>
@@ -222,7 +226,9 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     });
 
     it("selects the reference via keyboard activation", () => {
-        const body = setup([{ duration: 5, refs: [{ source: "Refiner" }] }]);
+        const body = setup([
+            { duration: 5, frameRefs: [{ source: "Refiner" }] },
+        ]);
         markEl(body, 0, 0).dispatchEvent(
             new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
         );
@@ -231,7 +237,10 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
     it("deletes the reference (and its stage ref-strengths) via shift+click", () => {
         const body = setup([
-            { duration: 5, refs: [{ source: "Refiner" }, { source: "Base" }] },
+            {
+                duration: 5,
+                frameRefs: [{ source: "Refiner" }, { source: "Base" }],
+            },
         ]);
         markEl(body, 0, 0).dispatchEvent(
             new MouseEvent("click", { bubbles: true, shiftKey: true }),
@@ -239,28 +248,28 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
         const clips = savedClips(saveSpy);
-        expect(clips[0].refs).toHaveLength(1);
-        expect(clips[0].refs[0].source).toBe("Base");
-        expect(clips[0].stages[0].refStrengths).toHaveLength(1);
+        expect(clips[0].frameRefs).toHaveLength(1);
+        expect(clips[0].frameRefs[0].source).toBe("Base");
+        expect(clips[0].stages[0].frameRefStrengths).toHaveLength(1);
         expect(getSelection().kind).toBe("none");
     });
 
     it("adds a reference (padding every stage's ref-strengths) when the empty lane is clicked", () => {
-        const body = setup([{ duration: 5, refs: [] }]);
+        const body = setup([{ duration: 5, frameRefs: [] }]);
         body.querySelector<HTMLElement>(
             '.vst-refs-lane[data-clip-idx="0"]',
         )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
         const clips = savedClips(saveSpy);
-        expect(clips[0].refs).toHaveLength(1);
-        expect(clips[0].stages[0].refStrengths).toHaveLength(1);
+        expect(clips[0].frameRefs).toHaveLength(1);
+        expect(clips[0].stages[0].frameRefStrengths).toHaveLength(1);
         // The new ref opens in the dock immediately.
         expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 0 });
     });
 
     it("does not add a reference when the model publishes no positions", () => {
-        const body = setup([{ duration: 5, refs: [] }], undefined, []);
+        const body = setup([{ duration: 5, frameRefs: [] }], undefined, []);
         body.querySelector<HTMLElement>(
             '.vst-refs-lane[data-clip-idx="0"]',
         )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -270,18 +279,20 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     });
 
     it("adding a ref selects the NEW ref even while another ref is selected", () => {
-        const body = setup([{ duration: 5, refs: [{ source: "Refiner" }] }]);
+        const body = setup([
+            { duration: 5, frameRefs: [{ source: "Refiner" }] },
+        ]);
         setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
         body.querySelector<HTMLElement>(
             '.vst-refs-lane[data-clip-idx="0"]',
         )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-        expect(savedClips(saveSpy)[0].refs).toHaveLength(2);
+        expect(savedClips(saveSpy)[0].frameRefs).toHaveLength(2);
         expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 1 });
     });
 
     it("uses the stored 16fps timeline when adding a ref", () => {
-        const body = setup([{ duration: 5, refs: [] }], 16);
+        const body = setup([{ duration: 5, frameRefs: [] }], 16);
         stubLaneRect(body, 0, 0, 120);
         body.querySelector<HTMLElement>(
             '.vst-refs-lane[data-clip-idx="0"]',
@@ -290,11 +301,11 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         );
 
         // Inclusive frame geometry makes the stored 16fps clip 81 frames long.
-        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(41);
+        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(41);
     });
 
     it("retimes a ref by dragging its thumbnail, suppressing the trailing click", () => {
-        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
+        const body = setup([{ duration: 5, frameRefs: [{ frame: 1 }] }]);
         stubLaneRect(body, 0, 0, 120);
         const thumb = markEl(body, 0, 0);
 
@@ -304,11 +315,11 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
         expect(getSelection().kind).toBe("none");
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(61);
+        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(61);
     });
 
     it("cancels a drag when a catalog refresh removes reference support", () => {
-        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
+        const body = setup([{ duration: 5, frameRefs: [{ frame: 1 }] }]);
         stubLaneRect(body, 0, 0, 120);
         const thumb = markEl(body, 0, 0);
         const originalLeft = thumb.style.left;
@@ -337,7 +348,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     });
 
     it("cancels a drag when a catalog refresh changes reference endpoints", () => {
-        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
+        const body = setup([{ duration: 5, frameRefs: [{ frame: 1 }] }]);
         stubLaneRect(body, 0, 0, 120);
         const thumb = markEl(body, 0, 0);
 
@@ -365,7 +376,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     });
 
     it("cancels a drag when a catalog repaint detaches its rendered lane", () => {
-        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
+        const body = setup([{ duration: 5, frameRefs: [{ frame: 1 }] }]);
         stubLaneRect(body, 0, 0, 120);
         const thumb = markEl(body, 0, 0);
 
@@ -388,21 +399,21 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     });
 
     it("snaps a dragged reference to the nearest clip edge", () => {
-        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
+        const body = setup([{ duration: 5, frameRefs: [{ frame: 1 }] }]);
         stubLaneRect(body, 0, 0, 120);
         dragThumb(markEl(body, 0, 0), 0, 116);
 
-        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(121);
+        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(121);
     });
 
     it("uses the stored 16fps timeline when dragging a ref", () => {
-        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }], 16);
+        const body = setup([{ duration: 5, frameRefs: [{ frame: 1 }] }], 16);
         stubLaneRect(body, 0, 0, 120);
         const thumb = markEl(body, 0, 0);
 
         dragThumb(thumb, 0, 60);
 
-        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(41);
+        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(41);
     });
 
     it("drags to the padded tail without aligning the effective frame count twice", async () => {
@@ -417,12 +428,12 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
             options: [model.value],
             value: model.value,
         });
-        const body = setup([{ duration: 6.5, refs: [{ frame: 1 }] }], 4);
+        const body = setup([{ duration: 6.5, frameRefs: [{ frame: 1 }] }], 4);
         stubLaneRect(body, 0, 0, 120);
 
         dragThumb(markEl(body, 0, 0), 0, 120);
 
-        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(33);
+        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(33);
     });
 
     it("drags a bounded reference between its advertised endpoints", async () => {
@@ -444,7 +455,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
             [
                 {
                     duration: 5,
-                    refs: [{ frame: 1, fromEnd: false }],
+                    frameRefs: [{ frame: 1, fromEnd: false }],
                 },
             ],
             undefined,
@@ -453,7 +464,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         stubLaneRect(body, 0, 0, 120);
 
         dragThumb(markEl(body, 0, 0), 0, 100);
-        expect(savedClips(saveSpy)[0].refs[0]).toMatchObject({
+        expect(savedClips(saveSpy)[0].frameRefs[0]).toMatchObject({
             frame: 1,
             fromEnd: true,
         });
@@ -463,7 +474,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     });
 
     it("treats a sub-threshold press as a select, not a drag", () => {
-        const body = setup([{ duration: 5, refs: [{ frame: 2 }] }]);
+        const body = setup([{ duration: 5, frameRefs: [{ frame: 2 }] }]);
         stubLaneRect(body, 0, 0, 120);
         const thumb = markEl(body, 0, 0);
 
@@ -475,7 +486,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     });
 
     it("cancels an in-flight drag on Escape without saving", () => {
-        const body = setup([{ duration: 5, refs: [{ frame: 10 }] }]);
+        const body = setup([{ duration: 5, frameRefs: [{ frame: 10 }] }]);
         stubLaneRect(body, 0, 0, 120);
         const thumb = markEl(body, 0, 0);
 
@@ -502,7 +513,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     });
 
     it("live-updates the label and holds position on a committed drag (no flash-back)", () => {
-        const body = setup([{ duration: 5, refs: [{ frame: 1 }] }]);
+        const body = setup([{ duration: 5, frameRefs: [{ frame: 1 }] }]);
         stubLaneRect(body, 0, 0, 120);
         const thumb = markEl(body, 0, 0);
         const originalLeft = thumb.style.left;
@@ -512,11 +523,11 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("R 61");
         expect(thumb.style.left).toBe("50.41322314049586%");
         expect(thumb.style.left).not.toBe(originalLeft);
-        expect(savedClips(saveSpy)[0].refs[0].frame).toBe(61);
+        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(61);
     });
 
     it("drags the on-clip arrow together with the thumbnail", () => {
-        mountPrompt([{ duration: 5, refs: [{ frame: 1 }] }]);
+        mountPrompt([{ duration: 5, frameRefs: [{ frame: 1 }] }]);
         const body = makeBody();
         renderTimeline(body, persistence.getClips(), { pxPerSecond: PPS });
         const catalog = testArchitectureCatalog();

@@ -11,7 +11,7 @@ internal static class UploadContainers
 
     public const string ClipsCollection = "clips";
     public const string IcLorasCollection = "icLoras";
-    public const string RefsCollection = "refs";
+    public const string FrameRefsCollection = "frameRefs";
     public const string AudioTracksCollection = "audioTracks";
     public const string AudioTrackSource = "source";
 }

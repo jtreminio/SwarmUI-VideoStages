@@ -51,7 +51,7 @@ public class RequestReaderTests
             ["clipLengthFromAudio"] = clipLengthFromAudio,
             ["clipLengthFromControlNet"] = clipLengthFromControlNet,
             ["reuseAudio"] = reuseAudio,
-            ["refs"] = new JArray(refs ?? []),
+            ["frameRefs"] = new JArray(refs ?? []),
             ["stages"] = new JArray(stages),
         };
         if (icLoras is not null)
@@ -354,18 +354,18 @@ public class RequestReaderTests
         Assert.True(clips[0].ClipLengthFromAudio);
         Assert.True(clips[0].ClipLengthFromControlNet);
         Assert.True(clips[0].ReuseAudio);
-        Assert.Equal(2, clips[0].ImageRefs.Count);
-        Assert.Equal("Base", clips[0].ImageRefs[0].Source);
-        Assert.Equal(1, clips[0].ImageRefs[0].Frame);
-        Assert.Equal("Refiner", clips[0].ImageRefs[1].Source);
-        Assert.Equal(12, clips[0].ImageRefs[1].Frame);
-        Assert.True(clips[0].ImageRefs[1].FromEnd);
+        Assert.Equal(2, clips[0].FrameRefs.Count);
+        Assert.Equal("Base", clips[0].FrameRefs[0].Source);
+        Assert.Equal(1, clips[0].FrameRefs[0].Frame);
+        Assert.Equal("Refiner", clips[0].FrameRefs[1].Source);
+        Assert.Equal(12, clips[0].FrameRefs[1].Frame);
+        Assert.True(clips[0].FrameRefs[1].FromEnd);
         Assert.Single(clips[0].Stages);
         Assert.Equal("model-a", clips[0].Stages[0].Model);
 
         Assert.Equal(1, clips[1].Id);
         Assert.False(clips[1].SaveAudioTrack);
-        Assert.Empty(clips[1].ImageRefs);
+        Assert.Empty(clips[1].FrameRefs);
         Assert.Equal(2, clips[1].Stages.Count);
     }
 
@@ -941,8 +941,8 @@ public class RequestReaderTests
         IReadOnlyList<ClipSpec> clips = RequestReader.Read(input).Clips;
 
         Assert.Single(clips);
-        Assert.Single(clips[0].ImageRefs);
-        Assert.Equal("Base", clips[0].ImageRefs[0].Source);
+        Assert.Single(clips[0].FrameRefs);
+        Assert.Equal("Base", clips[0].FrameRefs[0].Source);
     }
 
     [Fact]
@@ -1006,8 +1006,8 @@ public class RequestReaderTests
         T2IParamInput input = BuildGenerator(json);
 
         ClipSpec clip = RequestReader.Read(input).Clips.Single();
-        Assert.Equal("Upload", clip.ImageRefs[0].Source);
-        Assert.Equal("ref.png", clip.ImageRefs[0].UploadFileName);
+        Assert.Equal("Upload", clip.FrameRefs[0].Source);
+        Assert.Equal("ref.png", clip.FrameRefs[0].UploadFileName);
     }
 
     [Fact]
@@ -1031,7 +1031,7 @@ public class RequestReaderTests
         T2IParamInput input = BuildGenerator(json);
 
         ClipSpec clip = RequestReader.Read(input).Clips.Single();
-        ImageRefSpec r = clip.ImageRefs[0];
+        FrameRefSpec r = clip.FrameRefs[0];
         Assert.Equal("Upload", r.Source);
         Assert.Equal(imageData, r.Data);
         Assert.Equal("guide.png", r.UploadFileName);
@@ -1057,7 +1057,7 @@ public class RequestReaderTests
         ));
         T2IParamInput input = BuildGenerator(json);
 
-        ImageRefSpec r = RequestReader.Read(input).Clips.Single().ImageRefs[0];
+        FrameRefSpec r = RequestReader.Read(input).Clips.Single().FrameRefs[0];
         Assert.Equal("data:image/png;base64,TkVTVA==", r.Data);
         Assert.Equal("nested.png", r.UploadFileName);
     }
@@ -1066,7 +1066,7 @@ public class RequestReaderTests
     public void ReadRequest_ClipExposesRefsAndStageNormalizedRefStrengths()
     {
         JObject stage = MakeStage("model-a");
-        stage["refStrengths"] = new JArray(0.55, 0.66);
+        stage["frameRefStrengths"] = new JArray(0.55, 0.66);
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [stage],
@@ -1076,10 +1076,10 @@ public class RequestReaderTests
 
         ClipSpec clip = Assert.Single(RequestReader.Read(input).Clips);
         StageSpec flattened = Assert.Single(clip.Stages);
-        Assert.Equal(2, clip.ImageRefs.Count);
-        Assert.Equal(2, flattened.ImageRefStrengths.Count);
-        Assert.Equal(0.55, flattened.ImageRefStrengths[0]);
-        Assert.Equal(0.66, flattened.ImageRefStrengths[1]);
+        Assert.Equal(2, clip.FrameRefs.Count);
+        Assert.Equal(2, flattened.FrameRefStrengths.Count);
+        Assert.Equal(0.55, flattened.FrameRefStrengths[0]);
+        Assert.Equal(0.66, flattened.FrameRefStrengths[1]);
     }
 
     [Fact]
@@ -1122,9 +1122,9 @@ public class RequestReaderTests
         T2IParamInput input = BuildGenerator(json);
 
         StageSpec flattened = Assert.Single(FlattenedActiveStages(input));
-        Assert.Equal(2, flattened.ImageRefStrengths.Count);
+        Assert.Equal(2, flattened.FrameRefStrengths.Count);
         Assert.All(
-            flattened.ImageRefStrengths,
+            flattened.FrameRefStrengths,
             strength => Assert.Equal(Constants.DefaultStageRefStrength, strength));
     }
 

@@ -55,7 +55,7 @@ export interface VideoStagesConfig {
     audioTracks?: AudioTrack[];
 }
 
-export const CURRENT_AUTHORING_SCHEMA_VERSION = 6;
+export const CURRENT_AUTHORING_SCHEMA_VERSION = 7;
 
 export interface UploadedMedia {
     data: string;
@@ -85,7 +85,7 @@ export interface Stage {
     icLoraStrengths: number[];
     /** Per-stage weight for each clip LoRA, aligned by clip LoRA index. */
     loraWeights: number[];
-    refStrengths: number[];
+    frameRefStrengths: number[];
     upscale: number;
     upscaleMethod: string;
     model: string;
@@ -141,7 +141,7 @@ export interface InitVideo {
     lengthSeconds: number;
 }
 
-export interface RefImage {
+export interface FrameRefImage {
     id?: string;
     source: string;
     uploadFileName: string | null;
@@ -225,7 +225,7 @@ export interface Clip {
     promptWindows: PromptWindow[];
     retake: Retake | null;
     initVideo: InitVideo | null;
-    refs: RefImage[];
+    frameRefs: FrameRefImage[];
     stages: Stage[];
 }
 
@@ -275,19 +275,19 @@ export type CanonicalStage = WithRequiredId<Stage>;
 export type CanonicalIcLora = WithRequiredId<IcLora>;
 export type CanonicalPromptWindow = WithRequiredId<PromptWindow>;
 export type CanonicalRetake = WithRequiredId<Retake>;
-export type CanonicalRefImage = WithRequiredId<RefImage>;
+export type CanonicalFrameRefImage = WithRequiredId<FrameRefImage>;
 export type CanonicalAudioTrackSpan = WithRequiredId<AudioTrackSpan>;
 export type CanonicalAudioTrack = Omit<WithRequiredId<AudioTrack>, "spans"> & {
     spans: CanonicalAudioTrackSpan[];
 };
 export type CanonicalClip = Omit<
     WithRequiredId<Clip>,
-    "icLoras" | "promptWindows" | "retake" | "refs" | "stages"
+    "icLoras" | "promptWindows" | "retake" | "frameRefs" | "stages"
 > & {
     icLoras: CanonicalIcLora[];
     promptWindows: CanonicalPromptWindow[];
     retake: CanonicalRetake | null;
-    refs: CanonicalRefImage[];
+    frameRefs: CanonicalFrameRefImage[];
     stages: CanonicalStage[];
 };
 export type CanonicalVideoStagesConfig = Omit<
@@ -301,7 +301,7 @@ export type CanonicalVideoStagesConfig = Omit<
 
 export type {
     StoredClip,
-    StoredRefImage,
+    StoredFrameRefImage,
     StoredStage,
 } from "./storageTypes";
 export {

@@ -278,7 +278,7 @@ describe("catalog-backed authoring policy", () => {
                 .decision("retake").supported,
         ).toBe(true);
 
-        initVideoClip.refs = [minimalRef()];
+        initVideoClip.frameRefs = [minimalRef()];
         expect(
             createCapabilityViewResolver(models)
                 .forClip(initVideoClip)
@@ -315,7 +315,7 @@ describe("catalog-backed authoring policy", () => {
         clip.promptWindows = [
             { prompt: "Persisted relay", start: 0, duration: 1 },
         ];
-        clip.refs = [minimalRef()];
+        clip.frameRefs = [minimalRef()];
         clip.retake = {
             startSeconds: 0,
             lengthSeconds: 1,

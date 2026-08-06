@@ -2,19 +2,19 @@ using Newtonsoft.Json.Linq;
 
 namespace VideoStages.Authoring;
 
-internal static class ImageReferences
+internal static class FrameReferences
 {
-    public static IReadOnlyList<ImageRefSpec> Read(
+    public static IReadOnlyList<FrameRefSpec> Read(
         JObject clipObject,
         int clipIndex,
         Action<string> warn = null)
     {
         List<JObject> rawReferences = DocumentJson.GetObjectArray(
-            clipObject, UploadContainers.RefsCollection);
-        List<ImageRefSpec> references = [];
+            clipObject, UploadContainers.FrameRefsCollection);
+        List<FrameRefSpec> references = [];
         for (int index = 0; index < rawReferences.Count; index++)
         {
-            ImageRefSpec reference = ReadOne(
+            FrameRefSpec reference = ReadOne(
                 rawReferences[index],
                 clipIndex,
                 index,
@@ -27,7 +27,7 @@ internal static class ImageReferences
         return references;
     }
 
-    private static ImageRefSpec ReadOne(
+    private static FrameRefSpec ReadOne(
         JObject obj,
         int clipIndex,
         int refIndex,
@@ -38,7 +38,7 @@ internal static class ImageReferences
         {
             DocumentJson.Warn(
                 warn,
-                $"VideoStages: Clip {clipIndex} reference {refIndex} is missing a Source value; skipping.");
+                $"VideoStages: Clip {clipIndex} frame reference {refIndex} is missing a Source value; skipping.");
             return null;
         }
 
@@ -72,7 +72,7 @@ internal static class ImageReferences
             }
         }
 
-        return new ImageRefSpec(
+        return new FrameRefSpec(
             source.Trim(),
             frame,
             fromEnd,

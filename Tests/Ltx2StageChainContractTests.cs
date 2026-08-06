@@ -161,7 +161,7 @@ public class Ltx2StageChainContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject stage = fixture.Stage(control: 0.5);
-        stage["refStrengths"] = new JArray(strength);
+        stage["frameRefStrengths"] = new JArray(strength);
         JObject clip = MakeClipWithRefs(refs: [MakeRef("Base", frame: 1)], stage);
         clip["duration"] = 1.0;
 
@@ -200,7 +200,7 @@ public class Ltx2StageChainContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject stage = fixture.Stage(control: 0.5);
-        stage["refStrengths"] = new JArray(strength);
+        stage["frameRefStrengths"] = new JArray(strength);
         JObject clip = MakeClipWithRefs(refs: [MakeRef("Base", frame: 2)], stage);
         clip["duration"] = 1.0;
 
@@ -221,7 +221,7 @@ public class Ltx2StageChainContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject stage = fixture.Stage(control: 0.5);
-        stage["refStrengths"] = new JArray(0.55);
+        stage["frameRefStrengths"] = new JArray(0.55);
         JObject clip = MakeClipWithRefs(refs: [MakeRef("Base", frame: 2)], stage);
         clip["duration"] = 1.0;
 
@@ -777,7 +777,7 @@ public class Ltx2StageChainContractTests
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject stage = fixture.Stage(control: 0.5);
         stage.Remove("imageReference");
-        stage["refStrengths"] = new JArray(0.35);
+        stage["frameRefStrengths"] = new JArray(0.35);
         JObject clip = MakeClipWithRefs([MakeRef("edit0", frame: 1)], stage);
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(

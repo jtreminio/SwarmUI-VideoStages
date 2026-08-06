@@ -7,8 +7,8 @@ import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
+    CanonicalFrameRefImage,
     CanonicalPromptWindow,
-    CanonicalRefImage,
     CanonicalRetake,
     CanonicalStage,
     CanonicalVideoStagesConfig,
@@ -92,7 +92,7 @@ export type DocumentCommand =
     | {
           type: "ref.add";
           clipId: string;
-          ref: CanonicalRefImage;
+          ref: CanonicalFrameRefImage;
           beforeRefId?: string | null;
       }
     | { type: "ref.remove"; clipId: string; refId: string }

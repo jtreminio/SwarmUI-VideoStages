@@ -520,7 +520,7 @@ public class ArchitectureFoundationTests
         ClipSpec clip = InitVideoClip(0) with
         {
             PromptWindows = [new("dormant relay", 0, 1)],
-            ImageRefs = [new("Upload", 1, false, "ref.png")],
+            FrameRefs = [new("Upload", 1, false, "ref.png")],
             Loras = [new("clip-lora.safetensors")],
             IcLoras =
             [
@@ -752,7 +752,7 @@ public class ArchitectureFoundationTests
         FakeRegistry registry = new(fakeDescriptor: FakeCapabilityDescriptor());
         ClipSpec clip = GeneratedClip(0, Stage(10, "fake-model")) with
         {
-            ImageRefs = [new("Upload", 1, false, "ref.png")],
+            FrameRefs = [new("Upload", 1, false, "ref.png")],
             AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
         };
 

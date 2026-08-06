@@ -11,8 +11,8 @@ import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
+    CanonicalFrameRefImage,
     CanonicalPromptWindow,
-    CanonicalRefImage,
     CanonicalRetake,
     CanonicalStage,
     CanonicalVideoStagesConfig,
@@ -25,7 +25,7 @@ const stage = (id: string): CanonicalStage => ({
     controlNetStrength: 1,
     icLoraStrengths: [],
     loraWeights: [],
-    refStrengths: [],
+    frameRefStrengths: [],
     upscale: 1,
     upscaleMethod: "pixel-lanczos",
     model: "ltx",
@@ -36,7 +36,7 @@ const stage = (id: string): CanonicalStage => ({
     scheduler: "normal",
 });
 
-const ref = (id: string): CanonicalRefImage => ({
+const ref = (id: string): CanonicalFrameRefImage => ({
     id,
     source: "Base",
     uploadFileName: null,
@@ -82,7 +82,7 @@ const clip = (id: string): CanonicalClip => ({
     promptWindows: [],
     retake: null,
     initVideo: null,
-    refs: [],
+    frameRefs: [],
     stages: [],
 });
 
@@ -106,7 +106,7 @@ const track = (id: string): CanonicalAudioTrack => ({
 const document = (): CanonicalVideoStagesConfig => {
     const first = clip("clip-a");
     first.stages = [stage("stage-a"), stage("stage-b")];
-    first.refs = [ref("ref-a")];
+    first.frameRefs = [ref("ref-a")];
     first.promptWindows = [window("window-a")];
     first.retake = retake("retake-a");
     const second = clip("clip-b");
@@ -449,9 +449,10 @@ describe("reduceDocumentCommand", () => {
                 refId: "ref-b",
             },
             ids: (state: CanonicalVideoStagesConfig) =>
-                state.clips[0].refs.map((item) => item.id),
+                state.clips[0].frameRefs.map((item) => item.id),
             value: (state: CanonicalVideoStagesConfig) =>
-                state.clips[0].refs.find((item) => item.id === "ref-b")?.frame,
+                state.clips[0].frameRefs.find((item) => item.id === "ref-b")
+                    ?.frame,
             expectedValue: 3,
         },
         {
@@ -764,7 +765,7 @@ describe("reduceDocumentCommand", () => {
         targetClip.boundaryOut = "continue";
         targetClip.duration = 7;
         targetClip.prompt = "preserve me";
-        targetClip.refs = [ref("ref-convert")];
+        targetClip.frameRefs = [ref("ref-convert")];
         targetClip.promptWindows = [window("window-convert")];
         targetClip.retake = retake("retake-convert");
         targetClip.audioSource = "Upload";
@@ -802,7 +803,7 @@ describe("reduceDocumentCommand", () => {
         targetClip.stages = [
             {
                 ...stage("stage-convert-a"),
-                refStrengths: [0.8],
+                frameRefStrengths: [0.8],
                 upscale: 2,
                 loraWeights: [1],
             },
@@ -835,7 +836,7 @@ describe("reduceDocumentCommand", () => {
             boundaryOut: "continue",
             duration: 7,
             prompt: "preserve me",
-            refs: targetClip.refs,
+            frameRefs: targetClip.frameRefs,
             promptWindows: targetClip.promptWindows,
             retake: targetClip.retake,
             initVideo: targetClip.initVideo,
@@ -853,7 +854,7 @@ describe("reduceDocumentCommand", () => {
                 skipped: item.skipped,
                 model: item.model,
                 modelProfileId: item.modelProfileId,
-                refStrengths: item.refStrengths,
+                frameRefStrengths: item.frameRefStrengths,
                 upscale: item.upscale,
                 loraWeights: item.loraWeights,
             })),
@@ -863,7 +864,7 @@ describe("reduceDocumentCommand", () => {
                 skipped: false,
                 model: "test-video.safetensors",
                 modelProfileId: "test-profile",
-                refStrengths: [0.8],
+                frameRefStrengths: [0.8],
                 upscale: 2,
                 loraWeights: [1],
             },
@@ -872,7 +873,7 @@ describe("reduceDocumentCommand", () => {
                 skipped: true,
                 model: "test-video.safetensors",
                 modelProfileId: "test-profile",
-                refStrengths: [],
+                frameRefStrengths: [],
                 upscale: 1,
                 loraWeights: [],
             },

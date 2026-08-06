@@ -169,7 +169,7 @@ internal static class RequestReader
 
         IReadOnlyList<IcLoraSpec> icLoras = Loras.ReadIc(clipObject, context.Warn);
         List<JObject> rawStages = DocumentJson.GetObjectArray(clipObject, "stages");
-        IReadOnlyList<ImageRefSpec> references = ImageReferences.Read(
+        IReadOnlyList<FrameRefSpec> references = FrameReferences.Read(
             clipObject,
             clipIndex,
             context.Warn);
@@ -195,7 +195,7 @@ internal static class RequestReader
             ReuseAudio: reuseAudio,
             UploadedAudio: DocumentJson.GetEmbeddedUpload(
                 clipObject, UploadContainers.ClipAudio),
-            ImageRefs: references,
+            FrameRefs: references,
             Stages: stages,
             Loras: Loras.ReadNormal(clipObject, context.Warn),
             PromptWindows: SortWindows(context.Directives.ClipWindows.GetValueOrDefault(clipIndex)),
@@ -328,7 +328,7 @@ internal static class RequestReader
             ClipStageRawIndex: rawStageIndex,
             ControlNetStrength: ReadControlNetStrength(stage, location, warn),
             IcLoraStrengths: ReadIcLoraStrengths(stage),
-            ImageRefStrengths: ReadRefStrengths(stage, clipRefCount),
+            FrameRefStrengths: ReadRefStrengths(stage, clipRefCount),
             ImageRefWasExplicit: DocumentJson.HasProperty(stage, "imageReference"),
             Loras: Loras.ReadNormal(stage, warn),
             LoraWeights: Loras.ReadWeights(stage));
@@ -482,7 +482,7 @@ internal static class RequestReader
         }
 
         List<double> strengths = [];
-        if (DocumentJson.GetArray(stage, "refStrengths") is JArray array)
+        if (DocumentJson.GetArray(stage, "frameRefStrengths") is JArray array)
         {
             foreach (JToken entry in array)
             {

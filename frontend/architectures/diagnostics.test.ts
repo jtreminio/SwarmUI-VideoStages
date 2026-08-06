@@ -203,7 +203,7 @@ describe("architecture diagnostics", () => {
         const clip = minimalClip({
             architectureHint: "host-video",
             modelProfileId: "host-video",
-            refs: [minimalRef()],
+            frameRefs: [minimalRef()],
             refFraming: "fit",
             promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
             reuseAudio: true,
@@ -245,7 +245,7 @@ describe("architecture diagnostics", () => {
 
         const clip = minimalClip({
             architectureHint: host.id,
-            refs: [minimalRef()],
+            frameRefs: [minimalRef()],
             promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
             stages: [
                 minimalStage({
@@ -522,7 +522,7 @@ describe("architecture diagnostics", () => {
             loras: [{ name: "detail" }],
             prompt: "persisted major prompt",
             refFraming: "fit",
-            refs: [
+            frameRefs: [
                 {
                     source: "Base",
                     uploadFileName: null,
@@ -657,7 +657,9 @@ describe("architecture diagnostics", () => {
 
         it("blocks a continue into a first-frame reference", () => {
             expect(
-                codesFor(minimalClip({ refs: [minimalRef({ frame: 1 })] })),
+                codesFor(
+                    minimalClip({ frameRefs: [minimalRef({ frame: 1 })] }),
+                ),
             ).toContain("architecture.boundary-unsupported");
         });
     });
@@ -887,7 +889,7 @@ describe("architecture diagnostics", () => {
             minimalClip({
                 architectureHint: "wan22",
                 modelProfileId,
-                refs: [minimalRef({ frame: 1 })],
+                frameRefs: [minimalRef({ frame: 1 })],
                 stages: [
                     minimalStage({
                         model,

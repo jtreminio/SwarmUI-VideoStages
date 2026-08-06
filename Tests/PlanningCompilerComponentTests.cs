@@ -129,7 +129,7 @@ public class PlanningCompilerComponentTests
             },
             InitVideoClip(1, Stage(11)) with
             {
-                ImageRefs = [new ImageRefSpec("Upload", 1, false, "first.png")],
+                FrameRefs = [new FrameRefSpec("Upload", 1, false, "first.png")],
             },
         ]);
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
@@ -160,7 +160,7 @@ public class PlanningCompilerComponentTests
         StageSpec stage = Stage(11, rawIndex: 1) with
         {
             ImageReference = "edit4",
-            ImageRefStrengths = [0.25],
+            FrameRefStrengths = [0.25],
             ControlNetStrength = 0.6,
             Loras = [new LoraRef("stage", 0.5)],
         };
@@ -168,7 +168,7 @@ public class PlanningCompilerComponentTests
         {
             Loras = [new LoraRef("clip", 0.75)],
             PromptWindows = [new PromptWindowSpec("prompt", 0, 1)],
-            ImageRefs = [new ImageRefSpec("Upload", 1, false, "ref.png", "data:image/png;base64,QQ==")],
+            FrameRefs = [new FrameRefSpec("Upload", 1, false, "ref.png", "data:image/png;base64,QQ==")],
             IcLoras =
             [
                 new IcLoraSpec(

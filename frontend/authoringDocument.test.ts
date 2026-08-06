@@ -108,7 +108,7 @@ describe("versioned authoring document identity", () => {
             clips: [
                 {
                     duration: 3,
-                    refs: [{ source: "Base", frame: 1 }],
+                    frameRefs: [{ source: "Base", frame: 1 }],
                     stages: [
                         {
                             model: "ltx-2.3.safetensors",
@@ -149,7 +149,7 @@ describe("versioned authoring document identity", () => {
                             modelProfileId: "ltx-2.3",
                         },
                     ],
-                    refs: [{ id: "duplicate", source: "Base", frame: 1 }],
+                    frameRefs: [{ id: "duplicate", source: "Base", frame: 1 }],
                     icLoras: [
                         defaultIcLora({
                             id: "duplicate",
@@ -172,20 +172,20 @@ describe("versioned authoring document identity", () => {
             clips: {
                 id: string;
                 stages: { id: string }[];
-                refs: { id: string }[];
+                frameRefs: { id: string }[];
                 icLoras: { id: string }[];
             }[];
         };
         const storedIds = [
             stored.clips[0].id,
             stored.clips[0].stages[0].id,
-            stored.clips[0].refs[0].id,
+            stored.clips[0].frameRefs[0].id,
             stored.clips[0].icLoras[0].id,
         ];
         expect(storedIds).toEqual([
             repaired.clips[0].id,
             repaired.clips[0].stages[0].id,
-            repaired.clips[0].refs[0].id,
+            repaired.clips[0].frameRefs[0].id,
             repaired.clips[0].icLoras[0].id,
         ]);
         expect(storedIds.every((id) => id.trim() === id)).toBe(true);
@@ -199,7 +199,7 @@ describe("versioned authoring document identity", () => {
                 minimalClip({
                     id: duplicate,
                     stages: [minimalStage({ id: duplicate })],
-                    refs: [minimalRef({ id: duplicate })],
+                    frameRefs: [minimalRef({ id: duplicate })],
                     icLoras: [
                         defaultIcLora({
                             id: duplicate,
@@ -260,7 +260,7 @@ describe("versioned authoring document identity", () => {
         const nestedClip = minimalClip({
             id: "clip-nested",
             stages: [minimalStage(), minimalStage({ id: "stage_legacy_1_0" })],
-            refs: [minimalRef(), minimalRef({ id: "ref_legacy_1_0" })],
+            frameRefs: [minimalRef(), minimalRef({ id: "ref_legacy_1_0" })],
             promptWindows: [
                 { prompt: "new", start: 0, duration: 0.5 },
                 {
@@ -275,7 +275,7 @@ describe("versioned authoring document identity", () => {
             stages: [minimalStage({ id: "stage-new-clip" })],
         });
         const stableStage = nestedClip.stages[1];
-        const stableRef = nestedClip.refs[1];
+        const stableRef = nestedClip.frameRefs[1];
         const stableWindow = nestedClip.promptWindows[1];
         const stableSpan = {
             id: "audio_span_legacy_0_0",
@@ -311,7 +311,7 @@ describe("versioned authoring document identity", () => {
         expect(stableStage.id).toBe("stage_legacy_1_0");
         expect(nestedClip.stages[0].id).not.toBe(stableStage.id);
         expect(stableRef.id).toBe("ref_legacy_1_0");
-        expect(nestedClip.refs[0].id).not.toBe(stableRef.id);
+        expect(nestedClip.frameRefs[0].id).not.toBe(stableRef.id);
         expect(stableWindow.id).toBe("prompt_window_legacy_1_0");
         expect(nestedClip.promptWindows[0].id).not.toBe(stableWindow.id);
         expect(stableSpan.id).toBe("audio_span_legacy_0_0");
@@ -374,7 +374,7 @@ describe("versioned authoring document identity", () => {
             [
                 minimalClip({
                     id: "clip-nested",
-                    refs: [
+                    frameRefs: [
                         minimalRef({ id: "ref-a", frame: 1 }),
                         minimalRef({ id: "ref-b", frame: 2 }),
                     ],
@@ -425,14 +425,14 @@ describe("versioned authoring document identity", () => {
 
         const reordered = getState();
         const clip = reordered.clips[0];
-        clip.refs.reverse();
+        clip.frameRefs.reverse();
         clip.stages.reverse();
         reordered.audioTracks?.reverse();
         saveState(reordered, { notifyDomChange: false });
         __resetPersistenceForTests();
 
         const reloaded = getState();
-        expect(reloaded.clips[0].refs.map((ref) => ref.id)).toEqual([
+        expect(reloaded.clips[0].frameRefs.map((ref) => ref.id)).toEqual([
             "ref-b",
             "ref-a",
         ]);

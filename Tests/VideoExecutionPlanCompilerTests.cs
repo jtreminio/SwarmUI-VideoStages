@@ -122,7 +122,7 @@ public class VideoExecutionPlanCompilerTests
             [new IcLoraSpec("drive", Constants.IcLoraSourceUpload, 1, 1, Constants.IcLoraControlNone, null, Stage: 0)],
             false, true, false, true,
             new UploadedMediaSpec("data:audio/wav;base64,AA==", "track.wav"),
-            [new ImageRefSpec("Upload", 1, false, "ref.png")],
+            [new FrameRefSpec("Upload", 1, false, "ref.png")],
             [Stage(10, loras: [new LoraRef("stage")]), Stage(11)],
             Loras: [new LoraRef("clip")],
             PromptWindows: [new PromptWindowSpec("first", 0, 1)],
@@ -203,7 +203,7 @@ public class VideoExecutionPlanCompilerTests
     {
         List<LoraRef> clipLoras = [new("clip.safetensors", 0.6, 0.4)];
         List<LoraRef> stageLoras = [new("stage.safetensors", 1.2)];
-        List<ImageRefSpec> references =
+        List<FrameRefSpec> references =
         [
             new("Upload", 5, false, "opening.png", "data:image/png;base64,QQ=="),
             new("edit2", 3, true, null),
@@ -249,7 +249,7 @@ public class VideoExecutionPlanCompilerTests
         {
             ImageReference = "edit4",
             ControlNetStrength = 0.55,
-            ImageRefStrengths = [0.25, 0.9],
+            FrameRefStrengths = [0.25, 0.9],
             ImageRefWasExplicit = true,
         };
         StageSpec last = Stage(12);
@@ -263,7 +263,7 @@ public class VideoExecutionPlanCompilerTests
             ClipLengthFromControlNet: false,
             ReuseAudio: true,
             UploadedAudio: null,
-            ImageRefs: references,
+            FrameRefs: references,
             Stages: [first, target, last],
             Loras: clipLoras,
             PromptWindows:
@@ -470,7 +470,7 @@ public class VideoExecutionPlanCompilerTests
         ClipSpec clip = InitVideoClip(0) with
         {
             Stages = [Stage(10, retake: new RetakeWindowSpec(8, 16, 1))],
-            ImageRefs = [new ImageRefSpec("Upload", 2, false, "ref.png", "image")],
+            FrameRefs = [new FrameRefSpec("Upload", 2, false, "ref.png", "image")],
         };
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, clip));
@@ -557,7 +557,7 @@ public class VideoExecutionPlanCompilerTests
         ClipSpec first = GeneratedClip(0, Stage(10)) with { BoundaryOut = Constants.BoundaryOutContinue };
         ClipSpec next = GeneratedClip(1, Stage(11)) with
         {
-            ImageRefs = [new ImageRefSpec("Upload", 1, false, "first.png")],
+            FrameRefs = [new FrameRefSpec("Upload", 1, false, "first.png")],
         };
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, next));

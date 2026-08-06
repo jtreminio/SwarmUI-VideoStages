@@ -6,16 +6,16 @@ import {
 
 describe("nextAvailableReferenceFrame", () => {
     it("spaces preferred frames by rounded ten-percent increments", () => {
-        const refs: { frame: number; fromEnd: boolean }[] = [];
+        const frameRefs: { frame: number; fromEnd: boolean }[] = [];
         const allocated: number[] = [];
         for (let index = 0; index < 11; index++) {
-            const frame = nextAvailableReferenceFrame(refs, 121);
+            const frame = nextAvailableReferenceFrame(frameRefs, 121);
             expect(frame).not.toBeNull();
             if (frame === null) {
                 break;
             }
             allocated.push(frame);
-            refs.push({ frame, fromEnd: false });
+            frameRefs.push({ frame, fromEnd: false });
         }
 
         expect(allocated).toEqual([

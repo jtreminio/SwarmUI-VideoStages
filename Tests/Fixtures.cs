@@ -92,7 +92,7 @@ internal static class Fixtures
     public static JObject MakeClipWithRefs(IEnumerable<JObject> refs = null, params JObject[] stages) =>
         new()
         {
-            ["refs"] = new JArray(refs ?? []),
+            ["frameRefs"] = new JArray(refs ?? []),
             ["stages"] = new JArray(stages)
         };
 

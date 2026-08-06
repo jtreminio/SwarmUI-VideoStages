@@ -69,7 +69,7 @@ const persistedCapabilityIssues = (
         }
     };
     unsupported(
-        !supports("frameReferences") && clip.refs.length > 0,
+        !supports("frameReferences") && clip.frameRefs.length > 0,
         "frame-references",
         "Frame references",
     );

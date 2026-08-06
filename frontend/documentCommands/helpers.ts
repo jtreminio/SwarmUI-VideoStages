@@ -3,8 +3,8 @@ import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
+    CanonicalFrameRefImage,
     CanonicalPromptWindow,
-    CanonicalRefImage,
     CanonicalRetake,
     CanonicalStage,
     CanonicalVideoStagesConfig,
@@ -28,18 +28,18 @@ export const findTrack = (
 type AuthoringEntity =
     | CanonicalClip
     | CanonicalStage
-    | CanonicalRefImage
+    | CanonicalFrameRefImage
     | CanonicalPromptWindow
     | CanonicalRetake
     | CanonicalAudioTrack
     | CanonicalAudioTrackSpan;
 
 const candidateIds = (entity: AuthoringEntity): string[] => {
-    if ("stages" in entity && "refs" in entity) {
+    if ("stages" in entity && "frameRefs" in entity) {
         return [
             entity.id,
             ...entity.stages.map((stage) => stage.id),
-            ...entity.refs.map((ref) => ref.id),
+            ...entity.frameRefs.map((ref) => ref.id),
             ...entity.promptWindows.map((window) => window.id),
             ...(entity.retake ? [entity.retake.id] : []),
         ];

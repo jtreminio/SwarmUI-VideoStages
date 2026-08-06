@@ -48,13 +48,13 @@ const boundaryClip = (boundaryOut: BoundaryOut = "cut"): Clip =>
         hue: 210,
         boundaryOut,
         stages: [],
-        refs: [],
+        frameRefs: [],
     }) as unknown as Clip;
 
 const makeClip = (
     duration: number,
     stages: number,
-    refs: number,
+    frameRefs: number,
     skipped = false,
     hue = 210,
 ): Clip =>
@@ -63,7 +63,7 @@ const makeClip = (
         skipped,
         hue,
         stages: Array.from({ length: stages }, () => ({})),
-        refs: Array.from({ length: refs }, () => ({})),
+        frameRefs: Array.from({ length: frameRefs }, () => ({})),
     }) as unknown as Clip;
 
 describe("zoom helpers", () => {
@@ -195,7 +195,7 @@ describe("computeRegionLayout", () => {
         expect(computeRegionLayout([])).toEqual([]);
     });
 
-    it("null-guards a clip missing stages/refs instead of throwing", () => {
+    it("null-guards a clip missing stages/frameRefs instead of throwing", () => {
         const clip = { duration: 1 } as unknown as Clip;
         const layout = computeRegionLayout([clip]);
         expect(layout[0].stageCount).toBe(0);
@@ -284,7 +284,7 @@ describe("renderTimeline (DOM)", () => {
         expect(body.querySelectorAll(".vst-region")).toHaveLength(0);
     });
 
-    it("renders a bare clip (no refs/stages/lora) with fallbacks", () => {
+    it("renders a bare clip (no frameRefs/stages/lora) with fallbacks", () => {
         const clip = makeClip(2, 0, 0);
         expect(() => renderTimeline(body, [clip])).not.toThrow();
         expect(body.querySelector(".vst-keys")).toBeNull();
@@ -298,7 +298,7 @@ describe("renderTimeline (DOM)", () => {
     it("renders a model badge (stage 0's model) at the clip bottom-left", () => {
         const clip = {
             duration: 2,
-            refs: [],
+            frameRefs: [],
             stages: [{ model: "path/to/wan-2.2.safetensors" }],
         } as unknown as Clip;
         renderTimeline(body, [clip]);
@@ -346,7 +346,9 @@ describe("renderTimeline (DOM)", () => {
         const clip = {
             duration: 2,
             stages: [{}],
-            refs: [{ uploadedImage: { data: "data:image/png;base64,QQ==" } }],
+            frameRefs: [
+                { uploadedImage: { data: "data:image/png;base64,QQ==" } },
+            ],
         } as unknown as Clip;
         renderTimeline(body, [clip]);
         const thumb = body.querySelector<HTMLElement>(".vst-region-thumb");
@@ -366,7 +368,7 @@ describe("renderTimeline (DOM)", () => {
         const clip = {
             duration: 2,
             stages: [{}],
-            refs: [
+            frameRefs: [
                 { uploadedImage: { data: "inputs/VideoStages/abc123.png" } },
             ],
         } as unknown as Clip;
@@ -384,7 +386,7 @@ describe("renderTimeline (DOM)", () => {
         const clip = {
             duration: 2,
             stages: [{}],
-            refs: [
+            frameRefs: [
                 {
                     uploadedImage: {
                         data: "inputs/preview';color:red;.png",
@@ -407,7 +409,7 @@ describe("renderTimeline (DOM)", () => {
         const clip = {
             duration: 2,
             stages: [{}],
-            refs: [
+            frameRefs: [
                 {
                     frame: 1,
                     fromEnd: false,
@@ -435,7 +437,7 @@ describe("renderTimeline (DOM)", () => {
         const clip = {
             duration: 2,
             stages: [{}],
-            refs: [
+            frameRefs: [
                 {
                     frame: 40,
                     fromEnd: false,
@@ -463,7 +465,9 @@ describe("renderTimeline (DOM)", () => {
         const clip = {
             duration: 2,
             stages: [{}],
-            refs: [{ uploadedImage: { data: "data:image/png;base64,QQ==" } }],
+            frameRefs: [
+                { uploadedImage: { data: "data:image/png;base64,QQ==" } },
+            ],
         } as unknown as Clip;
         renderTimeline(body, [clip]);
         const thumb = body.querySelector<HTMLElement>(".vst-region-thumb");
@@ -481,7 +485,7 @@ describe("renderTimeline (DOM)", () => {
         const clip = {
             duration: 10,
             stages: [{}],
-            refs: [],
+            frameRefs: [],
             retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
         } as unknown as Clip;
         renderTimeline(body, [clip]);
@@ -506,7 +510,7 @@ describe("renderTimeline (DOM)", () => {
         const clip = {
             duration: 10,
             stages: [{}],
-            refs: [],
+            frameRefs: [],
             retake: { startSeconds: 2, lengthSeconds: 3, strength: 1 },
         } as unknown as Clip;
         renderTimeline(body, [clip]);
@@ -981,7 +985,7 @@ describe("renderTimeline (DOM)", () => {
     it("renders a retake lane under each region, holding the retake window", () => {
         const withRetake = {
             duration: 4,
-            refs: [],
+            frameRefs: [],
             stages: [{}],
             retake: { startSeconds: 1, lengthSeconds: 2, strength: 1 },
         } as unknown as Clip;
@@ -1003,7 +1007,7 @@ describe("renderTimeline (DOM)", () => {
     it("renders one editable chip per stage and NO add chip (adding lives in the dock)", () => {
         const clip = {
             duration: 2,
-            refs: [],
+            frameRefs: [],
             stages: [{}, { skipped: true }, {}],
         } as unknown as Clip;
         renderTimeline(body, [clip]);
@@ -1052,7 +1056,7 @@ describe("renderTimeline (DOM)", () => {
         const clip = {
             duration: 2,
             stages: [{}],
-            refs: [
+            frameRefs: [
                 {
                     frame: 10,
                     source: "Upload",
@@ -1077,7 +1081,7 @@ describe("renderTimeline (DOM)", () => {
     it("places a grid-padded tail reference at the generated endpoint", () => {
         const clip = minimalClip({
             duration: 1.05,
-            refs: [minimalRef({ frame: 33 })],
+            frameRefs: [minimalRef({ frame: 33 })],
         });
         renderTimeline(body, [clip], {
             fps: 24,
@@ -1097,7 +1101,7 @@ describe("renderTimeline (DOM)", () => {
     it("keeps generated marker geometry when a later authored card prevents output compaction", () => {
         const generated = minimalClip({
             duration: 1.05,
-            refs: [minimalRef({ frame: 17 })],
+            frameRefs: [minimalRef({ frame: 17 })],
         });
         const dormant = minimalClip({ skipped: true });
         const capabilities = createCapabilityViewResolver(
@@ -1144,11 +1148,11 @@ describe("renderTimeline (DOM)", () => {
         expect(body.querySelector(".vst-track-refs .vst-head-tags")).toBeNull();
     });
 
-    it("renders one References mark per ref, flagging primary (cover) and from-end refs", () => {
+    it("renders one References mark per ref, flagging primary (cover) and from-end frameRefs", () => {
         const clip = {
             duration: 4,
             stages: [{}],
-            refs: [
+            frameRefs: [
                 { frame: 1, source: "Refiner", fromEnd: false },
                 { frame: 6, source: "Base", fromEnd: true },
             ],
@@ -1175,11 +1179,11 @@ describe("renderTimeline (DOM)", () => {
         );
     });
 
-    it("edge-aligns refs within a few frames of a clip boundary, centers the rest", () => {
+    it("edge-aligns frameRefs within a few frames of a clip boundary, centers the rest", () => {
         const clip = {
             duration: 4,
             stages: [{}],
-            refs: [
+            frameRefs: [
                 { frame: 2, source: "Refiner", fromEnd: false }, // near start
                 { frame: 2, source: "Base", fromEnd: true }, // near end
                 { frame: 40, source: "Refiner", fromEnd: false }, // mid-clip
@@ -1202,7 +1206,7 @@ describe("renderTimeline (DOM)", () => {
         const clip = {
             duration: 4,
             stages: [{}],
-            refs: [
+            frameRefs: [
                 {
                     frame: 3,
                     source: "Upload",
@@ -1396,7 +1400,7 @@ describe("unsupported persisted timeline controls", () => {
                 data: "data:audio/wav;base64,AAAA",
                 fileName: "persisted.wav",
             },
-            refs: [minimalRef({ frame: 1 })],
+            frameRefs: [minimalRef({ frame: 1 })],
             retake: {
                 startSeconds: 0,
                 lengthSeconds: 1,

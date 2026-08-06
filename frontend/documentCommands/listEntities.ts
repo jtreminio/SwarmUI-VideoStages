@@ -2,8 +2,8 @@ import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
+    CanonicalFrameRefImage,
     CanonicalPromptWindow,
-    CanonicalRefImage,
     CanonicalRetake,
     CanonicalStage,
     CanonicalVideoStagesConfig,
@@ -134,7 +134,7 @@ const CLIP_ENTITY = defineList<CanonicalVideoStagesConfig, CanonicalClip>()({
         "modelProfileId",
         "promptWindows",
         "retake",
-        "refs",
+        "frameRefs",
         "stages",
     ],
     collection: (document) => document.clips,
@@ -152,7 +152,7 @@ const STAGE_ENTITY = defineList<CanonicalClip, CanonicalStage>()({
         "controlNetStrength",
         "icLoraStrengths",
         "loraWeights",
-        "refStrengths",
+        "frameRefStrengths",
         "upscale",
         "upscaleMethod",
         "steps",
@@ -165,7 +165,7 @@ const STAGE_ENTITY = defineList<CanonicalClip, CanonicalStage>()({
     collection: (clip) => clip.stages,
 });
 
-const REF_ENTITY = defineList<CanonicalClip, CanonicalRefImage>()({
+const REF_ENTITY = defineList<CanonicalClip, CanonicalFrameRefImage>()({
     prefix: "ref",
     owner: "clip",
     entityField: "ref",
@@ -179,7 +179,7 @@ const REF_ENTITY = defineList<CanonicalClip, CanonicalRefImage>()({
         "fromEnd",
     ],
     reservedKeys: ["id"],
-    collection: (clip) => clip.refs,
+    collection: (clip) => clip.frameRefs,
 });
 
 const PROMPT_WINDOW_ENTITY = defineList<CanonicalClip, CanonicalPromptWindow>()(

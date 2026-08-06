@@ -87,7 +87,7 @@ const durationClips = (durations: number[]): Array<Record<string, unknown>> =>
         (duration): Record<string, unknown> => ({
             duration,
             stages: [{}],
-            refs: [],
+            frameRefs: [],
         }),
     );
 
@@ -408,7 +408,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
                 {
                     duration: 5,
                     stages: [{}],
-                    refs: [{ source: "Base", frame: 999 }],
+                    frameRefs: [{ source: "Base", frame: 999 }],
                 },
             ],
             16,
@@ -432,6 +432,6 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         const clips = savedClips(saveSpy);
         expect(persistence.getState().fps).toBe(16);
         expect(clips[0].duration).toBe(1.3);
-        expect(clips[0].refs[0].frame).toBe(999);
+        expect(clips[0].frameRefs[0].frame).toBe(999);
     });
 });

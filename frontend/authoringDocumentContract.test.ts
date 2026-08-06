@@ -109,7 +109,7 @@ const contractState = (): VideoStagesConfig => ({
                 startSeconds: 1,
                 lengthSeconds: 3,
             },
-            refs: [
+            frameRefs: [
                 {
                     id: "ref-0",
                     source: "Upload",
@@ -130,7 +130,7 @@ const contractState = (): VideoStagesConfig => ({
                     controlNetStrength: 0.8,
                     icLoraStrengths: [0.8],
                     loraWeights: [0.5],
-                    refStrengths: [0.6],
+                    frameRefStrengths: [0.6],
                     upscale: 1,
                     upscaleMethod: "pixel-lanczos",
                     model: "ltx-2.3.safetensors",
@@ -147,7 +147,7 @@ const contractState = (): VideoStagesConfig => ({
                     controlNetStrength: 0.8,
                     icLoraStrengths: [0.5],
                     loraWeights: [0],
-                    refStrengths: [0.4],
+                    frameRefStrengths: [0.4],
                     upscale: 1.5,
                     upscaleMethod: "latentmodel-upscaler.safetensors",
                     model: "ltx-2.3.safetensors",
@@ -182,7 +182,7 @@ const contractState = (): VideoStagesConfig => ({
             promptWindows: [],
             retake: null,
             initVideo: null,
-            refs: [],
+            frameRefs: [],
             stages: [
                 {
                     id: "stage-2",
@@ -191,7 +191,7 @@ const contractState = (): VideoStagesConfig => ({
                     controlNetStrength: 0.8,
                     icLoraStrengths: [],
                     loraWeights: [],
-                    refStrengths: [],
+                    frameRefStrengths: [],
                     upscale: 1,
                     upscaleMethod: "latentmodel-upscaler.safetensors",
                     model: "ltx-2.3.safetensors",

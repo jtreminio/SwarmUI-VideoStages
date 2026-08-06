@@ -11,7 +11,7 @@ import {
     truncate,
 } from "../timelineDetail";
 import { keyframeLeftPercent, spanGeometry } from "../trackDomUtils";
-import type { AudioTrack, Clip, PromptWindow, RefImage } from "../types";
+import type { AudioTrack, Clip, FrameRefImage, PromptWindow } from "../types";
 import { roundToTenth } from "../utils";
 import {
     audioSegmentWaveBarHeights,
@@ -408,8 +408,8 @@ export const renderReferencesTrackRow = (
             const refsSupported =
                 capabilities?.forClip(clip).decision("frameReferences")
                     .supported ?? true;
-            const marks = (clip.refs ?? [])
-                .map((ref: RefImage, refIdx: number) => {
+            const marks = (clip.frameRefs ?? [])
+                .map((ref: FrameRefImage, refIdx: number) => {
                     const isEnd = ref.fromEnd === true;
                     const frame = Math.max(0, ref.frame ?? 0);
                     const isPrimary = frame === 1 && !isEnd;
@@ -459,12 +459,12 @@ export const renderReferencesTrackRow = (
                     );
                 })
                 .join("");
-            return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.refs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be inspected or removed"}">${marks}</div>`;
+            return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.frameRefs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a frame reference here" : "Frame references are unsupported; existing references can be inspected or removed"}">${marks}</div>`;
         })
         .join("");
     return (
         `<div class="vst-track-row vst-track-refs">` +
-        renderTrackHead("vst-track-icon-refs", "⧉", "References", "") +
+        renderTrackHead("vst-track-icon-refs", "⧉", "Frame References", "") +
         `<div class="vst-track-cell">${lanes}</div>` +
         `</div>`
     );

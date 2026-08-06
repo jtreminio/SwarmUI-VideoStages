@@ -332,7 +332,7 @@ public class StageRunnerCollaboratorTests
             ClipLengthFromControlNet: false,
             ReuseAudio: false,
             UploadedAudio: null,
-            ImageRefs: [],
+            FrameRefs: [],
             Stages: [stage]);
         return TestPlanCompiler.Compile(
             new TimelineSpec(512, 512, 24, false, [clip]));

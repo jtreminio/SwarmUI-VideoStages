@@ -48,12 +48,12 @@ export const appendStageReferenceGuideSection = ({
     fields,
     debouncedCommit,
 }: StagePanelBindings): void => {
-    if (clip.refs.length > 0) {
+    if (clip.frameRefs.length > 0) {
         const refDecision = context
             .authoring()
             .capabilities.forClip(clip)
             .decision("frameReferences");
-        appendSectionHeader(fields, "Reference Strengths");
+        appendSectionHeader(fields, "Frame Reference Strengths");
         const setRefHover = (refIdx: number, on: boolean): void => {
             context
                 .getBoundBody()
@@ -62,21 +62,21 @@ export const appendStageReferenceGuideSection = ({
                 )
                 ?.classList.toggle("vst-ref-hover", on);
         };
-        clip.refs.forEach((ref, refIdx) => {
+        clip.frameRefs.forEach((ref, refIdx) => {
             const current =
-                refIdx < stage.refStrengths.length
-                    ? stage.refStrengths[refIdx]
+                refIdx < stage.frameRefStrengths.length
+                    ? stage.frameRefStrengths[refIdx]
                     : STAGE_REF_STRENGTH_MAX;
             const refSlider = buildSlider(
-                `Reference R${refIdx}`,
+                `Frame Ref R${refIdx}`,
                 current,
                 STAGE_REF_STRENGTH_MIN,
                 STAGE_REF_STRENGTH_MAX,
                 STAGE_REF_STRENGTH_STEP,
                 (value) => {
                     debouncedCommit(`refstrength-${refIdx}`, (target) => {
-                        if (refIdx < target.refStrengths.length) {
-                            target.refStrengths[refIdx] = value;
+                        if (refIdx < target.frameRefStrengths.length) {
+                            target.frameRefStrengths[refIdx] = value;
                         }
                     });
                 },

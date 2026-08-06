@@ -105,10 +105,10 @@ describe("persistence", () => {
             );
 
         it.each([
-            ["missing clips", { schemaVersion: 5 }],
-            ["non-array clips", { schemaVersion: 5, clips: {} }],
-            ["null clip item", { schemaVersion: 5, clips: [null] }],
-            ["scalar clip item", { schemaVersion: 5, clips: ["clip"] }],
+            ["missing clips", { schemaVersion: 7 }],
+            ["non-array clips", { schemaVersion: 7, clips: {} }],
+            ["null clip item", { schemaVersion: 7, clips: [null] }],
+            ["scalar clip item", { schemaVersion: 7, clips: ["clip"] }],
         ])("rejects %s", (_label, document) => {
             expect(decode(document)).toBeNull();
         });
@@ -118,8 +118,8 @@ describe("persistence", () => {
             ["root audioTracks item", { audioTracks: [null] }],
             ["clip stages", { clips: [{ stages: {} }] }],
             ["clip stage item", { clips: [{ stages: [null] }] }],
-            ["clip refs", { clips: [{ refs: {} }] }],
-            ["clip ref item", { clips: [{ refs: [1] }] }],
+            ["clip frameRefs", { clips: [{ frameRefs: {} }] }],
+            ["clip ref item", { clips: [{ frameRefs: [1] }] }],
             ["clip icLoras", { clips: [{ icLoras: {} }] }],
             ["clip IC-LoRA item", { clips: [{ icLoras: [false] }] }],
             ["clip LoRAs", { clips: [{ loras: {} }] }],
@@ -136,11 +136,11 @@ describe("persistence", () => {
             ],
             [
                 "stage ref strengths",
-                { clips: [{ stages: [{ refStrengths: {} }] }] },
+                { clips: [{ stages: [{ frameRefStrengths: {} }] }] },
             ],
             [
                 "stage ref-strength item",
-                { clips: [{ stages: [{ refStrengths: [null] }] }] },
+                { clips: [{ stages: [{ frameRefStrengths: [null] }] }] },
             ],
             ["audio-track spans", { audioTracks: [{ spans: {} }] }],
             ["audio-track span item", { audioTracks: [{ spans: [null] }] }],
@@ -148,7 +148,7 @@ describe("persistence", () => {
         ])("rejects a malformed present %s collection", (_label, partial) => {
             expect(
                 decode({
-                    schemaVersion: 5,
+                    schemaVersion: 7,
                     clips: [],
                     ...partial,
                 }),
@@ -169,44 +169,48 @@ describe("persistence", () => {
             );
         });
 
-        it("migrates the version-five architecture field to an explicit hint", () => {
+        it("migrates the version-six reference fields to their frame names", () => {
             const decoded = decode({
-                schemaVersion: 5,
+                schemaVersion: 6,
                 clips: [
                     {
-                        architecture: "removed-architecture",
-                        modelProfileId: "removed-profile",
-                        stages: [{ model: "removed-model.safetensors" }],
+                        refs: [{ source: "Upload", frame: 1, fromEnd: false }],
+                        stages: [
+                            {
+                                model: "model.safetensors",
+                                refStrengths: [0.6],
+                            },
+                        ],
                     },
                 ],
             });
 
-            expect(decoded?.clips[0].architectureHint).toBe(
-                "removed-architecture",
-            );
+            expect(decoded?.clips[0].frameRefs).toHaveLength(1);
+            expect(decoded?.clips[0].frameRefs[0].source).toBe("Upload");
+            expect(decoded?.clips[0].stages[0].frameRefStrengths).toEqual([
+                0.6,
+            ]);
             const reencoded = JSON.parse(
                 serializeStateForStorage({
-                    schemaVersion: 6,
+                    schemaVersion: 7,
                     ...decoded?.dims,
                     clips: decoded?.clips ?? [],
                     audioTracks: decoded?.audioTracks ?? [],
                 } as VideoStagesConfig),
             ) as { schemaVersion: number; clips: Record<string, unknown>[] };
-            expect(reencoded.schemaVersion).toBe(6);
-            expect(reencoded.clips[0].architectureHint).toBe(
-                "removed-architecture",
-            );
-            expect(reencoded.clips[0].architecture).toBeUndefined();
+            expect(reencoded.schemaVersion).toBe(7);
+            expect(reencoded.clips[0].frameRefs).toHaveLength(1);
+            expect(reencoded.clips[0].refs).toBeUndefined();
         });
 
         it("accepts omitted optional collections without inventing stored items", () => {
-            const decoded = decode({ schemaVersion: 5, clips: [{}] });
+            const decoded = decode({ schemaVersion: 7, clips: [{}] });
 
             expect(decoded).not.toBeNull();
             expect(decoded?.clips).toHaveLength(1);
             expect(decoded?.clips[0]).toMatchObject({
                 stages: [],
-                refs: [],
+                frameRefs: [],
                 icLoras: [],
             });
             expect(decoded?.audioTracks).toEqual([]);
@@ -214,7 +218,7 @@ describe("persistence", () => {
 
         it("canonicalizes every clip and stage after the first skip marker", () => {
             const decoded = decode({
-                schemaVersion: 5,
+                schemaVersion: 7,
                 clips: [
                     {
                         stages: [
@@ -240,7 +244,7 @@ describe("persistence", () => {
 
         it("round-trips an explicit IC-LoRA Drive Media kind contract", () => {
             const decoded = decode({
-                schemaVersion: 5,
+                schemaVersion: 7,
                 clips: [
                     {
                         icLoras: [
@@ -289,11 +293,11 @@ describe("persistence", () => {
                     ],
                     clipLengthFromControlNet: true,
                     prompt: "should not be serialized",
-                    refs: [minimalRef({ frame: 2, fromEnd: true })],
+                    frameRefs: [minimalRef({ frame: 2, fromEnd: true })],
                     stages: [
                         minimalStage({
                             controlNetStrength: 0.7,
-                            refStrengths: [0.8],
+                            frameRefStrengths: [0.8],
                             loraWeights: [0.6],
                         }),
                     ],
@@ -335,9 +339,9 @@ describe("persistence", () => {
                     uploadedAudio: null,
                     initVideo: null,
                     retake: null,
-                    refs: [
+                    frameRefs: [
                         {
-                            id: clips[0].refs[0].id as string,
+                            id: clips[0].frameRefs[0].id as string,
                             source: REF_SOURCE_BASE,
                             uploadFileName: null,
                             uploadedImage: null,
@@ -353,7 +357,7 @@ describe("persistence", () => {
                             controlNetStrength: 0.7,
                             icLoraStrengths: [],
                             loraWeights: [0.6],
-                            refStrengths: [0.8],
+                            frameRefStrengths: [0.8],
                             upscale: 1,
                             upscaleMethod: "latentmodel-test.safetensors",
                             model: "ltx-2.3.safetensors",
@@ -392,7 +396,7 @@ describe("persistence", () => {
                             startSeconds: 2,
                             lengthSeconds: 4,
                         },
-                        refs: [
+                        frameRefs: [
                             minimalRef({
                                 frame: 8,
                                 fromEnd: true,
@@ -446,7 +450,7 @@ describe("persistence", () => {
                 clips: Array<{
                     uploadedAudio: unknown;
                     initVideo: unknown;
-                    refs: Array<{
+                    frameRefs: Array<{
                         uploadedImage: unknown;
                         frame: number;
                         fromEnd: boolean;
@@ -470,7 +474,7 @@ describe("persistence", () => {
                 duration: 4,
                 uploadedAudio: null,
                 initVideo: null,
-                refs: [
+                frameRefs: [
                     {
                         uploadedImage: null,
                         frame: 8,
@@ -590,7 +594,7 @@ describe("persistence", () => {
                                 duration: 2,
                             },
                         ],
-                        refs: [
+                        frameRefs: [
                             minimalRef({
                                 frame: 12,
                                 fromEnd: true,
@@ -616,7 +620,7 @@ describe("persistence", () => {
             expect(reloaded.clips[0]).toMatchObject({
                 duration: 6,
                 prompt: "durable clip prompt",
-                refs: [
+                frameRefs: [
                     {
                         frame: 12,
                         fromEnd: true,
@@ -808,7 +812,7 @@ describe("persistence", () => {
 
         it("preserves unknown architecture identities for diagnostics and repair", () => {
             mountVideoStagesData({
-                schemaVersion: 5,
+                schemaVersion: 7,
                 clips: [
                     {
                         architectureHint: "removed-architecture",
@@ -1219,7 +1223,7 @@ describe("persistence", () => {
             expect(state.fps).toBe(24);
         });
 
-        it("normalizes stored refs with the core Video FPS before serializing and reloading", () => {
+        it("normalizes stored frameRefs with the core Video FPS before serializing and reloading", () => {
             mountVideoFps(16);
             saveState(
                 baseState({
@@ -1227,7 +1231,7 @@ describe("persistence", () => {
                     clips: [
                         minimalClip({
                             duration: 5,
-                            refs: [minimalRef({ frame: 120 })],
+                            frameRefs: [minimalRef({ frame: 120 })],
                         }),
                     ],
                 }),
@@ -1238,7 +1242,7 @@ describe("persistence", () => {
             __resetPersistenceForTests();
             const reloaded = getState();
             expect(reloaded.fps).toBe(16);
-            expect(reloaded.clips[0].refs[0].frame).toBe(81);
+            expect(reloaded.clips[0].frameRefs[0].frame).toBe(81);
             expect("fps" in JSON.parse(dataInput().value)).toBe(false);
         });
 

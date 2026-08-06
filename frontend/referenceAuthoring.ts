@@ -1,10 +1,10 @@
 import { clamp, REF_FRAME_MIN } from "./constants";
-import type { RefImage } from "./types";
+import type { FrameRefImage } from "./types";
 
 const REFERENCE_FRAME_STEP_FRACTION = 0.1;
 
 const absoluteReferenceFrame = (
-    ref: Pick<RefImage, "frame" | "fromEnd">,
+    ref: Pick<FrameRefImage, "frame" | "fromEnd">,
     frameMax: number,
 ): number => {
     const authoredFrame = clamp(Math.round(ref.frame), REF_FRAME_MIN, frameMax);
@@ -21,7 +21,7 @@ const absoluteReferenceFrame = (
  * wraps to the earliest unused frame. Null means every frame is occupied.
  */
 export const nextAvailableReferenceFrame = (
-    refs: readonly Pick<RefImage, "frame" | "fromEnd">[],
+    frameRefs: readonly Pick<FrameRefImage, "frame" | "fromEnd">[],
     rawFrameMax: number,
 ): number | null => {
     const frameMax =
@@ -29,7 +29,7 @@ export const nextAvailableReferenceFrame = (
             ? Math.floor(rawFrameMax)
             : REF_FRAME_MIN;
     const occupied = new Set(
-        refs.map((ref) => absoluteReferenceFrame(ref, frameMax)),
+        frameRefs.map((ref) => absoluteReferenceFrame(ref, frameMax)),
     );
     const step = Math.max(
         1,
@@ -57,23 +57,23 @@ export const nextAvailableReferenceFrame = (
 };
 
 export const nextAllowedReferencePosition = (
-    refs: readonly Pick<RefImage, "frame" | "fromEnd">[],
+    frameRefs: readonly Pick<FrameRefImage, "frame" | "fromEnd">[],
     rawFrameMax: number,
     allowed: readonly string[],
 ): { frame: number; fromEnd: boolean } | null => {
     if (allowed.includes("any")) {
-        const frame = nextAvailableReferenceFrame(refs, rawFrameMax);
+        const frame = nextAvailableReferenceFrame(frameRefs, rawFrameMax);
         return frame === null ? null : { frame, fromEnd: false };
     }
     if (
         allowed.includes("first") &&
-        !refs.some((ref) => ref.frame === REF_FRAME_MIN && !ref.fromEnd)
+        !frameRefs.some((ref) => ref.frame === REF_FRAME_MIN && !ref.fromEnd)
     ) {
         return { frame: REF_FRAME_MIN, fromEnd: false };
     }
     if (
         allowed.includes("last") &&
-        !refs.some((ref) => ref.frame === REF_FRAME_MIN && ref.fromEnd)
+        !frameRefs.some((ref) => ref.frame === REF_FRAME_MIN && ref.fromEnd)
     ) {
         return { frame: REF_FRAME_MIN, fromEnd: true };
     }

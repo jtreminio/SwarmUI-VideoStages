@@ -16,7 +16,7 @@ import {
 } from "../timelineDetail";
 import type { TimelineBoundaryImpact, TimelineTiming } from "../timelineTiming";
 import { keyframeLeftPercent, spanGeometry } from "../trackDomUtils";
-import type { BoundaryOut, Clip, RefImage } from "../types";
+import type { BoundaryOut, Clip, FrameRefImage } from "../types";
 import { roundToTenth } from "../utils";
 import type { RegionLayout } from "./layout";
 import {
@@ -28,7 +28,7 @@ import {
     renderWindowSpan,
 } from "./rendering";
 
-const refFrame = (ref: RefImage): number => Math.max(0, ref.frame ?? 0);
+const refFrame = (ref: FrameRefImage): number => Math.max(0, ref.frame ?? 0);
 
 const hasRetake = (clip: Clip): boolean => clip.retake != null;
 
@@ -38,7 +38,7 @@ const retakeLaneVisible = (
 ): boolean => laneVisible(clip, "retake", hasRetake(clip), capabilities);
 
 const renderRegionThumb = (clip: Clip): string => {
-    const withImage = (clip.refs ?? []).filter(
+    const withImage = (clip.frameRefs ?? []).filter(
         (ref) => !!ref.uploadedImage?.data,
     );
     if (withImage.length === 0) {
@@ -48,7 +48,7 @@ const renderRegionThumb = (clip: Clip): string => {
     const startRef = (startPool.length > 0 ? startPool : withImage).reduce(
         (best, ref) => (refFrame(ref) < refFrame(best) ? ref : best),
     );
-    let endRef: RefImage | null =
+    let endRef: FrameRefImage | null =
         withImage.find((ref) => ref.fromEnd === true) ?? null;
     if (!endRef) {
         const highest = withImage.reduce((best, ref) =>
@@ -58,7 +58,7 @@ const renderRegionThumb = (clip: Clip): string => {
             endRef = highest;
         }
     }
-    const cell = (ref: RefImage, side: "start" | "end"): string => {
+    const cell = (ref: FrameRefImage, side: "start" | "end"): string => {
         const source = mediaPreviewSrc(ref.uploadedImage?.data ?? "");
         return `<div class="vst-region-thumb-cell vst-region-thumb-${side}"${backgroundImageDataAttr(source)}></div>`;
     };
@@ -126,11 +126,11 @@ const renderKeyframes = (
     fps: number,
     unit: TimelineUnit,
 ): string => {
-    const refs = clip.refs ?? [];
-    if (refs.length === 0) {
+    const frameRefs = clip.frameRefs ?? [];
+    if (frameRefs.length === 0) {
         return "";
     }
-    const markers = refs
+    const markers = frameRefs
         .map((ref, refIdx) => {
             const time = keyframeTimeSeconds(
                 ref.frame,
@@ -153,7 +153,7 @@ const renderKeyframes = (
             );
         })
         .join("");
-    return `<div class="vst-keys" title="Reference markers">${markers}</div>`;
+    return `<div class="vst-keys" title="Frame reference markers">${markers}</div>`;
 };
 
 const renderBadges = (clip: Clip, clipIdx: number): string => {

@@ -256,7 +256,7 @@ public class BackendConsolidationTests
         ClipLengthFromControlNet: false,
         ReuseAudio: false,
         UploadedAudio: null,
-        ImageRefs: [],
+        FrameRefs: [],
         Stages: [Stage(id)],
         BoundaryOut: boundary);
 
@@ -270,7 +270,7 @@ public class BackendConsolidationTests
         ClipLengthFromControlNet: false,
         ReuseAudio: false,
         UploadedAudio: null,
-        ImageRefs: [],
+        FrameRefs: [],
         Stages: [Stage(id)]);
 
     private static StageSpec Stage(int id) => new(

@@ -19,11 +19,11 @@ internal sealed record AuthoringDocument(
 /// </summary>
 internal static class DocumentJson
 {
-    /// <summary>The current authoring schema version. Reading also accepts the bounded version-5
+    /// <summary>The current authoring schema version. Reading also accepts the bounded version-6
     /// migration below. Must match the frontend's <c>CURRENT_AUTHORING_SCHEMA_VERSION</c>.</summary>
-    public const int SupportedSchemaVersion = 6;
+    public const int SupportedSchemaVersion = 7;
 
-    private const int ArchitectureHintLegacySchemaVersion = 5;
+    private const int FrameRefsLegacySchemaVersion = 6;
 
     /// <summary>Test-only observer of every document key lookup the request reader performs, used by the
     /// contract fixture test to prove no reader names a key the frontend never emits.</summary>
@@ -50,15 +50,11 @@ internal static class DocumentJson
             }
             int schemaVersion = ValidateSchemaVersion(obj);
             List<JObject> entries = GetObjectArray(obj, UploadContainers.ClipsCollection);
-            if (schemaVersion == ArchitectureHintLegacySchemaVersion)
+            if (schemaVersion == FrameRefsLegacySchemaVersion)
             {
                 foreach (JObject entry in entries)
                 {
-                    if (!entry.ContainsKey("architectureHint"))
-                    {
-                        entry["architectureHint"] = entry["architecture"];
-                    }
-                    entry.Remove("architecture");
+                    RenameFrameRefKeys(entry);
                 }
             }
             return new AuthoringDocument(
@@ -78,10 +74,34 @@ internal static class DocumentJson
     private static string GetData(T2IParamInput input) =>
         input.Get(VideoStagesExtension.Data, "");
 
+    /// <summary>The sole v6-&gt;v7 migration: the frame-reference keys gained their "frame" prefix so
+    /// they no longer read as the position-free references other architectures accept.</summary>
+    private static void RenameFrameRefKeys(JObject clip)
+    {
+        RenameKey(clip, "refs", UploadContainers.FrameRefsCollection);
+        foreach (JObject stage in GetObjectArray(clip, "stages"))
+        {
+            RenameKey(stage, "refStrengths", "frameRefStrengths");
+        }
+    }
+
+    private static void RenameKey(JObject obj, string oldKey, string newKey)
+    {
+        if (!obj.TryGetValue(oldKey, out JToken value))
+        {
+            return;
+        }
+        obj.Remove(oldKey);
+        if (!obj.ContainsKey(newKey))
+        {
+            obj[newKey] = value;
+        }
+    }
+
     private static int ValidateSchemaVersion(JObject obj)
     {
         int? version = GetOptionalNullableInt(obj, "schemaVersion");
-        if (version is not SupportedSchemaVersion and not ArchitectureHintLegacySchemaVersion)
+        if (version is not SupportedSchemaVersion and not FrameRefsLegacySchemaVersion)
         {
             throw new SwarmUserErrorException(
                 $"VideoStages: The Video Stages timeline uses document version "

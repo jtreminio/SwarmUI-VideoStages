@@ -32,7 +32,7 @@ interface ClipFixture {
 const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     duration: clip.duration,
     stages: [{}],
-    refs: [],
+    frameRefs: [],
     ...(clip.retake ? { retake: clip.retake } : {}),
 });
 

@@ -445,7 +445,7 @@ public sealed class EffectiveVideoRequestTests
             rawIndex: 0,
             model: "host-model") with
         {
-            ImageRefStrengths = [0.7],
+            FrameRefStrengths = [0.7],
         };
         ClipSpec clip = Clip(stage) with
         {
@@ -473,7 +473,7 @@ public sealed class EffectiveVideoRequestTests
             RootEnvironment.FromSpec(authored),
             architectures);
 
-        Assert.Equal([0.7], authored.Clips[0].Stages[0].ImageRefStrengths);
+        Assert.Equal([0.7], authored.Clips[0].Stages[0].FrameRefStrengths);
         Assert.Contains(
             plan.Diagnostics,
             diagnostic => diagnostic.Code
@@ -492,7 +492,7 @@ public sealed class EffectiveVideoRequestTests
             model: "host-model") with
         {
             IcLoraStrengths = [0.8],
-            ImageRefStrengths = [0.7],
+            FrameRefStrengths = [0.7],
             Loras = [new("stage-lora.safetensors", 0.5)],
             RetakeWindow = new(0, 8, 0.6),
         };
@@ -517,7 +517,7 @@ public sealed class EffectiveVideoRequestTests
             ClipLengthFromControlNet = true,
             ReuseAudio = true,
             UploadedAudio = new("data:audio/wav;base64,QUJD", "audio.wav"),
-            ImageRefs =
+            FrameRefs =
             [
                 new(
                     Constants.IcLoraSourceUpload,
@@ -562,8 +562,8 @@ public sealed class EffectiveVideoRequestTests
         Assert.Equal(
             ArchitectureFeature.None,
             HostVideoArchitectureModule.Instance.Descriptor.Features);
-        Assert.Equal(clip.ImageRefs, effective.ImageRefs);
-        Assert.Equal(first.ImageRefStrengths, effective.Stages[0].ImageRefStrengths);
+        Assert.Equal(clip.FrameRefs, effective.FrameRefs);
+        Assert.Equal(first.FrameRefStrengths, effective.Stages[0].FrameRefStrengths);
         Assert.Equal(ReferenceFramingMode.Fit, effective.ReferenceFraming);
         Assert.Equal(first.RetakeWindow, effective.Stages[0].RetakeWindow);
         Assert.Equal(clip.PromptWindows, effective.PromptWindows);
@@ -860,7 +860,7 @@ public sealed class EffectiveVideoRequestTests
             ClipLengthFromControlNet: false,
             ReuseAudio: false,
             UploadedAudio: null,
-            ImageRefs: [],
+            FrameRefs: [],
             Stages: stages)
         {
             AuthoredArchitectureHint = WanArchitectureModule.ArchitectureId.Value,

@@ -24,7 +24,7 @@ public class AuthoringDocumentContractTests
     [
         // Browser-side entity identity; the backend uses only clip and audio-track ids.
         "clips[].stages[].id",
-        "clips[].refs[].id",
+        "clips[].frameRefs[].id",
         "clips[].icLoras[].id",
         "clips[].retake.id",
         "clips[].initVideo.id",
@@ -51,8 +51,8 @@ public class AuthoringDocumentContractTests
         // Split model/text-encoder stage LoRA weights are API-only.
         "clips[].stages[].loras[].textEncoderWeight",
         // Pre-container reference payload kept for API documents; the UI writes uploadedImage.
-        "clips[].refs[].data",
-        // The guide source is authored through the refs track, so the codec never writes it; the
+        "clips[].frameRefs[].data",
+        // The guide source is authored through the frame-references track, so the codec never writes it; the
         // reader exists for the <videoclip[c,s],imagereference=...> prompt-tag override.
         "clips[].stages[].imageReference",
     ];
@@ -166,7 +166,7 @@ public class AuthoringDocumentContractTests
         Assert.Equal("source.mp4", clip.InitVideo.FileName);
         Assert.Equal(1, clip.InitVideo.StartSeconds);
 
-        ImageRefSpec reference = Assert.Single(clip.ImageRefs);
+        FrameRefSpec reference = Assert.Single(clip.FrameRefs);
         Assert.Equal("Upload", reference.Source);
         Assert.Equal(2, reference.Frame);
         Assert.True(reference.FromEnd);
@@ -198,7 +198,7 @@ public class AuthoringDocumentContractTests
         Assert.Equal("pixel-lanczos", stage.UpscaleMethod);
         Assert.Equal(0.8, stage.ControlNetStrength.Value);
         Assert.Equal([0.8], stage.IcLoraStrengths);
-        Assert.Equal([0.6], stage.ImageRefStrengths);
+        Assert.Equal([0.6], stage.FrameRefStrengths);
         LoraRef lora = Assert.Single(clip.Loras);
         Assert.Equal("style.safetensors", lora.Name);
         Assert.Equal(1, lora.Weight);
@@ -234,14 +234,19 @@ public class AuthoringDocumentContractTests
     }
 
     [Fact]
-    public void MigratesTheVersionFiveArchitectureFieldToAnExplicitHint()
+    public void MigratesTheVersionSixReferenceFieldsToTheirFrameNames()
     {
         JObject document = JObject.Parse(FixtureJson());
-        document["schemaVersion"] = 5;
+        document["schemaVersion"] = 6;
         foreach (JObject clip in document["clips"].Values<JObject>())
         {
-            clip["architecture"] = clip["architectureHint"];
-            clip.Remove("architectureHint");
+            clip["refs"] = clip["frameRefs"];
+            clip.Remove("frameRefs");
+            foreach (JObject stage in clip["stages"].Values<JObject>())
+            {
+                stage["refStrengths"] = stage["frameRefStrengths"];
+                stage.Remove("frameRefStrengths");
+            }
         }
         T2IParamInput input = new(null);
         Fixtures.SetVideoStagesConfig(input, "{}");
@@ -249,7 +254,8 @@ public class AuthoringDocumentContractTests
 
         TimelineSpec spec = RequestReader.Read(input);
 
-        Assert.Equal("ltx2", spec.Clips[0].AuthoredArchitectureHint);
+        Assert.NotEmpty(spec.Clips[0].FrameRefs);
+        Assert.NotEmpty(spec.Clips[0].Stages[0].FrameRefStrengths);
     }
 
     [Fact]

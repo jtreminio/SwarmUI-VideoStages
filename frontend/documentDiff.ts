@@ -104,7 +104,7 @@ const allEntityIds = (document: CanonicalVideoStagesConfig): unknown[] => [
     ...document.clips.flatMap((clip) => [
         clip.id,
         ...clip.stages.map((stage) => stage.id),
-        ...clip.refs.map((ref) => ref.id),
+        ...clip.frameRefs.map((ref) => ref.id),
         ...clip.promptWindows.map((window) => window.id),
         ...(clip.retake ? [clip.retake.id] : []),
     ]),

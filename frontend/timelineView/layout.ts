@@ -164,7 +164,7 @@ export const computeRegionLayout = (
             startPx: cursorPx,
             widthPx,
             stageCount: (clip.stages ?? []).length,
-            keyframeCount: (clip.refs ?? []).length,
+            keyframeCount: (clip.frameRefs ?? []).length,
             skipped: clip.skipped === true,
         });
         cursorSeconds += timelineDurationSeconds;

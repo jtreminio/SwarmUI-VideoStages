@@ -89,9 +89,9 @@ const clipIdentityEntries = (
                 repairPath: `${clipIndex}_${stageIndex}`,
             });
         }
-        for (let refIndex = 0; refIndex < clip.refs.length; refIndex++) {
+        for (let refIndex = 0; refIndex < clip.frameRefs.length; refIndex++) {
             entries.push({
-                entity: clip.refs[refIndex],
+                entity: clip.frameRefs[refIndex],
                 kind: "ref",
                 repairPath: `${clipIndex}_${refIndex}`,
             });
@@ -210,7 +210,7 @@ export const collectAuthoringEntityIds = (
     for (const clip of state.clips) {
         if (clip.id) ids.push(clip.id);
         for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
-        for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
+        for (const ref of clip.frameRefs) if (ref.id) ids.push(ref.id);
         for (const icLora of clip.icLoras) {
             if (icLora.id) ids.push(icLora.id);
         }

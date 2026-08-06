@@ -161,7 +161,7 @@ internal static class WanClipPlanCompiler
         ICollection<PlanDiagnostic> diagnostics)
     {
         bool custom = activeStages.Any(stage =>
-            stage.ImageRefStrengths?.Any(strength =>
+            stage.FrameRefStrengths?.Any(strength =>
                 Math.Abs(strength - Constants.DefaultStageRefStrength) > 0.000001) == true);
         if (custom)
         {

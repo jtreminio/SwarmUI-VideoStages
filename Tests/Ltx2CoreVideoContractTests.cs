@@ -689,7 +689,7 @@ public class Ltx2CoreVideoContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject stage = fixture.Stage(control: 0.5, steps: 10);
-        stage["refStrengths"] = new JArray(0.55);
+        stage["frameRefStrengths"] = new JArray(0.55);
         JObject clip = MakeClipWithRefs(refs: [MakeRef("Base", frame: 1)], stage);
         clip["duration"] = 1.0;
         JObject document = MakeDocument(clip);
@@ -729,7 +729,7 @@ public class Ltx2CoreVideoContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject stage = fixture.Stage(control: 0.5, steps: 10);
-        stage["refStrengths"] = new JArray(0.55);
+        stage["frameRefStrengths"] = new JArray(0.55);
         JObject clip = MakeClipWithRefs(refs: [MakeRef("Base", frame: 2)], stage);
         clip["duration"] = 1.0;
 
@@ -773,8 +773,8 @@ public class Ltx2CoreVideoContractTests
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject first = fixture.Stage(control: 0.5, steps: 10);
         JObject second = fixture.Stage("PreviousStage", control: 0.5, steps: 12);
-        first["refStrengths"] = new JArray(0.55);
-        second["refStrengths"] = new JArray(0.65);
+        first["frameRefStrengths"] = new JArray(0.55);
+        second["frameRefStrengths"] = new JArray(0.65);
         JObject clip = MakeClipWithRefs(refs: [MakeRef("Base", frame: 2)], first, second);
         clip["duration"] = 1.0;
 
@@ -822,8 +822,8 @@ public class Ltx2CoreVideoContractTests
         JObject second = fixture.Stage(
             "PreviousStage", control: 0.5, upscale: 1.5, upscaleMethod: LtxV15SpatialUpscaler,
             steps: 12);
-        first["refStrengths"] = new JArray(0.55);
-        second["refStrengths"] = new JArray(0.65);
+        first["frameRefStrengths"] = new JArray(0.55);
+        second["frameRefStrengths"] = new JArray(0.65);
         JObject clip = MakeClipWithRefs(refs: [MakeRef("Base", frame: 2)], first, second);
         clip["duration"] = 1.0;
 

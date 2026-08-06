@@ -40,7 +40,7 @@ export type StructuralCommit = (
 ) => void;
 
 /**
- * Each stage mirrors the clip's ref list in `refStrengths`, so a ref add or
+ * Each stage mirrors the clip's ref list in `frameRefStrengths`, so a ref add or
  * delete carries the matching per-stage patches in the same named batch.
  */
 const refStrengthPatches = (
@@ -54,7 +54,9 @@ const refStrengthPatches = (
                       type: "stage.patch" as const,
                       clipId: clip.id as string,
                       stageId: stage.id,
-                      patch: { refStrengths: next(stage.refStrengths) },
+                      patch: {
+                          frameRefStrengths: next(stage.frameRefStrengths),
+                      },
                   },
               ]
             : [],
@@ -114,7 +116,7 @@ export const createDetailSelectionDomainOperations = (
         commitRemoval(
             (clips) => {
                 const clip = clips[clipIdx];
-                const ref = clip?.refs[refIdx];
+                const ref = clip?.frameRefs[refIdx];
                 if (!clip?.id || !ref?.id) {
                     return null;
                 }
@@ -134,7 +136,7 @@ export const createDetailSelectionDomainOperations = (
                             ),
                         ],
                     },
-                    remaining: clip.refs.length - 1,
+                    remaining: clip.frameRefs.length - 1,
                 };
             },
             refIdx,
@@ -155,7 +157,7 @@ export const createDetailSelectionDomainOperations = (
                 return null;
             }
             const position = nextAllowedReferencePosition(
-                clip.refs,
+                clip.frameRefs,
                 getReferenceFrameMax(() => defaults, clip),
                 referenceEndpointPolicy(clip, defaults.modelCatalog).positions,
             );
@@ -185,7 +187,7 @@ export const createDetailSelectionDomainOperations = (
                 selection: {
                     kind: "ref",
                     clipIdx,
-                    refIdx: clip.refs.length,
+                    refIdx: clip.frameRefs.length,
                 },
             };
         });
@@ -412,7 +414,7 @@ export const createDetailSelectionDomainOperations = (
                             defaults.modelCatalog,
                         ),
                     last,
-                    clip.refs.length,
+                    clip.frameRefs.length,
                     clip.loras.map((entry) =>
                         defaultLoraWeight(defaults, entry.name),
                     ),

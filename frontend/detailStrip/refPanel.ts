@@ -27,7 +27,7 @@ import {
 import type { DetailStripContext } from "./context";
 
 /**
- * Stage-style reference-image child section for the owning clip panel. The
+ * Stage-style frame-reference child section for the owning clip panel. The
  * rail lists every reference while only the selected reference editor renders.
  */
 export const buildRefSection = (
@@ -44,21 +44,21 @@ export const buildRefSection = (
     const endpointPolicy = referenceEndpointPolicy(clip, defaults.modelCatalog);
     const hasSupportedEndpoint = endpointPolicy.available;
     const activeRefIdx =
-        clip.refs.length === 0
+        clip.frameRefs.length === 0
             ? null
-            : clamp(selectedRefIdx ?? 0, 0, clip.refs.length - 1);
+            : clamp(selectedRefIdx ?? 0, 0, clip.frameRefs.length - 1);
     const buildSection = (
         editorForItem?: (index: number) => HTMLElement | undefined,
     ): HTMLElement =>
         buildRepeatingEditor({
             key: "references",
-            label: "Reference Images",
+            label: "Frame References",
             sectionClass: "vst-detail-ref-section",
             open,
-            items: clip.refs.map((_, refIdx) => ({
+            items: clip.frameRefs.map((_, refIdx) => ({
                 label: `Ref${refIdx}`,
                 focusKey: `reference-tab-${refIdx}`,
-                title: `Edit reference image ${refIdx}`,
+                title: `Edit frame reference ${refIdx}`,
                 active: refIdx === activeRefIdx,
                 className: "vst-ref-tab",
                 onSelect: () => setSelection({ kind: "ref", clipIdx, refIdx }),
@@ -68,9 +68,9 @@ export const buildRefSection = (
                 title: !decision.supported
                     ? decision.reason
                     : hasSupportedEndpoint
-                      ? "Add a reference image"
+                      ? "Add a frame reference"
                       : "The selected models do not publish a supported frame-reference endpoint.",
-                label: "+ Add Reference Image",
+                label: "+ Add Frame Reference",
                 className: "vst-detail-add-ref",
                 disabled: !decision.supported || !hasSupportedEndpoint,
                 onClick: () => ctx.addRefEntry(clipIdx),
@@ -78,8 +78,8 @@ export const buildRefSection = (
             remove: {
                 title:
                     activeRefIdx === null
-                        ? "No reference image to delete"
-                        : `Delete reference image ${activeRefIdx}`,
+                        ? "No frame reference to delete"
+                        : `Delete frame reference ${activeRefIdx}`,
                 className: "vst-detail-delete-ref",
             },
             editorForItem,
@@ -89,7 +89,7 @@ export const buildRefSection = (
         return buildSection();
     }
     const buildEditor = (editorRefIdx: number): HTMLElement | undefined => {
-        const ref = clip.refs[editorRefIdx];
+        const ref = clip.frameRefs[editorRefIdx];
         if (!ref) {
             return undefined;
         }
@@ -103,7 +103,7 @@ export const buildRefSection = (
 
         const select = buildOptionSelect(options, source, (value) => {
             ctx.commit((cs) => {
-                const target = cs[clipIdx]?.refs[editorRefIdx];
+                const target = cs[clipIdx]?.frameRefs[editorRefIdx];
                 if (!target) {
                     return;
                 }
@@ -156,7 +156,7 @@ export const buildRefSection = (
             1,
             (value) => {
                 ctx.debouncedCommit(`ref-${editorRefIdx}-frame`, (cs) => {
-                    const target = cs[clipIdx]?.refs[editorRefIdx];
+                    const target = cs[clipIdx]?.frameRefs[editorRefIdx];
                     if (target) {
                         target.frame = clamp(
                             Math.round(value),
@@ -191,7 +191,7 @@ export const buildRefSection = (
                 ref.fromEnd === true,
                 (value) => {
                     ctx.commit((cs) => {
-                        const target = cs[clipIdx]?.refs[editorRefIdx];
+                        const target = cs[clipIdx]?.frameRefs[editorRefIdx];
                         if (target) {
                             target.fromEnd = value;
                         }
@@ -223,7 +223,7 @@ export const buildRefSection = (
                     ref.uploadedImage?.fileName,
                     (data, fileName) => {
                         ctx.commit((cs) => {
-                            const target = cs[clipIdx]?.refs[editorRefIdx];
+                            const target = cs[clipIdx]?.frameRefs[editorRefIdx];
                             if (target) {
                                 target.uploadedImage = { data, fileName };
                                 target.uploadFileName = fileName;
@@ -233,7 +233,7 @@ export const buildRefSection = (
                     },
                     () => {
                         ctx.commit((cs) => {
-                            const target = cs[clipIdx]?.refs[editorRefIdx];
+                            const target = cs[clipIdx]?.frameRefs[editorRefIdx];
                             if (target) {
                                 target.uploadedImage = null;
                                 target.uploadFileName = null;

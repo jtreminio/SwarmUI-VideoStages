@@ -48,7 +48,7 @@ public class LtxAudioReuseStateTests
         ClipLengthFromControlNet: false,
         ReuseAudio: true,
         UploadedAudio: null,
-        ImageRefs: [],
+        FrameRefs: [],
         Stages: [MakeStage(0), MakeStage(1), MakeStage(2)]);
 
     private static VideoExecutionPlan Plan(ClipSpec clip) =>

@@ -128,7 +128,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                       strength: clip.retake.strength,
                   }
                 : null,
-            refs: clip.refs.map((ref) => ({
+            frameRefs: clip.frameRefs.map((ref) => ({
                 id: ref.id,
                 source: ref.source,
                 uploadFileName: ref.uploadFileName,
@@ -143,7 +143,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 controlNetStrength: stage.controlNetStrength,
                 icLoraStrengths: stage.icLoraStrengths,
                 loraWeights: stage.loraWeights,
-                refStrengths: stage.refStrengths,
+                frameRefStrengths: stage.frameRefStrengths,
                 upscale: stage.upscale,
                 upscaleMethod: stage.upscaleMethod,
                 model: stage.model,
@@ -296,7 +296,7 @@ export const serializeStateForDurableStorage = (
         ) {
             clip.initVideo = null;
         }
-        for (const ref of clip.refs) {
+        for (const ref of clip.frameRefs) {
             if (isTransientBrowserMedia(ref.uploadedImage)) {
                 ref.uploadedImage = null;
             }
@@ -348,7 +348,7 @@ const hasValidStoredCollections = (
     for (const clip of parsed.clips) {
         if (
             !hasArrayOfRecords(clip, "stages") ||
-            !hasArrayOfRecords(clip, "refs") ||
+            !hasArrayOfRecords(clip, "frameRefs") ||
             !hasArrayOfRecords(clip, "icLoras") ||
             (Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras"))
         ) {
@@ -373,9 +373,9 @@ const hasValidStoredCollections = (
                                 typeof strength === "number" &&
                                 Number.isFinite(strength),
                         ))) ||
-                (Object.hasOwn(stage, "refStrengths") &&
-                    (!Array.isArray(stage.refStrengths) ||
-                        !stage.refStrengths.every(
+                (Object.hasOwn(stage, "frameRefStrengths") &&
+                    (!Array.isArray(stage.frameRefStrengths) ||
+                        !stage.frameRefStrengths.every(
                             (strength: unknown) =>
                                 typeof strength === "number" &&
                                 Number.isFinite(strength),
@@ -505,12 +505,26 @@ const noticeDivergentProjection = (serialized: string): void => {
     getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
 };
 
-const ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION = 5;
+const FRAME_REFS_LEGACY_SCHEMA_VERSION = 6;
+
+const renameKey = (
+    target: Record<string, unknown>,
+    oldKey: string,
+    newKey: string,
+): void => {
+    if (!(oldKey in target)) {
+        return;
+    }
+    if (!(newKey in target)) {
+        target[newKey] = target[oldKey];
+    }
+    delete target[oldKey];
+};
 
 /**
- * The sole v5→v6 migration: the value was already non-authoritative, but its
- * old name made it look like a behavior selector. Keep recovery intact while
- * exposing only the accurately named field to normalization and new storage.
+ * The sole v6→v7 migration: the frame-reference fields gained their "frame"
+ * prefix so they no longer read as the position-free references other
+ * architectures accept.
  */
 const migrateStoredDocument = (
     parsed: Record<string, unknown>,
@@ -519,7 +533,7 @@ const migrateStoredDocument = (
         return parsed;
     }
     if (
-        parsed.schemaVersion !== ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION ||
+        parsed.schemaVersion !== FRAME_REFS_LEGACY_SCHEMA_VERSION ||
         !Array.isArray(parsed.clips)
     ) {
         return null;
@@ -530,15 +544,20 @@ const migrateStoredDocument = (
         if (!isRecord(rawClip)) {
             continue;
         }
-        if (rawClip.architectureHint === undefined) {
-            rawClip.architectureHint = rawClip.architecture;
+        renameKey(rawClip, "refs", "frameRefs");
+        if (!Array.isArray(rawClip.stages)) {
+            continue;
         }
-        delete rawClip.architecture;
+        for (const rawStage of rawClip.stages) {
+            if (isRecord(rawStage)) {
+                renameKey(rawStage, "refStrengths", "frameRefStrengths");
+            }
+        }
     }
     return migrated;
 };
 
-/** Strict current decode with the one bounded v5 field-rename migration. */
+/** Strict current decode with the one bounded v6 field-rename migration. */
 export const decodeStoredDocument = (
     serialized: string,
     inherited: InheritedDims,
@@ -626,7 +645,7 @@ export const storedDocumentNeedsCanonicalIdRepair = (
         const seenIds = new Set<string>();
         for (const rawClip of parsed.clips) {
             if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-            for (const key of ["stages", "refs"] as const) {
+            for (const key of ["stages", "frameRefs"] as const) {
                 const children = rawClip[key];
                 if (
                     !Array.isArray(children) ||

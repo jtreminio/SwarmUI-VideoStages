@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 6,
+    "schemaVersion": 7,
     "width": 768,
     "height": 512,
     "clips": [
@@ -61,7 +61,7 @@
                 "lengthSeconds": 1.5,
                 "strength": 0.7
             },
-            "refs": [
+            "frameRefs": [
                 {
                     "id": "ref-0",
                     "source": "Upload",
@@ -86,7 +86,7 @@
                     "loraWeights": [
                         0.5
                     ],
-                    "refStrengths": [
+                    "frameRefStrengths": [
                         0.6
                     ],
                     "upscale": 1,
@@ -109,7 +109,7 @@
                     "loraWeights": [
                         0
                     ],
-                    "refStrengths": [
+                    "frameRefStrengths": [
                         0.4
                     ],
                     "upscale": 1.5,
@@ -143,7 +143,7 @@
             "uploadedAudio": null,
             "initVideo": null,
             "retake": null,
-            "refs": [],
+            "frameRefs": [],
             "stages": [
                 {
                     "id": "stage-2",
@@ -152,7 +152,7 @@
                     "controlNetStrength": 0.8,
                     "icLoraStrengths": [],
                     "loraWeights": [],
-                    "refStrengths": [],
+                    "frameRefStrengths": [],
                     "upscale": 1,
                     "upscaleMethod": "latentmodel-upscaler.safetensors",
                     "model": "ltx-2.3.safetensors",

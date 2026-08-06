@@ -148,7 +148,7 @@ describe("cross-language mirror: M1 crossfade plan (boundaryPlan.crossfadePlanFo
             boundaryOut,
             boundaryOutOverlap,
             stages: [],
-            refs: [],
+            frameRefs: [],
         }) as unknown as Clip;
 
     it.each(cases)("$name", ({

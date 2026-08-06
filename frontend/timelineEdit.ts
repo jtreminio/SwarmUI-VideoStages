@@ -66,7 +66,7 @@ export const clampClipRefsToDuration = (
         clip,
         effectiveFps,
     );
-    for (const ref of clip.refs) {
+    for (const ref of clip.frameRefs) {
         ref.frame =
             frameMax === null
                 ? Math.max(REF_FRAME_MIN, Math.round(ref.frame))

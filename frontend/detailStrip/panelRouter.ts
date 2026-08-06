@@ -48,7 +48,7 @@ export const clampDetailSelection = (
             : { kind: "clip", clipIdx: selection.clipIdx, stageIdx };
     }
     if (selection.kind === "ref") {
-        return selection.refIdx >= 0 && selection.refIdx < clip.refs.length
+        return selection.refIdx >= 0 && selection.refIdx < clip.frameRefs.length
             ? selection
             : { kind: "none" };
     }

@@ -69,7 +69,7 @@ const mountRootDefaults = (): void => {
 
 const makeClipsJson = (count: number, duration = 2): string =>
     JSON.stringify({
-        schemaVersion: 5,
+        schemaVersion: 7,
         clips: Array.from({ length: count }, () => ({
             architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
@@ -80,7 +80,7 @@ const makeClipsJson = (count: number, duration = 2): string =>
                     modelProfileId: "ltx-2.3",
                 },
             ] as unknown[],
-            refs: [] as unknown[],
+            frameRefs: [] as unknown[],
         })),
     });
 
@@ -244,10 +244,10 @@ describe("videoStagesTimeline", () => {
         mountEnabledToggle();
         mountState(
             JSON.stringify({
-                schemaVersion: 5,
+                schemaVersion: 7,
                 clips: [
-                    { duration: 2, stages: [{}], refs: [] },
-                    { duration: 4, stages: [{}], refs: [] },
+                    { duration: 2, stages: [{}], frameRefs: [] },
+                    { duration: 4, stages: [{}], frameRefs: [] },
                 ],
             }),
         );
@@ -378,7 +378,7 @@ describe("videoStagesTimeline", () => {
     it("+ Clip copies the previous clip's base settings and mirrors the prior join", async () => {
         mountState(
             JSON.stringify({
-                schemaVersion: 5,
+                schemaVersion: 7,
                 clips: [
                     {
                         duration: 2,
@@ -386,7 +386,7 @@ describe("videoStagesTimeline", () => {
                         boundaryOutCarryAudio: true,
                         boundaryOutOverlap: 16,
                         stages: [{}] as unknown[],
-                        refs: [] as unknown[],
+                        frameRefs: [] as unknown[],
                     },
                     {
                         duration: 3,
@@ -401,7 +401,7 @@ describe("videoStagesTimeline", () => {
                                 loras: [{ name: "look", weight: 0.6 }],
                             },
                         ],
-                        refs: [] as unknown[],
+                        frameRefs: [] as unknown[],
                     },
                 ],
             }),
@@ -445,7 +445,7 @@ describe("videoStagesTimeline", () => {
 
     it("paints loading once without authoring controls, then renders after authoritative success", async () => {
         document.getElementById("input_videomodel")?.remove();
-        mountState(JSON.stringify({ schemaVersion: 5, clips: [] }));
+        mountState(JSON.stringify({ schemaVersion: 7, clips: [] }));
         resetArchitectureCatalogForTests();
 
         const dto = {
@@ -865,12 +865,12 @@ describe("videoStagesTimeline", () => {
         await loadAuthoritativeArchitectureCatalog();
         mountState(
             JSON.stringify({
-                schemaVersion: 5,
+                schemaVersion: 7,
                 clips: [
                     {
                         duration: 2,
                         stages: [{ model: installedModel }],
-                        refs: [],
+                        frameRefs: [],
                     },
                 ],
             }),
@@ -916,7 +916,7 @@ describe("videoStagesTimeline", () => {
 
     it("undoes and redoes hues and prompt-window IDs through the repository", () => {
         mountEnabledToggle();
-        mountState(JSON.stringify({ schemaVersion: 5, clips: [] }));
+        mountState(JSON.stringify({ schemaVersion: 7, clips: [] }));
         saveClips(
             [
                 minimalClip({
@@ -1080,8 +1080,8 @@ describe("videoStagesTimeline", () => {
         mountEnabledToggle();
         mountVideoStagesData(
             JSON.stringify({
-                schemaVersion: 5,
-                clips: [{ duration: 10, stages: [{}], refs: [] }],
+                schemaVersion: 7,
+                clips: [{ duration: 10, stages: [{}], frameRefs: [] }],
             }),
         );
         // A relay window rides in the prompt box as a <videoclip[0]:S-E> tag.

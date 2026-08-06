@@ -71,7 +71,7 @@ export const createBoundaryCapabilityViews = (
             rightView !== null &&
             leftView.architectureId !== rightView.architectureId;
         const hasInitialReference =
-            right?.refs.some(
+            right?.frameRefs.some(
                 (reference) =>
                     reference.fromEnd !== true &&
                     Math.max(1, Math.round(reference.frame)) === 1,

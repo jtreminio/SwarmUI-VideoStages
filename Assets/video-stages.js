@@ -1141,7 +1141,7 @@
       const rightView = right === null ? null : forClip(right);
       const leftDescriptor = architectureById.get(leftView.architectureId);
       const crossArchitecture = rightView !== null && leftView.architectureId !== rightView.architectureId;
-      const hasInitialReference = right?.refs.some(
+      const hasInitialReference = right?.frameRefs.some(
         (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1
       ) ?? false;
       const rightHasActiveStage = right !== null && activeStageCount(right) > 0;
@@ -2189,7 +2189,7 @@
   };
 
   // frontend/types.ts
-  var CURRENT_AUTHORING_SCHEMA_VERSION = 6;
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 7;
   var REF_SOURCE_BASE = "Base";
   var REF_SOURCE_REFINER = "Refiner";
   var REF_SOURCE_UPLOAD = "Upload";
@@ -2244,9 +2244,9 @@
           repairPath: `${clipIndex}_${stageIndex}`
         });
       }
-      for (let refIndex = 0; refIndex < clip.refs.length; refIndex++) {
+      for (let refIndex = 0; refIndex < clip.frameRefs.length; refIndex++) {
         entries.push({
-          entity: clip.refs[refIndex],
+          entity: clip.frameRefs[refIndex],
           kind: "ref",
           repairPath: `${clipIndex}_${refIndex}`
         });
@@ -2327,7 +2327,7 @@
     for (const clip of state.clips) {
       if (clip.id) ids.push(clip.id);
       for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
-      for (const ref of clip.refs) if (ref.id) ids.push(ref.id);
+      for (const ref of clip.frameRefs) if (ref.id) ids.push(ref.id);
       for (const icLora of clip.icLoras) {
         if (icLora.id) ids.push(icLora.id);
       }
@@ -3243,7 +3243,7 @@
       controlNetStrength: previousStage ? previousStage.controlNetStrength : STAGE_CONTROLNET_STRENGTH_DEFAULT,
       icLoraStrengths: previousStage ? [...previousStage.icLoraStrengths] : initialIcLoraStrengths.map(normalizeStageControlNetStrengthValue),
       loraWeights: previousStage ? [...previousStage.loraWeights] : [...initialLoraWeights],
-      refStrengths: buildDefaultStageRefStrengths(refCount),
+      frameRefStrengths: buildDefaultStageRefStrengths(refCount),
       upscale: previousStage ? previousStage.upscale : defaults.upscale,
       upscaleMethod: previousStage ? previousStage.upscaleMethod : resolveRootPreferredUpscaleMethod(defaults.upscaleMethodValues),
       model,
@@ -3262,19 +3262,19 @@
     fromEnd: false
   });
   var appendRefToClip = (clip, ref) => {
-    clip.refs.push(ref);
+    clip.frameRefs.push(ref);
     for (const stage of clip.stages) {
-      stage.refStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
+      stage.frameRefStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
     }
   };
   var removeRefAt = (clip, refIdx) => {
-    if (refIdx < 0 || refIdx >= clip.refs.length) {
+    if (refIdx < 0 || refIdx >= clip.frameRefs.length) {
       return false;
     }
-    clip.refs.splice(refIdx, 1);
+    clip.frameRefs.splice(refIdx, 1);
     for (const stage of clip.stages) {
-      if (refIdx < stage.refStrengths.length) {
-        stage.refStrengths.splice(refIdx, 1);
+      if (refIdx < stage.frameRefStrengths.length) {
+        stage.frameRefStrengths.splice(refIdx, 1);
       }
     }
     return true;
@@ -3405,8 +3405,8 @@
         normalizeStageControlNetStrengthValue
       ) : [...fallback.icLoraStrengths],
       loraWeights,
-      refStrengths: normalizeStageRefStrengths(
-        rawStage.refStrengths,
+      frameRefStrengths: normalizeStageRefStrengths(
+        rawStage.frameRefStrengths,
         refCount
       ),
       upscale: firstStageUpscale.upscale,
@@ -3468,7 +3468,7 @@
   var normalizeReferenceFraming = (value) => value === "stretch" || value === "fit" || value === "fit-green" ? value : "crop";
   var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
     const defaults = getRootDefaults2();
-    const refs = includeDefaultRef ? [buildDefaultRef()] : [];
+    const frameRefs = includeDefaultRef ? [buildDefaultRef()] : [];
     const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
     const initialLoraWeights = loras.map(
       (entry, index) => previousClip?.stages[0]?.loraWeights[index] ?? defaults.loraDefaultWeights[defaults.loraValues.indexOf(entry.name)] ?? 1
@@ -3478,11 +3478,11 @@
         getRootDefaults2,
         getDefaultStageModel2,
         previousClip?.stages[0] ?? null,
-        refs.length,
+        frameRefs.length,
         initialLoraWeights
       ),
-      refStrengths: buildDefaultStageRefStrengths(
-        refs.length,
+      frameRefStrengths: buildDefaultStageRefStrengths(
+        frameRefs.length,
         includeDefaultRef ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
       )
     };
@@ -3516,7 +3516,7 @@
       promptWindows: [],
       retake: null,
       initVideo: null,
-      refs,
+      frameRefs,
       stages: [firstStage]
     };
   };
@@ -3534,7 +3534,7 @@
       Math.max(CLIP_DURATION_MIN, rawDuration),
       fps
     );
-    const refsRaw = Array.isArray(rawClip.refs) ? rawClip.refs : [];
+    const refsRaw = Array.isArray(rawClip.frameRefs) ? rawClip.frameRefs : [];
     const clipScopedLoras = normalizeStageLoras(rawClip.loras);
     const loraNames = [];
     const loraDefaultWeightByName = /* @__PURE__ */ new Map();
@@ -3602,7 +3602,7 @@
       },
       fps
     );
-    const refs = refsRaw.map(
+    const frameRefs = refsRaw.map(
       (rawRef) => normalizeRef(isRecord2(rawRef) ? rawRef : {}, refFrameMax)
     );
     const stageZero = stages[0] ?? null;
@@ -3675,7 +3675,7 @@
       promptWindows: normalizePromptWindows(rawClip),
       retake,
       initVideo,
-      refs,
+      frameRefs,
       stages
     };
   };
@@ -3757,7 +3757,7 @@
           lengthSeconds: clip.retake.lengthSeconds,
           strength: clip.retake.strength
         } : null,
-        refs: clip.refs.map((ref) => ({
+        frameRefs: clip.frameRefs.map((ref) => ({
           id: ref.id,
           source: ref.source,
           uploadFileName: ref.uploadFileName,
@@ -3772,7 +3772,7 @@
           controlNetStrength: stage.controlNetStrength,
           icLoraStrengths: stage.icLoraStrengths,
           loraWeights: stage.loraWeights,
-          refStrengths: stage.refStrengths,
+          frameRefStrengths: stage.frameRefStrengths,
           upscale: stage.upscale,
           upscaleMethod: stage.upscaleMethod,
           model: stage.model,
@@ -3873,7 +3873,7 @@
       if (clip.initVideo && isTransientBrowserMedia({ data: clip.initVideo.data })) {
         clip.initVideo = null;
       }
-      for (const ref of clip.refs) {
+      for (const ref of clip.frameRefs) {
         if (isTransientBrowserMedia(ref.uploadedImage)) {
           ref.uploadedImage = null;
         }
@@ -3906,7 +3906,7 @@
       return false;
     }
     for (const clip of parsed.clips) {
-      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "refs") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
+      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "frameRefs") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
         return false;
       }
       const stages = Array.isArray(clip.stages) ? clip.stages : [];
@@ -3915,7 +3915,7 @@
           (weight) => typeof weight === "number" && Number.isFinite(weight)
         )) || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
           (strength) => typeof strength === "number" && Number.isFinite(strength)
-        )) || Object.hasOwn(stage, "refStrengths") && (!Array.isArray(stage.refStrengths) || !stage.refStrengths.every(
+        )) || Object.hasOwn(stage, "frameRefStrengths") && (!Array.isArray(stage.frameRefStrengths) || !stage.frameRefStrengths.every(
           (strength) => typeof strength === "number" && Number.isFinite(strength)
         ))) {
           return false;
@@ -3994,12 +3994,21 @@
     noticedDivergentProjection = serialized;
     getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
   };
-  var ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION = 5;
+  var FRAME_REFS_LEGACY_SCHEMA_VERSION = 6;
+  var renameKey = (target, oldKey, newKey) => {
+    if (!(oldKey in target)) {
+      return;
+    }
+    if (!(newKey in target)) {
+      target[newKey] = target[oldKey];
+    }
+    delete target[oldKey];
+  };
   var migrateStoredDocument = (parsed) => {
     if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
       return parsed;
     }
-    if (parsed.schemaVersion !== ARCHITECTURE_HINT_LEGACY_SCHEMA_VERSION || !Array.isArray(parsed.clips)) {
+    if (parsed.schemaVersion !== FRAME_REFS_LEGACY_SCHEMA_VERSION || !Array.isArray(parsed.clips)) {
       return null;
     }
     const migrated = structuredClone(parsed);
@@ -4008,10 +4017,15 @@
       if (!isRecord2(rawClip)) {
         continue;
       }
-      if (rawClip.architectureHint === void 0) {
-        rawClip.architectureHint = rawClip.architecture;
+      renameKey(rawClip, "refs", "frameRefs");
+      if (!Array.isArray(rawClip.stages)) {
+        continue;
       }
-      delete rawClip.architecture;
+      for (const rawStage of rawClip.stages) {
+        if (isRecord2(rawStage)) {
+          renameKey(rawStage, "refStrengths", "frameRefStrengths");
+        }
+      }
     }
     return migrated;
   };
@@ -4079,7 +4093,7 @@
       const seenIds = /* @__PURE__ */ new Set();
       for (const rawClip of parsed.clips) {
         if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-        for (const key of ["stages", "refs"]) {
+        for (const key of ["stages", "frameRefs"]) {
           const children = rawClip[key];
           if (!Array.isArray(children) || children.some(
             (child) => !hasCanonicalStoredId(child, seenIds)
@@ -4203,7 +4217,7 @@
       "modelProfileId",
       "promptWindows",
       "retake",
-      "refs",
+      "frameRefs",
       "stages"
     ],
     collection: (document2) => document2.clips
@@ -4220,7 +4234,7 @@
       "controlNetStrength",
       "icLoraStrengths",
       "loraWeights",
-      "refStrengths",
+      "frameRefStrengths",
       "upscale",
       "upscaleMethod",
       "steps",
@@ -4246,7 +4260,7 @@
       "fromEnd"
     ],
     reservedKeys: ["id"],
-    collection: (clip) => clip.refs
+    collection: (clip) => clip.frameRefs
   });
   var PROMPT_WINDOW_ENTITY = defineList()(
     {
@@ -4334,7 +4348,7 @@
     ...document2.clips.flatMap((clip) => [
       clip.id,
       ...clip.stages.map((stage) => stage.id),
-      ...clip.refs.map((ref) => ref.id),
+      ...clip.frameRefs.map((ref) => ref.id),
       ...clip.promptWindows.map((window2) => window2.id),
       ...clip.retake ? [clip.retake.id] : []
     ]),
@@ -4752,11 +4766,11 @@
   var findClip = (document2, clipId) => document2.clips.find((clip) => clip.id === clipId) ?? null;
   var findTrack = (document2, trackId) => document2.audioTracks.find((track) => track.id === trackId) ?? null;
   var candidateIds = (entity) => {
-    if ("stages" in entity && "refs" in entity) {
+    if ("stages" in entity && "frameRefs" in entity) {
       return [
         entity.id,
         ...entity.stages.map((stage) => stage.id),
-        ...entity.refs.map((ref) => ref.id),
+        ...entity.frameRefs.map((ref) => ref.id),
         ...entity.promptWindows.map((window2) => window2.id),
         ...entity.retake ? [entity.retake.id] : []
       ];
@@ -6003,7 +6017,7 @@
       }
     };
     unsupported(
-      !supports("frameReferences") && clip.refs.length > 0,
+      !supports("frameReferences") && clip.frameRefs.length > 0,
       "frame-references",
       "Frame references"
     );
@@ -6456,7 +6470,7 @@
       case "clip":
         return { list: clip.stages, index: selection.stageIdx };
       case "ref":
-        return { list: clip.refs, index: selection.refIdx };
+        return { list: clip.frameRefs, index: selection.refIdx };
       case "ic-lora":
         return { list: clip.icLoras, index: selection.entryIdx };
       case "prompt-minor":
@@ -7097,7 +7111,7 @@
         startPx: cursorPx,
         widthPx,
         stageCount: (clip.stages ?? []).length,
-        keyframeCount: (clip.refs ?? []).length,
+        keyframeCount: (clip.frameRefs ?? []).length,
         skipped: clip.skipped === true
       });
       cursorSeconds += timelineDurationSeconds;
@@ -9665,7 +9679,7 @@
   var hasRetake = (clip) => clip.retake != null;
   var retakeLaneVisible = (clip, capabilities) => laneVisible(clip, "retake", hasRetake(clip), capabilities);
   var renderRegionThumb = (clip) => {
-    const withImage = (clip.refs ?? []).filter(
+    const withImage = (clip.frameRefs ?? []).filter(
       (ref) => !!ref.uploadedImage?.data
     );
     if (withImage.length === 0) {
@@ -9731,11 +9745,11 @@
     });
   };
   var renderKeyframes = (clip, clipIdx, durationSeconds, fps, unit) => {
-    const refs = clip.refs ?? [];
-    if (refs.length === 0) {
+    const frameRefs = clip.frameRefs ?? [];
+    if (frameRefs.length === 0) {
       return "";
     }
-    const markers = refs.map((ref, refIdx) => {
+    const markers = frameRefs.map((ref, refIdx) => {
       const time = keyframeTimeSeconds(
         ref.frame,
         ref.fromEnd === true,
@@ -9750,7 +9764,7 @@
       const kindClass = (isEnd ? " vst-key-end" : " vst-key-start") + (isPrimary ? " vst-key-primary" : "");
       return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeAttr(title)}" aria-hidden="true"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
     }).join("");
-    return `<div class="vst-keys" title="Reference markers">${markers}</div>`;
+    return `<div class="vst-keys" title="Frame reference markers">${markers}</div>`;
   };
   var renderBadges = (clip, clipIdx) => {
     const firstStage = (clip.stages ?? [])[0];
@@ -10877,7 +10891,7 @@
       clip,
       effectiveFps
     );
-    for (const ref of clip.refs) {
+    for (const ref of clip.frameRefs) {
       ref.frame = frameMax === null ? Math.max(REF_FRAME_MIN, Math.round(ref.frame)) : clamp(ref.frame, REF_FRAME_MIN, frameMax);
     }
   };
@@ -11385,30 +11399,30 @@
     const decision = capabilities.forClip(clip).decision("frameReferences");
     const endpointPolicy = referenceEndpointPolicy(clip, defaults.modelCatalog);
     const hasSupportedEndpoint = endpointPolicy.available;
-    const activeRefIdx = clip.refs.length === 0 ? null : clamp(selectedRefIdx ?? 0, 0, clip.refs.length - 1);
+    const activeRefIdx = clip.frameRefs.length === 0 ? null : clamp(selectedRefIdx ?? 0, 0, clip.frameRefs.length - 1);
     const buildSection = (editorForItem) => buildRepeatingEditor({
       key: "references",
-      label: "Reference Images",
+      label: "Frame References",
       sectionClass: "vst-detail-ref-section",
       open,
-      items: clip.refs.map((_, refIdx) => ({
+      items: clip.frameRefs.map((_, refIdx) => ({
         label: `Ref${refIdx}`,
         focusKey: `reference-tab-${refIdx}`,
-        title: `Edit reference image ${refIdx}`,
+        title: `Edit frame reference ${refIdx}`,
         active: refIdx === activeRefIdx,
         className: "vst-ref-tab",
         onSelect: () => setSelection({ kind: "ref", clipIdx, refIdx }),
         onShiftDelete: () => ctx.deleteRefEntry(clipIdx, refIdx)
       })),
       add: {
-        title: !decision.supported ? decision.reason : hasSupportedEndpoint ? "Add a reference image" : "The selected models do not publish a supported frame-reference endpoint.",
-        label: "+ Add Reference Image",
+        title: !decision.supported ? decision.reason : hasSupportedEndpoint ? "Add a frame reference" : "The selected models do not publish a supported frame-reference endpoint.",
+        label: "+ Add Frame Reference",
         className: "vst-detail-add-ref",
         disabled: !decision.supported || !hasSupportedEndpoint,
         onClick: () => ctx.addRefEntry(clipIdx)
       },
       remove: {
-        title: activeRefIdx === null ? "No reference image to delete" : `Delete reference image ${activeRefIdx}`,
+        title: activeRefIdx === null ? "No frame reference to delete" : `Delete frame reference ${activeRefIdx}`,
         className: "vst-detail-delete-ref"
       },
       editorForItem
@@ -11417,7 +11431,7 @@
       return buildSection();
     }
     const buildEditor = (editorRefIdx) => {
-      const ref = clip.refs[editorRefIdx];
+      const ref = clip.frameRefs[editorRefIdx];
       if (!ref) {
         return void 0;
       }
@@ -11429,7 +11443,7 @@
       fields.setAttribute("data-vst-ref-index", `${editorRefIdx}`);
       const select2 = buildOptionSelect(options, source, (value) => {
         ctx.commit((cs) => {
-          const target = cs[clipIdx]?.refs[editorRefIdx];
+          const target = cs[clipIdx]?.frameRefs[editorRefIdx];
           if (!target) {
             return;
           }
@@ -11476,7 +11490,7 @@
         1,
         (value) => {
           ctx.debouncedCommit(`ref-${editorRefIdx}-frame`, (cs) => {
-            const target = cs[clipIdx]?.refs[editorRefIdx];
+            const target = cs[clipIdx]?.frameRefs[editorRefIdx];
             if (target) {
               target.frame = clamp(
                 Math.round(value),
@@ -11506,7 +11520,7 @@
           ref.fromEnd === true,
           (value) => {
             ctx.commit((cs) => {
-              const target = cs[clipIdx]?.refs[editorRefIdx];
+              const target = cs[clipIdx]?.frameRefs[editorRefIdx];
               if (target) {
                 target.fromEnd = value;
               }
@@ -11527,7 +11541,7 @@
             ref.uploadedImage?.fileName,
             (data, fileName) => {
               ctx.commit((cs) => {
-                const target = cs[clipIdx]?.refs[editorRefIdx];
+                const target = cs[clipIdx]?.frameRefs[editorRefIdx];
                 if (target) {
                   target.uploadedImage = { data, fileName };
                   target.uploadFileName = fileName;
@@ -11537,7 +11551,7 @@
             },
             () => {
               ctx.commit((cs) => {
-                const target = cs[clipIdx]?.refs[editorRefIdx];
+                const target = cs[clipIdx]?.frameRefs[editorRefIdx];
                 if (target) {
                   target.uploadedImage = null;
                   target.uploadFileName = null;
@@ -11834,26 +11848,26 @@
     fields,
     debouncedCommit
   }) => {
-    if (clip.refs.length > 0) {
+    if (clip.frameRefs.length > 0) {
       const refDecision = context.authoring().capabilities.forClip(clip).decision("frameReferences");
-      appendSectionHeader(fields, "Reference Strengths");
+      appendSectionHeader(fields, "Frame Reference Strengths");
       const setRefHover = (refIdx, on) => {
         context.getBoundBody()?.querySelector(
           `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
         )?.classList.toggle("vst-ref-hover", on);
       };
-      clip.refs.forEach((ref, refIdx) => {
-        const current = refIdx < stage.refStrengths.length ? stage.refStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
+      clip.frameRefs.forEach((ref, refIdx) => {
+        const current = refIdx < stage.frameRefStrengths.length ? stage.frameRefStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
         const refSlider = buildSlider(
-          `Reference R${refIdx}`,
+          `Frame Ref R${refIdx}`,
           current,
           STAGE_REF_STRENGTH_MIN,
           STAGE_REF_STRENGTH_MAX,
           STAGE_REF_STRENGTH_STEP,
           (value) => {
             debouncedCommit(`refstrength-${refIdx}`, (target) => {
-              if (refIdx < target.refStrengths.length) {
-                target.refStrengths[refIdx] = value;
+              if (refIdx < target.frameRefStrengths.length) {
+                target.frameRefStrengths[refIdx] = value;
               }
             });
           },
@@ -12306,7 +12320,7 @@
     };
     appendCapabilitySection(
       "frameReferences",
-      clip.refs.length > 0,
+      clip.frameRefs.length > 0,
       () => buildRefSection(
         context,
         clipIdx,
@@ -12937,7 +12951,7 @@
       return stageIdx === selection.stageIdx ? selection : { kind: "clip", clipIdx: selection.clipIdx, stageIdx };
     }
     if (selection.kind === "ref") {
-      return selection.refIdx >= 0 && selection.refIdx < clip.refs.length ? selection : { kind: "none" };
+      return selection.refIdx >= 0 && selection.refIdx < clip.frameRefs.length ? selection : { kind: "none" };
     }
     if (selection.kind === "ic-lora") {
       return selection.entryIdx >= 0 && selection.entryIdx < clip.icLoras.length ? selection : { kind: "clip", clipIdx: selection.clipIdx, stageIdx: 0 };
@@ -13094,10 +13108,10 @@
     const authoredFrame = clamp(Math.round(ref.frame), REF_FRAME_MIN, frameMax);
     return ref.fromEnd ? frameMax - authoredFrame + REF_FRAME_MIN : authoredFrame;
   };
-  var nextAvailableReferenceFrame = (refs, rawFrameMax) => {
+  var nextAvailableReferenceFrame = (frameRefs, rawFrameMax) => {
     const frameMax = Number.isFinite(rawFrameMax) && rawFrameMax >= REF_FRAME_MIN ? Math.floor(rawFrameMax) : REF_FRAME_MIN;
     const occupied = new Set(
-      refs.map((ref) => absoluteReferenceFrame(ref, frameMax))
+      frameRefs.map((ref) => absoluteReferenceFrame(ref, frameMax))
     );
     const step = Math.max(
       1,
@@ -13123,15 +13137,15 @@
     }
     return null;
   };
-  var nextAllowedReferencePosition = (refs, rawFrameMax, allowed) => {
+  var nextAllowedReferencePosition = (frameRefs, rawFrameMax, allowed) => {
     if (allowed.includes("any")) {
-      const frame = nextAvailableReferenceFrame(refs, rawFrameMax);
+      const frame = nextAvailableReferenceFrame(frameRefs, rawFrameMax);
       return frame === null ? null : { frame, fromEnd: false };
     }
-    if (allowed.includes("first") && !refs.some((ref) => ref.frame === REF_FRAME_MIN && !ref.fromEnd)) {
+    if (allowed.includes("first") && !frameRefs.some((ref) => ref.frame === REF_FRAME_MIN && !ref.fromEnd)) {
       return { frame: REF_FRAME_MIN, fromEnd: false };
     }
-    if (allowed.includes("last") && !refs.some((ref) => ref.frame === REF_FRAME_MIN && ref.fromEnd)) {
+    if (allowed.includes("last") && !frameRefs.some((ref) => ref.frame === REF_FRAME_MIN && ref.fromEnd)) {
       return { frame: REF_FRAME_MIN, fromEnd: true };
     }
     return null;
@@ -13144,7 +13158,9 @@
         type: "stage.patch",
         clipId: clip.id,
         stageId: stage.id,
-        patch: { refStrengths: next(stage.refStrengths) }
+        patch: {
+          frameRefStrengths: next(stage.frameRefStrengths)
+        }
       }
     ] : []
   );
@@ -13172,7 +13188,7 @@
       commitRemoval(
         (clips) => {
           const clip = clips[clipIdx];
-          const ref = clip?.refs[refIdx];
+          const ref = clip?.frameRefs[refIdx];
           if (!clip?.id || !ref?.id) {
             return null;
           }
@@ -13193,7 +13209,7 @@
                 )
               ]
             },
-            remaining: clip.refs.length - 1
+            remaining: clip.frameRefs.length - 1
           };
         },
         refIdx,
@@ -13209,7 +13225,7 @@
           return null;
         }
         const position = nextAllowedReferencePosition(
-          clip.refs,
+          clip.frameRefs,
           getReferenceFrameMax(() => defaults, clip),
           referenceEndpointPolicy(clip, defaults.modelCatalog).positions
         );
@@ -13239,7 +13255,7 @@
           selection: {
             kind: "ref",
             clipIdx,
-            refIdx: clip.refs.length
+            refIdx: clip.frameRefs.length
           }
         };
       });
@@ -13436,7 +13452,7 @@
               defaults.modelCatalog
             ),
             last,
-            clip.refs.length,
+            clip.frameRefs.length,
             clip.loras.map(
               (entry) => defaultLoraWeight(defaults, entry.name)
             ),
@@ -14622,7 +14638,7 @@
             );
           } else {
             const position = nextAllowedReferencePosition(
-              clip.refs,
+              clip.frameRefs,
               frameMax,
               allowed
             );
@@ -14633,7 +14649,7 @@
             ref.fromEnd = position.fromEnd;
           }
           appendRefToClip(clip, ref);
-          newRefIdx = clip.refs.length - 1;
+          newRefIdx = clip.frameRefs.length - 1;
           return clips;
         }
       );
@@ -14724,7 +14740,7 @@
           "references-track",
           (clips) => {
             const clip = clips[state.clipIdx];
-            const ref = clip?.refs?.[state.refIdx];
+            const ref = clip?.frameRefs?.[state.refIdx];
             const livePolicy = clip ? resolveDragPolicy(clip, state.fps, getAuthoring()) : null;
             if (!ref || !livePolicy) {
               return null;
@@ -14767,7 +14783,7 @@
       }
       const documentSnapshot = getTimelineStore().getSnapshot();
       const clip = documentSnapshot.state.clips[clipIdx];
-      const ref = clip?.refs?.[refIdx];
+      const ref = clip?.frameRefs?.[refIdx];
       if (!clip || !ref) {
         return null;
       }
@@ -15364,7 +15380,7 @@
       }
       const width = clipInnerWidth(layout.widthPx);
       const refsSupported = capabilities?.forClip(clip).decision("frameReferences").supported ?? true;
-      const marks = (clip.refs ?? []).map((ref, refIdx) => {
+      const marks = (clip.frameRefs ?? []).map((ref, refIdx) => {
         const isEnd = ref.fromEnd === true;
         const frame = Math.max(0, ref.frame ?? 0);
         const isPrimary = frame === 1 && !isEnd;
@@ -15389,9 +15405,9 @@
         const label = refsSupported ? `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})` : `Inspect unsupported persisted reference ${refIdx} for removal`;
         return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeAttr(frameLabel)}</span></span></div>`;
       }).join("");
-      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.refs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a reference image at this frame" : "Frame references are unsupported; existing references can be inspected or removed"}">${marks}</div>`;
+      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.frameRefs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a frame reference here" : "Frame references are unsupported; existing references can be inspected or removed"}">${marks}</div>`;
     }).join("");
-    return `<div class="vst-track-row vst-track-refs">` + renderTrackHead("vst-track-icon-refs", "⧉", "References", "") + `<div class="vst-track-cell">${lanes}</div></div>`;
+    return `<div class="vst-track-row vst-track-refs">` + renderTrackHead("vst-track-icon-refs", "⧉", "Frame References", "") + `<div class="vst-track-cell">${lanes}</div></div>`;
   };
 
   // frontend/timelineView.ts

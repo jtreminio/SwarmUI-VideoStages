@@ -642,7 +642,7 @@ public class IcLoraDrivePlanTests
         ClipLengthFromControlNet: false,
         ReuseAudio: false,
         UploadedAudio: null,
-        ImageRefs: [],
+        FrameRefs: [],
         Stages: stages ?? [Stage(0)]);
 
     private static StageSpec Stage(int index) => new(

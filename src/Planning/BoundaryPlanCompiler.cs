@@ -194,7 +194,7 @@ internal static class BoundaryPlanCompiler
     }
 
     private static bool HasExplicitFirstFrameReference(ClipSpec clip) =>
-        clip.ImageRefs?.Any(reference => !reference.FromEnd && reference.Frame == 1) == true;
+        clip.FrameRefs?.Any(reference => !reference.FromEnd && reference.Frame == 1) == true;
 
     private static string DescribeFallback(BoundaryFallbackReason fallback) => fallback switch
     {

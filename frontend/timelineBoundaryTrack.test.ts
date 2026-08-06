@@ -39,12 +39,12 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     duration: clip.duration,
     boundaryOut: clip.boundaryOut ?? "cut",
     stages: [{}],
-    refs: [],
+    frameRefs: [],
     promptWindows: [],
 });
 
 const clipFor = (boundaryOut: BoundaryOut, duration = 2): Clip =>
-    ({ duration, boundaryOut, stages: [], refs: [] }) as unknown as Clip;
+    ({ duration, boundaryOut, stages: [], frameRefs: [] }) as unknown as Clip;
 
 describe("crossfadePlanForClips", () => {
     it("reports no overlap when every boundary is a cut", () => {

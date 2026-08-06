@@ -53,7 +53,7 @@ internal static class NativeFrameReferences
             return model?.ReferencePositions?.Contains(position, StringComparer.Ordinal) == true;
         }
 
-        foreach (ImageRefSpec reference in clip.ImageRefs ?? [])
+        foreach (FrameRefSpec reference in clip.FrameRefs ?? [])
         {
             bool isFirst = !reference.FromEnd && reference.Frame == 1;
             bool isLast = reference.FromEnd && reference.Frame == 1;

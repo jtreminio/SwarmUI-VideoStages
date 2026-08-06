@@ -15,8 +15,8 @@ import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
+    CanonicalFrameRefImage,
     CanonicalPromptWindow,
-    CanonicalRefImage,
     CanonicalRetake,
     CanonicalStage,
     CanonicalVideoStagesConfig,
@@ -29,7 +29,7 @@ const stage = (id: string): CanonicalStage => ({
     controlNetStrength: 1,
     icLoraStrengths: [],
     loraWeights: [],
-    refStrengths: [0.5],
+    frameRefStrengths: [0.5],
     upscale: 1,
     upscaleMethod: "pixel-lanczos",
     model: "ltx",
@@ -40,7 +40,7 @@ const stage = (id: string): CanonicalStage => ({
     scheduler: "normal",
 });
 
-const ref = (id: string): CanonicalRefImage => ({
+const ref = (id: string): CanonicalFrameRefImage => ({
     id,
     source: "Base",
     uploadFileName: null,
@@ -86,7 +86,7 @@ const clip = (id: string): CanonicalClip => ({
     promptWindows: [],
     retake: null,
     initVideo: null,
-    refs: [],
+    frameRefs: [],
     stages: [],
 });
 
@@ -110,7 +110,7 @@ const track = (id: string): CanonicalAudioTrack => ({
 const document = (): CanonicalVideoStagesConfig => {
     const clipA = clip("clip-a");
     clipA.stages = [stage("stage-a"), stage("stage-b"), stage("stage-c")];
-    clipA.refs = [ref("ref-a"), ref("ref-b"), ref("ref-c")];
+    clipA.frameRefs = [ref("ref-a"), ref("ref-b"), ref("ref-c")];
     clipA.promptWindows = [
         window("window-a"),
         window("window-b"),
@@ -120,7 +120,7 @@ const document = (): CanonicalVideoStagesConfig => {
     const trackA = track("track-a");
     trackA.spans = [span("span-a"), span("span-b"), span("span-c")];
     return {
-        schemaVersion: 5,
+        schemaVersion: 7,
         width: 1024,
         height: 576,
         fps: 24,
@@ -215,7 +215,7 @@ describe("diffDocuments", () => {
             lengthSeconds: 4,
         };
         before.clips[0].stages = [stage("stage-only")];
-        before.clips[0].refs = [];
+        before.clips[0].frameRefs = [];
         before.clips[0].retake = null;
         const catalog = testArchitectureCatalog();
         expect(
@@ -243,7 +243,7 @@ describe("diffDocuments", () => {
     it("still rejects emptying a clip that has no source video", () => {
         const before = document();
         before.clips[0].stages = [stage("stage-only")];
-        before.clips[0].refs = [];
+        before.clips[0].frameRefs = [];
         before.clips[0].retake = null;
         const after = structuredClone(before);
         after.clips[0].stages = [];
@@ -378,7 +378,7 @@ describe("diffDocuments", () => {
         before.clips[0].loras = [{ name: "detail.safetensors" }];
         before.clips[0].stages[0].loraWeights = [1];
         before.clips[0].stages[0].upscale = 2;
-        before.clips[0].refs = [ref("conversion-ref")];
+        before.clips[0].frameRefs = [ref("conversion-ref")];
         const { catalog, target } = crossArchitectureCatalog();
         const planned = planArchitectureConversion(
             before.clips[0],
@@ -597,7 +597,7 @@ describe("diffDocuments", () => {
             new DocumentDiffError("architecture-invariant"),
         );
 
-        after.clips[0].refs = [ref("unsupported-restored-ref")];
+        after.clips[0].frameRefs = [ref("unsupported-restored-ref")];
         expect(() =>
             diffDocuments(before, after, { architectureCatalog: catalog }),
         ).not.toThrow();
@@ -750,15 +750,15 @@ describe("diffDocuments", () => {
             type: "stage.patch",
             mutate: (after: CanonicalVideoStagesConfig) => {
                 after.clips[0].stages[0].loraWeights = [0.6];
-                after.clips[0].stages[0].refStrengths = [0.9, 0.4];
+                after.clips[0].stages[0].frameRefStrengths = [0.9, 0.4];
             },
         },
         {
             name: "reference",
             type: "ref.patch",
             mutate: (after: CanonicalVideoStagesConfig) => {
-                after.clips[0].refs[0].frame = 9;
-                after.clips[0].refs[0].uploadedImage = {
+                after.clips[0].frameRefs[0].frame = 9;
+                after.clips[0].frameRefs[0].uploadedImage = {
                     data: "data:image/png;base64,AA==",
                     fileName: "r.png",
                 };
@@ -848,8 +848,8 @@ describe("diffDocuments", () => {
             addType: "ref.add",
             moveType: "ref.move",
             mutate: (after: CanonicalVideoStagesConfig) => {
-                const items = after.clips[0].refs;
-                after.clips[0].refs = [items[2], ref("ref-new"), items[1]];
+                const items = after.clips[0].frameRefs;
+                after.clips[0].frameRefs = [items[2], ref("ref-new"), items[1]];
             },
         },
         {
@@ -964,7 +964,7 @@ describe("diffDocuments", () => {
         [
             "missing-id",
             (after: CanonicalVideoStagesConfig) => {
-                (after.clips[0].refs[0] as { id?: string }).id = undefined;
+                (after.clips[0].frameRefs[0] as { id?: string }).id = undefined;
             },
         ],
     ] as const)("rejects %s documents before producing commands", (_, mutate) => {

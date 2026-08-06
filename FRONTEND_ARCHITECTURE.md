@@ -96,7 +96,7 @@ surfaces a one-shot notice and loads nothing rather than loading partially.
 
 Every canonical commit reaches `store.dispatch`. Two APIs get there:
 
-- `dispatchDocumentCommand` — structural edits. Adding and deleting refs,
+- `dispatchDocumentCommand` — structural edits. Adding and deleting frame refs,
   prompt windows, retakes, stages and clips, both skip toggles, and the
   source-only clip's first-stage batch all dispatch named commands. The draft
   queue owns dispatch, the revision compare-and-set, staleness, and where the
@@ -374,7 +374,7 @@ of the selected-region class.
 sliders, checkboxes, textareas, media-pick rows (upload or host input browser),
 `?` help popovers wired to the host's `doPopover`, static and accordion sections
 with remembered open state, and `buildRepeatingEditor` — the one owner of every
-add / delete / select / skip repeater in the strip (stages, refs, IC-LoRAs,
+add / delete / select / skip repeater in the strip (stages, frame refs, IC-LoRAs,
 relay windows, audio tracks). `Assets/video-stages.css` adds only `.vst-*`
 layout hooks on top; both add buttons use the host's native button classes.
 

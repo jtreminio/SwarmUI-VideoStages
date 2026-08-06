@@ -37,7 +37,7 @@ interface ClipFixture {
 const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     duration: clip.duration,
     stages: [{}],
-    refs: [],
+    frameRefs: [],
 });
 
 const promptText = (clips: ClipFixture[]): string => {

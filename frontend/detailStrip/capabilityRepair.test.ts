@@ -103,7 +103,7 @@ describe("persisted-but-unsupported repair contract", () => {
 
     it("keeps the delete of an unsupported persisted reference operable", () => {
         const models = restrictedCatalog();
-        const clip = minimalClip({ refs: [minimalRef()] });
+        const clip = minimalClip({ frameRefs: [minimalRef()] });
         const ctx = context(models, [clip]);
 
         const body = buildClipBody(

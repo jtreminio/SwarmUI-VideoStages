@@ -182,7 +182,7 @@ describe("stage architecture model filtering", () => {
             initialReference = false,
         ) => {
             const clip = minimalClip({
-                refs: initialReference ? [minimalRef({ frame: 1 })] : [],
+                frameRefs: initialReference ? [minimalRef({ frame: 1 })] : [],
                 initVideo: initVideo
                     ? {
                           data: "data:video/mp4;base64,AA==",

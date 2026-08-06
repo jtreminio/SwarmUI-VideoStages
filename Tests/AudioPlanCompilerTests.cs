@@ -62,7 +62,7 @@ public class AudioPlanCompilerTests
             ClipLengthFromControlNet: controlNetLength,
             ReuseAudio: reuse,
             UploadedAudio: uploadedAudio,
-            ImageRefs: [],
+            FrameRefs: [],
             Stages: stages ?? [Stage(0)]);
 
     [Theory]

@@ -21,7 +21,7 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     duration: clip.duration,
     audioSource: clip.audioSource ?? "Native",
     stages: [{}],
-    refs: [],
+    frameRefs: [],
     promptWindows: [],
 });
 
@@ -94,7 +94,7 @@ describe("renderAudioTrackRow (timeline audio lanes)", () => {
     it("renders no timeline audio lanes when no track exists", () => {
         mountPromptBox("");
         mountVideoStagesData({
-            clips: [{ duration: 5, stages: [{}], refs: [] }],
+            clips: [{ duration: 5, stages: [{}], frameRefs: [] }],
         });
         const clips = getClips();
         const layouts = computeRegionLayout(clips, { pxPerSecond: PPS });

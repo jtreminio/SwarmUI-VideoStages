@@ -2,7 +2,7 @@ import type {
     CanonicalIcLora,
     CanonicalRetake,
     Clip,
-    RefImage,
+    FrameRefImage,
     Stage,
 } from "./types";
 
@@ -17,7 +17,7 @@ export const STORED_REF_KEYS = [
     "uploadedImage",
     "frame",
     "fromEnd",
-] as const satisfies readonly (keyof RefImage)[];
+] as const satisfies readonly (keyof FrameRefImage)[];
 
 export const STORED_STAGE_KEYS = [
     "id",
@@ -26,7 +26,7 @@ export const STORED_STAGE_KEYS = [
     "controlNetStrength",
     "icLoraStrengths",
     "loraWeights",
-    "refStrengths",
+    "frameRefStrengths",
     "upscale",
     "upscaleMethod",
     "model",
@@ -57,7 +57,7 @@ export const STORED_CLIP_KEYS = [
     "uploadedAudio",
     "retake",
     "initVideo",
-    "refs",
+    "frameRefs",
     "stages",
 ] as const satisfies readonly (keyof Clip)[];
 
@@ -75,7 +75,7 @@ type AssertClassified<T, U extends keyof T> = [Exclude<keyof T, U>] extends [
     : Exclude<keyof T, U>;
 
 const _refKeysExhaustive: AssertClassified<
-    RefImage,
+    FrameRefImage,
     (typeof STORED_REF_KEYS)[number]
 > = true;
 const _stageKeysExhaustive: AssertClassified<
@@ -92,8 +92,8 @@ type RequireEntityId<T extends { id?: string }> = Omit<T, "id"> & {
     id: string;
 };
 
-export type StoredRefImage = RequireEntityId<
-    Pick<RefImage, (typeof STORED_REF_KEYS)[number]>
+export type StoredFrameRefImage = RequireEntityId<
+    Pick<FrameRefImage, (typeof STORED_REF_KEYS)[number]>
 >;
 
 export type StoredStage = RequireEntityId<
@@ -105,12 +105,12 @@ export type StoredClip = RequireEntityId<
         Clip,
         Exclude<
             (typeof STORED_CLIP_KEYS)[number],
-            "icLoras" | "retake" | "refs" | "stages"
+            "icLoras" | "retake" | "frameRefs" | "stages"
         >
     >
 > & {
     icLoras: CanonicalIcLora[];
     retake: CanonicalRetake | null;
-    refs: StoredRefImage[];
+    frameRefs: StoredFrameRefImage[];
     stages: StoredStage[];
 };

@@ -40,7 +40,7 @@ public class AudioHandlerTests
             ClipLengthFromControlNet: clipLengthFromControlNet,
             ReuseAudio: false,
             UploadedAudio: null,
-            ImageRefs: [],
+            FrameRefs: [],
             Stages: [stage]);
         TimelineSpec spec = new(768, 512, 24, true, [clip]);
         return Assert.Single(TestPlanCompiler.Compile(spec).Clips);

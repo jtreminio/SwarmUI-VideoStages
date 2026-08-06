@@ -160,7 +160,7 @@ export const createTimelineReferencesTrack = (
                     );
                 } else {
                     const position = nextAllowedReferencePosition(
-                        clip.refs,
+                        clip.frameRefs,
                         frameMax,
                         allowed,
                     );
@@ -171,7 +171,7 @@ export const createTimelineReferencesTrack = (
                     ref.fromEnd = position.fromEnd;
                 }
                 appendRefToClip(clip, ref);
-                newRefIdx = clip.refs.length - 1;
+                newRefIdx = clip.frameRefs.length - 1;
                 return clips;
             },
         );
@@ -281,7 +281,7 @@ export const createTimelineReferencesTrack = (
                 "references-track",
                 (clips) => {
                     const clip = clips[state.clipIdx];
-                    const ref = clip?.refs?.[state.refIdx];
+                    const ref = clip?.frameRefs?.[state.refIdx];
                     const livePolicy = clip
                         ? resolveDragPolicy(clip, state.fps, getAuthoring())
                         : null;
@@ -341,7 +341,7 @@ export const createTimelineReferencesTrack = (
         }
         const documentSnapshot = getTimelineStore().getSnapshot();
         const clip = documentSnapshot.state.clips[clipIdx];
-        const ref = clip?.refs?.[refIdx];
+        const ref = clip?.frameRefs?.[refIdx];
         if (!clip || !ref) {
             return null;
         }

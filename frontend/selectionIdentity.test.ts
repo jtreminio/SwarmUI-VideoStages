@@ -37,7 +37,7 @@ const mountDocument = (): void => {
             minimalClip({
                 id: "clip-b",
                 duration: 3,
-                refs: [
+                frameRefs: [
                     minimalRef({ id: "ref-b0", frame: 0 }),
                     minimalRef({ id: "ref-b1", frame: 5 }),
                 ],
@@ -59,7 +59,7 @@ describe("identity-anchored selection", () => {
 
     it("keeps a ref selection on the same ref after an earlier clip is deleted", () => {
         setSelection({ kind: "ref", clipIdx: 1, refIdx: 1 });
-        expect(getState().clips[1].refs[1].id).toBe("ref-b1");
+        expect(getState().clips[1].frameRefs[1].id).toBe("ref-b1");
 
         const clips = getClips();
         clips.splice(0, 1);
@@ -71,7 +71,7 @@ describe("identity-anchored selection", () => {
             throw new Error("expected a ref selection");
         }
         expect(
-            getState().clips[selection.clipIdx].refs[selection.refIdx].id,
+            getState().clips[selection.clipIdx].frameRefs[selection.refIdx].id,
         ).toBe("ref-b1");
     });
 
@@ -191,13 +191,13 @@ describe("identity-anchored selection", () => {
         setSelection({ kind: "ref", clipIdx: 1, refIdx: 1 });
 
         const clips = getClips();
-        clips[1].refs.splice(1, 1);
+        clips[1].frameRefs.splice(1, 1);
         saveClips(clips, { notifyDomChange: false });
 
         expect(getSelection()).toEqual({ kind: "ref", clipIdx: 1, refIdx: 0 });
 
         const remaining = getClips();
-        remaining[1].refs.splice(0, 1);
+        remaining[1].frameRefs.splice(0, 1);
         saveClips(remaining, { notifyDomChange: false });
 
         expect(getSelection()).toEqual({ kind: "none" });

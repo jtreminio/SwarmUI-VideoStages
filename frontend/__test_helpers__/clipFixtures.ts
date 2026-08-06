@@ -1,9 +1,9 @@
 import {
     type Clip,
+    type FrameRefImage,
     type IcLora,
     type InitVideo,
     REF_SOURCE_BASE,
-    type RefImage,
     type Stage,
 } from "../types";
 
@@ -39,7 +39,7 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
     controlNetStrength: 0.8,
     icLoraStrengths: [],
     loraWeights: [],
-    refStrengths: [],
+    frameRefStrengths: [],
     upscale: 1,
     upscaleMethod: "latentmodel-test.safetensors",
     model: "ltx-2.3.safetensors",
@@ -51,7 +51,9 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
     ...overrides,
 });
 
-export const minimalRef = (overrides: Partial<RefImage> = {}): RefImage => ({
+export const minimalRef = (
+    overrides: Partial<FrameRefImage> = {},
+): FrameRefImage => ({
     source: REF_SOURCE_BASE,
     uploadFileName: null,
     uploadedImage: null,
@@ -82,7 +84,7 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     promptWindows: [],
     retake: null,
     initVideo: null,
-    refs: [],
+    frameRefs: [],
     stages: [minimalStage()],
     ...overrides,
 });

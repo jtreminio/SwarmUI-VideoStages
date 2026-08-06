@@ -67,8 +67,8 @@ internal static class ArchitectureCapabilityValidator
 
         Warn(
             Unsupported(ArchitectureFeature.FrameReferences)
-                && (clip.ImageRefs is { Count: > 0 }
-                    || stages.Any(stage => stage.ImageRefStrengths is { Count: > 0 })),
+                && (clip.FrameRefs is { Count: > 0 }
+                    || stages.Any(stage => stage.FrameRefStrengths is { Count: > 0 })),
             ArchitectureFeature.FrameReferences,
             "image/frame references");
         Warn(

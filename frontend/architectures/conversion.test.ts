@@ -23,7 +23,7 @@ describe("architecture conversion policy", () => {
         };
         const clip = minimalClip({
             loras: [{ name: "detail" }],
-            refs: [minimalRef()],
+            frameRefs: [minimalRef()],
             refFraming: "fit-green",
             promptWindows: [{ prompt: "relay", start: 0, duration: 1 }],
             stages: [minimalStage({ loraWeights: [1] }), minimalStage()],
@@ -34,7 +34,7 @@ describe("architecture conversion policy", () => {
 
         expect(conversion?.removals ?? []).toEqual([]);
         expect(conversion?.clip).toMatchObject({
-            refs: clip.refs,
+            frameRefs: clip.frameRefs,
             refFraming: "fit-green",
             loras: clip.loras,
             promptWindows: clip.promptWindows,
@@ -111,7 +111,7 @@ describe("architecture conversion policy", () => {
         };
         const source = minimalClip({
             loras: [{ name: "detail" }],
-            refs: [minimalRef()],
+            frameRefs: [minimalRef()],
             stages: [
                 minimalStage(),
                 minimalStage({

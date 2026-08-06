@@ -113,7 +113,7 @@ describe("backend-aligned authoring diagnostics", () => {
                         lengthSeconds: 1,
                         strength: 1,
                     },
-                    refs: [minimalRef()],
+                    frameRefs: [minimalRef()],
                 }),
             ]),
         ).toEqual([]);
@@ -153,7 +153,7 @@ describe("backend-aligned authoring diagnostics", () => {
             reuseAudio: true,
             clipLengthFromAudio: true,
             promptWindows: [{ prompt: "relay", start: 0, duration: 1 }],
-            refs: [minimalRef()],
+            frameRefs: [minimalRef()],
             retake: {
                 startSeconds: 0,
                 lengthSeconds: 1,

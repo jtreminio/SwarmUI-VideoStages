@@ -73,7 +73,7 @@ export const mountVideoStagesData = (state: unknown): HTMLTextAreaElement => {
         state !== null &&
         !Array.isArray(state) &&
         !Object.hasOwn(state, "schemaVersion")
-            ? { ...state, schemaVersion: 5 }
+            ? { ...state, schemaVersion: 7 }
             : state;
     el.value =
         typeof persisted === "string" ? persisted : JSON.stringify(persisted);
