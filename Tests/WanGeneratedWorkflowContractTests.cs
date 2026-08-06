@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -158,7 +159,7 @@ public class WanGeneratedWorkflowContractTests
         WorkflowBridge bridge,
         params SwarmKSamplerNode[] samplers)
     {
-        VAEDecodeNode[] decodes = [.. bridge.Graph.NodesOfType<VAEDecodeNode>()
+        IVaeDecode[] decodes = [.. bridge.Graph.NodesOfType<IVaeDecode>()
             .Where(decode => samplers.Contains(decode.Samples.Connection?.Node))];
         Assert.Equal(samplers.Length, decodes.Length);
         Assert.All(
@@ -1366,10 +1367,10 @@ public class WanGeneratedWorkflowContractTests
         Assert.Equal(3, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
         Assert.Same(high, low.LatentImage.Connection?.Node);
         Assert.True(ReachesUpstream(bridge, high.LatentImage.Connection?.Node, window.Id));
-        VAEDecodeNode decode = BaseImage(bridge, low);
+        IVaeDecode decode = BaseImage(bridge, low);
         Assert.Equal(SourceClipFrames, generator.CurrentMedia.Frames);
 
-        live.AssertAllLive(window, high, low, decode);
+        live.AssertAllLive(window, high, low, (ComfyNode)decode);
         AssertShippable(bridge, workflow, live);
     }
 

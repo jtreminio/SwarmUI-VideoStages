@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Text2Image;
@@ -147,13 +148,19 @@ internal static class TypedWorkflowAssertions
     /// the image-to-video shape has one. This overload identifies it as the graph's only plain
     /// <c>VAEDecode</c>, which holds on LTX but not on architectures whose video half decodes
     /// through one too — those must name the base sampler.
+    /// <para>
+    /// The class is the discriminator here, so this overload also assumes core keeps decoding the
+    /// base image through a plain <c>VAEDecode</c>. Core already tiles per model family, and the
+    /// day it tiles the base image this stops selecting anything. The other overload discriminates
+    /// on the graph instead and is unaffected; prefer it wherever a base sampler is reachable.
+    /// </para>
     /// </summary>
     public static VAEDecodeNode BaseImage(WorkflowBridge bridge) =>
         Assert.Single(bridge.Graph.NodesOfType<VAEDecodeNode>());
 
     /// <summary>Core's base-image decode, selected by the base pass it decodes.</summary>
-    public static VAEDecodeNode BaseImage(WorkflowBridge bridge, SwarmKSamplerNode baseSampler) =>
-        Assert.Single(bridge.Graph.NodesOfType<VAEDecodeNode>(),
+    public static IVaeDecode BaseImage(WorkflowBridge bridge, SwarmKSamplerNode baseSampler) =>
+        Assert.Single(bridge.Graph.NodesOfType<IVaeDecode>(),
             decode => ReferenceEquals(decode.Samples.Connection?.Node, baseSampler));
 
     /// <summary>
