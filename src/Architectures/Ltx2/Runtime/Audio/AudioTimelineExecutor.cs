@@ -305,7 +305,7 @@ internal sealed class AudioTimelineExecutor
             ?.ControlNetSourceIndex;
         if (!sourceIndex.HasValue)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 _generator.UserInput,
                 "VideoStages: ControlNet owns clip length, but the compiled plan has no valid "
                 + "ControlNet 1-3 source; using the authored clip length instead.");
@@ -313,7 +313,7 @@ internal sealed class AudioTimelineExecutor
         }
         if (!TryApplyControlNetFrameCount(sourceIndex.Value))
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 _generator.UserInput,
                 $"VideoStages: ControlNet {sourceIndex.Value + 1} owns clip {plannedClip.ClipId} "
                 + "length, but its captured video frame count is unavailable; using the authored "

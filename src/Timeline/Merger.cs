@@ -46,7 +46,7 @@ internal sealed class Merger(WorkflowGenerator g)
             BoundaryOverlapPlanner.ValidateRuntime(generatedClips, generatedBoundaries);
         if (runtimeBoundaries.Degraded)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: overlap boundaries degraded to cuts because "
                 + $"{runtimeBoundaries.Reason}.");

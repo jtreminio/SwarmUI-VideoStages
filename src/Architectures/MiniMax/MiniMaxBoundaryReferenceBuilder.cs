@@ -64,7 +64,7 @@ internal sealed class MiniMaxBoundaryReferenceBuilder(
             || referenceFrames <= 0
             || sourceWindow > previous.Frames)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: Clip {context.PreviousClip.ClipId} cannot supply "
                     + (includeSoundtrack ? "video and audio " : "video ")

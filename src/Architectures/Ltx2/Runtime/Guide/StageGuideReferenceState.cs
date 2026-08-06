@@ -68,7 +68,7 @@ internal sealed class StageGuideReferenceState(
         {
             return reference;
         }
-        PlanDiagnosticReporter.TrackRequestWarning(
+        RequestWarnings.Track(
             g.UserInput,
             $"VideoStages: ImageReference '{guide.RawValue}' requested, but Base2Edit stage {stageIndex} does not exist.");
         return null;
@@ -80,7 +80,7 @@ internal sealed class StageGuideReferenceState(
     {
         if (reference is null)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(g.UserInput, message);
+            RequestWarnings.Track(g.UserInput, message);
         }
         return reference;
     }

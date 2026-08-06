@@ -44,7 +44,7 @@ internal sealed class LtxClipRefResolver(
             WGNodeData raw = ResolveClipRefSourceMedia(reference, refStore, postVideoChain);
             if (raw is null)
             {
-                PlanDiagnosticReporter.TrackRequestWarning(
+                RequestWarnings.Track(
                     g.UserInput,
                     $"VideoStages: Stage {stage.StageId} clip reference {i} ({reference.RawSource}) could not be resolved; "
                     + "skipping.");
@@ -146,7 +146,7 @@ internal sealed class LtxClipRefResolver(
         {
             if (!string.IsNullOrWhiteSpace(reference.RawSource))
             {
-                PlanDiagnosticReporter.TrackRequestWarning(
+                RequestWarnings.Track(
                     g.UserInput,
                     $"VideoStages: Unsupported or unresolved clip reference source '{reference.RawSource}'.");
             }

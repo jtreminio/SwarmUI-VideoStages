@@ -35,7 +35,7 @@ internal static class RequestReader
     {
         LegacyVideoSwapRequestSnapshot legacyVideoSwap = CaptureLegacyVideoSwap(input);
         Action<string> warn =
-            warning => PlanDiagnosticReporter.TrackRequestWarning(input, warning);
+            warning => RequestWarnings.Track(input, warning);
         AuthoringDocument document = DocumentJson.Read(input);
         PromptTags.Directives directives = DocumentJson.IsActive(input)
             ? PromptTags.Read(

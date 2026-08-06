@@ -288,7 +288,7 @@ internal static class TypedWorkflowAssertions
     }
 
     /// <summary>
-    /// The browser-visible warnings <c>PlanDiagnosticReporter.TrackRequestWarning</c> accumulates.
+    /// The browser-visible warnings <c>RequestWarnings.Track</c> accumulates.
     /// The API route's generator carries the same input, so these are readable off a generated
     /// workflow as well as off a hand-built generator.
     /// <para>

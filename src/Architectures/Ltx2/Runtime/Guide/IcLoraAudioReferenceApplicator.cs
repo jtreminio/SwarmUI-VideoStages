@@ -93,7 +93,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         }
         if (g.CurrentAudioVae is null)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 "VideoStages: this audio-consuming IC-LoRA requires an LTX audio VAE, "
                 + "but none is available for the selected model; skipping its audio reference.");
@@ -111,7 +111,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         {
             if (incomingMedia?.AttachedAudio is not WGNodeData incomingAudio)
             {
-                PlanDiagnosticReporter.TrackRequestWarning(
+                RequestWarnings.Track(
                     g.UserInput,
                     $"VideoStages: IC-LoRA entry {entry.EntryIndex} requests Incoming Audio, "
                     + "but the incoming media has no attached audio; skipping its audio reference.");

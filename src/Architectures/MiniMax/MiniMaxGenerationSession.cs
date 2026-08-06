@@ -257,7 +257,7 @@ internal sealed class MiniMaxGenerationSession(
         }
         if (!context.Clip.Stages.Any(stage => !stage.IsPassthrough))
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: Clip {context.Clip.ClipId} has no generating stage for its "
                     + "incoming audio carry; treating the boundary as a cut.");
@@ -272,7 +272,7 @@ internal sealed class MiniMaxGenerationSession(
             || windowFrames <= 0
             || windowFrames > previous.Frames)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: Clip {context.PreviousClip.ClipId} cannot carry audio into "
                     + $"Clip {context.Clip.ClipId} because its decoded audio timing is unavailable; "
@@ -630,7 +630,7 @@ internal sealed class MiniMaxGenerationSession(
         }
         if (captured is null)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: {descriptor} source '{source}' was not available; "
                     + "ignoring it for this generation.");
@@ -641,7 +641,7 @@ internal sealed class MiniMaxGenerationSession(
         WGNodeData decoded = captured.AsImage();
         if (decoded is null)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: {descriptor} source '{source}' was captured as a latent "
                     + "with no VAE available to decode it; ignoring it for this generation.");
@@ -682,7 +682,7 @@ internal sealed class MiniMaxGenerationSession(
                 case ClipReferenceKind.Video:
                     if (videos.Count >= MiniMaxClipReferences.MaxVideos)
                     {
-                        PlanDiagnosticReporter.TrackRequestWarning(
+                        RequestWarnings.Track(
                             g.UserInput,
                             $"VideoStages: {descriptor} exceeds MiniMax H3's "
                                 + $"{MiniMaxClipReferences.MaxVideos}-video limit because "
@@ -808,7 +808,7 @@ internal sealed class MiniMaxGenerationSession(
             WGNodeData captured = ResolveHostCapture(reference.Source, $"{descriptor} {index}");
             if (captured is null)
             {
-                PlanDiagnosticReporter.TrackRequestWarning(
+                RequestWarnings.Track(
                     g.UserInput,
                     $"VideoStages: {descriptor} {index} was dropped, so every later image "
                         + "reference on this clip moves down one <Picture> number.");
@@ -883,7 +883,7 @@ internal sealed class MiniMaxGenerationSession(
     }
 
     private void WarnUnavailableReferenceSource(string source, string descriptor) =>
-        PlanDiagnosticReporter.TrackRequestWarning(
+        RequestWarnings.Track(
             g.UserInput,
             $"VideoStages: {descriptor} source '{source}' was not available; "
                 + "ignoring it for this generation.");

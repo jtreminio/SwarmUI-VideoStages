@@ -134,7 +134,7 @@ internal class StageRefStore(WorkflowGenerator g)
         ComfyNode node = bridge.Graph.GetNode(nodeId);
         if (node is null)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: node '{nodeId}' not found in workflow; treating as not captured.");
             return null;
@@ -142,7 +142,7 @@ internal class StageRefStore(WorkflowGenerator g)
         INodeOutput output = node.FindOutput(slot);
         if (output is null)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: slot {slot} on node '{nodeId}' not found; treating as not captured.");
             return null;

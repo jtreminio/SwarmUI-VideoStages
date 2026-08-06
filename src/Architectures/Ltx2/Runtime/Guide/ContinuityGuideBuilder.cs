@@ -27,7 +27,7 @@ internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)
             || frames is not int lastFrameCount
             || lastFrameCount <= 0)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: Clip {previousClip.ClipId} boundary 'continue' needs a known frame count for the "
                 + "previous clip's output; treating the boundary as a cut.");
@@ -43,7 +43,7 @@ internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)
                 window / (double)nextGeometry.FramesPerSecond * previousFps));
         if (sourceWindow > lastFrameCount)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: Clip {previousClip.ClipId} boundary 'continue' needs {sourceWindow} overlap frames but "
                 + $"its output has {lastFrameCount}; treating the boundary as a cut.");

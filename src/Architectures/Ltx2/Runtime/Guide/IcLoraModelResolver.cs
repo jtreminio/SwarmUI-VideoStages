@@ -36,7 +36,7 @@ internal static class IcLoraModelResolver
         {
             return model;
         }
-        PlanDiagnosticReporter.TrackRequestWarning(
+        RequestWarnings.Track(
             input,
             $"VideoStages: {error} Ignoring this IC-LoRA.");
         return null;
@@ -67,7 +67,7 @@ internal static class IcLoraModelResolver
         T2IModel lora = FindLoraModel(loraName);
         if (lora is null)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 input,
                 $"VideoStages: LoRA Model '{loraName}' was not found in the model set. "
                     + "Ignoring this IC-LoRA.");

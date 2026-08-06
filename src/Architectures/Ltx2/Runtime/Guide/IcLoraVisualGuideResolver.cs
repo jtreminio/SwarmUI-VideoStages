@@ -50,7 +50,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
             case IcLoraMediaSourceKind.Incoming:
                 if (stageInput is null || !IsImageStream(stageInput))
                 {
-                    PlanDiagnosticReporter.TrackRequestWarning(
+                    RequestWarnings.Track(
                         g.UserInput,
                         $"VideoStages: planned IC-LoRA Incoming visual media is unavailable for stage "
                         + $"{stage.ClipStageRawIndex}; applying the model patch without a guide.");
@@ -67,7 +67,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                         index,
                         out WGNodeData controlImage))
                 {
-                    PlanDiagnosticReporter.TrackRequestWarning(
+                    RequestWarnings.Track(
                         g.UserInput,
                         $"VideoStages: planned IC-LoRA entry {entry.EntryIndex} requires ControlNet "
                         + $"{(entry.Drive.ControlNetIndex ?? -1) + 1} drive media, but it is unavailable; "
@@ -80,7 +80,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                     false);
                 return true;
             default:
-                PlanDiagnosticReporter.TrackRequestWarning(
+                RequestWarnings.Track(
                     g.UserInput,
                     $"VideoStages: planned IC-LoRA entry {entry.EntryIndex} has no usable drive-media "
                     + "identity; applying the model patch without a guide.");
@@ -101,7 +101,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         }
         if (string.IsNullOrWhiteSpace(entry.Drive.Upload?.Data))
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: planned IC-LoRA entry {entryIndex} requires uploaded drive media, "
                 + "but the planned media identity is empty; applying the model patch without a guide.");
@@ -128,7 +128,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         }
         else
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: planned IC-LoRA entry {entryIndex} has unsupported uploaded drive-media "
                 + "kind; applying the model patch without a guide.");

@@ -36,7 +36,7 @@ internal sealed class BoundaryHandoffResolver(
         {
             if (!nextClip.Stages.Any(stage => !stage.IsPassthrough))
             {
-                PlanDiagnosticReporter.TrackRequestWarning(
+                RequestWarnings.Track(
                     g.UserInput,
                     $"VideoStages: Clip {nextClip.ClipId} has no generating stage for its "
                     + "incoming Continue handle; treating the boundary as a cut.");
@@ -48,7 +48,7 @@ internal sealed class BoundaryHandoffResolver(
                 || targetFrames <= 0
                 || targetFrames > int.MaxValue - continueHandleFrames)
             {
-                PlanDiagnosticReporter.TrackRequestWarning(
+                RequestWarnings.Track(
                     g.UserInput,
                     $"VideoStages: Clip {nextClip.ClipId} has a runtime-derived duration, so its "
                     + "incoming Continue handle cannot be added safely; treating the boundary as a cut.");
@@ -57,7 +57,7 @@ internal sealed class BoundaryHandoffResolver(
             }
             if (nextClip.EntryMode == ArchitectureEntryMode.InitVideo)
             {
-                PlanDiagnosticReporter.TrackRequestWarning(
+                RequestWarnings.Track(
                     g.UserInput,
                     $"VideoStages: Clip {previousClip.ClipId} boundary 'continue' flows into "
                     + $"init-video Clip {nextClip.ClipId}; treating the boundary as a cut.");
@@ -114,7 +114,7 @@ internal sealed class BoundaryHandoffResolver(
             || fps <= 0
             || windowFrames > previousFrames)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: Clip {previousClip.ClipId} cannot carry audio into "
                 + $"Clip {nextClip.ClipId} because its decoded audio timing is unavailable; "
@@ -125,7 +125,7 @@ internal sealed class BoundaryHandoffResolver(
         using WorkflowBridge bridge = BridgeSync.For(g);
         if (bridge.ResolvePath(previousAudioPath) is null)
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 g.UserInput,
                 $"VideoStages: Clip {previousClip.ClipId} cannot carry audio into "
                 + $"Clip {nextClip.ClipId} because its decoded audio output cannot be resolved; "

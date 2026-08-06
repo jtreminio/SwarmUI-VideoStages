@@ -187,7 +187,7 @@ internal static class NativeFrameReferences
         }
         if (!StringUtils.Equals(reference.Source, MediaSource.Upload))
         {
-            PlanDiagnosticReporter.TrackRequestWarning(
+            RequestWarnings.Track(
                 generator.UserInput,
                 $"VideoStages: {descriptor} source '{reference.Source}' cannot be materialized "
                     + "by the native image input; ignoring it for this generation.");

@@ -35,7 +35,7 @@ internal sealed class AudioRuntimeSourceResolver(
                 {
                     if (clip.Audio.Base.AceStepFunTrack is not int track)
                     {
-                        PlanDiagnosticReporter.TrackRequestWarning(
+                        RequestWarnings.Track(
                             g.UserInput,
                             $"VideoStages: clip {clip.ClipId} selects an AceStepFun audio source "
                             + "without a valid track; continuing without that source.");
@@ -44,7 +44,7 @@ internal sealed class AudioRuntimeSourceResolver(
                     WGNodeData audio = audioHandler.DetectAceStepFunAudio(track);
                     if (audio is null)
                     {
-                        PlanDiagnosticReporter.TrackRequestWarning(
+                        RequestWarnings.Track(
                             g.UserInput,
                             $"VideoStages: clip {clip.ClipId} selects AceStepFun audio{track}, "
                             + "but that track is not present in the workflow; continuing without that source.");
@@ -64,7 +64,7 @@ internal sealed class AudioRuntimeSourceResolver(
                     }
                     if (!controlNet.TryGetCapturedAudio(sourceIndex.Value, out WGNodeData audio))
                     {
-                        PlanDiagnosticReporter.TrackRequestWarning(
+                        RequestWarnings.Track(
                             g.UserInput,
                             $"VideoStages: clip {clip.ClipId} selects ControlNet "
                             + $"{sourceIndex.Value + 1} audio, but captured video audio is unavailable; "
@@ -102,7 +102,7 @@ internal sealed class AudioRuntimeSourceResolver(
             return capturedIndices[0];
         }
 
-        PlanDiagnosticReporter.TrackRequestWarning(
+        RequestWarnings.Track(
             g.UserInput,
             $"VideoStages: clip {clip.ClipId} selects ControlNet audio without a "
             + "unique valid ControlNet 1-3 drive source; using silence instead.");

@@ -85,7 +85,7 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
                 targetHeight);
         }
 
-        PlanDiagnosticReporter.TrackRequestWarning(
+        RequestWarnings.Track(
             g.UserInput,
             $"VideoStages: Stage {stage.StageId} uses unsupported upscale method "
             + $"'{upscale.RawMethod}'. Ignoring upscale.");
