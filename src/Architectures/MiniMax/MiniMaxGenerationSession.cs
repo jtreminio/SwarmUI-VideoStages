@@ -163,7 +163,7 @@ internal sealed class MiniMaxGenerationSession(
             clip,
             stage,
             sectionId,
-            payload.LoraTargetPolicy))
+            payload.LoraTarget))
         using (ParamSnapshot ignoredAudioReference = ParamSnapshot.Of(
             g.UserInput,
             T2IParamTypes.PromptAudios.Type))

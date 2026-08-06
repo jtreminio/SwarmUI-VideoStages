@@ -7,7 +7,7 @@ internal sealed record StockHostVideoStagePayload(
     ArchitectureId ArchitectureId,
     string ModelClassId,
     string CompatibilityClassId,
-    LoraTarget LoraTargetPolicy,
+    LoraTarget LoraTarget,
     StageCorePlan Core) :
     IArchitectureStagePayload
 {

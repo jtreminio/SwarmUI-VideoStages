@@ -174,7 +174,7 @@ internal sealed class StockHostVideoGenerationSession(
             clip,
             stage,
             sectionId,
-            payload.LoraTargetPolicy))
+            payload.LoraTarget))
         using (StageModelLoadScope continuationModelScope = continuation is null
             ? null
             : new(
@@ -182,7 +182,7 @@ internal sealed class StockHostVideoGenerationSession(
                 clip,
                 continuation,
                 continuationStageSectionId,
-                continuationPayload.LoraTargetPolicy,
+                continuationPayload.LoraTarget,
                 T2IParamInput.SectionID_VideoSwap))
         {
             return _wanBehavior is null

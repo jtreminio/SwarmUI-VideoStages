@@ -93,14 +93,13 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool decodedInput = context.EntryMode == ArchitectureEntryMode.InitVideo
                 || stage.ClipStageIndex > 0;
-            LoraTarget loraTargetPolicy =
-                resolved.LorasTargetTextEncoder == false
-                    ? LoraTarget.ModelOnly
-                    : LoraTarget.ModelAndTextEncoder;
+            LoraTarget loraTarget = resolved.LorasTargetTextEncoder == false
+                ? LoraTarget.ModelOnly
+                : LoraTarget.ModelAndTextEncoder;
             ImmutableArray<LoraPlan> loras = LoraPlanCompiler.Compile(
                 clip,
                 stage,
-                loraTargetPolicy);
+                loraTarget);
             if (decodedInput
                 && (!double.IsFinite(stage.Control)
                     || stage.Control < 0
@@ -131,7 +130,7 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
                 ArchitectureId,
                 resolved.ModelClassId,
                 resolved.CompatibilityClassId,
-                loraTargetPolicy,
+                loraTarget,
                 new StageCorePlan(
                     stage.Control,
                     stage.Steps,
