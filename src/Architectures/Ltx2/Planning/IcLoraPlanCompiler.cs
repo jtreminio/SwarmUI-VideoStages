@@ -143,7 +143,7 @@ internal static class IcLoraPlanCompiler
                 stagePlans[stageIndex].Add(plan);
             }
             if (primaryControlNetSourceIndex is null
-                && ControlNetSourcePlan.TryParseIndex(
+                && MediaSource.TryParseControlNetIndex(
                     normalizedSource,
                     out int sourceIndex))
             {
@@ -227,7 +227,7 @@ internal static class IcLoraPlanCompiler
                 null);
         }
         if (source == IcLoraMediaSourceKind.ControlNet
-            && ControlNetSourcePlan.TryParseIndex(
+            && MediaSource.TryParseControlNetIndex(
                 normalizedSource,
                 out int controlNetIndex))
         {
@@ -434,15 +434,15 @@ internal static class IcLoraPlanCompiler
     private static IcLoraMediaSourceKind ResolveSourceKind(string source)
     {
         string normalized = NormalizeDriveSource(source);
-        if (StringUtils.Equals(normalized, Constants.IcLoraSourceUpload))
+        if (StringUtils.Equals(normalized, MediaSource.Upload))
         {
             return IcLoraMediaSourceKind.Upload;
         }
-        if (StringUtils.Equals(normalized, Constants.IcLoraSourceIncoming))
+        if (StringUtils.Equals(normalized, MediaSource.Incoming))
         {
             return IcLoraMediaSourceKind.Incoming;
         }
-        return ControlNetSourcePlan.TryParseIndex(normalized, out _)
+        return MediaSource.TryParseControlNetIndex(normalized, out _)
             ? IcLoraMediaSourceKind.ControlNet
             : IcLoraMediaSourceKind.Unknown;
     }
@@ -451,20 +451,20 @@ internal static class IcLoraPlanCompiler
     {
         string compact = StringUtils.Compact(source);
         if (compact.Length == 0
-            || StringUtils.Equals(compact, StringUtils.Compact(Constants.IcLoraSourceUpload)))
+            || StringUtils.Equals(compact, StringUtils.Compact(MediaSource.Upload)))
         {
-            return Constants.IcLoraSourceUpload;
+            return MediaSource.Upload;
         }
-        if (StringUtils.Equals(compact, StringUtils.Compact(Constants.IcLoraSourceIncoming))
+        if (StringUtils.Equals(compact, StringUtils.Compact(MediaSource.Incoming))
             || StringUtils.Equals(
                 compact,
                 StringUtils.Compact(Constants.IcLoraLegacySourceStageInput)))
         {
-            return Constants.IcLoraSourceIncoming;
+            return MediaSource.Incoming;
         }
-        if (ControlNetSourcePlan.TryParseIndex(compact, out int sourceIndex))
+        if (MediaSource.TryParseControlNetIndex(compact, out int sourceIndex))
         {
-            return ControlNetSourcePlan.Format(sourceIndex);
+            return MediaSource.FormatControlNet(sourceIndex);
         }
         return source?.Trim() ?? "";
     }

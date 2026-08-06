@@ -110,9 +110,9 @@ public class MiniMaxReferenceConditioningContractTests
     }
 
     [Theory]
-    [InlineData("image", Constants.ControlNetSourceOne, 0)]
-    [InlineData("video", Constants.ControlNetSourceTwo, 1)]
-    [InlineData("audio", Constants.ControlNetSourceThree, 2)]
+    [InlineData("image", MediaSource.ControlNetOne, 0)]
+    [InlineData("video", MediaSource.ControlNetTwo, 1)]
+    [InlineData("audio", MediaSource.ControlNetThree, 2)]
     public async Task ControlNet_clip_reference_sources_reach_the_matching_H3_input(
         string kind,
         string source,

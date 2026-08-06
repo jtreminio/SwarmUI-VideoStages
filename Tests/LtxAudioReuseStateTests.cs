@@ -41,7 +41,7 @@ public class LtxAudioReuseStateTests
     private static ClipSpec MakeReusableAudioClip() => new(
         Id: 0,
         Frames: null,
-        AudioSource: Constants.AudioSourceNative,
+        AudioSource: MediaSource.Native,
         IcLoras: null,
         SaveAudioTrack: false,
         ClipLengthFromAudio: false,

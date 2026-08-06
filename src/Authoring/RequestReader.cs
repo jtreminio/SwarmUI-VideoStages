@@ -563,13 +563,13 @@ internal static class RequestReader
         {
             return DefaultGeneratedReference;
         }
-        if (StringUtils.Equals(compact, "Base"))
+        if (StringUtils.Equals(compact, MediaSource.Base))
         {
-            return "Base";
+            return MediaSource.Base;
         }
-        if (StringUtils.Equals(compact, "Refiner"))
+        if (StringUtils.Equals(compact, MediaSource.Refiner))
         {
-            return "Refiner";
+            return MediaSource.Refiner;
         }
         if (StringUtils.Equals(compact, DefaultPreviousStageReference))
         {
@@ -587,9 +587,9 @@ internal static class RequestReader
                 + $"(must reference a strictly previous stage). Using '{defaultReference}' instead.");
             return defaultReference;
         }
-        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(compact, out int editStage))
+        if (MediaSource.TryParseBase2EditIndex(compact, out int editStage))
         {
-            return ImageReferenceSyntax.FormatBase2EditStageIndex(editStage);
+            return MediaSource.FormatBase2Edit(editStage);
         }
 
         DocumentJson.Warn(
@@ -618,7 +618,7 @@ internal static class RequestReader
 
     private static string NormalizeAudioSource(string audioSource) =>
         string.IsNullOrWhiteSpace(audioSource)
-            ? Constants.AudioSourceNative
+            ? MediaSource.Native
             : audioSource.Trim();
 
     private static IReadOnlyList<PromptWindowSpec> SortWindows(List<PromptWindowSpec> windows) =>

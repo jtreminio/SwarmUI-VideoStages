@@ -1,5 +1,4 @@
 using Newtonsoft.Json.Linq;
-using VideoStages.Execution.Audio;
 
 namespace VideoStages.Authoring;
 
@@ -155,8 +154,8 @@ internal static class AuthoringTimeline
                 sourceObject,
                 UploadContainers.ClipAudio);
             string aceStepSource =
-                string.Equals(kind, "AceStepFun", StringComparison.OrdinalIgnoreCase)
-                && AudioHandler.TryParseAceStepFunAudioSource(reference, out _)
+                StringUtils.Equals(kind, MediaSource.AceStepFun)
+                && MediaSource.TryParseAceStepFunIndex(reference, out _)
                     ? reference
                     : null;
             if (upload is null && aceStepSource is null)

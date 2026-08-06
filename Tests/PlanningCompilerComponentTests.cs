@@ -219,7 +219,7 @@ public class PlanningCompilerComponentTests
             [
                 new IcLoraSpec(
                     "adapter.safetensors",
-                    Constants.ControlNetSourceTwo,
+                    MediaSource.ControlNetTwo,
                     1,
                     1,
                     Constants.IcLoraControlCanny,
@@ -389,7 +389,7 @@ public class PlanningCompilerComponentTests
             [
                 new IcLoraSpec(
                     "adapter-one.safetensors",
-                    Constants.ControlNetSourceOne,
+                    MediaSource.ControlNetOne,
                     1,
                     1,
                     Constants.IcLoraControlCanny,
@@ -397,7 +397,7 @@ public class PlanningCompilerComponentTests
                     DriveData: IcLoraDriveData.Visual),
                 new IcLoraSpec(
                     "adapter-two.safetensors",
-                    Constants.ControlNetSourceTwo,
+                    MediaSource.ControlNetTwo,
                     1,
                     1,
                     Constants.IcLoraControlDepth,
@@ -695,10 +695,10 @@ public class PlanningCompilerComponentTests
     }
 
     private static ClipSpec GeneratedClip(int id, params StageSpec[] stages) =>
-        new(id, 49, Constants.AudioSourceNative, [], false, false, false, false, null, [], stages);
+        new(id, 49, MediaSource.Native, [], false, false, false, false, null, [], stages);
 
     private static ClipSpec InitVideoClip(int id, params StageSpec[] stages) =>
-        new(id, 49, Constants.AudioSourceNative, [], false, false, false, false, null, [], stages,
+        new(id, 49, MediaSource.Native, [], false, false, false, false, null, [], stages,
             InitVideo: new InitVideoSpec("data:video/mp4;base64,QQ==", "source.mp4", 1.5));
 
     private static StageSpec Stage(int id, double control = 1, int? rawIndex = null) =>

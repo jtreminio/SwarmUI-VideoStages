@@ -410,7 +410,7 @@ public sealed class ArchitectureContractGraphTests
         clip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = ClipLoraName,
-            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveSource"] = MediaSource.Upload,
             ["driveData"] = "Visual",
             ["strength"] = 1.0,
             ["attentionStrength"] = 1.0,

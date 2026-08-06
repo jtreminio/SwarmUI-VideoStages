@@ -358,7 +358,7 @@ public class Ltx2InitVideoContractTests
         clip["icLoras"] = new JArray(IcLora(
             fixture,
             IcLoraDriveData.Audio,
-            Constants.IcLoraSourceUpload,
+            MediaSource.Upload,
             lora: "UnitTest_LipDub",
             preset: "lipdub",
             driveMedia: new JObject
@@ -406,7 +406,7 @@ public class Ltx2InitVideoContractTests
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject clip = SourcedClip(SourcedStage(fixture));
         clip["icLoras"] = new JArray(IcLora(
-            fixture, IcLoraDriveData.Audio, Constants.IcLoraSourceIncoming, preset: "custom-audio"));
+            fixture, IcLoraDriveData.Audio, MediaSource.Incoming, preset: "custom-audio"));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -439,7 +439,7 @@ public class Ltx2InitVideoContractTests
         first["boundaryOut"] = Constants.BoundaryOutCut;
         JObject second = GeneratedClip(fixture);
         second["icLoras"] = new JArray(IcLora(
-            fixture, IcLoraDriveData.Audio, Constants.IcLoraSourceIncoming, preset: "custom-audio"));
+            fixture, IcLoraDriveData.Audio, MediaSource.Incoming, preset: "custom-audio"));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(first, second));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -467,7 +467,7 @@ public class Ltx2InitVideoContractTests
             SourcedStage(fixture),
             fixture.Stage("PreviousStage", control: 0.5, steps: 12));
         clip["icLoras"] = new JArray(IcLora(
-            fixture, IcLoraDriveData.Audio, Constants.IcLoraSourceIncoming, preset: "custom-audio"));
+            fixture, IcLoraDriveData.Audio, MediaSource.Incoming, preset: "custom-audio"));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -498,7 +498,7 @@ public class Ltx2InitVideoContractTests
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject clip = SourcedClip(SourcedStage(fixture));
         clip["icLoras"] = new JArray(IcLora(
-            fixture, IcLoraDriveData.Visual, Constants.IcLoraSourceIncoming, stage: authoredStage));
+            fixture, IcLoraDriveData.Visual, MediaSource.Incoming, stage: authoredStage));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(
             MakeDocument(GeneratedClip(fixture), clip));
@@ -536,7 +536,7 @@ public class Ltx2InitVideoContractTests
             SourcedStage(fixture, control: 0.0),
             fixture.Stage("PreviousStage", control: 0.5, upscale: 2.0, steps: 12));
         clip["icLoras"] = new JArray(IcLora(
-            fixture, IcLoraDriveData.Visual, Constants.IcLoraSourceIncoming, stage: 1));
+            fixture, IcLoraDriveData.Visual, MediaSource.Incoming, stage: 1));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(
             MakeDocument(GeneratedClip(fixture), clip));
@@ -564,7 +564,7 @@ public class Ltx2InitVideoContractTests
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject clip = SourcedClip(SourcedStage(fixture));
         clip["icLoras"] = new JArray(IcLora(
-            fixture, IcLoraDriveData.Visual, Constants.IcLoraSourceIncoming));
+            fixture, IcLoraDriveData.Visual, MediaSource.Incoming));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -1023,7 +1023,7 @@ public class Ltx2InitVideoContractTests
         refine["loras"] = stageLoras.DeepClone();
         ((JArray)clip["stages"]).Add(refine);
         clip["icLoras"] = new JArray(IcLora(
-            fixture, IcLoraDriveData.Visual, Constants.IcLoraSourceIncoming, lora: "UnitTest_StageLora"));
+            fixture, IcLoraDriveData.Visual, MediaSource.Incoming, lora: "UnitTest_StageLora"));
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -1148,7 +1148,7 @@ public class Ltx2InitVideoContractTests
         clip["icLoras"] = new JArray(IcLora(
             fixture,
             IcLoraDriveData.Visual,
-            Constants.IcLoraSourceUpload,
+            MediaSource.Upload,
             driveMedia: new JObject
             {
                 ["data"] = "data:video/mp4;base64,QUJDQUJDQUJD",

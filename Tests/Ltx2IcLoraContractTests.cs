@@ -20,7 +20,7 @@ public class Ltx2IcLoraContractTests
 
     private static JObject MakeIcLora(
         string lora,
-        string source = Constants.IcLoraSourceUpload,
+        string source = MediaSource.Upload,
         double strength = 1.0,
         double attentionStrength = 1.0,
         string controlType = Constants.IcLoraControlNone,
@@ -211,7 +211,7 @@ public class Ltx2IcLoraContractTests
 
         JObject entry = MakeIcLora(
             "UnitTest_IcLoraA",
-            source: Constants.IcLoraSourceIncoming,
+            source: MediaSource.Incoming,
             driveData: IcLoraDriveData.Visual);
         entry["stage"] = stageId;
 
@@ -250,7 +250,7 @@ public class Ltx2IcLoraContractTests
             [fixture.Stage(control: 0.5), fixture.Stage("PreviousStage", control: 0.5)],
             MakeIcLora(
                 "UnitTest_IcLoraA",
-                source: Constants.IcLoraSourceIncoming,
+                source: MediaSource.Incoming,
                 controlType: Constants.IcLoraControlCanny,
                 driveData: IcLoraDriveData.Visual))));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -286,7 +286,7 @@ public class Ltx2IcLoraContractTests
 
         JObject entry = MakeIcLora(
             "UnitTest_IcLoraA",
-            source: Constants.IcLoraSourceIncoming,
+            source: MediaSource.Incoming,
             driveData: IcLoraDriveData.Visual);
         entry["stage"] = 1;
 
@@ -716,7 +716,7 @@ public class Ltx2IcLoraContractTests
         uploaded["stage"] = 0;
         JObject incoming = MakeIcLora(
             "UnitTest_IcLoraB",
-            source: Constants.IcLoraSourceIncoming,
+            source: MediaSource.Incoming,
             driveData: IcLoraDriveData.Visual);
         incoming["stage"] = 1;
         JObject target = IcLoraClip(
@@ -932,7 +932,7 @@ public class Ltx2IcLoraContractTests
         entry["driveData"] = $"{IcLoraDriveData.Audio}";
         JObject clip = IcLoraClip([fixture.Stage(control: 0.5)], entry);
         clip["duration"] = 1.0;
-        clip["audioSource"] = Constants.AudioSourceUpload;
+        clip["audioSource"] = MediaSource.Upload;
         clip["uploadedAudio"] = UploadedAudio("base.wav", payload: "QkFTRQ==");
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));

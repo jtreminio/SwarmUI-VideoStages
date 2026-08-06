@@ -26,7 +26,7 @@ public class MiniMaxRuntimeFlowTests
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
         JObject dynamicClip = MakeClip(1.0, fixture.Stage());
-        dynamicClip["audioSource"] = Constants.AudioSourceUpload;
+        dynamicClip["audioSource"] = MediaSource.Upload;
         dynamicClip["clipLengthFromAudio"] = true;
         dynamicClip["uploadedAudio"] = UploadedAudio();
         T2IParamInput input = BuildNativeInput(

@@ -57,7 +57,7 @@ public class BoundaryHandoffResolverTests
     }
 
     private static ClipSpec GeneratedClip(int id) =>
-        new(id, ClipFrames, Constants.AudioSourceNative, [], false, false, false, false, null, [],
+        new(id, ClipFrames, MediaSource.Native, [], false, false, false, false, null, [],
         [
             new StageSpec(10 + id, 1, 1, "pixel-lanczos", "ltx-2", 12, 4.5, "euler", "normal",
                 "Generated", ClipStageIndex: 0, ClipStageRawIndex: 0),

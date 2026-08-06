@@ -72,7 +72,7 @@ public class IcLoraDrivePlanTests
         ClipSpec clip = Clip([
             new(
                 "visual.safetensors",
-                Constants.IcLoraSourceUpload,
+                MediaSource.Upload,
                 1,
                 1,
                 Constants.IcLoraControlNone,
@@ -96,7 +96,7 @@ public class IcLoraDrivePlanTests
         ClipSpec clip = Clip([
             new(
                 "image-only.safetensors",
-                Constants.IcLoraSourceUpload,
+                MediaSource.Upload,
                 1,
                 1,
                 Constants.IcLoraControlNone,
@@ -124,7 +124,7 @@ public class IcLoraDrivePlanTests
         ClipSpec clip = Clip([
             new(
                 "image-only.safetensors",
-                Constants.IcLoraSourceIncoming,
+                MediaSource.Incoming,
                 1,
                 1,
                 Constants.IcLoraControlNone,
@@ -158,7 +158,7 @@ public class IcLoraDrivePlanTests
         ClipSpec clip = Clip([
             new(
                 "adapter.safetensors",
-                Constants.IcLoraSourceUpload,
+                MediaSource.Upload,
                 1,
                 1,
                 Constants.IcLoraControlNone,
@@ -179,7 +179,7 @@ public class IcLoraDrivePlanTests
         ClipSpec clip = Clip([
             new(
                 "visual.safetensors",
-                Constants.IcLoraSourceUpload,
+                MediaSource.Upload,
                 1,
                 1,
                 Constants.IcLoraControlNone,
@@ -250,7 +250,7 @@ public class IcLoraDrivePlanTests
         ClipSpec clip = Clip([
             new(
                 "model-only.safetensors",
-                Constants.IcLoraSourceUpload,
+                MediaSource.Upload,
                 1,
                 1,
                 Constants.IcLoraControlNone,
@@ -273,7 +273,7 @@ public class IcLoraDrivePlanTests
         ClipSpec clip = Clip([
             new(
                 IcLoraWeights.AutoModelToken,
-                Constants.IcLoraSourceUpload,
+                MediaSource.Upload,
                 1,
                 1,
                 Constants.IcLoraControlNone,
@@ -293,7 +293,7 @@ public class IcLoraDrivePlanTests
         ClipSpec clip = Clip([
             new(
                 IcLoraWeights.AutoModelToken,
-                Constants.IcLoraSourceUpload,
+                MediaSource.Upload,
                 1,
                 1,
                 Constants.IcLoraControlNone,
@@ -419,7 +419,7 @@ public class IcLoraDrivePlanTests
             [
                 new(
                     "adapter.safetensors",
-                    Constants.IcLoraSourceUpload,
+                    MediaSource.Upload,
                     1,
                     1,
                     Constants.IcLoraControlNone,
@@ -451,7 +451,7 @@ public class IcLoraDrivePlanTests
             },
             "drive-media-unused" => new(
                 "adapter.safetensors",
-                Constants.IcLoraSourceUpload,
+                MediaSource.Upload,
                 1,
                 1,
                 Constants.IcLoraControlNone,
@@ -459,7 +459,7 @@ public class IcLoraDrivePlanTests
                 DriveData: IcLoraDriveData.None),
             "audio-controlnet-unsupported" => new(
                 "adapter.safetensors",
-                Constants.ControlNetSourceOne,
+                MediaSource.ControlNetOne,
                 1,
                 1,
                 Constants.IcLoraControlNone,
@@ -484,7 +484,7 @@ public class IcLoraDrivePlanTests
             [
                 new(
                     "visual.safetensors",
-                    Constants.ControlNetSourceTwo,
+                    MediaSource.ControlNetTwo,
                     1,
                     1,
                     Constants.IcLoraControlNone,
@@ -535,7 +535,7 @@ public class IcLoraDrivePlanTests
             [
                 new(
                     "visual.safetensors",
-                    Constants.ControlNetSourceTwo,
+                    MediaSource.ControlNetTwo,
                     1,
                     1,
                     "future-control",
@@ -562,7 +562,7 @@ public class IcLoraDrivePlanTests
             [
                 new(
                     "audio-adapter.safetensors",
-                    Constants.ControlNetSourceTwo,
+                    MediaSource.ControlNetTwo,
                     1,
                     1,
                     Constants.IcLoraControlNone,
@@ -609,7 +609,7 @@ public class IcLoraDrivePlanTests
         string preset = "lipdub",
         int stage = -1) => new(
         "audio-adapter.safetensors",
-        Constants.IcLoraSourceUpload,
+        MediaSource.Upload,
         1,
         1,
         Constants.IcLoraControlNone,
@@ -622,7 +622,7 @@ public class IcLoraDrivePlanTests
         IcLoraDriveData data,
         string preset = "custom") => new(
         "adapter.safetensors",
-        Constants.IcLoraSourceIncoming,
+        MediaSource.Incoming,
         1,
         1,
         Constants.IcLoraControlNone,
@@ -635,7 +635,7 @@ public class IcLoraDrivePlanTests
         IReadOnlyList<StageSpec> stages = null) => new(
         Id: 0,
         Frames: 121,
-        AudioSource: Constants.AudioSourceNative,
+        AudioSource: MediaSource.Native,
         IcLoras: icLoras,
         SaveAudioTrack: false,
         ClipLengthFromAudio: false,

@@ -526,7 +526,7 @@ public class ArchitectureFoundationTests
             [
                 new(
                     "ic-lora.safetensors",
-                    Constants.IcLoraSourceUpload,
+                    MediaSource.Upload,
                     1,
                     1,
                     Constants.IcLoraControlNone,
@@ -573,7 +573,7 @@ public class ArchitectureFoundationTests
     {
         ClipSpec clip = InitVideoClip(0) with
         {
-            AudioSource = Constants.AudioSourceUpload,
+            AudioSource = MediaSource.Upload,
             UploadedAudio = new("data:audio/wav;base64,AA==", "voice.wav"),
             SaveAudioTrack = true,
             ClipLengthFromAudio = true,
@@ -624,8 +624,8 @@ public class ArchitectureFoundationTests
     }
 
     [Theory]
-    [InlineData(Constants.AudioSourceUpload)]
-    [InlineData(Constants.AudioSourceControlNet)]
+    [InlineData(MediaSource.Upload)]
+    [InlineData(MediaSource.ControlNet)]
     [InlineData("audio3")]
     public void Ltx_accepts_audio_derived_duration_from_external_source_kinds(
         string audioSource)
@@ -636,7 +636,7 @@ public class ArchitectureFoundationTests
         ClipSpec clip = GeneratedClip(0, stage) with
         {
             AudioSource = audioSource,
-            UploadedAudio = audioSource == Constants.AudioSourceUpload
+            UploadedAudio = audioSource == MediaSource.Upload
                 ? new("data:audio/wav;base64,AA==", "voice.wav")
                 : null,
             ClipLengthFromAudio = true,
@@ -1413,7 +1413,7 @@ public class ArchitectureFoundationTests
         new(
             id,
             25,
-            Constants.AudioSourceNative,
+            MediaSource.Native,
             [],
             false,
             false,
@@ -1427,7 +1427,7 @@ public class ArchitectureFoundationTests
         new(
             id,
             25,
-            Constants.AudioSourceNative,
+            MediaSource.Native,
             [],
             false,
             false,

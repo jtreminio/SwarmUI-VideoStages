@@ -1207,7 +1207,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
-        clip["audioSource"] = Constants.AudioSourceControlNet;
+        clip["audioSource"] = MediaSource.ControlNet;
         clip["clipLengthFromAudio"] = true;
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
@@ -1252,7 +1252,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
-        clip["audioSource"] = Constants.AudioSourceControlNet;
+        clip["audioSource"] = MediaSource.ControlNet;
         clip["clipLengthFromAudio"] = true;
 
         (JObject workflow, WorkflowGenerator generator) =

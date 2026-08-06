@@ -116,8 +116,8 @@ public class MiniMaxArchitectureTests
     }
 
     [Theory]
-    [InlineData(Constants.AudioSourceUpload)]
-    [InlineData(Constants.AudioSourceControlNet)]
+    [InlineData(MediaSource.Upload)]
+    [InlineData(MediaSource.ControlNet)]
     [InlineData("audio0")]
     public void External_audio_can_drive_MiniMax_duration(string audioSource)
     {
@@ -127,7 +127,7 @@ public class MiniMaxArchitectureTests
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
         clip["audioSource"] = audioSource;
         clip["clipLengthFromAudio"] = true;
-        if (audioSource == Constants.AudioSourceUpload)
+        if (audioSource == MediaSource.Upload)
         {
             clip["uploadedAudio"] = new JObject
             {
@@ -236,7 +236,7 @@ public class MiniMaxArchitectureTests
             ["fileName"] = "source.mp4",
             ["startSeconds"] = 0,
         };
-        clipObject["audioSource"] = Constants.AudioSourceUpload;
+        clipObject["audioSource"] = MediaSource.Upload;
         clipObject["clipLengthFromAudio"] = true;
         clipObject["uploadedAudio"] = new JObject
         {

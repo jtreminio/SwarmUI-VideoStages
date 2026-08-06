@@ -344,7 +344,7 @@ public sealed class FrameInterpolationContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage(steps: 8));
-        clip["audioSource"] = Constants.AudioSourceUpload;
+        clip["audioSource"] = MediaSource.Upload;
         clip["clipLengthFromAudio"] = true;
         clip["uploadedAudio"] = UploadedAudio("clip.wav");
 

@@ -189,7 +189,7 @@ public class TimelineAudioSegmentPlanCompilerTests
         int overlap = 8) => new(
             id,
             frames,
-            Constants.AudioSourceNative,
+            MediaSource.Native,
             [],
             false,
             false,

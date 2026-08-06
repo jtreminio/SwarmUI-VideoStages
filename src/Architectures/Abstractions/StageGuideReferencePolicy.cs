@@ -56,11 +56,11 @@ internal readonly record struct StageGuideReferencePolicy
         {
             return new(StageGuideReferenceKind.Generated, null);
         }
-        if (StringUtils.Equals(raw, "Base"))
+        if (StringUtils.Equals(raw, MediaSource.Base))
         {
             return new(StageGuideReferenceKind.Base, null);
         }
-        if (StringUtils.Equals(raw, "Refiner"))
+        if (StringUtils.Equals(raw, MediaSource.Refiner))
         {
             return new(StageGuideReferenceKind.Refiner, null);
         }
@@ -72,7 +72,7 @@ internal readonly record struct StageGuideReferencePolicy
         {
             return new(StageGuideReferenceKind.ExplicitStage, stageIndex);
         }
-        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(raw, out int editStageIndex))
+        if (MediaSource.TryParseBase2EditIndex(raw, out int editStageIndex))
         {
             return new(StageGuideReferenceKind.Base2Edit, editStageIndex);
         }

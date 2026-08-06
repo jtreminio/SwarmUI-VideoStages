@@ -1,5 +1,4 @@
 using VideoStages.Authoring;
-using VideoStages.Execution.Audio;
 
 namespace VideoStages.Planning;
 
@@ -55,20 +54,20 @@ internal static class AudioSourceParser
 {
     internal static AudioSourceSelection Parse(string raw)
     {
-        string trimmed = (raw ?? Constants.AudioSourceNative).Trim();
-        if (trimmed.Length == 0 || StringUtils.Equals(trimmed, Constants.AudioSourceNative))
+        string trimmed = (raw ?? MediaSource.Native).Trim();
+        if (trimmed.Length == 0 || StringUtils.Equals(trimmed, MediaSource.Native))
         {
             return new(AudioSourceKind.Native, trimmed, null);
         }
-        if (StringUtils.Equals(trimmed, Constants.AudioSourceUpload))
+        if (StringUtils.Equals(trimmed, MediaSource.Upload))
         {
             return new(AudioSourceKind.Upload, trimmed, null);
         }
-        if (StringUtils.Equals(trimmed, Constants.AudioSourceControlNet))
+        if (StringUtils.Equals(trimmed, MediaSource.ControlNet))
         {
             return new(AudioSourceKind.ControlNet, trimmed, null);
         }
-        return AudioHandler.TryParseAceStepFunAudioSource(trimmed, out int track)
+        return MediaSource.TryParseAceStepFunIndex(trimmed, out int track)
             ? new(AudioSourceKind.AceStepFun, trimmed, track)
             : new(AudioSourceKind.Unknown, trimmed, null);
     }

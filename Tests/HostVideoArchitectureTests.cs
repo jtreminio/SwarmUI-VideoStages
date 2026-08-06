@@ -91,7 +91,7 @@ public class HostVideoArchitectureTests
         ClipSpec clip = new(
             0,
             25,
-            Constants.AudioSourceNative,
+            MediaSource.Native,
             [],
             false,
             false,

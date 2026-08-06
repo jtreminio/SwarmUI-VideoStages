@@ -325,7 +325,7 @@ public class StageRunnerCollaboratorTests
         ClipSpec clip = new(
             Id: 7,
             Frames: 25,
-            AudioSource: Constants.AudioSourceNative,
+            AudioSource: MediaSource.Native,
             IcLoras: [],
             SaveAudioTrack: false,
             ClipLengthFromAudio: false,

@@ -30,7 +30,7 @@ public class VideoExecutionPlanCompilerTests
     public void Compile_InitVideoClip_UsesSourceAndDistinguishesPassthroughRefineAndRetake()
     {
         ClipSpec initVideoClip = new(
-            3, 49, Constants.AudioSourceNative, [], false, false, false, false, null, [],
+            3, 49, MediaSource.Native, [], false, false, false, false, null, [],
             [
                 Stage(10, control: 0),
                 Stage(11, control: 0.4),
@@ -118,8 +118,8 @@ public class VideoExecutionPlanCompilerTests
     public void Compile_OptionsAreExpressedAtStageAndClipHooks()
     {
         ClipSpec clip = new(
-            4, 49, Constants.AudioSourceUpload,
-            [new IcLoraSpec("drive", Constants.IcLoraSourceUpload, 1, 1, Constants.IcLoraControlNone, null, Stage: 0)],
+            4, 49, MediaSource.Upload,
+            [new IcLoraSpec("drive", MediaSource.Upload, 1, 1, Constants.IcLoraControlNone, null, Stage: 0)],
             false, true, false, true,
             new UploadedMediaSpec("data:audio/wav;base64,AA==", "track.wav"),
             [new FrameRefSpec("Upload", 1, false, "ref.png")],
@@ -212,7 +212,7 @@ public class VideoExecutionPlanCompilerTests
         [
             new(
                 IcLoraWeights.AutoModelToken,
-                Constants.IcLoraSourceUpload,
+                MediaSource.Upload,
                 0.8,
                 0.7,
                 Constants.IcLoraControlCanny,
@@ -222,7 +222,7 @@ public class VideoExecutionPlanCompilerTests
                 Stage: 1),
             new(
                 "control.safetensors",
-                Constants.ControlNetSourceTwo,
+                MediaSource.ControlNetTwo,
                 1.1,
                 1,
                 Constants.IcLoraControlDepth,
@@ -231,7 +231,7 @@ public class VideoExecutionPlanCompilerTests
                 Stage: -1),
             new(
                 "other-stage.safetensors",
-                Constants.IcLoraSourceUpload,
+                MediaSource.Upload,
                 1,
                 1,
                 Constants.IcLoraControlNone,
@@ -256,7 +256,7 @@ public class VideoExecutionPlanCompilerTests
         ClipSpec clip = new(
             7,
             72,
-            Constants.AudioSourceNative,
+            MediaSource.Native,
             icLoras,
             SaveAudioTrack: true,
             ClipLengthFromAudio: false,
@@ -379,14 +379,14 @@ public class VideoExecutionPlanCompilerTests
         ClipSpec clip = GeneratedClip(0, Stage(10)) with
         {
             Frames = null,
-            AudioSource = controlNetOwnsLength ? Constants.AudioSourceControlNet : Constants.AudioSourceUpload,
+            AudioSource = controlNetOwnsLength ? MediaSource.ControlNet : MediaSource.Upload,
             UploadedAudio = controlNetOwnsLength ? null : new UploadedMediaSpec("audio", "track.wav"),
             ClipLengthFromAudio = !controlNetOwnsLength,
             ClipLengthFromControlNet = controlNetOwnsLength,
             IcLoras = controlNetOwnsLength
                 ? [new IcLoraSpec(
                     "control",
-                    Constants.ControlNetSourceOne,
+                    MediaSource.ControlNetOne,
                     1,
                     1,
                     Constants.IcLoraControlNone,
@@ -424,7 +424,7 @@ public class VideoExecutionPlanCompilerTests
             [
                 new(
                     "control",
-                    Constants.ControlNetSourceTwo,
+                    MediaSource.ControlNetTwo,
                     1,
                     1,
                     Constants.IcLoraControlNone,
@@ -836,10 +836,10 @@ public class VideoExecutionPlanCompilerTests
         new(512, 512, 24, isTextToVideo, clips);
 
     private static ClipSpec GeneratedClip(int id, params StageSpec[] stages) =>
-        new(id, 49, Constants.AudioSourceNative, [], false, false, false, false, null, [], stages);
+        new(id, 49, MediaSource.Native, [], false, false, false, false, null, [], stages);
 
     private static ClipSpec InitVideoClip(int id) =>
-        new(id, 49, Constants.AudioSourceNative, [], false, false, false, false, null, [], [],
+        new(id, 49, MediaSource.Native, [], false, false, false, false, null, [], [],
             InitVideo: new InitVideoSpec("data", "source.mp4", 0));
 
     private static StageSpec Stage(

@@ -86,10 +86,10 @@ internal static class ArchitectureCatalogSerializer
     private static string SerializeAudioSourceKind(AudioSourceKind kind) => kind switch
     {
         AudioSourceKind.Disabled => "Disabled",
-        AudioSourceKind.Native => "Native",
-        AudioSourceKind.Upload => "Upload",
-        AudioSourceKind.ControlNet => "ControlNet",
-        AudioSourceKind.AceStepFun => "AceStepFun",
+        AudioSourceKind.Native => MediaSource.Native,
+        AudioSourceKind.Upload => MediaSource.Upload,
+        AudioSourceKind.ControlNet => MediaSource.ControlNet,
+        AudioSourceKind.AceStepFun => MediaSource.AceStepFun,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

@@ -249,7 +249,7 @@ public class BackendConsolidationTests
     private static ClipSpec ClipWithBoundary(int id, int frames, string boundary) => new(
         Id: id,
         Frames: frames,
-        AudioSource: Constants.AudioSourceNative,
+        AudioSource: MediaSource.Native,
         IcLoras: [],
         SaveAudioTrack: false,
         ClipLengthFromAudio: false,

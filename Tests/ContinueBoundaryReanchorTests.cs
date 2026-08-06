@@ -14,7 +14,7 @@ namespace VideoStages.Tests;
 public partial class StageFlowTests
 {
     private static ClipSpec ReanchorClipSpec(int id, params StageSpec[] stages) =>
-        new(id, 49, Constants.AudioSourceNative, [], false, false, false, false, null, [], stages);
+        new(id, 49, MediaSource.Native, [], false, false, false, false, null, [], stages);
 
     private static StageSpec ReanchorStageSpec(int stageIndex, string model) =>
         new(10 + stageIndex, 1, 1, "pixel-lanczos", model, 12, 4.5, "euler", "normal", "Generated",

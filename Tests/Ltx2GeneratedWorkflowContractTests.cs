@@ -187,7 +187,7 @@ public class Ltx2GeneratedWorkflowContractTests
         clip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_ControlNetLora",
-            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveSource"] = MediaSource.ControlNetOne,
             ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
 

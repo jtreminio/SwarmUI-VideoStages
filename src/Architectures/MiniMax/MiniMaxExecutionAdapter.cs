@@ -61,7 +61,7 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
 
     public void CaptureBaseReference(VideoExecutionPlan plan)
     {
-        if (AnyClipReferences(plan, "Base"))
+        if (AnyClipReferences(plan, MediaSource.Base))
         {
             _baseReference = CapturedHostReference.From(generator);
         }
@@ -69,7 +69,7 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
 
     public void CaptureRefinerReference(VideoExecutionPlan plan)
     {
-        if (AnyClipReferences(plan, "Refiner"))
+        if (AnyClipReferences(plan, MediaSource.Refiner))
         {
             _refinerReference = CapturedHostReference.From(generator);
         }

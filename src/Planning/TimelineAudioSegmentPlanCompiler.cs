@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using VideoStages.Authoring;
-using VideoStages.Execution.Audio;
 
 namespace VideoStages.Planning;
 
@@ -166,7 +165,7 @@ internal static class TimelineAudioSegmentPlanCompiler
         TimelineAudioSegmentSpec segment,
         out ResolvedSource source)
     {
-        if (AudioHandler.TryParseAceStepFunAudioSource(
+        if (MediaSource.TryParseAceStepFunIndex(
                 segment.AceStepFunSource,
                 out int aceStepFunTrack))
         {

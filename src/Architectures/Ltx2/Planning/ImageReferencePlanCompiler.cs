@@ -31,19 +31,19 @@ internal static class ImageReferencePlanCompiler
 
     private static (ImageReferenceSourceKind Kind, int? EditStage) CompileSource(string rawSource)
     {
-        if (StringUtils.Equals(rawSource, "Upload"))
+        if (StringUtils.Equals(rawSource, MediaSource.Upload))
         {
             return (ImageReferenceSourceKind.Upload, null);
         }
-        if (StringUtils.Equals(rawSource, "Base"))
+        if (StringUtils.Equals(rawSource, MediaSource.Base))
         {
             return (ImageReferenceSourceKind.Base, null);
         }
-        if (StringUtils.Equals(rawSource, "Refiner"))
+        if (StringUtils.Equals(rawSource, MediaSource.Refiner))
         {
             return (ImageReferenceSourceKind.Refiner, null);
         }
-        if (ImageReferenceSyntax.TryParseBase2EditStageIndex(rawSource, out int editStage))
+        if (MediaSource.TryParseBase2EditIndex(rawSource, out int editStage))
         {
             return (ImageReferenceSourceKind.Base2Edit, editStage);
         }

@@ -10,7 +10,6 @@ public sealed class AudioHandler(WorkflowGenerator g)
 {
     private const long AceStepFunDecodeIdBase = 65160;
     private const long AceStepFunTrackIdStride = 100;
-    private const string AceStepFunAudioSourcePrefix = "audio";
 
     public static string MakeAceStepFunDecodeId(int trackIndex) =>
         (AceStepFunDecodeIdBase + trackIndex * AceStepFunTrackIdStride).ToString();
@@ -75,18 +74,6 @@ public sealed class AudioHandler(WorkflowGenerator g)
                 PruneDownstreamSaveAudio(bridge, decode);
             }
         }
-    }
-
-    public static bool TryParseAceStepFunAudioSource(string source, out int trackIndex)
-    {
-        trackIndex = -1;
-        string trimmed = (source ?? "").Trim();
-        if (!trimmed.StartsWith(AceStepFunAudioSourcePrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-        string indexText = trimmed[AceStepFunAudioSourcePrefix.Length..];
-        return int.TryParse(indexText, out trackIndex) && trackIndex >= 0;
     }
 
     private void PruneDownstreamSaveAudio(WorkflowBridge bridge, VAEDecodeAudioNode decode)

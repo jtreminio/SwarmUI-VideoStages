@@ -40,13 +40,13 @@ public class AudioPlanCompilerTests
 
     private static AudioBaseSourcePlan Base(bool hasConfiguredTrack) => new(
         AudioSourceKind.Upload,
-        Constants.AudioSourceUpload,
+        MediaSource.Upload,
         AceStepFunTrack: null,
         hasConfiguredTrack,
         UploadedMedia: null);
 
     private static ClipSpec Clip(
-        string source = Constants.AudioSourceNative,
+        string source = MediaSource.Native,
         bool audioLength = false,
         bool controlNetLength = false,
         bool reuse = false,
@@ -66,16 +66,16 @@ public class AudioPlanCompilerTests
             Stages: stages ?? [Stage(0)]);
 
     [Theory]
-    [InlineData(Constants.AudioSourceNative, (int)AudioSourceKind.Native)]
-    [InlineData(Constants.AudioSourceUpload, (int)AudioSourceKind.Upload)]
-    [InlineData(Constants.AudioSourceControlNet, (int)AudioSourceKind.ControlNet)]
+    [InlineData(MediaSource.Native, (int)AudioSourceKind.Native)]
+    [InlineData(MediaSource.Upload, (int)AudioSourceKind.Upload)]
+    [InlineData(MediaSource.ControlNet, (int)AudioSourceKind.ControlNet)]
     [InlineData("audio7", (int)AudioSourceKind.AceStepFun)]
     public void Compile_maps_lockable_base_source_kinds(string source, int expectedValue)
     {
         AudioSourceKind expected = (AudioSourceKind)expectedValue;
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(
             source: source,
-            uploadedAudio: source == Constants.AudioSourceUpload ? Upload() : null));
+            uploadedAudio: source == MediaSource.Upload ? Upload() : null));
 
         Assert.Equal(expected, plan.Base.Kind);
         Assert.Equal(source, plan.Base.RawSource);
@@ -110,14 +110,14 @@ public class AudioPlanCompilerTests
     {
         IcLoraSpec controlNetDrive = new(
             Lora: "drive.safetensors",
-            DriveSource: Constants.ControlNetSourceTwo,
+            DriveSource: MediaSource.ControlNetTwo,
             Strength: 1,
             AttentionStrength: 1,
             ControlType: Constants.IcLoraControlNone,
             DriveMedia: null,
             DriveData: IcLoraDriveData.Visual);
         ClipSpec clip = Clip(
-            source: Constants.AudioSourceUpload,
+            source: MediaSource.Upload,
             audioLength: true,
             controlNetLength: true,
             uploadedAudio: Upload(),
@@ -132,7 +132,7 @@ public class AudioPlanCompilerTests
     [Fact]
     public void Compile_uses_timeline_when_no_length_override_is_requested()
     {
-        AudioPlan plan = AudioPlanCompiler.Compile(Clip(source: Constants.AudioSourceUpload, uploadedAudio: Upload()));
+        AudioPlan plan = AudioPlanCompiler.Compile(Clip(source: MediaSource.Upload, uploadedAudio: Upload()));
 
         Assert.Equal(AudioLengthOwner.Timeline, plan.Length.Owner);
     }
@@ -158,7 +158,7 @@ public class AudioPlanCompilerTests
     {
         ClipSpec nativeClip = Clip();
         ClipSpec uploadClip = Clip(
-            source: Constants.AudioSourceUpload,
+            source: MediaSource.Upload,
             uploadedAudio: Upload());
 
         Assert.Equal(
@@ -177,7 +177,7 @@ public class AudioPlanCompilerTests
     public void Compile_leaves_segments_to_the_timeline_projection()
     {
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(
-            source: Constants.AudioSourceUpload,
+            source: MediaSource.Upload,
             uploadedAudio: Upload()));
 
         Assert.Empty(plan.Segments.Items);

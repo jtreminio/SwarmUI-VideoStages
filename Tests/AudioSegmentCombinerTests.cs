@@ -68,7 +68,7 @@ public class AudioSegmentCombinerTests
             segments,
             new AudioBaseSourcePlan(
                 AudioSourceKind.Native,
-                Constants.AudioSourceNative,
+                MediaSource.Native,
                 AceStepFunTrack: null,
                 HasConfiguredTrack: true,
                 UploadedMedia: null)).Plan;

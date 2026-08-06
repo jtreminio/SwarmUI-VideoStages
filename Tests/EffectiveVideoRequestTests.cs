@@ -120,8 +120,8 @@ public sealed class EffectiveVideoRequestTests
     }
 
     [Theory]
-    [InlineData(true, false, Constants.AudioSourceControlNet)]
-    [InlineData(false, true, Constants.AudioSourceNative)]
+    [InlineData(true, false, MediaSource.ControlNet)]
+    [InlineData(false, true, MediaSource.Native)]
     public void Runtime_derived_lengths_are_not_projected_onto_a_static_grid(
         bool fromAudio,
         bool fromControl,
@@ -154,7 +154,7 @@ public sealed class EffectiveVideoRequestTests
         ClipSpec clip = Clip(stage) with
         {
             Frames = 27,
-            AudioSource = Constants.AudioSourceNative,
+            AudioSource = MediaSource.Native,
             ClipLengthFromAudio = true,
         };
         TimelineSpec authored = Spec(clip);
@@ -351,7 +351,7 @@ public sealed class EffectiveVideoRequestTests
             [
                 new(
                     "wan-ic.safetensors",
-                    Constants.IcLoraSourceUpload,
+                    MediaSource.Upload,
                     1,
                     1,
                     Constants.IcLoraControlNone,
@@ -411,7 +411,7 @@ public sealed class EffectiveVideoRequestTests
             [
                 new(
                     "wan-ic.safetensors",
-                    Constants.IcLoraSourceUpload,
+                    MediaSource.Upload,
                     1,
                     1,
                     Constants.IcLoraControlNone,
@@ -511,7 +511,7 @@ public sealed class EffectiveVideoRequestTests
                 new(0, first.Model, HostVideoArchitectureModule.ProfileId.Value, false),
                 new(1, second.Model, HostVideoArchitectureModule.ProfileId.Value, false),
             ],
-            AudioSource = Constants.AudioSourceUpload,
+            AudioSource = MediaSource.Upload,
             SaveAudioTrack = true,
             ClipLengthFromAudio = true,
             ClipLengthFromControlNet = true,
@@ -520,7 +520,7 @@ public sealed class EffectiveVideoRequestTests
             FrameRefs =
             [
                 new(
-                    Constants.IcLoraSourceUpload,
+                    MediaSource.Upload,
                     1,
                     false,
                     "reference.png",
@@ -537,7 +537,7 @@ public sealed class EffectiveVideoRequestTests
             [
                 new(
                     "host-ic.safetensors",
-                    Constants.IcLoraSourceUpload,
+                    MediaSource.Upload,
                     1,
                     1,
                     Constants.IcLoraControlNone,
@@ -567,7 +567,7 @@ public sealed class EffectiveVideoRequestTests
         Assert.Equal(ReferenceFramingMode.Fit, effective.ReferenceFraming);
         Assert.Equal(first.RetakeWindow, effective.Stages[0].RetakeWindow);
         Assert.Equal(clip.PromptWindows, effective.PromptWindows);
-        Assert.Equal(Constants.AudioSourceUpload, effective.AudioSource);
+        Assert.Equal(MediaSource.Upload, effective.AudioSource);
         Assert.True(effective.SaveAudioTrack);
         Assert.True(effective.ClipLengthFromAudio);
         Assert.True(effective.ClipLengthFromControlNet);
@@ -789,7 +789,7 @@ public sealed class EffectiveVideoRequestTests
         clip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "wan-ic.safetensors",
-            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveSource"] = MediaSource.Upload,
             ["strength"] = 1,
             ["attentionStrength"] = 1,
             ["controlType"] = Constants.IcLoraControlNone,
@@ -853,7 +853,7 @@ public sealed class EffectiveVideoRequestTests
         new(
             Id: 0,
             Frames: 25,
-            AudioSource: Constants.AudioSourceNative,
+            AudioSource: MediaSource.Native,
             IcLoras: [],
             SaveAudioTrack: false,
             ClipLengthFromAudio: false,

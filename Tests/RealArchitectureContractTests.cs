@@ -29,7 +29,7 @@ public class RealArchitectureContractTests
             new(
                 0,
                 25,
-                Constants.AudioSourceNative,
+                MediaSource.Native,
                 [],
                 false,
                 false,

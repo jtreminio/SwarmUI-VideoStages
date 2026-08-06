@@ -91,7 +91,7 @@ internal static class NativeFrameReferences
                         + "saved and is ignored for this generation.");
                 continue;
             }
-            bool supportedSource = StringUtils.Equals(reference.Source, "Upload")
+            bool supportedSource = StringUtils.Equals(reference.Source, MediaSource.Upload)
                 || allowHostStageSources
                     && ImageReferenceSyntax.IsHostStageSource(reference.Source);
             if (!supportedSource)
@@ -160,7 +160,7 @@ internal static class NativeFrameReferences
             foreach ((NativeFrameReferencePlan reference, string edge) in
                 new[] { (payload.FirstFrameReference, "first"), (payload.LastFrameReference, "last") })
             {
-                if (reference is null || !StringUtils.Equals(reference.Source, "Upload"))
+                if (reference is null || !StringUtils.Equals(reference.Source, MediaSource.Upload))
                 {
                     continue;
                 }
@@ -185,7 +185,7 @@ internal static class NativeFrameReferences
         {
             return null;
         }
-        if (!StringUtils.Equals(reference.Source, "Upload"))
+        if (!StringUtils.Equals(reference.Source, MediaSource.Upload))
         {
             PlanDiagnosticReporter.TrackRequestWarning(
                 generator.UserInput,

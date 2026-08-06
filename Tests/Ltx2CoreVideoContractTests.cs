@@ -121,7 +121,7 @@ public class Ltx2CoreVideoContractTests
     }
 
     private static JObject IcLoraClip(params JObject[] stages) =>
-        IcLoraClip(Constants.ControlNetSourceOne, stages);
+        IcLoraClip(MediaSource.ControlNetOne, stages);
 
     /// <summary>
     /// The two resize nodes in a ControlNet chain are told apart by their multiple, not their id:
@@ -1309,7 +1309,7 @@ public class Ltx2CoreVideoContractTests
         using Ltx2WorkflowFixture fixture = WithControlNetStubs(
             Ltx2WorkflowFixture.CreateWithBaseModel());
         JObject clip = MakeClip(1.0, fixture.Stage(control: 0.5));
-        clip["audioSource"] = Constants.AudioSourceControlNet;
+        clip["audioSource"] = MediaSource.ControlNet;
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(
             MakeDocument(clip), RequestControlNet);
@@ -1338,8 +1338,8 @@ public class Ltx2CoreVideoContractTests
     {
         using Ltx2WorkflowFixture fixture = WithControlNetStubs(
             Ltx2WorkflowFixture.CreateWithBaseModel());
-        JObject clip = IcLoraClip(Constants.ControlNetSourceTwo, fixture.Stage(control: 0.5));
-        clip["audioSource"] = Constants.AudioSourceControlNet;
+        JObject clip = IcLoraClip(MediaSource.ControlNetTwo, fixture.Stage(control: 0.5));
+        clip["audioSource"] = MediaSource.ControlNet;
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip), post =>
         {

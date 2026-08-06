@@ -323,7 +323,7 @@ public class WanArchitectureTests
         AssertIgnored(
             GeneratedClip(0, stage) with
             {
-                AudioSource = Constants.AudioSourceUpload,
+                AudioSource = MediaSource.Upload,
                 UploadedAudio = new("data:audio/wav;base64,AA==", "voice.wav"),
             },
             "effective-request.unsupported-audio-source-ignored");
@@ -1519,7 +1519,7 @@ public class WanArchitectureTests
         new(
             id,
             25,
-            Constants.AudioSourceNative,
+            MediaSource.Native,
             [],
             false,
             false,

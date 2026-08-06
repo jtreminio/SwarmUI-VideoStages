@@ -96,7 +96,7 @@ public class RootPlanTests
     private static ClipSpec GeneratedClip(int id) => new(
         id,
         49,
-        Constants.AudioSourceNative,
+        MediaSource.Native,
         [],
         false,
         false,

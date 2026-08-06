@@ -34,7 +34,7 @@ public class RequestReaderTests
         IEnumerable<JObject> refs = null,
         bool skipped = false,
         double duration = 3.0,
-        string audioSource = Constants.AudioSourceNative,
+        string audioSource = MediaSource.Native,
         JArray icLoras = null,
         bool saveAudioTrack = false,
         bool clipLengthFromAudio = false,
@@ -210,7 +210,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadClips_ScalarOverride_MutatesClipField()
     {
-        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: Constants.AudioSourceNative);
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: MediaSource.Native);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         ClipSpec parsed = Assert.Single(
@@ -278,7 +278,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadClips_UnknownOverrideField_IsIgnoredWithoutThrowing()
     {
-        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: Constants.AudioSourceNative);
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: MediaSource.Native);
         string json = JsonConvert.SerializeObject(new JArray(clip));
         T2IParamInput input =
             BuildGenerator(json, "<videoclip[0,bogusfield]:whatever>");
@@ -286,7 +286,7 @@ public class RequestReaderTests
         ClipSpec parsed = Assert.Single(
             RequestReader.Read(input).Clips);
 
-        Assert.Equal(Constants.AudioSourceNative, parsed.AudioSource);
+        Assert.Equal(MediaSource.Native, parsed.AudioSource);
         Assert.Contains(
             Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
             warning => warning.Contains(
@@ -297,14 +297,14 @@ public class RequestReaderTests
     [Fact]
     public void ReadClips_OutOfRangeOverrideIndex_IsIgnoredWithoutThrowing()
     {
-        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: Constants.AudioSourceNative);
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: MediaSource.Native);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         IReadOnlyList<ClipSpec> clips = RequestReader.Read(
             BuildGenerator(json, "<videoclip[5,audiosource]:X> <videoclip[0,5,steps]:99>")).Clips;
 
         ClipSpec parsed = Assert.Single(clips);
-        Assert.Equal(Constants.AudioSourceNative, parsed.AudioSource);
+        Assert.Equal(MediaSource.Native, parsed.AudioSource);
     }
 
 
@@ -321,7 +321,7 @@ public class RequestReaderTests
                     ["lora"] = "clip-lora",
                     ["preset"] = "deblur",
                     ["stage"] = 0,
-                    ["driveSource"] = Constants.ControlNetSourceTwo,
+                    ["driveSource"] = MediaSource.ControlNetTwo,
                     ["driveData"] = nameof(IcLoraDriveData.Visual),
                     ["strength"] = 0.7,
                     ["attentionStrength"] = 0.4,
@@ -345,7 +345,7 @@ public class RequestReaderTests
         Assert.Equal("clip-lora", entry.Lora);
         Assert.Equal("deblur", entry.Preset);
         Assert.Equal(0, entry.Stage);
-        Assert.Equal(Constants.ControlNetSourceTwo, entry.DriveSource);
+        Assert.Equal(MediaSource.ControlNetTwo, entry.DriveSource);
         Assert.Equal(IcLoraDriveData.Visual, entry.DriveData);
         Assert.Equal(0.7, entry.Strength);
         Assert.Equal(0.4, entry.AttentionStrength);
@@ -376,7 +376,7 @@ public class RequestReaderTests
         {
             ["lora"] = "lipdub.safetensors",
             ["preset"] = "lipdub",
-            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveSource"] = MediaSource.Upload,
             ["driveData"] = nameof(IcLoraDriveData.Audio),
             ["driveMediaKinds"] = new JArray("audio", "video"),
             ["controlType"] = Constants.IcLoraControlNone,
@@ -396,7 +396,7 @@ public class RequestReaderTests
         IcLoraSpec parsed = Assert.Single(clip.IcLoras);
 
         Assert.Equal("lipdub", parsed.Preset);
-        Assert.Equal(Constants.IcLoraSourceUpload, parsed.DriveSource);
+        Assert.Equal(MediaSource.Upload, parsed.DriveSource);
         Assert.Equal(IcLoraDriveData.Audio, parsed.DriveData);
         Assert.Equal(["audio", "video"], parsed.DriveMediaKinds);
         Assert.NotNull(parsed.DriveMedia);
@@ -411,7 +411,7 @@ public class RequestReaderTests
         {
             ["lora"] = "lipdub.safetensors",
             ["preset"] = "lipdub",
-            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveSource"] = MediaSource.Upload,
             ["driveMedia"] = new JObject
             {
                 ["data"] = "data:audio/wav;base64,QUJD",
@@ -436,7 +436,7 @@ public class RequestReaderTests
         JObject entry = new()
         {
             ["lora"] = "adapter.safetensors",
-            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveSource"] = MediaSource.Upload,
             ["driveData"] = "future-stream",
         };
         string json = JsonConvert.SerializeObject(new JArray(
@@ -460,7 +460,7 @@ public class RequestReaderTests
         JObject entry = new()
         {
             ["lora"] = "adapter.safetensors",
-            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveSource"] = MediaSource.Upload,
             ["driveData"] = nameof(IcLoraDriveData.Visual),
             ["driveMediaKinds"] = "image",
         };
@@ -485,7 +485,7 @@ public class RequestReaderTests
         JObject entry = new()
         {
             ["lora"] = "adapter.safetensors",
-            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveSource"] = MediaSource.Upload,
             ["driveData"] = nameof(IcLoraDriveData.Visual),
             ["driveMediaKinds"] = new JArray(123, "Image", "image", "future"),
         };
@@ -509,7 +509,7 @@ public class RequestReaderTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         clip["ControlNetLora"] = "legacy-lora";
-        clip["ControlNetSource"] = Constants.ControlNetSourceTwo;
+        clip["ControlNetSource"] = MediaSource.ControlNetTwo;
 
         ClipSpec parsed = ReadSingleClip(clip);
 
@@ -540,7 +540,7 @@ public class RequestReaderTests
             clips: [
                 MakeClip(
                     stages: [MakeStage("model-a")],
-                    audioSource: Constants.AudioSourceUpload)
+                    audioSource: MediaSource.Upload)
             ]));
         T2IParamInput input = BuildGenerator(json);
 
@@ -549,7 +549,7 @@ public class RequestReaderTests
         Assert.Equal(1344, config.Width);
         Assert.Equal(832, config.Height);
         Assert.Single(config.Clips);
-        Assert.Equal(Constants.AudioSourceUpload, config.Clips[0].AudioSource);
+        Assert.Equal(MediaSource.Upload, config.Clips[0].AudioSource);
     }
 
     [Fact]
@@ -580,11 +580,11 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [MakeStage("model-a")],
-                audioSource: Constants.AudioSourceUpload,
+                audioSource: MediaSource.Upload,
                 uploadedAudio: UploadedAudio(fileName: "first.wav")),
             MakeClip(
                 stages: [MakeStage("model-b")],
-                audioSource: Constants.AudioSourceUpload,
+                audioSource: MediaSource.Upload,
                 uploadedAudio: UploadedAudio(fileName: "second.wav"))
         ));
         T2IParamInput input = BuildGenerator(json);
@@ -611,7 +611,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [MakeStage("model-a")],
-                audioSource: Constants.AudioSourceUpload,
+                audioSource: MediaSource.Upload,
                 uploadedAudio: new JObject
                 {
                     ["data"] = "inputs/_comfy1/clip_part02.wav",
@@ -738,7 +738,7 @@ public class RequestReaderTests
         ClipSpec clip = Assert.Single(spec.Clips);
         StageSpec stage = Assert.Single(clip.Stages);
         Assert.Equal(0, clip.Id);
-        Assert.Equal(Constants.AudioSourceNative, clip.AudioSource);
+        Assert.Equal(MediaSource.Native, clip.AudioSource);
         Assert.Empty(clip.IcLoras);
         Assert.False(clip.ClipLengthFromAudio);
         Assert.False(clip.ClipLengthFromControlNet);
@@ -758,7 +758,7 @@ public class RequestReaderTests
             clips: [
                 MakeClip(
                     stages: [MakeStage("model-a")],
-                    audioSource: Constants.AudioSourceUpload,
+                    audioSource: MediaSource.Upload,
                     clipLengthFromAudio: true,
                     clipLengthFromControlNet: true)
             ]));
@@ -871,7 +871,7 @@ public class RequestReaderTests
                 {
                     ["lora"] = "clip-lora",
                     ["stage"] = 2,
-                    ["driveSource"] = Constants.IcLoraSourceUpload,
+                    ["driveSource"] = MediaSource.Upload,
                 }))
         ));
         T2IParamInput input = BuildGenerator(json);

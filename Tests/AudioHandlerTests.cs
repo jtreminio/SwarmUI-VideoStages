@@ -201,7 +201,7 @@ public class AudioHandlerTests
     public void Runtime_source_resolver_warns_when_ControlNet_source_is_ambiguous()
     {
         WorkflowGenerator generator = CreateGenerator([]);
-        ClipPlan clip = Clip(0, Constants.AudioSourceControlNet, saveAudioTrack: false);
+        ClipPlan clip = Clip(0, MediaSource.ControlNet, saveAudioTrack: false);
 
         AudioRuntimeSources sources =
             new AudioRuntimeSourceResolver(generator, new AudioHandler(generator))
@@ -217,7 +217,7 @@ public class AudioHandlerTests
     public void Runtime_source_resolver_warns_when_planned_ControlNet_audio_is_missing()
     {
         WorkflowGenerator generator = CreateGenerator([]);
-        ClipPlan authored = Clip(0, Constants.AudioSourceControlNet, saveAudioTrack: false);
+        ClipPlan authored = Clip(0, MediaSource.ControlNet, saveAudioTrack: false);
         ClipPlan clip = authored with
         {
             ArchitecturePayload = authored.RequireLtx2Payload() with
@@ -240,7 +240,7 @@ public class AudioHandlerTests
     public void ControlNet_length_without_a_source_warns_and_keeps_authored_length()
     {
         WorkflowGenerator generator = CreateGenerator([]);
-        ClipPlan authored = Clip(0, Constants.AudioSourceControlNet, saveAudioTrack: false);
+        ClipPlan authored = Clip(0, MediaSource.ControlNet, saveAudioTrack: false);
         ClipPlan clip = authored with
         {
             Audio = authored.Audio with { Length = new(AudioLengthOwner.ControlNet) },
@@ -259,7 +259,7 @@ public class AudioHandlerTests
         WorkflowGenerator generator = CreateGenerator([]);
         ClipPlan clip = Clip(
             0,
-            Constants.AudioSourceControlNet,
+            MediaSource.ControlNet,
             saveAudioTrack: false,
             clipLengthFromControlNet: true);
 
@@ -274,7 +274,7 @@ public class AudioHandlerTests
     public void ControlNet_length_without_captured_frames_warns_and_keeps_authored_length()
     {
         WorkflowGenerator generator = CreateGenerator([]);
-        ClipPlan authored = Clip(0, Constants.AudioSourceControlNet, saveAudioTrack: false);
+        ClipPlan authored = Clip(0, MediaSource.ControlNet, saveAudioTrack: false);
         ClipPlan clip = authored with
         {
             Audio = authored.Audio with { Length = new(AudioLengthOwner.ControlNet) },
@@ -383,7 +383,7 @@ public class AudioHandlerTests
         }
 
         new AudioHandler(CreateGenerator(workflow)).PruneAceStepFunUnsavedTracks(
-            [Clip(id: 0, audioSource: Constants.AudioSourceNative, saveAudioTrack: false)]);
+            [Clip(id: 0, audioSource: MediaSource.Native, saveAudioTrack: false)]);
 
         using WorkflowBridge after = WorkflowBridge.Create(workflow);
         Assert.NotNull(after.Graph.GetNode<SaveAudioMP3Node>("64170"));

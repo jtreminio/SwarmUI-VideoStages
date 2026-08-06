@@ -593,7 +593,7 @@ internal sealed class MiniMaxGenerationSession(
         NativeFrameReferencePlan reference,
         string descriptor)
     {
-        if (StringUtils.Equals(reference?.Source, Constants.MediaSourceUpload))
+        if (StringUtils.Equals(reference?.Source, MediaSource.Upload))
         {
             Image image = NativeFrameReferences.MaterializeUpload(g, reference, descriptor);
             return image is null
@@ -611,15 +611,15 @@ internal sealed class MiniMaxGenerationSession(
     {
         string value = source?.Trim() ?? "";
         CapturedHostReference captured = null;
-        if (StringUtils.Equals(value, "Base"))
+        if (StringUtils.Equals(value, MediaSource.Base))
         {
             captured = baseReference;
         }
-        else if (StringUtils.Equals(value, "Refiner"))
+        else if (StringUtils.Equals(value, MediaSource.Refiner))
         {
             captured = refinerReference;
         }
-        else if (ImageReferenceSyntax.TryParseBase2EditStageIndex(value, out int editStage)
+        else if (MediaSource.TryParseBase2EditIndex(value, out int editStage)
             && Base2EditStageRefs.TryGet(
                 g,
                 editStage,
@@ -789,7 +789,7 @@ internal sealed class MiniMaxGenerationSession(
         string descriptor,
         int index)
     {
-        if (ControlNetSourcePlan.TryParseIndex(reference.Source, out int controlNetIndex))
+        if (MediaSource.TryParseControlNetIndex(reference.Source, out int controlNetIndex))
         {
             ControlNetCoreMediaCapture captures = new(g);
             if (!captures.TryGetCapturedControlVideo(controlNetIndex, out WGNodeData video))
@@ -803,7 +803,7 @@ internal sealed class MiniMaxGenerationSession(
             first.Image.ConnectFromPath(bridge, video.Path);
             return WorkflowBridge.ToPath(first.IMAGE);
         }
-        if (!StringUtils.Equals(reference.Source, Constants.MediaSourceUpload))
+        if (!StringUtils.Equals(reference.Source, MediaSource.Upload))
         {
             WGNodeData captured = ResolveHostCapture(reference.Source, $"{descriptor} {index}");
             if (captured is null)
@@ -829,7 +829,7 @@ internal sealed class MiniMaxGenerationSession(
         MiniMaxReferencePlan reference,
         string descriptor)
     {
-        if (StringUtils.Equals(reference.Source, Constants.MediaSourceUpload))
+        if (StringUtils.Equals(reference.Source, MediaSource.Upload))
         {
             return g.LoadImage(
                 UploadedMedia.GetVideo(
@@ -840,7 +840,7 @@ internal sealed class MiniMaxGenerationSession(
                 "${videostagesminimaxrefvideo}",
                 resize: false);
         }
-        if (ControlNetSourcePlan.TryParseIndex(reference.Source, out int controlNetIndex)
+        if (MediaSource.TryParseControlNetIndex(reference.Source, out int controlNetIndex)
             && new ControlNetCoreMediaCapture(g).TryGetCapturedControlVideo(
                 controlNetIndex,
                 out WGNodeData video))
@@ -855,7 +855,7 @@ internal sealed class MiniMaxGenerationSession(
         MiniMaxReferencePlan reference,
         string descriptor)
     {
-        if (StringUtils.Equals(reference.Source, Constants.MediaSourceUpload))
+        if (StringUtils.Equals(reference.Source, MediaSource.Upload))
         {
             return new JArray(
                 g.CreateAudioLoadNode(
@@ -863,14 +863,14 @@ internal sealed class MiniMaxGenerationSession(
                     "${videostagesminimaxrefaudio}"),
                 0);
         }
-        if (ControlNetSourcePlan.TryParseIndex(reference.Source, out int controlNetIndex)
+        if (MediaSource.TryParseControlNetIndex(reference.Source, out int controlNetIndex)
             && new ControlNetCoreMediaCapture(g).TryGetCapturedAudio(
                 controlNetIndex,
                 out WGNodeData controlNetAudio))
         {
             return controlNetAudio.Path as JArray;
         }
-        if (AudioHandler.TryParseAceStepFunAudioSource(reference.Source, out int trackIndex))
+        if (MediaSource.TryParseAceStepFunIndex(reference.Source, out int trackIndex))
         {
             WGNodeData aceStepFunAudio = new AudioHandler(g).DetectAceStepFunAudio(trackIndex);
             if (aceStepFunAudio is not null)

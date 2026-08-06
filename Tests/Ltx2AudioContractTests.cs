@@ -69,7 +69,7 @@ public class Ltx2AudioContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject clip = AudioClip(
-            Constants.AudioSourceUpload,
+            MediaSource.Upload,
             duration: 1.0,
             hasPayload ? UploadedAudio("clip.wav") : null,
             fixture.Stage(control: 0.5));
@@ -132,7 +132,7 @@ public class Ltx2AudioContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject clip = AudioClip(
-            Constants.AudioSourceUpload,
+            MediaSource.Upload,
             duration: 1.0,
             UploadedAudio("clip.wav"),
             fixture.Stage(control: 0.5));
@@ -191,7 +191,7 @@ public class Ltx2AudioContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject clip = AudioClip(
-            Constants.AudioSourceNative,
+            MediaSource.Native,
             duration: 1.0,
             uploadedAudio: null,
             fixture.Stage(control: 0.5));
@@ -242,7 +242,7 @@ public class Ltx2AudioContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject clip = AudioClip(
-            Constants.AudioSourceUpload,
+            MediaSource.Upload,
             duration: 1.0,
             UploadedAudio("clip.wav"),
             fixture.Stage(control: 0.5),
@@ -285,12 +285,12 @@ public class Ltx2AudioContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject first = AudioClip(
-            Constants.AudioSourceUpload,
+            MediaSource.Upload,
             duration: 1.0,
             UploadedAudio("first.wav", payload: "QUFB"),
             fixture.Stage(control: 0.5));
         JObject second = AudioClip(
-            Constants.AudioSourceUpload,
+            MediaSource.Upload,
             duration: 1.0,
             UploadedAudio("second.wav", payload: "QkJC"),
             fixture.Stage(control: 0.5));
@@ -341,12 +341,12 @@ public class Ltx2AudioContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject first = AudioClip(
-            Constants.AudioSourceNative,
+            MediaSource.Native,
             duration: 1.0,
             uploadedAudio: null,
             fixture.Stage(control: 0.5));
         JObject second = AudioClip(
-            Constants.AudioSourceUpload,
+            MediaSource.Upload,
             duration: 1.0,
             UploadedAudio("second.wav", payload: "QkJC"),
             fixture.Stage(control: 0.5));
@@ -383,7 +383,7 @@ public class Ltx2AudioContractTests
         const int rootHeight = 640;
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         JObject document = MakeDocument(AudioClip(
-            Constants.AudioSourceUpload,
+            MediaSource.Upload,
             duration: 1.0,
             UploadedAudio("clip.wav"),
             fixture.Stage(control: 0.5)));
@@ -420,7 +420,7 @@ public class Ltx2AudioContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject document = MakeDocument(AudioClip(
-            Constants.AudioSourceUpload,
+            MediaSource.Upload,
             duration: 10.0,
             uploadedAudio: null,
             fixture.Stage(control: 0.5)));
@@ -469,7 +469,7 @@ public class Ltx2AudioContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         JObject document = MakeDocument(AudioClip(
-            Constants.AudioSourceUpload,
+            MediaSource.Upload,
             duration: 10.0,
             uploadedAudio: null,
             fixture.Stage(control: 0.5)));
@@ -506,7 +506,7 @@ public class Ltx2AudioContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         JObject clip = AudioClip(
-            Constants.AudioSourceUpload,
+            MediaSource.Upload,
             duration: null,
             uploadedAudio: UploadedAudio(),
             fixture.Stage(control: 0.5));
@@ -540,7 +540,7 @@ public class Ltx2AudioContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject document = MakeDocument(AudioClip(
-            Constants.AudioSourceUpload,
+            MediaSource.Upload,
             duration,
             uploadedAudio: null,
             fixture.Stage(control: 0.5)));
@@ -576,14 +576,14 @@ public class Ltx2AudioContractTests
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject first = AudioClip(
-            Constants.AudioSourceNative,
+            MediaSource.Native,
             duration: 5.0,
             uploadedAudio: null,
             fixture.Stage(control: 0.5));
         first["boundaryOut"] = Constants.BoundaryOutContinue;
         first["boundaryOutOverlap"] = 24;
         JObject second = AudioClip(
-            Constants.AudioSourceNative,
+            MediaSource.Native,
             duration: 5.0,
             uploadedAudio: null,
             fixture.Stage(control: 0.5));
@@ -763,14 +763,14 @@ public class Ltx2AudioContractTests
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         fixture.InstallModel("LoRA", "UnitTest_ControlNetIcLora.safetensors");
         JObject clip = AudioClip(
-            Constants.AudioSourceControlNet,
+            MediaSource.ControlNet,
             duration: null,
             uploadedAudio: null,
             fixture.Stage());
         clip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_ControlNetIcLora",
-            ["driveSource"] = Constants.ControlNetSourceOne,
+            ["driveSource"] = MediaSource.ControlNetOne,
             ["driveData"] = $"{IcLoraDriveData.Visual}",
         });
 

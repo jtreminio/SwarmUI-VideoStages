@@ -46,13 +46,13 @@ public class BoundaryPolicyOwnershipTests
                 TargetDisallowsInitialReference: false));
         TimelineSpec spec = new(640, 360, 24, false,
         [
-            new ClipSpec(0, 49, Constants.AudioSourceNative, [], false, false, false, false,
+            new ClipSpec(0, 49, MediaSource.Native, [], false, false, false, false,
                 null, [], [Stage(10)]) with
             {
                 BoundaryOut = Constants.BoundaryOutContinue,
                 BoundaryOutOverlap = 22,
             },
-            new ClipSpec(1, 49, Constants.AudioSourceNative, [], false, false, false, false,
+            new ClipSpec(1, 49, MediaSource.Native, [], false, false, false, false,
                 null, [], [Stage(11)]),
         ]);
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);

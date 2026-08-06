@@ -57,7 +57,7 @@ public sealed class StageRefStoreScopeTests
         clip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_IcLoraA",
-            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveSource"] = MediaSource.Upload,
             ["driveData"] = $"{IcLoraDriveData.Visual}",
             ["strength"] = 1.0,
             ["attentionStrength"] = 1.0,

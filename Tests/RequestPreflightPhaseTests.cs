@@ -66,7 +66,7 @@ public sealed class RequestPreflightPhaseTests
         clip["icLoras"] = new JArray(new JObject
         {
             ["lora"] = "UnitTest_PreflightIcLora",
-            ["driveSource"] = Constants.IcLoraSourceUpload,
+            ["driveSource"] = MediaSource.Upload,
             ["driveData"] = "Visual",
             ["strength"] = 1.0,
             ["attentionStrength"] = 1.0,
