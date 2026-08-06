@@ -27,6 +27,27 @@ Before running it:
 
 If `./run-tests` fails with “No such file or directory”, you are in the wrong directory—use the path above or `cd` to the extension root (the directory that contains this `AGENTS.md` file).
 
+# How to change this codebase
+
+- **Reduce unnecessary abstraction and misdirection.** Delete wrappers that only carry another type, results objects with one producer, options records with one caller, interfaces with one implementer that buy no layering. A name must not promise something the code does not do.
+- **Comment only what the code cannot say.** A non-obvious invariant, a cross-file coupling, a "why not the obvious thing". Never restate the next line, never paraphrase a signature in XML doc, never narrate a past fix.
+- **Deslop every comment you pass.** Cut hedging, reassurance, and over-explanation. Shorter and blunter is correct.
+- **Touch a file, clean its comments.** Auditing every comment in a file you edit is part of that edit, not a follow-up.
+- **Names are for humans.** Files and methods should read as plain English and match what is inside; a filename names the type it holds. Renaming is normal maintenance — do it freely, in its own commit.
+
+Directions the recent history has been going. Keep going that way:
+
+- **One owner per fact.** A rule, a constant, or a piece of arithmetic lives in exactly one place and everyone calls it. Two copies that must agree is a defect even when they currently do.
+- **Namespace follows directory, and both say what they do.** Move a type to the layer that owns it rather than reaching across layers to reach it.
+- **Fold layers inward instead of adding them.** Prefer giving an existing owner the job over introducing a collaborator to carry it.
+- **Split a file that holds unrelated concerns**, and name each half for its half.
+- **Match the runtime instead of reimplementing it.** When planning predicts something execution decides, call the same code; don't hand-roll a parallel copy.
+- **Prefer a declared capability over a hard-coded family check.** Ask the descriptor what an architecture can do; don't compare its id.
+- **Generate and drift-test cross-boundary vocabulary.** C# owns it; hand-written mirrors are a defect.
+- **Keep the build and the test output quiet.** No warnings, no noise.
+- **One item, one commit, one short imperative subject.** No body, no trailers.
+- **Backing a change out is fine** when it did not earn its place.
+
 # Rules override
 
 If `AGENTS.dev.md` exists beside this file, it takes precedence over this one for overlapping instructions. The file will be gitignored, check the filesystem manually.
