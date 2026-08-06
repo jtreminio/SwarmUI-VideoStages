@@ -10,12 +10,14 @@ import {
     normalizeIcLora,
     normalizeIcLoraDriveMediaKinds,
 } from "./architectures/ltx2/icLoraNormalization";
+import { clipReferenceTags } from "./clipReferenceAuthoring";
 import {
     appendRefToClip,
     buildDefaultClip,
     buildDefaultRef,
     buildDefaultStage,
     normalizeClip,
+    normalizeClipReferences,
     normalizeContinueOverlap,
     normalizeInitVideo,
     normalizeRef,
@@ -1320,5 +1322,218 @@ describe("normalizeInitVideo", () => {
         );
         expect(clip.initVideo?.startSeconds).toBe(1);
         expect(clip.duration).toBe(3.5);
+    });
+});
+
+describe("normalizeClipReferences", () => {
+    it("keeps the authored order and per-kind fields", () => {
+        expect(
+            normalizeClipReferences([
+                {
+                    kind: "IMAGE",
+                    source: "Base",
+                    uploadedMedia: null,
+                    includeSoundtrack: true,
+                },
+                {
+                    kind: "video",
+                    source: "Refiner",
+                    uploadedMedia: {
+                        data: "data:video/mp4;base64,REVG",
+                        fileName: "motion.mp4",
+                    },
+                    includeSoundtrack: true,
+                },
+            ]),
+        ).toEqual([
+            {
+                id: undefined,
+                kind: "image",
+                source: "Base",
+                uploadedMedia: null,
+                // Only a video reference has a soundtrack to include.
+                includeSoundtrack: false,
+                mediaDurationSeconds: 0,
+                drivesClipLength: false,
+                mediaScale: 1,
+            },
+            {
+                id: undefined,
+                kind: "video",
+                // Video and audio references can only come from an upload.
+                source: "Upload",
+                uploadedMedia: {
+                    data: "data:video/mp4;base64,REVG",
+                    fileName: "motion.mp4",
+                },
+                includeSoundtrack: true,
+                mediaDurationSeconds: 0,
+                drivesClipLength: false,
+                mediaScale: 1,
+            },
+        ]);
+    });
+
+    it("keeps an unusable entry rather than silently dropping a prompt tag", () => {
+        const references = normalizeClipReferences([{}, "nonsense"]);
+
+        expect(references).toHaveLength(2);
+        expect(references.every((entry) => entry.kind === "image")).toBe(true);
+        expect(references.every((entry) => entry.uploadedMedia === null)).toBe(
+            true,
+        );
+    });
+
+    it("returns an empty list for a document that has no references", () => {
+        expect(normalizeClipReferences(undefined)).toEqual([]);
+        expect(
+            normalizeClip({ stages: [] }, getRootDefaults, getDefaultStageModel)
+                .references,
+        ).toEqual([]);
+    });
+});
+
+describe("clipReferenceTags", () => {
+    it("numbers each kind independently, in authored order", () => {
+        expect(
+            clipReferenceTags([
+                { kind: "video", includeSoundtrack: false },
+                { kind: "image", includeSoundtrack: false },
+                { kind: "video", includeSoundtrack: false },
+                { kind: "audio", includeSoundtrack: false },
+                { kind: "image", includeSoundtrack: false },
+            ]),
+        ).toEqual([
+            "<Video 1>",
+            "<Picture 1>",
+            "<Video 2>",
+            "<Audio 1>",
+            "<Picture 2>",
+        ]);
+    });
+
+    // The node presents an included soundtrack as its own audio item, ahead of
+    // every standalone audio reference, so it consumes an audio ordinal.
+    it("counts an included soundtrack against the audio ordinals", () => {
+        expect(
+            clipReferenceTags([
+                { kind: "audio", includeSoundtrack: false },
+                { kind: "video", includeSoundtrack: true },
+                { kind: "audio", includeSoundtrack: false },
+                { kind: "video", includeSoundtrack: false },
+            ]),
+        ).toEqual(["<Audio 2>", "<Video 1>", "<Audio 3>", "<Video 2>"]);
+    });
+});
+
+describe("clip reference media scale", () => {
+    const scaleOf = (raw: Record<string, unknown>) =>
+        normalizeClipReferences([{ kind: "video", ...raw }])[0].mediaScale;
+
+    it.each([
+        [0.5, 0.5],
+        [0.25, 0.25],
+        [1, 1],
+        // Outside the offered factors, so it falls back rather than resampling
+        // to a size nobody picked.
+        [0.7, 1],
+        ["half", 1],
+        [undefined, 1],
+    ])("normalizes an authored %p to %p", (authored, expected) => {
+        expect(scaleOf({ mediaScale: authored })).toBe(expected);
+    });
+
+    it("keeps only a video reference scalable", () => {
+        expect(
+            normalizeClipReferences([{ kind: "audio", mediaScale: 0.5 }])[0]
+                .mediaScale,
+        ).toBe(1);
+    });
+});
+
+describe("clip length from a reference", () => {
+    const videoReference = (
+        overrides: Record<string, unknown> = {},
+    ): Record<string, unknown> => ({
+        kind: "video",
+        source: "Upload",
+        uploadedMedia: {
+            data: "data:video/mp4;base64,REVG",
+            fileName: "m.mp4",
+        },
+        mediaDurationSeconds: 4.5,
+        drivesClipLength: true,
+        ...overrides,
+    });
+
+    const clipWith = (
+        references: Record<string, unknown>[],
+        rest: Record<string, unknown> = {},
+    ) =>
+        normalizeClip(
+            { duration: 2, stages: [], references, ...rest },
+            getRootDefaults,
+            getDefaultStageModel,
+            24,
+        );
+
+    it("takes the clip duration from the reference's probed length", () => {
+        expect(clipWith([videoReference()]).duration).toBe(4.5);
+    });
+
+    it("keeps only the first claim so one source owns the length", () => {
+        const clip = clipWith([
+            videoReference({ mediaDurationSeconds: 4.5 }),
+            videoReference({ mediaDurationSeconds: 9 }),
+        ]);
+
+        expect(clip.references.map((r) => r.drivesClipLength)).toEqual([
+            true,
+            false,
+        ]);
+        expect(clip.duration).toBe(4.5);
+    });
+
+    it("refuses the claim on an image reference, which has no length", () => {
+        const clip = clipWith([
+            videoReference({ kind: "image", uploadedMedia: null }),
+        ]);
+
+        expect(clip.references[0].drivesClipLength).toBe(false);
+        expect(clip.duration).toBe(2);
+    });
+
+    it("ignores a claim with no probed length", () => {
+        expect(
+            clipWith([videoReference({ mediaDurationSeconds: 0 })]).duration,
+        ).toBe(2);
+    });
+
+    it("yields to the clip-level length flags", () => {
+        const fromAudio = clipWith([videoReference()], {
+            clipLengthFromAudio: true,
+        });
+        const fromControlNet = clipWith([videoReference()], {
+            clipLengthFromControlNet: true,
+        });
+
+        expect(fromAudio.references[0].drivesClipLength).toBe(false);
+        expect(fromAudio.duration).toBe(2);
+        expect(fromControlNet.references[0].drivesClipLength).toBe(false);
+    });
+
+    it("yields to an init video, whose range is the clip", () => {
+        const clip = clipWith([videoReference()], {
+            initVideo: {
+                data: "data:video/mp4;base64,QQ==",
+                durationSeconds: 10,
+                startSeconds: 0,
+                lengthSeconds: 3,
+            },
+        });
+
+        expect(clip.duration).toBe(3);
+        // The authored claim survives for repair rather than being erased.
+        expect(clip.references[0].drivesClipLength).toBe(true);
     });
 });

@@ -1063,6 +1063,106 @@ public class RequestReaderTests
     }
 
     [Fact]
+    public void ReadClips_ClipReferences_ReadEveryKindWithItsUpload()
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["references"] = new JArray(
+            new JObject
+            {
+                ["kind"] = "image",
+                ["source"] = "Base",
+            },
+            new JObject
+            {
+                ["kind"] = "VIDEO",
+                ["source"] = "Upload",
+                ["includeSoundtrack"] = true,
+                ["uploadedMedia"] = new JObject
+                {
+                    ["data"] = "data:video/mp4;base64,REVG",
+                    ["fileName"] = "motion.mp4",
+                },
+            },
+            new JObject
+            {
+                ["kind"] = "audio",
+                ["source"] = "Upload",
+                ["uploadedMedia"] = new JObject
+                {
+                    ["data"] = "data:audio/wav;base64,QUJD",
+                    ["fileName"] = "voice.wav",
+                },
+            });
+        T2IParamInput input = BuildGenerator(
+            JsonConvert.SerializeObject(new JArray(clip)));
+
+        IReadOnlyList<ClipReferenceSpec> references =
+            RequestReader.Read(input).Clips.Single().References;
+
+        Assert.Equal(
+            [ClipReferenceKind.Image, ClipReferenceKind.Video, ClipReferenceKind.Audio],
+            references.Select(reference => reference.Kind));
+        Assert.Equal("Base", references[0].Source);
+        Assert.Null(references[0].Media);
+        Assert.True(references[1].IncludeSoundtrack);
+        Assert.Equal("motion.mp4", references[1].Media.FileName);
+        Assert.False(references[2].IncludeSoundtrack);
+        Assert.Equal("data:audio/wav;base64,QUJD", references[2].Media.Data);
+    }
+
+    [Theory]
+    [InlineData(0.5, 0.5)]
+    [InlineData(0.25, 0.25)]
+    [InlineData(1.0, 1.0)]
+    // Anything outside the authored vocabulary would resample to a size nobody picked.
+    [InlineData(0.7, 1.0)]
+    [InlineData(-1.0, 1.0)]
+    public void ReadClips_ClipReference_MediaScale_KeepsOnlyTheOfferedFactors(
+        double authored,
+        double expected)
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["references"] = new JArray(
+            new JObject
+            {
+                ["kind"] = "video",
+                ["source"] = "Upload",
+                ["mediaScale"] = authored,
+                ["uploadedMedia"] = new JObject
+                {
+                    ["data"] = "data:video/mp4;base64,REVG",
+                    ["fileName"] = "motion.mp4",
+                },
+            });
+        T2IParamInput input = BuildGenerator(
+            JsonConvert.SerializeObject(new JArray(clip)));
+
+        Assert.Equal(
+            expected,
+            RequestReader.Read(input).Clips.Single().References[0].MediaScale);
+    }
+
+    [Theory]
+    [InlineData("sprite", "Upload")]
+    [InlineData("image", "")]
+    public void ReadClips_ClipReference_WithoutAKindOrSource_IsSkipped(
+        string kind,
+        string source)
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["references"] = new JArray(
+            new JObject
+            {
+                ["kind"] = kind,
+                ["source"] = source,
+            });
+        T2IParamInput input = BuildGenerator(
+            JsonConvert.SerializeObject(new JArray(clip)));
+
+        Assert.Empty(RequestReader.Read(input).Clips.Single().References);
+    }
+
+    [Fact]
     public void ReadRequest_ClipExposesRefsAndStageNormalizedRefStrengths()
     {
         JObject stage = MakeStage("model-a");

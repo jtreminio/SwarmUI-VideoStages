@@ -1,5 +1,9 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using VideoStages.Authoring;
@@ -8,6 +12,45 @@ namespace VideoStages.Tests;
 
 internal static class Fixtures
 {
+    /// <summary>
+    /// Stands in for the Base2Edit extension: publishes an edit stage's image under the key that
+    /// extension owns, so a reference to <c>editN</c> has something real to resolve to.
+    /// </summary>
+    public static WorkflowGenerator.WorkflowGenStep PublishBase2EditImageStep(int editStageIndex) =>
+        new(g =>
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            SwarmLoadImageB64Node published = bridge.AddNode(
+                new SwarmLoadImageB64Node().With(ImageBase64: "data:image/png;base64,QUJDREVGRw=="));
+
+            JObject media = new()
+            {
+                ["path"] = new JArray(published.Id, 0),
+                ["dataType"] = WGNodeData.DT_IMAGE,
+                ["width"] = VideoStagesWorkflowFixture.Width,
+                ["height"] = VideoStagesWorkflowFixture.Height,
+            };
+            if (g.CurrentCompat()?.ID is string compatId)
+            {
+                media["compatId"] = compatId;
+            }
+            JObject payload = new() { ["media"] = media };
+            if (g.CurrentVae?.Path is JArray { Count: 2 } vaePath)
+            {
+                JObject vae = new()
+                {
+                    ["path"] = new JArray(vaePath[0], vaePath[1]),
+                    ["dataType"] = WGNodeData.DT_VAE,
+                };
+                if (g.CurrentVae.Compat?.ID is string vaeCompatId)
+                {
+                    vae["compatId"] = vaeCompatId;
+                }
+                payload["vae"] = vae;
+            }
+            g.NodeHelpers[$"b2e.published.edit.{editStageIndex}"] = payload.ToString(Formatting.None);
+        }, Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);
+
     public const string LtxV23SpatialUpscaler = "latentmodel-ltx-2.3-spatial-upscaler-x2-1.1.safetensors";
 
     public static JObject MakeStage(

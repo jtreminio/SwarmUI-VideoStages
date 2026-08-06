@@ -82,6 +82,7 @@ const clip = (id: string): CanonicalClip => ({
     promptWindows: [],
     retake: null,
     initVideo: null,
+    references: [],
     frameRefs: [],
     stages: [],
 });

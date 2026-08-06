@@ -18,7 +18,11 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
         ArchitectureRequestPreflightContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        List<PlanDiagnostic> diagnostics = [];
+        List<PlanDiagnostic> diagnostics = [
+            .. MiniMaxClipReferences.PreflightUploads(
+                new UploadedMediaPreflight(generator.UserInput),
+                context.Plan)
+        ];
         if (generator.UserInput.TryGet(
                 T2IParamTypes.Video2VideoCreativity,
                 out double creativity)
@@ -80,9 +84,13 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
         plan.Clips
             .Select(clip => clip.ArchitecturePayload as MiniMaxClipPayload)
             .Where(payload => payload is not null)
-            .SelectMany(payload =>
-                new[] { payload.FirstFrameReference, payload.LastFrameReference })
-            .Any(reference => StringUtils.Equals(reference?.Source, source));
+            .SelectMany(payload => new[]
+                {
+                    payload.FirstFrameReference?.Source,
+                    payload.LastFrameReference?.Source,
+                }
+                .Concat(payload.References.Select(reference => reference.Source)))
+            .Any(candidate => StringUtils.Equals(candidate, source));
 
     public IVideoGenerationSession CreateSession(
         ArchitectureTimelineSessionContext context)

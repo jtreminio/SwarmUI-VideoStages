@@ -7,6 +7,7 @@ import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity
 import { NONE_ARCHITECTURE_ID } from "../architectures/none/identity";
 import { referenceEndpointPolicy } from "../architectures/referenceEndpoints";
 import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
+import { buildDefaultClipReference } from "../clipReferenceAuthoring";
 import {
     clamp,
     PROMPT_WINDOW_DEFAULT_DURATION,
@@ -65,6 +66,8 @@ const refStrengthPatches = (
 export interface DetailSelectionDomainOperations {
     addRefEntry(clipIdx: number): void;
     deleteRefEntry(clipIdx: number, refIdx: number): void;
+    addClipReference(clipIdx: number): void;
+    deleteClipReference(clipIdx: number, referenceIdx: number): void;
     addPromptWindow(clipIdx: number): void;
     deleteWindowEntry(clipIdx: number, windowIdx: number): void;
     createRetake(clipIdx: number): void;
@@ -191,6 +194,60 @@ export const createDetailSelectionDomainOperations = (
                 },
             };
         });
+    };
+
+    const addClipReference = (clipIdx: number): void => {
+        structuralCommit((clips) => {
+            const clip = clips[clipIdx];
+            const { capabilities } = captureAuthoringTransaction();
+            if (
+                !clip?.id ||
+                !capabilities.forClip(clip).decision("clipReferences").supported
+            ) {
+                return null;
+            }
+            return {
+                command: {
+                    type: "clip-reference.add",
+                    clipId: clip.id,
+                    reference: {
+                        ...buildDefaultClipReference(),
+                        id: createEntityId("clip_reference"),
+                    },
+                },
+                selection: {
+                    kind: "clip-ref",
+                    clipIdx,
+                    referenceIdx: clip.references.length,
+                },
+            };
+        });
+    };
+
+    const deleteClipReference = (
+        clipIdx: number,
+        referenceIdx: number,
+    ): void => {
+        commitRemoval(
+            (clips) => {
+                const clip = clips[clipIdx];
+                const reference = clip?.references[referenceIdx];
+                if (!clip?.id || !reference?.id) {
+                    return null;
+                }
+                return {
+                    command: {
+                        type: "clip-reference.remove",
+                        clipId: clip.id,
+                        referenceId: reference.id,
+                    },
+                    remaining: clip.references.length - 1,
+                };
+            },
+            referenceIdx,
+            (index) => ({ kind: "clip-ref", clipIdx, referenceIdx: index }),
+            { kind: "clip", clipIdx, stageIdx: 0 },
+        );
     };
 
     const addPromptWindow = (clipIdx: number): void => {
@@ -555,6 +612,8 @@ export const createDetailSelectionDomainOperations = (
     return {
         addRefEntry,
         deleteRefEntry,
+        addClipReference,
+        deleteClipReference,
         addPromptWindow,
         deleteWindowEntry,
         createRetake,

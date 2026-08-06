@@ -105,6 +105,7 @@ const allEntityIds = (document: CanonicalVideoStagesConfig): unknown[] => [
         clip.id,
         ...clip.stages.map((stage) => stage.id),
         ...clip.frameRefs.map((ref) => ref.id),
+        ...clip.references.map((reference) => reference.id),
         ...clip.promptWindows.map((window) => window.id),
         ...(clip.retake ? [clip.retake.id] : []),
     ]),
@@ -341,6 +342,7 @@ const diffClipChildren = (
 ): void => {
     diffStages(before, after, phases, context);
     diffList(LIST_ENTITIES.ref, after.id, before, after, phases);
+    diffList(LIST_ENTITIES.clipReference, after.id, before, after, phases);
     diffList(LIST_ENTITIES.promptWindow, after.id, before, after, phases);
     diffRetake(before, after, phases);
 };

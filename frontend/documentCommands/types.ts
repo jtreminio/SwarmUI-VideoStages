@@ -7,6 +7,7 @@ import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
+    CanonicalClipReference,
     CanonicalFrameRefImage,
     CanonicalPromptWindow,
     CanonicalRetake,
@@ -17,6 +18,7 @@ import type {
     AudioSpanPatch,
     AudioTrackPatch,
     ClipPatch,
+    ClipReferencePatch,
     PromptWindowPatch,
     RefPatch,
     RetakePatch,
@@ -103,6 +105,25 @@ export type DocumentCommand =
           beforeRefId: string | null;
       }
     | { type: "ref.patch"; clipId: string; refId: string; patch: RefPatch }
+    | {
+          type: "clip-reference.add";
+          clipId: string;
+          reference: CanonicalClipReference;
+          beforeReferenceId?: string | null;
+      }
+    | { type: "clip-reference.remove"; clipId: string; referenceId: string }
+    | {
+          type: "clip-reference.move";
+          clipId: string;
+          referenceId: string;
+          beforeReferenceId: string | null;
+      }
+    | {
+          type: "clip-reference.patch";
+          clipId: string;
+          referenceId: string;
+          patch: ClipReferencePatch;
+      }
     | {
           type: "prompt-window.add";
           clipId: string;

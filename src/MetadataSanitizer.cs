@@ -41,6 +41,12 @@ internal static class MetadataSanitizer
             UploadContainers.RefImage),
         new(
             [
+                UploadPathStep.Each(UploadContainers.ClipsCollection),
+                UploadPathStep.Each(UploadContainers.ClipReferencesCollection)
+            ],
+            UploadContainers.ClipReferenceMedia),
+        new(
+            [
                 UploadPathStep.Each(UploadContainers.AudioTracksCollection),
                 UploadPathStep.Into(UploadContainers.AudioTrackSource)
             ],

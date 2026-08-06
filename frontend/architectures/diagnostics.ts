@@ -74,6 +74,11 @@ const persistedCapabilityIssues = (
         "Frame references",
     );
     unsupported(
+        !supports("clipReferences") && clip.references.length > 0,
+        "clip-references",
+        "Clip references",
+    );
+    unsupported(
         !supports("referenceFraming") && clip.refFraming !== "crop",
         "reference-framing",
         "Reference framing",

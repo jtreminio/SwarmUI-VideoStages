@@ -15,6 +15,7 @@ internal static class ArchitectureFeatureVocabulary
     [
         new(ArchitectureFeature.PromptRelay, "promptRelay", "Relay prompts"),
         new(ArchitectureFeature.FrameReferences, "frameReferences", "Frame references"),
+        new(ArchitectureFeature.ClipReferences, "clipReferences", "Clip references"),
         new(ArchitectureFeature.ReferenceFraming, "referenceFraming", "Reference framing"),
         new(ArchitectureFeature.Retake, "retake", "Retake"),
         new(

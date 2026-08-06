@@ -141,6 +141,31 @@ export interface InitVideo {
     lengthSeconds: number;
 }
 
+export type ClipReferenceKind = "image" | "video" | "audio";
+
+/**
+ * One whole-clip reference: media the model conditions on with no frame
+ * position. The architecture presents references to its text encoder as
+ * numbered items the prompt names by tag, so the authored order is meaningful.
+ * `source` is "Upload" for `uploadedMedia`, or a host capture ("Base",
+ * "Refiner") for image references. `includeSoundtrack` asks a video reference
+ * to also pass its own audio track as the paired reference audio.
+ * `mediaDurationSeconds` is the browser-probed length of the picked media
+ * (0 = unknown); when `drivesClipLength` is set the clip's own duration follows
+ * it, so at most one reference per clip may claim it. `mediaScale` downsamples
+ * a video reference before it is presented, trading detail for speed.
+ */
+export interface ClipReference {
+    id?: string;
+    kind: ClipReferenceKind;
+    source: string;
+    uploadedMedia: UploadedMedia | null;
+    includeSoundtrack: boolean;
+    mediaDurationSeconds: number;
+    drivesClipLength: boolean;
+    mediaScale: number;
+}
+
 export interface FrameRefImage {
     id?: string;
     source: string;
@@ -225,6 +250,7 @@ export interface Clip {
     promptWindows: PromptWindow[];
     retake: Retake | null;
     initVideo: InitVideo | null;
+    references: ClipReference[];
     frameRefs: FrameRefImage[];
     stages: Stage[];
 }
@@ -276,17 +302,24 @@ export type CanonicalIcLora = WithRequiredId<IcLora>;
 export type CanonicalPromptWindow = WithRequiredId<PromptWindow>;
 export type CanonicalRetake = WithRequiredId<Retake>;
 export type CanonicalFrameRefImage = WithRequiredId<FrameRefImage>;
+export type CanonicalClipReference = WithRequiredId<ClipReference>;
 export type CanonicalAudioTrackSpan = WithRequiredId<AudioTrackSpan>;
 export type CanonicalAudioTrack = Omit<WithRequiredId<AudioTrack>, "spans"> & {
     spans: CanonicalAudioTrackSpan[];
 };
 export type CanonicalClip = Omit<
     WithRequiredId<Clip>,
-    "icLoras" | "promptWindows" | "retake" | "frameRefs" | "stages"
+    | "icLoras"
+    | "promptWindows"
+    | "retake"
+    | "references"
+    | "frameRefs"
+    | "stages"
 > & {
     icLoras: CanonicalIcLora[];
     promptWindows: CanonicalPromptWindow[];
     retake: CanonicalRetake | null;
+    references: CanonicalClipReference[];
     frameRefs: CanonicalFrameRefImage[];
     stages: CanonicalStage[];
 };
@@ -301,11 +334,13 @@ export type CanonicalVideoStagesConfig = Omit<
 
 export type {
     StoredClip,
+    StoredClipReference,
     StoredFrameRefImage,
     StoredStage,
 } from "./storageTypes";
 export {
     STORED_CLIP_KEYS,
+    STORED_CLIP_REFERENCE_KEYS,
     STORED_REF_KEYS,
     STORED_STAGE_KEYS,
     UNSTORED_CLIP_KEYS,

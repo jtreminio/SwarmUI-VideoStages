@@ -128,6 +128,16 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                       strength: clip.retake.strength,
                   }
                 : null,
+            references: clip.references.map((reference) => ({
+                id: reference.id,
+                kind: reference.kind,
+                source: reference.source,
+                uploadedMedia: reference.uploadedMedia,
+                includeSoundtrack: reference.includeSoundtrack,
+                mediaDurationSeconds: reference.mediaDurationSeconds,
+                drivesClipLength: reference.drivesClipLength,
+                mediaScale: reference.mediaScale,
+            })),
             frameRefs: clip.frameRefs.map((ref) => ({
                 id: ref.id,
                 source: ref.source,
@@ -301,6 +311,11 @@ export const serializeStateForDurableStorage = (
                 ref.uploadedImage = null;
             }
         }
+        for (const reference of clip.references) {
+            if (isTransientBrowserMedia(reference.uploadedMedia)) {
+                reference.uploadedMedia = null;
+            }
+        }
         for (const icLora of clip.icLoras) {
             if (isTransientBrowserMedia(icLora.driveMedia)) {
                 icLora.driveMedia = null;
@@ -349,6 +364,7 @@ const hasValidStoredCollections = (
         if (
             !hasArrayOfRecords(clip, "stages") ||
             !hasArrayOfRecords(clip, "frameRefs") ||
+            !hasArrayOfRecords(clip, "references") ||
             !hasArrayOfRecords(clip, "icLoras") ||
             (Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras"))
         ) {
@@ -645,7 +661,7 @@ export const storedDocumentNeedsCanonicalIdRepair = (
         const seenIds = new Set<string>();
         for (const rawClip of parsed.clips) {
             if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-            for (const key of ["stages", "frameRefs"] as const) {
+            for (const key of ["stages", "frameRefs", "references"] as const) {
                 const children = rawClip[key];
                 if (
                     !Array.isArray(children) ||

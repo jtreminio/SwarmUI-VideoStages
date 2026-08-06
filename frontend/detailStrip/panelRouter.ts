@@ -1,3 +1,4 @@
+import { clipReferenceTags } from "../clipReferenceAuthoring";
 import { executableBoundaryForLeftClip } from "../clipSemantics";
 import { clamp } from "../constants";
 import { stageChipLabel } from "../timelineDetail";
@@ -52,6 +53,12 @@ export const clampDetailSelection = (
             ? selection
             : { kind: "none" };
     }
+    if (selection.kind === "clip-ref") {
+        return selection.referenceIdx >= 0 &&
+            selection.referenceIdx < clip.references.length
+            ? selection
+            : { kind: "clip", clipIdx: selection.clipIdx, stageIdx: 0 };
+    }
     if (selection.kind === "ic-lora") {
         return selection.entryIdx >= 0 &&
             selection.entryIdx < clip.icLoras.length
@@ -84,6 +91,12 @@ export const detailBreadcrumb = (
                 : `Clip ${selection.clipIdx} · ${stageChipLabel(selection.stageIdx)}`;
         case "ref":
             return `Ref${selection.refIdx} · Clip ${selection.clipIdx}`;
+        case "clip-ref": {
+            const tag = clipReferenceTags(
+                clips[selection.clipIdx]?.references ?? [],
+            )[selection.referenceIdx];
+            return `${tag ?? "Reference"} · Clip ${selection.clipIdx}`;
+        }
         case "ic-lora":
             return `IC-LoRA ${selection.entryIdx} · Clip ${selection.clipIdx}`;
         case "audio":
@@ -156,6 +169,8 @@ export const buildDetailPanelBody = (
         case "clip":
             return buildClipBody(context, selection, state);
         case "ref":
+            return buildClipBody(context, selection, state);
+        case "clip-ref":
             return buildClipBody(context, selection, state);
         case "ic-lora":
             return buildClipBody(context, selection, state);

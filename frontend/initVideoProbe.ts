@@ -76,17 +76,28 @@ export const estimateFpsFromMediaTimes = (
     return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
 };
 
-export const probeInitVideo = (
+/**
+ * Loads `src` into a throwaway media element and hands its positive duration to
+ * `onMetadata`, which either resolves right away or keeps the element alive to
+ * sample more. Every exit — error, timeout, resolve — tears the element down.
+ */
+const withProbedMedia = <T>(
     src: string,
-    timeoutMs = 8000,
-): Promise<InitVideoProbe | null> =>
+    timeoutMs: number,
+    empty: T,
+    onMetadata: (
+        video: VideoWithFrameCallback,
+        durationSeconds: number,
+        finish: (result: T) => void,
+    ) => void,
+): Promise<T> =>
     new Promise((resolve) => {
         const video =
             getVideoStagesHostBridge().createInitVideoElement() as VideoWithFrameCallback;
         video.muted = true;
         video.preload = "auto";
         let settled = false;
-        const finish = (result: InitVideoProbe | null): void => {
+        const finish = (result: T): void => {
             if (settled) {
                 return;
             }
@@ -97,16 +108,30 @@ export const probeInitVideo = (
             video.load();
             resolve(result);
         };
-        const timer = setTimeout(() => finish(null), timeoutMs);
-        video.addEventListener("error", () => finish(null));
+        const timer = setTimeout(() => finish(empty), timeoutMs);
+        video.addEventListener("error", () => finish(empty));
         video.addEventListener("loadedmetadata", () => {
             const durationSeconds = Number.isFinite(video.duration)
                 ? video.duration
                 : 0;
             if (!(durationSeconds > 0)) {
-                finish(null);
+                finish(empty);
                 return;
             }
+            onMetadata(video, durationSeconds, finish);
+        });
+        video.src = src;
+    });
+
+export const probeInitVideo = (
+    src: string,
+    timeoutMs = 8000,
+): Promise<InitVideoProbe | null> =>
+    withProbedMedia<InitVideoProbe | null>(
+        src,
+        timeoutMs,
+        null,
+        (video, durationSeconds, finish) => {
             const requestFrame = video.requestVideoFrameCallback?.bind(video);
             if (!requestFrame) {
                 finish({ durationSeconds, fps: null });
@@ -132,6 +157,18 @@ export const probeInitVideo = (
             };
             requestFrame(step);
             video.play()?.catch(() => finish({ durationSeconds, fps: null }));
-        });
-        video.src = src;
-    });
+        },
+    );
+
+/**
+ * Duration alone, from `loadedmetadata`. Unlike `probeInitVideo` it never plays
+ * the media, so it also works for audio files, where the frame-callback fps
+ * sampling would simply never fire. 0 = unknown.
+ */
+export const probeMediaDurationSeconds = (
+    src: string,
+    timeoutMs = 8000,
+): Promise<number> =>
+    withProbedMedia<number>(src, timeoutMs, 0, (_video, duration, finish) =>
+        finish(duration),
+    );

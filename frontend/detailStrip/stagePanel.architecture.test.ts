@@ -89,6 +89,8 @@ const context = (
     render: jest.fn(),
     addRefEntry: jest.fn(),
     deleteRefEntry: jest.fn(),
+    addClipReference: jest.fn(),
+    deleteClipReference: jest.fn(),
     addPromptWindow: jest.fn(),
     deleteWindowEntry: jest.fn(),
     createRetake: jest.fn(),

@@ -14,6 +14,7 @@ describe("normalization compatibility facade", () => {
             "normalizeAudioTracks",
             "normalizeBoundaryOut",
             "normalizeClip",
+            "normalizeClipReferences",
             "normalizeContinueOverlap",
             "normalizeInitVideo",
             "normalizePromptWindows",

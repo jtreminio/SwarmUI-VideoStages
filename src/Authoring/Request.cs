@@ -67,6 +67,28 @@ public sealed record UploadedMediaSpec(
     string FileName
 );
 
+public enum ClipReferenceKind
+{
+    Image,
+    Video,
+    Audio,
+}
+
+/// <summary>
+/// One whole-clip reference: media the architecture conditions on without attaching it to any
+/// frame position. <c>Source</c> is "Upload" for <c>Media</c>, or a host capture name ("Base",
+/// "Refiner") for image references. <c>IncludeSoundtrack</c> asks a video reference to also pass
+/// its own audio track as the paired reference audio. <c>MediaScale</c> downsamples a video
+/// reference before it is presented, trading detail for reference tokens.
+/// </summary>
+public sealed record ClipReferenceSpec(
+    ClipReferenceKind Kind,
+    string Source,
+    UploadedMediaSpec Media,
+    bool IncludeSoundtrack = false,
+    double MediaScale = 1
+);
+
 /// <summary>
 /// The one data stream an IC-LoRA consumes from its selected drive source. <c>Visual</c> extracts
 /// image/video frames, <c>Audio</c> extracts audio from an audio/video source, and <c>None</c>
@@ -180,7 +202,10 @@ public sealed record ClipSpec(
     // When true on a non-cut boundary, the next generated clip receives the outgoing audio tail
     // as preserved opening context and generates the continuation after that window.
     bool BoundaryOutCarryAudio = false,
-    ReferenceFramingMode ReferenceFraming = ReferenceFramingMode.Crop
+    ReferenceFramingMode ReferenceFraming = ReferenceFramingMode.Crop,
+    // Whole-clip references with no frame position; only architectures declaring
+    // ArchitectureFeature.ClipReferences consume them.
+    IReadOnlyList<ClipReferenceSpec> References = null
 )
 {
     /// <summary>Persisted repair/diagnostic hint. Resolved stage models own behavior.</summary>

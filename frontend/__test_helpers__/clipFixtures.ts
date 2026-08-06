@@ -1,5 +1,6 @@
 import {
     type Clip,
+    type ClipReference,
     type FrameRefImage,
     type IcLora,
     type InitVideo,
@@ -62,6 +63,22 @@ export const minimalRef = (
     ...overrides,
 });
 
+export const minimalClipReference = (
+    overrides: Partial<ClipReference> = {},
+): ClipReference => ({
+    kind: "image",
+    source: "Upload",
+    uploadedMedia: {
+        data: "data:image/png;base64,QQ==",
+        fileName: "subject.png",
+    },
+    includeSoundtrack: false,
+    mediaDurationSeconds: 0,
+    drivesClipLength: false,
+    mediaScale: 1,
+    ...overrides,
+});
+
 export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     architectureHint: "ltx2",
     modelProfileId: "ltx-2.3",
@@ -84,6 +101,7 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     promptWindows: [],
     retake: null,
     initVideo: null,
+    references: [],
     frameRefs: [],
     stages: [minimalStage()],
     ...overrides,

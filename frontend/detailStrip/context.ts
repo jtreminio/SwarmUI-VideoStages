@@ -35,6 +35,8 @@ export interface DetailStripContext {
 
     addRefEntry(clipIdx: number): void;
     deleteRefEntry(clipIdx: number, refIdx: number): void;
+    addClipReference(clipIdx: number): void;
+    deleteClipReference(clipIdx: number, referenceIdx: number): void;
     addPromptWindow(clipIdx: number): void;
     deleteWindowEntry(clipIdx: number, windowIdx: number): void;
     createRetake(clipIdx: number): void;

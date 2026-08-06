@@ -12,6 +12,11 @@ public static class ImageReferenceSyntax
     public static bool TryParseBase2EditStageIndex(string rawValue, out int stageIndex) =>
         TryParseNonNegativeIndexAfterPrefix(StringUtils.Compact(rawValue), Base2EditStagePrefix, out stageIndex);
 
+    public static bool IsHostStageSource(string rawValue) =>
+        StringUtils.Equals(rawValue, "Base")
+        || StringUtils.Equals(rawValue, "Refiner")
+        || TryParseBase2EditStageIndex(rawValue, out _);
+
     public static string FormatExplicitStageIndex(int stageIndex) => $"{VideoStagePrefix}{stageIndex}";
 
     public static string FormatBase2EditStageIndex(int stageIndex) => $"{Base2EditStagePrefix}{stageIndex}";

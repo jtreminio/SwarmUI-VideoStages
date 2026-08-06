@@ -8,6 +8,7 @@ export type EntityKind =
     | "clip"
     | "stage"
     | "ref"
+    | "clip_reference"
     | "ic_lora"
     | "prompt_window"
     | "retake"
@@ -94,6 +95,17 @@ const clipIdentityEntries = (
                 entity: clip.frameRefs[refIndex],
                 kind: "ref",
                 repairPath: `${clipIndex}_${refIndex}`,
+            });
+        }
+        for (
+            let referenceIndex = 0;
+            referenceIndex < clip.references.length;
+            referenceIndex++
+        ) {
+            entries.push({
+                entity: clip.references[referenceIndex],
+                kind: "clip_reference",
+                repairPath: `${clipIndex}_${referenceIndex}`,
             });
         }
         for (
@@ -211,6 +223,9 @@ export const collectAuthoringEntityIds = (
         if (clip.id) ids.push(clip.id);
         for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
         for (const ref of clip.frameRefs) if (ref.id) ids.push(ref.id);
+        for (const reference of clip.references) {
+            if (reference.id) ids.push(reference.id);
+        }
         for (const icLora of clip.icLoras) {
             if (icLora.id) ids.push(icLora.id);
         }

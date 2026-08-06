@@ -25,6 +25,7 @@ public class AuthoringDocumentContractTests
         // Browser-side entity identity; the backend uses only clip and audio-track ids.
         "clips[].stages[].id",
         "clips[].frameRefs[].id",
+        "clips[].references[].id",
         "clips[].icLoras[].id",
         "clips[].retake.id",
         "clips[].initVideo.id",
@@ -33,6 +34,10 @@ public class AuthoringDocumentContractTests
         "clips[].initVideo.fps",
         "clips[].initVideo.durationSeconds",
         "clips[].initVideo.lengthSeconds",
+        // Browser-probed reference length and the flag that applies it: the clip's own
+        // authored duration already follows them, so the backend reads that instead.
+        "clips[].references[].mediaDurationSeconds",
+        "clips[].references[].drivesClipLength",
     ];
 
     /// <summary>Keys the backend reads that the frontend deliberately never emits, with the reason
@@ -172,6 +177,23 @@ public class AuthoringDocumentContractTests
         Assert.True(reference.FromEnd);
         Assert.Equal("ref.png", reference.UploadFileName);
         Assert.Equal("data:image/png;base64,QUJD", reference.Data);
+
+        Assert.Collection(
+            clip.References,
+            image =>
+            {
+                Assert.Equal(ClipReferenceKind.Image, image.Kind);
+                Assert.Equal("Upload", image.Source);
+                Assert.Equal("subject.png", image.Media.FileName);
+                Assert.Equal("data:image/png;base64,QUJD", image.Media.Data);
+                Assert.False(image.IncludeSoundtrack);
+            },
+            video =>
+            {
+                Assert.Equal(ClipReferenceKind.Video, video.Kind);
+                Assert.Equal("motion.mp4", video.Media.FileName);
+                Assert.True(video.IncludeSoundtrack);
+            });
 
         IcLoraSpec icLora = Assert.Single(clip.IcLoras);
         Assert.Equal("ic-lora-pose.safetensors", icLora.Lora);

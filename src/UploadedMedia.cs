@@ -86,20 +86,43 @@ internal static class UploadedMedia
         return true;
     }
 
+    public static ImageFile GetVideo(
+        T2IParamInput input,
+        string data,
+        string fileName,
+        string descriptor)
+    {
+        if (!TryGetVideo(input, data, fileName, descriptor, out ImageFile video, out string error))
+        {
+            throw Invariant.Failure(
+                $"Request preflight accepted a video that runtime cannot load. {error}");
+        }
+        return video;
+    }
+
     internal static bool TryGetInitVideo(
         T2IParamInput input,
         InitVideoPlan source,
         out ImageFile video,
+        out string error) =>
+        TryGetVideo(input, source?.Data, source?.FileName, "clip source video", out video, out error);
+
+    internal static bool TryGetVideo(
+        T2IParamInput input,
+        string data,
+        string fileName,
+        string descriptor,
+        out ImageFile video,
         out string error)
     {
         video = null;
-        if (source is null || string.IsNullOrWhiteSpace(source.Data))
+        if (string.IsNullOrWhiteSpace(data))
         {
             error = null;
             return true;
         }
         if (!TryResolveDataString(
-            input, source.Data.Trim(), "source video", StringComparison.Ordinal, out string material, out error))
+            input, data.Trim(), descriptor, StringComparison.Ordinal, out string material, out error))
         {
             return false;
         }
@@ -109,19 +132,17 @@ internal static class UploadedMedia
         }
         catch (Exception ex)
         {
-            error = $"The clip source video embedded in Video Stages JSON is not readable. {ex.Message}";
+            error = $"The {descriptor} embedded in Video Stages JSON is not readable. {ex.Message}";
             return false;
         }
         if (video?.Type?.MetaType != MediaMetaType.Video)
         {
             video = null;
-            error = "A clip source video is not a video file "
+            error = $"A {descriptor} is not a video file "
                 + $"(media type '{(object)video?.Type?.MetaType?.Name ?? "unknown"}').";
             return false;
         }
-        video.SourceFilePath = string.IsNullOrWhiteSpace(source.FileName)
-            ? null
-            : source.FileName.Trim();
+        video.SourceFilePath = string.IsNullOrWhiteSpace(fileName) ? null : fileName.Trim();
         return true;
     }
 

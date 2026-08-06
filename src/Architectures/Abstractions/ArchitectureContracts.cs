@@ -64,6 +64,7 @@ internal enum ArchitectureFeature
     AudioBoundaryCarry = 1 << 8,
     LatentUpscale = 1 << 9,
     LatentModelUpscale = 1 << 10,
+    ClipReferences = 1 << 11,
 }
 
 // --- Boundary rules: the only rule family, published with typed constraints so the backend and

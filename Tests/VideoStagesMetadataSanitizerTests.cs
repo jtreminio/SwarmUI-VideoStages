@@ -142,6 +142,41 @@ public class MetadataSanitizerTests
     }
 
     [Fact]
+    public void StripUploadData_ClipReferenceUpload_IsStripped()
+    {
+        string raw = new JObject
+        {
+            ["clips"] = new JArray
+            {
+                new JObject
+                {
+                    ["references"] = new JArray
+                    {
+                        new JObject
+                        {
+                            ["kind"] = "video",
+                            ["source"] = "Upload",
+                            ["uploadedMedia"] = new JObject
+                            {
+                                ["data"] = "data:video/mp4;base64,REVG",
+                                ["fileName"] = "motion.mp4"
+                            }
+                        }
+                    }
+                }
+            }
+        }.ToString();
+
+        string sanitized = MetadataSanitizer.StripUploadDataFromJsonParameter(raw);
+
+        JObject reference =
+            (JObject)JObject.Parse(sanitized)["clips"]![0]!["references"]![0]!;
+        Assert.Null(reference["uploadedMedia"]!["data"]);
+        Assert.Equal("motion.mp4", $"{reference["uploadedMedia"]!["fileName"]}");
+        Assert.DoesNotContain("REVG", sanitized);
+    }
+
+    [Fact]
     public void StripUploadData_BareClipArrayRoot_IsRefusedRatherThanPublished()
     {
         // The document envelope is always a versioned root object. The sanitizer cannot walk any

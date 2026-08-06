@@ -2,6 +2,7 @@ import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalClip,
+    CanonicalClipReference,
     CanonicalFrameRefImage,
     CanonicalPromptWindow,
     CanonicalRetake,
@@ -134,6 +135,7 @@ const CLIP_ENTITY = defineList<CanonicalVideoStagesConfig, CanonicalClip>()({
         "modelProfileId",
         "promptWindows",
         "retake",
+        "references",
         "frameRefs",
         "stages",
     ],
@@ -180,6 +182,28 @@ const REF_ENTITY = defineList<CanonicalClip, CanonicalFrameRefImage>()({
     ],
     reservedKeys: ["id"],
     collection: (clip) => clip.frameRefs,
+});
+
+const CLIP_REFERENCE_ENTITY = defineList<
+    CanonicalClip,
+    CanonicalClipReference
+>()({
+    prefix: "clip-reference",
+    owner: "clip",
+    entityField: "reference",
+    idField: "referenceId",
+    beforeIdField: "beforeReferenceId",
+    patchKeys: [
+        "kind",
+        "source",
+        "uploadedMedia",
+        "includeSoundtrack",
+        "mediaDurationSeconds",
+        "drivesClipLength",
+        "mediaScale",
+    ],
+    reservedKeys: ["id"],
+    collection: (clip) => clip.references,
 });
 
 const PROMPT_WINDOW_ENTITY = defineList<CanonicalClip, CanonicalPromptWindow>()(
@@ -232,6 +256,7 @@ export const LIST_ENTITIES = {
     clip: CLIP_ENTITY,
     stage: STAGE_ENTITY,
     ref: REF_ENTITY,
+    clipReference: CLIP_REFERENCE_ENTITY,
     promptWindow: PROMPT_WINDOW_ENTITY,
     audioTrack: AUDIO_TRACK_ENTITY,
     audioSpan: AUDIO_SPAN_ENTITY,
@@ -245,6 +270,7 @@ type PatchOf<D> =
 export type ClipPatch = PatchOf<typeof CLIP_ENTITY>;
 export type StagePatch = PatchOf<typeof STAGE_ENTITY>;
 export type RefPatch = PatchOf<typeof REF_ENTITY>;
+export type ClipReferencePatch = PatchOf<typeof CLIP_REFERENCE_ENTITY>;
 export type PromptWindowPatch = PatchOf<typeof PROMPT_WINDOW_ENTITY>;
 export type AudioTrackPatch = PatchOf<typeof AUDIO_TRACK_ENTITY>;
 export type AudioSpanPatch = PatchOf<typeof AUDIO_SPAN_ENTITY>;

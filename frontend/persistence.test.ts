@@ -13,6 +13,7 @@ import {
 } from "./__test_helpers__/architectureFixtures";
 import {
     minimalClip,
+    minimalClipReference,
     minimalRef,
     minimalStage,
 } from "./__test_helpers__/clipFixtures";
@@ -293,6 +294,19 @@ describe("persistence", () => {
                     ],
                     clipLengthFromControlNet: true,
                     prompt: "should not be serialized",
+                    references: [
+                        minimalClipReference({
+                            kind: "video",
+                            uploadedMedia: {
+                                data: "data:video/mp4;base64,REVG",
+                                fileName: "motion.mp4",
+                            },
+                            includeSoundtrack: true,
+                            mediaDurationSeconds: 4.5,
+                            drivesClipLength: true,
+                            mediaScale: 0.5,
+                        }),
+                    ],
                     frameRefs: [minimalRef({ frame: 2, fromEnd: true })],
                     stages: [
                         minimalStage({
@@ -339,6 +353,21 @@ describe("persistence", () => {
                     uploadedAudio: null,
                     initVideo: null,
                     retake: null,
+                    references: [
+                        {
+                            id: clips[0].references[0].id as string,
+                            kind: "video",
+                            source: "Upload",
+                            uploadedMedia: {
+                                data: "data:video/mp4;base64,REVG",
+                                fileName: "motion.mp4",
+                            },
+                            includeSoundtrack: true,
+                            mediaDurationSeconds: 4.5,
+                            drivesClipLength: true,
+                            mediaScale: 0.5,
+                        },
+                    ],
                     frameRefs: [
                         {
                             id: clips[0].frameRefs[0].id as string,

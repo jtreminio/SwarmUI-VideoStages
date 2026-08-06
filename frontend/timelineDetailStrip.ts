@@ -112,6 +112,8 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
             activeSnapshot ?? captureAuthoringTransactionSnapshot(),
         addRefEntry: selectionOperations.addRefEntry,
         deleteRefEntry: selectionOperations.deleteRefEntry,
+        addClipReference: selectionOperations.addClipReference,
+        deleteClipReference: selectionOperations.deleteClipReference,
         addPromptWindow: selectionOperations.addPromptWindow,
         deleteWindowEntry: selectionOperations.deleteWindowEntry,
         createRetake: selectionOperations.createRetake,

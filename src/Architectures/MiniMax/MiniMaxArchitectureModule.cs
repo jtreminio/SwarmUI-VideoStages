@@ -19,8 +19,8 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
     /// are 5, 22, 39, ... Mirrors core's <c>WorkflowGenerator.MiniMaxH3AlignFrames</c>.
     /// </summary>
     internal const int FrameGrid = 17;
-
     internal const int FrameGridOrigin = 5;
+    internal const double ReferenceFramesPerSecond = 24;
 
     /// <summary>The checkpoint class; core registers its video VAE under the same compat class.</summary>
     internal const string ModelClassId = "minimax-h3";
@@ -68,6 +68,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             ArchitectureEntryMode.InitVideo,
         ],
         ArchitectureFeature.FrameReferences
+            | ArchitectureFeature.ClipReferences
             | ArchitectureFeature.AudioDerivedDuration
             | ArchitectureFeature.ReferenceFraming
             | ArchitectureFeature.AudioReuse
@@ -196,7 +197,8 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 clip.ReferenceFraming,
                 clip.ReuseAudio && activeStages.Count >= 3,
                 first,
-                last),
+                last,
+                MiniMaxClipReferences.Compile(clip, diagnostics)),
             stages,
             diagnostics.AsReadOnly());
     }
@@ -206,7 +208,8 @@ internal sealed record MiniMaxClipPayload(
     ReferenceFramingMode ReferenceFraming,
     bool ReuseAudio,
     NativeFrameReferencePlan FirstFrameReference,
-    NativeFrameReferencePlan LastFrameReference) :
+    NativeFrameReferencePlan LastFrameReference,
+    IReadOnlyList<MiniMaxReferencePlan> References) :
     IArchitectureClipPayload, INativeFrameReferenceClipPayload
 {
     public ArchitectureId ArchitectureId => MiniMaxArchitectureModule.ArchitectureId;

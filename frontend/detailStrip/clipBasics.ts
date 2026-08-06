@@ -1,4 +1,5 @@
 import type { AuthoringState } from "../architectures/policy";
+import { clipLengthReferenceIndex } from "../clipReferenceAuthoring";
 import { CLIP_DURATION_MAX, CLIP_DURATION_MIN } from "../constants";
 import {
     buildField,
@@ -25,9 +26,11 @@ export const buildClipColumn = (
         "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
 
     const initVideoClip = !!clip.initVideo;
+    const lengthReferenceIdx = clipLengthReferenceIndex(clip.references);
     const lengthDerived =
         clip.clipLengthFromAudio === true ||
         clip.clipLengthFromControlNet === true ||
+        lengthReferenceIdx >= 0 ||
         initVideoClip;
     const durationInput = buildNumber(
         clip.duration,
@@ -48,11 +51,13 @@ export const buildClipColumn = (
     const durationField = buildField(
         "Duration (s)",
         durationInput,
-        lengthDerived
-            ? initVideoClip
-                ? "(derived from the source video range)"
-                : "(derived from audio/ControlNet source)"
-            : undefined,
+        !lengthDerived
+            ? undefined
+            : initVideoClip
+              ? "(derived from the source video range)"
+              : lengthReferenceIdx >= 0
+                ? "(derived from a reference's media length)"
+                : "(derived from audio/ControlNet source)",
     );
     if (lengthDerived) {
         durationInput.disabled = true;

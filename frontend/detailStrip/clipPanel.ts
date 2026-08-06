@@ -4,6 +4,7 @@ import type { TimelineSelection, VideoStagesConfig } from "../types";
 import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import { buildClipColumn, buildClipSkipAction } from "./clipBasics";
 import { buildClipLorasSection } from "./clipLorasPanel";
+import { buildClipReferenceSection } from "./clipReferencePanel";
 import type { DetailStripContext } from "./context";
 import { buildInitVideoSection } from "./initVideoPanel";
 import { buildRefSection } from "./refPanel";
@@ -19,7 +20,7 @@ export const buildClipBody = (
     context: DetailStripContext,
     selection: Extract<
         TimelineSelection,
-        { kind: "clip" | "ref" | "ic-lora" | "retake" }
+        { kind: "clip" | "ref" | "clip-ref" | "ic-lora" | "retake" }
     >,
     state: VideoStagesConfig,
 ): HTMLElement => {
@@ -94,7 +95,7 @@ export const buildClipBody = (
     }
     body.appendChild(stages);
     const appendCapabilitySection = (
-        feature: "frameReferences" | "icLora" | "retake",
+        feature: "clipReferences" | "frameReferences" | "icLora" | "retake",
         persisted: boolean,
         content: () => HTMLElement | DocumentFragment,
     ): void => {
@@ -110,6 +111,16 @@ export const buildClipBody = (
         }
         body.appendChild(section);
     };
+    appendCapabilitySection("clipReferences", clip.references.length > 0, () =>
+        buildClipReferenceSection(
+            context,
+            clipIdx,
+            selection.kind === "clip-ref" ? selection.referenceIdx : null,
+            clips,
+            state.fps,
+            selection.kind === "clip-ref",
+        ),
+    );
     appendCapabilitySection("frameReferences", clip.frameRefs.length > 0, () =>
         buildRefSection(
             context,

@@ -76,6 +76,8 @@ const clipItemList = (
             return { list: clip.stages, index: selection.stageIdx };
         case "ref":
             return { list: clip.frameRefs, index: selection.refIdx };
+        case "clip-ref":
+            return { list: clip.references, index: selection.referenceIdx };
         case "ic-lora":
             return { list: clip.icLoras, index: selection.entryIdx };
         case "prompt-minor":
@@ -157,6 +159,8 @@ const withItemIndex = (
             return { kind: "clip", clipIdx, stageIdx: itemIdx };
         case "ref":
             return { kind: "ref", clipIdx, refIdx: itemIdx };
+        case "clip-ref":
+            return { kind: "clip-ref", clipIdx, referenceIdx: itemIdx };
         case "ic-lora":
             return { kind: "ic-lora", clipIdx, entryIdx: itemIdx };
         case "prompt-minor":
@@ -273,6 +277,11 @@ const sameSelectionShape = (
             return (
                 a.clipIdx === (b as typeof a).clipIdx &&
                 a.refIdx === (b as typeof a).refIdx
+            );
+        case "clip-ref":
+            return (
+                a.clipIdx === (b as typeof a).clipIdx &&
+                a.referenceIdx === (b as typeof a).referenceIdx
             );
         case "ic-lora":
             return (

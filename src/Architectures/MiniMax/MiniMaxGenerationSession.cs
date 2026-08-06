@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Authoring;
 using VideoStages.Execution.Audio;
 using VideoStages.Execution.Graph;
 using VideoStages.Execution.Parameters;
@@ -297,16 +298,16 @@ internal sealed class MiniMaxGenerationSession(
         try
         {
             g.IsImageToVideo = true;
-            PrepModelAndPrompt(genInfo);
+            PrepModelAndPrompt(clip, genInfo, clip.RequireMiniMaxPayload().References);
             int frames = genInfo.Frames
                 ?? throw Invariant.Failure(
                     "A MiniMax H3 stage has no resolved frame count.");
+            HostRootClaim claim = rootAdoption.ClaimTextRoot(clip, stage, includeLatent: true);
             g.CurrentMedia = incoming is null
-                ? EntryJointLatent(clip, genInfo, frames)
+                ? EntryJointLatent(clip, genInfo, frames, claim.Latent)
                 : JointLatent(incoming, genInfo);
             ApplyLatentInterpolation(stageUpscale);
             AttachKeyframes(genInfo, firstFrame);
-            HostRootClaim claim = rootAdoption.ClaimTextRoot(clip, stage);
             string sampled = g.CreateKSampler(
                 genInfo.Model.Path,
                 genInfo.PosCond,
@@ -338,38 +339,45 @@ internal sealed class MiniMaxGenerationSession(
     }
 
     /// <summary>Prepares the model and prompt without host keyframe attachment.</summary>
-    private void PrepModelAndPrompt(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    private void PrepModelAndPrompt(
+        ClipPlan clip,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        IReadOnlyList<MiniMaxReferencePlan> references)
     {
         g.FinalLoadedModel = genInfo.VideoModel;
-        (genInfo.VideoModel, genInfo.Model, WGNodeData clip, genInfo.Vae) = g.CreateModelLoader(
-            genInfo.VideoModel,
-            "image2video",
-            null,
-            true,
-            sectionId: genInfo.ContextID);
-        genInfo.Clip = clip;
+        (genInfo.VideoModel, genInfo.Model, WGNodeData textEncoder, genInfo.Vae) =
+            g.CreateModelLoader(
+                genInfo.VideoModel,
+                "image2video",
+                null,
+                true,
+                sectionId: genInfo.ContextID);
+        genInfo.Clip = textEncoder;
         // H3's reference conditioning reads the host VAE, which this session leaves unset so no
         // foreign root VAE binds to an uploaded frame. The model just loaded its own.
         g.CurrentVae = genInfo.Vae;
-        genInfo.PosCond = g.CreateConditioning(
-            genInfo.Prompt, clip.Path, genInfo.VideoModel, true, isVideo: true);
+        // Whole-clip references are tokenized WITH the prompt, so they replace the text encode
+        // rather than decorating its output.
+        genInfo.PosCond = BuildReferenceConditioning(clip.ClipId, references, genInfo)
+            ?? g.CreateConditioning(
+                genInfo.Prompt, textEncoder.Path, genInfo.VideoModel, true, isVideo: true);
         genInfo.NegCond = g.CreateConditioning(
-            genInfo.NegativePrompt, clip.Path, genInfo.VideoModel, false, isVideo: true);
+            genInfo.NegativePrompt, textEncoder.Path, genInfo.VideoModel, false, isVideo: true);
     }
 
     private WGNodeData EmptyJointLatent(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         int frames,
+        string latentNodeId = null,
         JArray framesConnection = null)
     {
-        string empty = g.CreateNode("EmptyMiniMaxH3LatentAV", new JObject()
-        {
-            ["length"] = framesConnection is null
-                ? new JValue(frames)
-                : framesConnection,
-            ["height"] = genInfo.Height,
-            ["width"] = genInfo.Width,
-        });
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        EmptyMiniMaxH3LatentAVNode emptyNode = latentNodeId is null
+            ? bridge.AddNode(new EmptyMiniMaxH3LatentAVNode())
+            : bridge.AddNode(new EmptyMiniMaxH3LatentAVNode(), latentNodeId);
+        emptyNode.With(Width: (int)genInfo.Width, Height: (int)genInfo.Height);
+        emptyNode.Length.SetFromToken(bridge, (JToken)framesConnection ?? new JValue(frames));
+        string empty = emptyNode.Id;
         return new WGNodeData([empty, 0], g, WGNodeData.DT_LATENT_AUDIOVIDEO, genInfo.Model.Compat)
         {
             Width = (int)genInfo.Width,
@@ -408,21 +416,21 @@ internal sealed class MiniMaxGenerationSession(
                 _referenceFraming,
                 unwrapExistingFraming: false)
             : null;
-        string keyframes = g.CreateNode("SwarmMiniMaxH3AddKeyframes", new JObject()
-        {
-            ["vae"] = genInfo.Vae.Path,
-            ["latent"] = g.CurrentMedia.Path,
-            ["conditioning"] = genInfo.PosCond,
-            ["first_frame"] = firstFramePath,
-            ["last_frame"] = lastFramePath,
-        });
-        genInfo.PosCond = [keyframes, 0];
+        SwarmMiniMaxH3AddKeyframesNode keyframes = bridge.AddNode(
+            new SwarmMiniMaxH3AddKeyframesNode());
+        keyframes.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
+        keyframes.Latent.ConnectFromPath(bridge, g.CurrentMedia.Path);
+        keyframes.ConditioningInput.ConnectFromPath(bridge, genInfo.PosCond);
+        keyframes.FirstFrame.TryConnectFromPath(bridge, firstFramePath);
+        keyframes.LastFrame.TryConnectFromPath(bridge, lastFramePath);
+        genInfo.PosCond = WorkflowBridge.ToPath(keyframes.Conditioning);
     }
 
     private WGNodeData EntryJointLatent(
         ClipPlan clip,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        int frames)
+        int frames,
+        string latentNodeId)
     {
         WGNodeData combinedAudio = CombineClipAudio(
             clip,
@@ -450,7 +458,7 @@ internal sealed class MiniMaxGenerationSession(
             combinedAudio = combinedAudio.WithPath(
                 WorkflowBridge.ToPath(lengthToFrames.Audio));
         }
-        WGNodeData joint = EmptyJointLatent(genInfo, frames, framesConnection);
+        WGNodeData joint = EmptyJointLatent(genInfo, frames, latentNodeId, framesConnection);
         if (combinedAudio is null)
         {
             return joint;
@@ -586,31 +594,206 @@ internal sealed class MiniMaxGenerationSession(
                 ? null
                 : g.LoadImage(image, "${videostagesminimaxreference}", false);
         }
-        CapturedHostReference captured = reference?.Source?.Trim() switch
+        return reference is null ? null : ResolveHostCapture(reference.Source, descriptor);
+    }
+
+    /// <summary>
+    /// The host stage image a "Base", "Refiner" or Base2Edit <c>editN</c> source names, or null with
+    /// a warning. Base2Edit publishes its edit stages itself, so those need no capture of our own.
+    /// </summary>
+    private WGNodeData ResolveHostCapture(string source, string descriptor)
+    {
+        string value = source?.Trim() ?? "";
+        CapturedHostReference captured = null;
+        if (StringUtils.Equals(value, "Base"))
         {
-            string source when StringUtils.Equals(source, "Base") => baseReference,
-            string source when StringUtils.Equals(source, "Refiner") => refinerReference,
-            _ => null,
-        };
-        if (reference is not null && captured is null)
+            captured = baseReference;
+        }
+        else if (StringUtils.Equals(value, "Refiner"))
+        {
+            captured = refinerReference;
+        }
+        else if (ImageReferenceSyntax.TryParseBase2EditStageIndex(value, out int editStage)
+            && Base2EditStageRefs.TryGet(
+                g,
+                editStage,
+                out WGNodeData editMedia,
+                out WGNodeData editVae))
+        {
+            captured = new(editMedia, editVae);
+        }
+        if (captured is null)
         {
             PlanDiagnosticReporter.TrackRequestWarning(
                 g.UserInput,
-                $"VideoStages: {descriptor} source '{reference.Source}' was not captured; "
+                $"VideoStages: {descriptor} source '{source}' was not available; "
                     + "ignoring it for this generation.");
             return null;
         }
         // The base capture happens before the host decodes its latent, so this may need a VAE
-        // round-trip. Keyframe inputs take images; handing them a latent breaks the graph.
-        WGNodeData decoded = captured?.AsImage();
-        if (captured is not null && decoded is null)
+        // round-trip. Image inputs take images; handing them a latent breaks the graph.
+        WGNodeData decoded = captured.AsImage();
+        if (decoded is null)
         {
             PlanDiagnosticReporter.TrackRequestWarning(
                 g.UserInput,
-                $"VideoStages: {descriptor} source '{reference.Source}' was captured as a latent "
+                $"VideoStages: {descriptor} source '{source}' was captured as a latent "
                     + "with no VAE available to decode it; ignoring it for this generation.");
         }
         return decoded;
+    }
+
+    /// <summary>
+    /// Builds H3's <c>MiniMaxH3ReferenceToVideo</c> conditioning, or null when the clip authored
+    /// no usable reference. Its second output is an empty AV latent this session already builds
+    /// itself, so only the conditioning is taken.
+    /// </summary>
+    private JArray BuildReferenceConditioning(
+        int clipId,
+        IReadOnlyList<MiniMaxReferencePlan> references,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        List<JArray> images = [];
+        List<JArray> videos = [];
+        List<JArray> videoAudios = [];
+        List<JArray> audios = [];
+        foreach (MiniMaxReferencePlan reference in references)
+        {
+            string descriptor =
+                $"clip {clipId} {MiniMaxClipReferences.Label(reference.Kind)} reference";
+            switch (reference.Kind)
+            {
+                case ClipReferenceKind.Image:
+                    if (ReferenceImage(reference, descriptor, images.Count) is JArray image)
+                    {
+                        images.Add(image);
+                    }
+                    break;
+                case ClipReferenceKind.Video:
+                    WGNodeData video = g.LoadImage(
+                        UploadedMedia.GetVideo(
+                            g.UserInput,
+                            reference.Media.Data,
+                            reference.Media.FileName,
+                            descriptor),
+                        "${videostagesminimaxrefvideo}",
+                        resize: false);
+                    videos.Add(ConformReferenceVideo(video, reference.MediaScale));
+                    videoAudios.Add(
+                        reference.IncludeSoundtrack ? video.AttachedAudio?.Path : null);
+                    break;
+                default:
+                    audios.Add(new JArray(
+                        g.CreateAudioLoadNode(
+                            UploadedMedia.GetAudio(g.UserInput, reference.Media),
+                            "${videostagesminimaxrefaudio}"),
+                        0));
+                    break;
+            }
+        }
+        if (images.Count + videos.Count + audios.Count == 0)
+        {
+            return null;
+        }
+
+        WGNodeData audioVae = g.CurrentAudioVae
+            ?? throw Invariant.Failure(
+                "MiniMax H3 reference conditioning requires the model's audio VAE.");
+        int frames = genInfo.Frames
+            ?? throw Invariant.Failure(
+                "MiniMax H3 reference conditioning has no resolved frame count.");
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        MiniMaxH3ReferenceToVideoNode node = bridge.AddNode(
+            new MiniMaxH3ReferenceToVideoNode().With(
+                Prompt: genInfo.Prompt,
+                Width: (int)genInfo.Width,
+                Height: (int)genInfo.Height,
+                Length: frames,
+                RefImageSize: "match"));
+        node.Clip.ConnectFromPath(bridge, genInfo.Clip.Path);
+        node.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
+        node.AudioVae.ConnectFromPath(bridge, audioVae.Path);
+        Fill(node.RefImages, images);
+        Fill(node.RefVideos, videos);
+        Fill(node.RefVideoAudios, videoAudios);
+        Fill(node.RefAudios, audios);
+        return WorkflowBridge.ToPath(node.Positive);
+
+        void Fill(INodeInputList list, IReadOnlyList<JArray> paths)
+        {
+            foreach (JArray path in paths)
+            {
+                list.AppendUnsetSlot().TryConnectToUntyped(bridge.ResolvePath(path));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Puts a reference video on the timebase and size H3 expects.
+    /// <para>
+    /// The node reads a reference as a plain frame batch at its own fixed 24 fps: it truncates to
+    /// the generated frame count, samples every twelfth frame for the text encoder, and stamps
+    /// those at half-second intervals. A 30 or 60 fps upload therefore arrives as sped-up motion
+    /// cut short of the seconds it was meant to cover, so it is resampled first. Scaling comes
+    /// after, on the frames that survived, and only buys back reference tokens — H3 fits every
+    /// reference onto its own 32-aligned canvas regardless.
+    /// </para>
+    /// </summary>
+    private JArray ConformReferenceVideo(WGNodeData video, double scale)
+    {
+        JArray frames = video.Path;
+        JArray fps = video.FPS as JArray;
+        if (fps is null && scale >= 1)
+        {
+            return frames;
+        }
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        if (fps is not null)
+        {
+            SwarmVideoResampleFPSNode resampled = bridge.AddNode(
+                new SwarmVideoResampleFPSNode().With(
+                    FpsOut: MiniMaxArchitectureModule.ReferenceFramesPerSecond,
+                    Method: "linear"));
+            resampled.ImagesInput.ConnectFromPath(bridge, frames);
+            resampled.FpsIn.ConnectFromPath(bridge, fps);
+            frames = WorkflowBridge.ToPath(resampled.Images);
+        }
+        if (scale >= 1)
+        {
+            return frames;
+        }
+        ImageScaleByNode scaled = bridge.AddNode(new ImageScaleByNode().With(
+            UpscaleMethod: "lanczos",
+            ScaleBy: scale));
+        scaled.Image.ConnectFromPath(bridge, frames);
+        return WorkflowBridge.ToPath(scaled.IMAGE);
+    }
+
+    private JArray ReferenceImage(
+        MiniMaxReferencePlan reference,
+        string descriptor,
+        int index)
+    {
+        if (!StringUtils.Equals(reference.Source, "Upload"))
+        {
+            WGNodeData captured = ResolveHostCapture(reference.Source, $"{descriptor} {index}");
+            if (captured is null)
+            {
+                PlanDiagnosticReporter.TrackRequestWarning(
+                    g.UserInput,
+                    $"VideoStages: {descriptor} {index} was dropped, so every later image "
+                        + "reference on this clip moves down one <Picture> number.");
+            }
+            return captured?.Path;
+        }
+        return g.LoadImage(
+            UploadedMedia.GetRefImage(
+                g.UserInput,
+                reference.Media.Data,
+                reference.Media.FileName,
+                $"{descriptor} {index}"),
+            "${videostagesminimaxrefimage}",
+            false).Path;
     }
 
     /// <summary>Uses the global final frame only when one clip has no authored reference.</summary>

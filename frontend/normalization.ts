@@ -14,6 +14,7 @@ export {
     normalizeContinueOverlap,
 } from "./normalizationClip";
 export {
+    normalizeClipReferences,
     normalizeInitVideo,
     normalizePromptWindows,
     normalizeRetake,

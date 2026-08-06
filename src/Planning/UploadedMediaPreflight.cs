@@ -41,6 +41,17 @@ internal sealed class UploadedMediaPreflight(T2IParamInput input)
             ? null
             : Unreadable(error, clipId, stageId);
 
+    /// <summary>Null when the video is readable or absent.</summary>
+    internal PlanDiagnostic VideoDiagnostic(
+        string data,
+        string fileName,
+        string descriptor,
+        int clipId,
+        int? stageId = null) =>
+        UploadedMedia.TryGetVideo(input, data, fileName, descriptor, out _, out string error)
+            ? null
+            : Unreadable(error, clipId, stageId);
+
     /// <summary>Null when the reference image is readable.</summary>
     internal PlanDiagnostic ImageDiagnostic(
         string inlineData,

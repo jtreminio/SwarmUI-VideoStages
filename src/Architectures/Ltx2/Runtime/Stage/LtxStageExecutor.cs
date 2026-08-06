@@ -59,9 +59,11 @@ internal sealed class LtxStageExecutor
                 handler(genInfo);
             }
 
-            stageFrame.Claim = rootAdoption.ClaimWholeTextRoot(
+            stageFrame.Claim = rootAdoption.ClaimTextRoot(
                 stageFrame.ClipContext.PlannedClip,
-                stageFrame.Stage);
+                stageFrame.Stage,
+                includeLatent: true,
+                includeConditioning: true);
             WGNodeData effectiveSourceMedia = g.CurrentMedia ?? sourceMedia;
             modelPromptPreparer.Prepare(genInfo, stageFrame, effectiveSourceMedia);
             bool canReuseLatent =

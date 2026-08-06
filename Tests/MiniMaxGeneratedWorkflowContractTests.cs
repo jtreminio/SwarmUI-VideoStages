@@ -1467,6 +1467,203 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertAcyclic(bridge);
     }
 
+    [Fact]
+    public async Task Clip_references_build_the_reference_conditioning_the_sampler_reads()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["frameRefs"] = new JArray(UploadedReference("RklSU1Q=", fromEnd: false));
+        clip["references"] = new JArray(
+            ClipReference("image", "data:image/png;base64,U1VCSkVDVA==", "subject.png"),
+            ClipReference(
+                "video",
+                "data:video/mp4;base64,TU9USU9O",
+                "motion.mp4",
+                includeSoundtrack: true),
+            ClipReference("audio", "data:audio/wav;base64,Vk9JQ0U=", "voice.wav"));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        ComfyNode referenceNode = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
+        Assert.Equal("match", inputs["ref_image_size"]?.ToString());
+        Assert.Equal(
+            MiniMaxWorkflowFixture.GeneratedFrames,
+            inputs["length"].Value<int>());
+        Assert.All(
+            new[]
+            {
+                "ref_images.ref_image_0",
+                "ref_videos.ref_video_0",
+                "ref_video_audios.ref_video_audio_0",
+                "ref_audios.ref_audio_0",
+            },
+            key => Assert.NotNull(inputs[key]));
+        // The soundtrack rides the same video load, not a second decode of the file.
+        Assert.Equal(
+            inputs["ref_videos.ref_video_0"][0],
+            inputs["ref_video_audios.ref_video_audio_0"][0]);
+
+        // The reference node feeds the keyframe wrapper, which feeds the sampler's positive.
+        SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
+        // A plain text encode here would mean the references never reached the tokenizer.
+        Assert.Same(referenceNode, keyframes.ConditioningInput.Connection?.Node);
+        Assert.Same(keyframes, StageSampler(bridge, 0).Positive.Connection?.Node);
+
+        live.AssertLive(keyframes);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    [Theory]
+    [InlineData(1.0, false)]
+    [InlineData(0.5, true)]
+    public async Task A_video_reference_is_resampled_to_the_model_rate_then_scaled_on_request(
+        double scale,
+        bool expectScaling)
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["references"] = new JArray(
+            ClipReference("video", "data:video/mp4;base64,TU9USU9O", "motion.mp4", scale: scale));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        ComfyNode referenceNode = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        string videoInputNodeId =
+            workflow[referenceNode.Id]["inputs"]["ref_videos.ref_video_0"][0].ToString();
+
+        // The node reads a reference as a plain 24 fps batch, so the file's own rate is
+        // resampled away before anything else touches the frames.
+        SwarmVideoResampleFPSNode resampled = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmVideoResampleFPSNode>());
+        GetVideoComponentsNode components = Assert.IsType<GetVideoComponentsNode>(
+            resampled.ImagesInput.Connection?.Node);
+        Assert.Equal(24, resampled.FpsOut.LiteralAsDouble());
+        Assert.Same(components, resampled.FpsIn.Connection?.Node);
+
+        if (!expectScaling)
+        {
+            Assert.Empty(bridge.Graph.NodesOfType<ImageScaleByNode>());
+            Assert.Equal(resampled.Id, videoInputNodeId);
+        }
+        else
+        {
+            ImageScaleByNode scaled = Assert.Single(
+                bridge.Graph.NodesOfType<ImageScaleByNode>());
+            Assert.Equal(videoInputNodeId, scaled.Id);
+            Assert.Equal(scale, scaled.ScaleBy.LiteralAsDouble());
+            // Scaling runs on the frames that survived the resample, not the raw load.
+            Assert.Same(resampled, scaled.Image.Connection?.Node);
+            live.AssertLive(scaled);
+        }
+        // The soundtrack still comes off the untouched load.
+        live.AssertLive(resampled);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// The node pairs <c>ref_video_audio_N</c> with <c>ref_video_N</c> by name, so a video carrying
+    /// no soundtrack has to leave its number open. Closing the gap would slide the next video's
+    /// track onto the silent one and condition the wrong reference.
+    /// </summary>
+    [Fact]
+    public async Task A_soundtrack_keeps_the_number_of_the_video_reference_it_belongs_to()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["references"] = new JArray(
+            ClipReference("video", "data:video/mp4;base64,U0lMRU5U", "silent.mp4"),
+            ClipReference(
+                "video",
+                "data:video/mp4;base64,U0NPUkVE",
+                "scored.mp4",
+                includeSoundtrack: true));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        ComfyNode referenceNode = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
+        Assert.NotNull(inputs["ref_videos.ref_video_0"]);
+        Assert.NotNull(inputs["ref_videos.ref_video_1"]);
+        Assert.Null(inputs["ref_video_audios.ref_video_audio_0"]);
+        Assert.NotNull(inputs["ref_video_audios.ref_video_audio_1"]);
+
+        live.AssertLive(referenceNode);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// A Base2Edit edit stage is published rather than captured, so this is the reference source
+    /// that reaches the conditioning without any capture hook of the extension's own.
+    /// </summary>
+    [Fact]
+    public async Task A_base2edit_clip_reference_is_wired_into_the_reference_conditioning()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["references"] = new JArray(
+            new JObject { ["kind"] = "image", ["source"] = "edit0" });
+
+        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+            fixture.Post(MakeDocument(clip)),
+            extraSteps: [PublishBase2EditImageStep(0)]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmLoadImageB64Node published = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        ComfyNode referenceNode = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        Assert.Equal(
+            published.Id,
+            ((JObject)workflow[referenceNode.Id]["inputs"])["ref_images.ref_image_0"][0]
+                .ToString());
+
+        // The node replaces the positive text encode, so reaching the sampler is what proves the
+        // published image was tokenized with the prompt rather than left dangling.
+        Assert.Same(referenceNode, StageSampler(bridge, 0).Positive.Connection?.Node);
+
+        live.AssertAllLive(published, referenceNode);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    private static JObject ClipReference(
+        string kind,
+        string data,
+        string fileName,
+        bool includeSoundtrack = false,
+        double scale = 1) =>
+        new()
+        {
+            ["kind"] = kind,
+            ["source"] = "Upload",
+            ["includeSoundtrack"] = includeSoundtrack,
+            ["mediaScale"] = scale,
+            ["uploadedMedia"] = new JObject
+            {
+                ["data"] = data,
+                ["fileName"] = fileName,
+            },
+        };
+
     /// <summary>Nothing resolves or downloads this; the loader only names it.</summary>
     private const string UpscaleModelFileName = "unit-test-upscaler.pth";
 

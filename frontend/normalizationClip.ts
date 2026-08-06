@@ -21,6 +21,8 @@ import {
 } from "./constants";
 import { defaultLoraWeight } from "./loraAuthoring";
 import {
+    clipReferenceDurationSeconds,
+    normalizeClipReferences,
     normalizeInitVideo,
     normalizePromptWindows,
     normalizeRetake,
@@ -152,6 +154,7 @@ export const buildDefaultClip = (
         promptWindows: [],
         retake: null,
         initVideo: null,
+        references: [],
         frameRefs,
         stages: [firstStage],
     };
@@ -175,9 +178,20 @@ export const normalizeClip = (
             ? effectiveFps
             : defaults.fps,
     );
-    // An init-video clip uses its selected source range as its duration.
+    // Preserved exactly as authored: a source that cannot supply a length is
+    // reported by architecture diagnostics, never silently erased here. Only
+    // the mutual exclusion between the two flags is enforced, with ControlNet
+    // precedence matching RequestReader and AudioLengthPlanCompiler.
+    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
+    const clipLengthFromAudio =
+        !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
+    const references = normalizeClipReferences(
+        rawClip.references,
+        clipLengthFromControlNet || clipLengthFromAudio,
+    );
     const rawDuration =
         initVideo?.lengthSeconds ??
+        clipReferenceDurationSeconds(references) ??
         numberOr(rawClip.duration, defaults.frames / fps);
     const duration = snapDurationToFps(
         Math.max(CLIP_DURATION_MIN, rawDuration),
@@ -237,13 +251,6 @@ export const normalizeClip = (
             stages[index].skipped = true;
         }
     }
-    // Preserved exactly as authored: a source that cannot supply a length is
-    // reported by architecture diagnostics, never silently erased here. Only
-    // the mutual exclusion between the two flags is enforced, with ControlNet
-    // precedence matching RequestReader and AudioLengthPlanCompiler.
-    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
-    const clipLengthFromAudio =
-        !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
     const retake = normalizeRetake(rawClip.retake, duration);
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const refFrameMax = getKnownReferenceFrameMax(
@@ -350,6 +357,7 @@ export const normalizeClip = (
         promptWindows: normalizePromptWindows(rawClip),
         retake,
         initVideo,
+        references,
         frameRefs,
         stages,
     };

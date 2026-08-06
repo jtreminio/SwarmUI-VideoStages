@@ -194,7 +194,7 @@ or disabled. Persisted unsupported values stay visible and disabled with an
 inline reason plus a panel-owned removal affordance; normalization never erases
 them, and diagnostics report them instead.
 
-The feature vocabulary is `initVideo`, `frameReferences`,
+The feature vocabulary is `initVideo`, `frameReferences`, `clipReferences`,
 `retake`, `majorPrompt`, `promptRelay`, `clipAudio`, `audioReuse`,
 `stageLoras`, `icLora`, `upscale`, plus per-stage `sampler` and
 `scheduler`. Supported audio source kinds and upscale modes are lists on the

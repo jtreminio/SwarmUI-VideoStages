@@ -1,5 +1,9 @@
 import { reconcileArchitectureIncomingIcLoraDrives } from "../architectures/behaviorRegistry";
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
+import {
+    INIT_VIDEO_PROBE_SLOT,
+    runClipMediaProbe,
+} from "../clipMediaProbeGuard";
 import { CLIP_DURATION_MIN } from "../constants";
 import {
     appendHelp,
@@ -9,60 +13,42 @@ import {
     clampStartLength,
 } from "../detailWidgets";
 import { initVideoFromProbe, probeInitVideo } from "../initVideoProbe";
-import {
-    beginInitVideoProbeOperation,
-    findClipByStableId,
-} from "../initVideoProbeGuard";
-import { getTimelineStore, saveClips } from "../persistence/repository";
+import { getTimelineStore } from "../persistence/repository";
 import { applyClipDurationResize } from "../timelineEdit";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
 
 const DURATION_STEP = 0.1;
 
-/**
- * The only initVideoClip side effect that cannot use DetailStripContext:
- * metadata probing resolves asynchronously, so it re-reads the current state
- * after the operation guard proves the authored Data value is unchanged.
- */
+/** Metadata probing resolves asynchronously, so it runs through the probe guard. */
 const applyPickedInitVideo = (
     context: DetailStripContext,
     clipId: string,
     data: string,
     fileName: string,
-): void => {
-    const store = getTimelineStore();
-    const { revision } = store.getSnapshot();
-    const operation = beginInitVideoProbeOperation(clipId, revision);
-    void probeInitVideo(data).then((probe) => {
-        if (!operation.claim(store.revision())) {
-            return;
-        }
-        const state = store.getState();
-        const clips = state.clips;
-        const target = findClipByStableId(clips, operation.clipId);
-        const { capabilities, defaults } = context.authoring();
-        if (!target) {
-            return;
-        }
-        target.initVideo = initVideoFromProbe(
-            probe,
-            data,
-            fileName,
-            target.duration,
-        );
-        const lengthSeconds = target.initVideo.lengthSeconds;
-        reconcileClipArchitectureIdentity(target, capabilities.catalog);
-        applyClipDurationResize(
-            target,
-            Math.max(CLIP_DURATION_MIN, lengthSeconds),
-            () => defaults,
-            state.fps,
-        );
-        saveClips(clips, { origin: "detail-strip" });
-        context.render();
-    }, operation.cancel);
-};
+): void =>
+    runClipMediaProbe({
+        clipId,
+        slot: INIT_VIDEO_PROBE_SLOT,
+        probe: () => probeInitVideo(data),
+        apply: (target, probe, state) => {
+            const { capabilities, defaults } = context.authoring();
+            target.initVideo = initVideoFromProbe(
+                probe,
+                data,
+                fileName,
+                target.duration,
+            );
+            reconcileClipArchitectureIdentity(target, capabilities.catalog);
+            applyClipDurationResize(
+                target,
+                Math.max(CLIP_DURATION_MIN, target.initVideo.lengthSeconds),
+                () => defaults,
+                state.fps,
+            );
+        },
+        onApplied: () => context.render(),
+    });
 
 export const buildInitVideoSection = (
     context: DetailStripContext,

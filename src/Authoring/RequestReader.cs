@@ -215,7 +215,8 @@ internal static class RequestReader
                 "boundaryOutCarryAudio",
                 false),
             ReferenceFraming: ReferenceFraming.Parse(
-                DocumentJson.GetString(clipObject, "refFraming")))
+                DocumentJson.GetString(clipObject, "refFraming")),
+            References: ClipReferences.Read(clipObject, clipIndex, context.Warn))
         {
             AuthoredArchitectureHint = DocumentJson.GetString(
                 clipObject,

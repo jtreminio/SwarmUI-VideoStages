@@ -296,6 +296,14 @@ export const reduceDocumentCommand = (
             return list(document, "ref", "move", command, context);
         case "ref.patch":
             return list(document, "ref", "patch", command, context);
+        case "clip-reference.add":
+            return list(document, "clipReference", "add", command, context);
+        case "clip-reference.remove":
+            return list(document, "clipReference", "remove", command, context);
+        case "clip-reference.move":
+            return list(document, "clipReference", "move", command, context);
+        case "clip-reference.patch":
+            return list(document, "clipReference", "patch", command, context);
         case "prompt-window.add":
             return list(document, "promptWindow", "add", command, context);
         case "prompt-window.remove":

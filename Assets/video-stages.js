@@ -615,6 +615,7 @@
   var AUTHORING_FEATURE_LABELS = {
     promptRelay: "Relay prompts",
     frameReferences: "Frame references",
+    clipReferences: "Clip references",
     referenceFraming: "Reference framing",
     retake: "Retake",
     audioBoundaryCarry: "Boundary audio carry",
@@ -2089,7 +2090,7 @@
     const fps = Math.round(1 / median);
     return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
   };
-  var probeInitVideo = (src, timeoutMs = 8e3) => new Promise((resolve) => {
+  var withProbedMedia = (src, timeoutMs, empty, onMetadata) => new Promise((resolve) => {
     const video = getVideoStagesHostBridge().createInitVideoElement();
     video.muted = true;
     video.preload = "auto";
@@ -2105,14 +2106,23 @@
       video.load();
       resolve(result);
     };
-    const timer = setTimeout(() => finish2(null), timeoutMs);
-    video.addEventListener("error", () => finish2(null));
+    const timer = setTimeout(() => finish2(empty), timeoutMs);
+    video.addEventListener("error", () => finish2(empty));
     video.addEventListener("loadedmetadata", () => {
       const durationSeconds = Number.isFinite(video.duration) ? video.duration : 0;
       if (!(durationSeconds > 0)) {
-        finish2(null);
+        finish2(empty);
         return;
       }
+      onMetadata(video, durationSeconds, finish2);
+    });
+    video.src = src;
+  });
+  var probeInitVideo = (src, timeoutMs = 8e3) => withProbedMedia(
+    src,
+    timeoutMs,
+    null,
+    (video, durationSeconds, finish2) => {
       const requestFrame = video.requestVideoFrameCallback?.bind(video);
       if (!requestFrame) {
         finish2({ durationSeconds, fps: null });
@@ -2132,9 +2142,14 @@
       };
       requestFrame(step);
       video.play()?.catch(() => finish2({ durationSeconds, fps: null }));
-    });
-    video.src = src;
-  });
+    }
+  );
+  var probeMediaDurationSeconds = (src, timeoutMs = 8e3) => withProbedMedia(
+    src,
+    timeoutMs,
+    0,
+    (_video, duration, finish2) => finish2(duration)
+  );
 
   // frontend/normalizationShared.ts
   var text = (value, fallback = "") => `${value ?? fallback}`;
@@ -2251,6 +2266,13 @@
           repairPath: `${clipIndex}_${refIndex}`
         });
       }
+      for (let referenceIndex = 0; referenceIndex < clip.references.length; referenceIndex++) {
+        entries.push({
+          entity: clip.references[referenceIndex],
+          kind: "clip_reference",
+          repairPath: `${clipIndex}_${referenceIndex}`
+        });
+      }
       for (let icLoraIndex = 0; icLoraIndex < clip.icLoras.length; icLoraIndex++) {
         entries.push({
           entity: clip.icLoras[icLoraIndex],
@@ -2328,6 +2350,9 @@
       if (clip.id) ids.push(clip.id);
       for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
       for (const ref of clip.frameRefs) if (ref.id) ids.push(ref.id);
+      for (const reference of clip.references) {
+        if (reference.id) ids.push(reference.id);
+      }
       for (const icLora of clip.icLoras) {
         if (icLora.id) ids.push(icLora.id);
       }
@@ -2342,6 +2367,68 @@
     }
     return ids;
   };
+
+  // frontend/clipReferenceAuthoring.ts
+  var CLIP_REFERENCE_KIND_INFO = {
+    image: {
+      label: "Image",
+      tag: "Picture",
+      accept: "image/*",
+      browserTypes: ["image"]
+    },
+    video: {
+      label: "Video",
+      tag: "Video",
+      accept: "video/*",
+      browserTypes: ["video"]
+    },
+    audio: {
+      label: "Audio",
+      tag: "Audio",
+      accept: "audio/*",
+      browserTypes: ["audio"]
+    }
+  };
+  var CLIP_REFERENCE_KINDS = ["image", "video", "audio"];
+  var CLIP_REFERENCE_SCALES = [
+    { value: 1, label: "Full" },
+    { value: 0.5, label: "Half" },
+    { value: 0.25, label: "Quarter" }
+  ];
+  var normalizeClipReferenceScale = (value) => {
+    const numeric = Number(value);
+    return CLIP_REFERENCE_SCALES.some((scale) => scale.value === numeric) ? numeric : 1;
+  };
+  var normalizeClipReferenceKind = (value) => {
+    const raw = `${value ?? ""}`.trim().toLowerCase();
+    return raw === "video" || raw === "audio" ? raw : "image";
+  };
+  var buildDefaultClipReference = (kind = "image") => ({
+    kind,
+    source: REF_SOURCE_UPLOAD,
+    uploadedMedia: null,
+    includeSoundtrack: false,
+    mediaDurationSeconds: 0,
+    drivesClipLength: false,
+    mediaScale: 1
+  });
+  var clipReferenceCanDriveLength = (reference) => reference.kind === "video" || reference.kind === "audio";
+  var clipReferenceTags = (references) => {
+    const used = {
+      image: 0,
+      video: 0,
+      audio: references.filter(
+        (reference) => reference.kind === "video" && reference.includeSoundtrack === true
+      ).length
+    };
+    return references.map((reference) => {
+      used[reference.kind] += 1;
+      return `<${CLIP_REFERENCE_KIND_INFO[reference.kind].tag} ${used[reference.kind]}>`;
+    });
+  };
+  var clipLengthReferenceIndex = (references) => references.findIndex(
+    (reference) => reference.drivesClipLength === true && clipReferenceCanDriveLength(reference) && reference.mediaDurationSeconds > 0
+  );
 
   // frontend/normalizationMedia.ts
   var normalizePromptWindow = (raw) => {
@@ -2427,6 +2514,39 @@
       startSeconds: roundToTenth(startSeconds),
       lengthSeconds: roundToTenth(lengthSeconds)
     };
+  };
+  var normalizeClipReferences = (value, clipLengthClaimedElsewhere = false) => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    let lengthClaimed = clipLengthClaimedElsewhere;
+    return value.map((entry) => {
+      const raw = isRecord2(entry) ? entry : {};
+      const kind = normalizeClipReferenceKind(raw.kind);
+      const source = trimmedText(raw.source) || REF_SOURCE_UPLOAD;
+      const mediaDurationSeconds = roundToTenth(
+        nonNegativeNumber(raw.mediaDurationSeconds)
+      );
+      const reference = {
+        id: normalizeOptionalEntityId(raw.id),
+        kind,
+        // Only image references can name a host capture.
+        source: kind === "image" ? source : REF_SOURCE_UPLOAD,
+        uploadedMedia: normalizeUploadedMedia(raw.uploadedMedia),
+        includeSoundtrack: kind === "video" && raw.includeSoundtrack === true,
+        mediaDurationSeconds,
+        // A claim with no length behind it cannot move the clip, so it is
+        // dropped rather than left holding the one slot forever.
+        drivesClipLength: !lengthClaimed && raw.drivesClipLength === true && clipReferenceCanDriveLength({ kind }) && mediaDurationSeconds > 0,
+        mediaScale: kind === "video" ? normalizeClipReferenceScale(raw.mediaScale) : 1
+      };
+      lengthClaimed = lengthClaimed || reference.drivesClipLength;
+      return reference;
+    });
+  };
+  var clipReferenceDurationSeconds = (references) => {
+    const index = clipLengthReferenceIndex(references);
+    return index < 0 ? null : references[index].mediaDurationSeconds;
   };
   var normalizeUploadedMedia = (value) => {
     if (!isRecord2(value)) {
@@ -3516,6 +3636,7 @@
       promptWindows: [],
       retake: null,
       initVideo: null,
+      references: [],
       frameRefs,
       stages: [firstStage]
     };
@@ -3529,7 +3650,13 @@
       1,
       typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps
     );
-    const rawDuration = initVideo?.lengthSeconds ?? numberOr(rawClip.duration, defaults.frames / fps);
+    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
+    const clipLengthFromAudio = !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
+    const references = normalizeClipReferences(
+      rawClip.references,
+      clipLengthFromControlNet || clipLengthFromAudio
+    );
+    const rawDuration = initVideo?.lengthSeconds ?? clipReferenceDurationSeconds(references) ?? numberOr(rawClip.duration, defaults.frames / fps);
     const duration = snapDurationToFps(
       Math.max(CLIP_DURATION_MIN, rawDuration),
       fps
@@ -3585,8 +3712,6 @@
         stages[index].skipped = true;
       }
     }
-    const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
-    const clipLengthFromAudio = !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
     const retake = normalizeRetake(rawClip.retake, duration);
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const refFrameMax = getKnownReferenceFrameMax(
@@ -3675,6 +3800,7 @@
       promptWindows: normalizePromptWindows(rawClip),
       retake,
       initVideo,
+      references,
       frameRefs,
       stages
     };
@@ -3757,6 +3883,16 @@
           lengthSeconds: clip.retake.lengthSeconds,
           strength: clip.retake.strength
         } : null,
+        references: clip.references.map((reference) => ({
+          id: reference.id,
+          kind: reference.kind,
+          source: reference.source,
+          uploadedMedia: reference.uploadedMedia,
+          includeSoundtrack: reference.includeSoundtrack,
+          mediaDurationSeconds: reference.mediaDurationSeconds,
+          drivesClipLength: reference.drivesClipLength,
+          mediaScale: reference.mediaScale
+        })),
         frameRefs: clip.frameRefs.map((ref) => ({
           id: ref.id,
           source: ref.source,
@@ -3878,6 +4014,11 @@
           ref.uploadedImage = null;
         }
       }
+      for (const reference of clip.references) {
+        if (isTransientBrowserMedia(reference.uploadedMedia)) {
+          reference.uploadedMedia = null;
+        }
+      }
       for (const icLora of clip.icLoras) {
         if (isTransientBrowserMedia(icLora.driveMedia)) {
           icLora.driveMedia = null;
@@ -3906,7 +4047,7 @@
       return false;
     }
     for (const clip of parsed.clips) {
-      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "frameRefs") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
+      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "frameRefs") || !hasArrayOfRecords(clip, "references") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
         return false;
       }
       const stages = Array.isArray(clip.stages) ? clip.stages : [];
@@ -4093,7 +4234,7 @@
       const seenIds = /* @__PURE__ */ new Set();
       for (const rawClip of parsed.clips) {
         if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-        for (const key of ["stages", "frameRefs"]) {
+        for (const key of ["stages", "frameRefs", "references"]) {
           const children = rawClip[key];
           if (!Array.isArray(children) || children.some(
             (child) => !hasCanonicalStoredId(child, seenIds)
@@ -4217,6 +4358,7 @@
       "modelProfileId",
       "promptWindows",
       "retake",
+      "references",
       "frameRefs",
       "stages"
     ],
@@ -4262,6 +4404,24 @@
     reservedKeys: ["id"],
     collection: (clip) => clip.frameRefs
   });
+  var CLIP_REFERENCE_ENTITY = defineList()({
+    prefix: "clip-reference",
+    owner: "clip",
+    entityField: "reference",
+    idField: "referenceId",
+    beforeIdField: "beforeReferenceId",
+    patchKeys: [
+      "kind",
+      "source",
+      "uploadedMedia",
+      "includeSoundtrack",
+      "mediaDurationSeconds",
+      "drivesClipLength",
+      "mediaScale"
+    ],
+    reservedKeys: ["id"],
+    collection: (clip) => clip.references
+  });
   var PROMPT_WINDOW_ENTITY = defineList()(
     {
       prefix: "prompt-window",
@@ -4302,6 +4462,7 @@
     clip: CLIP_ENTITY,
     stage: STAGE_ENTITY,
     ref: REF_ENTITY,
+    clipReference: CLIP_REFERENCE_ENTITY,
     promptWindow: PROMPT_WINDOW_ENTITY,
     audioTrack: AUDIO_TRACK_ENTITY,
     audioSpan: AUDIO_SPAN_ENTITY
@@ -4349,6 +4510,7 @@
       clip.id,
       ...clip.stages.map((stage) => stage.id),
       ...clip.frameRefs.map((ref) => ref.id),
+      ...clip.references.map((reference) => reference.id),
       ...clip.promptWindows.map((window2) => window2.id),
       ...clip.retake ? [clip.retake.id] : []
     ]),
@@ -4513,6 +4675,7 @@
   var diffClipChildren = (before, after, phases, context) => {
     diffStages(before, after, phases, context);
     diffList(LIST_ENTITIES.ref, after.id, before, after, phases);
+    diffList(LIST_ENTITIES.clipReference, after.id, before, after, phases);
     diffList(LIST_ENTITIES.promptWindow, after.id, before, after, phases);
     diffRetake(before, after, phases);
   };
@@ -5124,6 +5287,14 @@
         return list(document2, "ref", "move", command, context);
       case "ref.patch":
         return list(document2, "ref", "patch", command, context);
+      case "clip-reference.add":
+        return list(document2, "clipReference", "add", command, context);
+      case "clip-reference.remove":
+        return list(document2, "clipReference", "remove", command, context);
+      case "clip-reference.move":
+        return list(document2, "clipReference", "move", command, context);
+      case "clip-reference.patch":
+        return list(document2, "clipReference", "patch", command, context);
       case "prompt-window.add":
         return list(document2, "promptWindow", "add", command, context);
       case "prompt-window.remove":
@@ -6022,6 +6193,11 @@
       "Frame references"
     );
     unsupported(
+      !supports("clipReferences") && clip.references.length > 0,
+      "clip-references",
+      "Clip references"
+    );
+    unsupported(
       !supports("referenceFraming") && clip.refFraming !== "crop",
       "reference-framing",
       "Reference framing"
@@ -6471,6 +6647,8 @@
         return { list: clip.stages, index: selection.stageIdx };
       case "ref":
         return { list: clip.frameRefs, index: selection.refIdx };
+      case "clip-ref":
+        return { list: clip.references, index: selection.referenceIdx };
       case "ic-lora":
         return { list: clip.icLoras, index: selection.entryIdx };
       case "prompt-minor":
@@ -6529,6 +6707,8 @@
         return { kind: "clip", clipIdx, stageIdx: itemIdx };
       case "ref":
         return { kind: "ref", clipIdx, refIdx: itemIdx };
+      case "clip-ref":
+        return { kind: "clip-ref", clipIdx, referenceIdx: itemIdx };
       case "ic-lora":
         return { kind: "ic-lora", clipIdx, entryIdx: itemIdx };
       case "prompt-minor":
@@ -6600,6 +6780,8 @@
         return a.clipIdx === b.clipIdx && a.stageIdx === b.stageIdx;
       case "ref":
         return a.clipIdx === b.clipIdx && a.refIdx === b.refIdx;
+      case "clip-ref":
+        return a.clipIdx === b.clipIdx && a.referenceIdx === b.referenceIdx;
       case "ic-lora":
         return a.clipIdx === b.clipIdx && a.entryIdx === b.entryIdx;
       case "prompt-minor":
@@ -10910,7 +11092,8 @@
     const column = document.createElement("div");
     column.className = "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
     const initVideoClip = !!clip.initVideo;
-    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || initVideoClip;
+    const lengthReferenceIdx = clipLengthReferenceIndex(clip.references);
+    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || lengthReferenceIdx >= 0 || initVideoClip;
     const durationInput = buildNumber(
       clip.duration,
       CLIP_DURATION_MIN,
@@ -10930,7 +11113,7 @@
     const durationField = buildField(
       "Duration (s)",
       durationInput,
-      lengthDerived2 ? initVideoClip ? "(derived from the source video range)" : "(derived from audio/ControlNet source)" : void 0
+      !lengthDerived2 ? void 0 : initVideoClip ? "(derived from the source video range)" : lengthReferenceIdx >= 0 ? "(derived from a reference's media length)" : "(derived from audio/ControlNet source)"
     );
     if (lengthDerived2) {
       durationInput.disabled = true;
@@ -11101,64 +11284,381 @@
     return built.section;
   };
 
-  // frontend/initVideoProbeGuard.ts
+  // frontend/clipMediaProbeGuard.ts
+  var INIT_VIDEO_PROBE_SLOT = "init-video";
   var nextOperationId = 0;
   var currentOperations = /* @__PURE__ */ new Map();
   var findClipByStableId = (clips, clipId) => clips.find((clip) => clip.id === clipId);
-  var beginInitVideoProbeOperation = (clipId, revisionAtStart) => {
+  var beginClipMediaProbe = (clipId, slot, revisionAtStart) => {
     const operationId = ++nextOperationId;
-    currentOperations.set(clipId, operationId);
+    const key = `${clipId}
+${slot}`;
+    currentOperations.set(key, operationId);
     const release = () => {
-      if (currentOperations.get(clipId) === operationId) {
-        currentOperations.delete(clipId);
+      if (currentOperations.get(key) === operationId) {
+        currentOperations.delete(key);
       }
     };
     return {
       clipId,
       claim: (currentRevision2) => {
-        const current = currentRevision2 === revisionAtStart && currentOperations.get(clipId) === operationId;
+        const current = currentRevision2 === revisionAtStart && currentOperations.get(key) === operationId;
         release();
         return current;
       },
       cancel: release
     };
   };
-
-  // frontend/detailStrip/initVideoPanel.ts
-  var DURATION_STEP2 = 0.1;
-  var applyPickedInitVideo = (context, clipId, data, fileName) => {
+  var runClipMediaProbe = ({
+    clipId,
+    slot,
+    probe,
+    apply,
+    onApplied
+  }) => {
     const store2 = getTimelineStore();
-    const { revision } = store2.getSnapshot();
-    const operation = beginInitVideoProbeOperation(clipId, revision);
-    void probeInitVideo(data).then((probe) => {
+    const operation = beginClipMediaProbe(
+      clipId,
+      slot,
+      store2.getSnapshot().revision
+    );
+    void probe().then((result) => {
       if (!operation.claim(store2.revision())) {
         return;
       }
       const state = store2.getState();
-      const clips = state.clips;
-      const target = findClipByStableId(clips, operation.clipId);
-      const { capabilities, defaults } = context.authoring();
-      if (!target) {
+      const clip = findClipByStableId(state.clips, operation.clipId);
+      if (!clip) {
         return;
       }
+      apply(clip, result, state);
+      saveClips(state.clips, { origin: "detail-strip" });
+      onApplied?.();
+    }, operation.cancel);
+  };
+
+  // frontend/imageSource.ts
+  var buildImageSourceOptions = (currentValue = "") => {
+    const options = [
+      { value: REF_SOURCE_BASE, label: "Base Output" },
+      { value: REF_SOURCE_REFINER, label: "Refiner Output" },
+      { value: REF_SOURCE_UPLOAD, label: "Upload" }
+    ];
+    for (const editRef of getBase2EditStageRefs()) {
+      const editStage = parseBase2EditStageIndex(editRef);
+      options.push({
+        value: editRef,
+        label: `Base2Edit Edit ${editStage} Output`
+      });
+    }
+    preserveSelectedOption(options, currentValue, "start", (value) => {
+      const isBase2Edit = parseBase2EditStageIndex(value) != null;
+      return {
+        value,
+        label: isBase2Edit ? `Missing Base2Edit ${value}` : value,
+        disabled: isBase2Edit
+      };
+    });
+    return options;
+  };
+  var resolveImageSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, REF_SOURCE_REFINER);
+
+  // frontend/detailStrip/clipReferencePanel.ts
+  var claimClipLength = (clip, referenceIdx, getDefaults, fps) => {
+    clip.references.forEach((reference, index) => {
+      reference.drivesClipLength = index === referenceIdx;
+    });
+    if (referenceIdx < 0) {
+      return;
+    }
+    clip.clipLengthFromAudio = false;
+    clip.clipLengthFromControlNet = false;
+    const seconds = clip.references[referenceIdx]?.mediaDurationSeconds ?? 0;
+    if (seconds > 0) {
+      applyClipDurationResize(
+        clip,
+        Math.max(CLIP_DURATION_MIN, seconds),
+        getDefaults,
+        fps
+      );
+    }
+  };
+  var applyPickedReferenceMedia = (ctx, clipId, referenceId, data, fileName) => runClipMediaProbe({
+    clipId,
+    slot: referenceId,
+    probe: () => probeMediaDurationSeconds(data),
+    apply: (clip, seconds, state) => {
+      const index = clip.references.findIndex(
+        (reference2) => reference2.id === referenceId
+      );
+      const reference = clip.references[index];
+      if (!reference) {
+        return;
+      }
+      reference.uploadedMedia = { data, fileName };
+      reference.mediaDurationSeconds = roundToTenth(seconds);
+      if (reference.drivesClipLength) {
+        claimClipLength(
+          clip,
+          index,
+          () => ctx.authoring().defaults,
+          state.fps
+        );
+      }
+    },
+    onApplied: () => ctx.render()
+  });
+  var buildClipReferenceSection = (ctx, clipIdx, selectedIdx, clips, fps, open = selectedIdx !== null) => {
+    const clip = clips[clipIdx];
+    const references = clip.references;
+    const { capabilities, defaults } = ctx.authoring();
+    const decision = capabilities.forClip(clip).decision("clipReferences");
+    const tags = clipReferenceTags(references);
+    const activeIdx = references.length === 0 ? null : clamp(selectedIdx ?? 0, 0, references.length - 1);
+    const buildSection = (editorForItem) => buildRepeatingEditor({
+      key: "clip-references",
+      label: "References",
+      sectionClass: "vst-detail-clip-ref-section",
+      open,
+      items: references.map((reference, index) => ({
+        label: tags[index],
+        focusKey: `clip-reference-tab-${index}`,
+        title: `Edit ${CLIP_REFERENCE_KIND_INFO[reference.kind].label} reference ${tags[index]}`,
+        active: index === activeIdx,
+        className: "vst-clip-ref-tab",
+        onSelect: () => setSelection({
+          kind: "clip-ref",
+          clipIdx,
+          referenceIdx: index
+        }),
+        onShiftDelete: () => ctx.deleteClipReference(clipIdx, index)
+      })),
+      add: {
+        title: decision.supported ? "Add a reference the prompt can name by tag" : decision.reason,
+        label: "+ Add Reference",
+        className: "vst-detail-add-clip-ref",
+        disabled: !decision.supported,
+        onClick: () => ctx.addClipReference(clipIdx)
+      },
+      remove: {
+        title: activeIdx === null ? "No reference to delete" : `Delete reference ${tags[activeIdx]}`,
+        className: "vst-detail-delete-clip-ref"
+      },
+      editorForItem
+    }).section;
+    if (activeIdx === null) {
+      return buildSection();
+    }
+    const buildEditor = (editorIdx) => {
+      const reference = references[editorIdx];
+      if (!reference) {
+        return void 0;
+      }
+      const patch = (mutate) => {
+        ctx.commit((cs) => {
+          const target = cs[clipIdx]?.references[editorIdx];
+          if (target) {
+            mutate(target);
+          }
+        });
+      };
+      const fields = document.createElement("div");
+      fields.className = "vst-detail-col vst-detail-instance-fields vst-detail-clip-ref-editor";
+      fields.setAttribute("data-vst-clip-ref-index", `${editorIdx}`);
+      fields.appendChild(
+        buildField(
+          "Kind",
+          buildOptionSelect(
+            CLIP_REFERENCE_KINDS.map((kind) => ({
+              value: kind,
+              label: CLIP_REFERENCE_KIND_INFO[kind].label
+            })),
+            reference.kind,
+            (value) => {
+              patch((target) => {
+                target.kind = value;
+                target.uploadedMedia = null;
+                target.includeSoundtrack = false;
+                target.mediaDurationSeconds = 0;
+                target.drivesClipLength = false;
+                if (target.kind !== "image") {
+                  target.source = REF_SOURCE_UPLOAD;
+                }
+              });
+              ctx.render();
+            }
+          ),
+          void 0,
+          `What this reference is. The prompt names it as ${tags[editorIdx]} — a reference the prompt never mentions still costs sampling time.`
+        )
+      );
+      const options = buildImageSourceOptions(reference.source ?? "");
+      const source = resolveImageSourceValue(reference.source ?? "", options);
+      if (reference.kind === "image") {
+        fields.appendChild(
+          buildField(
+            "Image Source",
+            buildOptionSelect(options, source, (value) => {
+              patch((target) => {
+                const resolved = resolveImageSourceValue(
+                  value,
+                  buildImageSourceOptions(value)
+                );
+                target.source = resolved;
+                if (resolved !== REF_SOURCE_UPLOAD) {
+                  target.uploadedMedia = null;
+                }
+              });
+              ctx.render();
+            }),
+            void 0,
+            "Where this reference image comes from — an upload, or another clip's rendered frame."
+          )
+        );
+      }
+      if (reference.kind !== "image" || source === REF_SOURCE_UPLOAD) {
+        const data = reference.uploadedMedia?.data;
+        if (reference.kind === "image" && data) {
+          const preview = document.createElement("div");
+          preview.className = "vst-refs-thumb-preview vst-refs-thumb-preview-set";
+          preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
+          fields.appendChild(preview);
+        }
+        const media = CLIP_REFERENCE_KIND_INFO[reference.kind];
+        fields.appendChild(
+          buildMediaPickRow(
+            `${media.label} File`,
+            media.accept,
+            [...media.browserTypes],
+            reference.uploadedMedia?.fileName,
+            (pickedData, fileName) => {
+              if (clipReferenceCanDriveLength(reference) && clip.id && reference.id) {
+                applyPickedReferenceMedia(
+                  ctx,
+                  clip.id,
+                  reference.id,
+                  pickedData,
+                  fileName
+                );
+                return;
+              }
+              patch((target) => {
+                target.uploadedMedia = {
+                  data: pickedData,
+                  fileName
+                };
+              });
+              ctx.render();
+            },
+            () => {
+              patch((target) => {
+                target.uploadedMedia = null;
+                target.mediaDurationSeconds = 0;
+                target.drivesClipLength = false;
+              });
+              ctx.render();
+            }
+          )
+        );
+      }
+      if (clipReferenceCanDriveLength(reference)) {
+        const seconds = reference.mediaDurationSeconds;
+        const hint = document.createElement("small");
+        hint.className = "vst-detail-field-hint";
+        hint.textContent = `Detected: ${seconds > 0 ? `${seconds.toFixed(1)} s` : "unknown length"}`;
+        fields.appendChild(hint);
+        fields.appendChild(
+          buildCheckbox(
+            `Clip Length from ${CLIP_REFERENCE_KIND_INFO[reference.kind].label}`,
+            reference.drivesClipLength === true,
+            (value) => {
+              ctx.commit((cs) => {
+                const target = cs[clipIdx];
+                if (target) {
+                  claimClipLength(
+                    target,
+                    value ? editorIdx : -1,
+                    () => defaults,
+                    fps
+                  );
+                }
+              });
+              ctx.render();
+            },
+            {
+              // Never disable a ticked box: a re-pick that probes to
+              // nothing would otherwise trap an unhonourable claim.
+              disabled: !(seconds > 0) && reference.drivesClipLength !== true,
+              help: seconds > 0 ? "Set this clip's length to the reference's own length. Only one source can own the clip length, so this clears any other reference and the clip-level length options." : "This reference has no detected length to lend the clip. Pick a file the browser can read."
+            }
+          )
+        );
+      }
+      if (reference.kind === "video") {
+        fields.appendChild(
+          buildField(
+            "Reference scale",
+            buildOptionSelect(
+              CLIP_REFERENCE_SCALES.map((scale) => ({
+                value: `${scale.value}`,
+                label: scale.label
+              })),
+              `${reference.mediaScale}`,
+              (value) => {
+                patch((target) => {
+                  target.mediaScale = Number(value);
+                });
+              }
+            ),
+            void 0,
+            "Downsample this video before it is referenced. Its tokens are re-encoded on every sampling step, so half or quarter resolution is markedly faster and costs detail the model may not need from a motion or style reference."
+          )
+        );
+        fields.appendChild(
+          buildCheckbox(
+            "Include soundtrack",
+            reference.includeSoundtrack === true,
+            (value) => {
+              patch((target) => {
+                target.includeSoundtrack = value;
+              });
+              ctx.render();
+            },
+            {
+              help: `Also reference this video's own audio. It is presented as its own Audio reference just before ${tags[editorIdx]}, ahead of every standalone audio reference — the tags shown here already account for it.`
+            }
+          )
+        );
+      }
+      return fields;
+    };
+    return buildSection(buildEditor);
+  };
+
+  // frontend/detailStrip/initVideoPanel.ts
+  var DURATION_STEP2 = 0.1;
+  var applyPickedInitVideo = (context, clipId, data, fileName) => runClipMediaProbe({
+    clipId,
+    slot: INIT_VIDEO_PROBE_SLOT,
+    probe: () => probeInitVideo(data),
+    apply: (target, probe, state) => {
+      const { capabilities, defaults } = context.authoring();
       target.initVideo = initVideoFromProbe(
         probe,
         data,
         fileName,
         target.duration
       );
-      const lengthSeconds = target.initVideo.lengthSeconds;
       reconcileClipArchitectureIdentity(target, capabilities.catalog);
       applyClipDurationResize(
         target,
-        Math.max(CLIP_DURATION_MIN, lengthSeconds),
+        Math.max(CLIP_DURATION_MIN, target.initVideo.lengthSeconds),
         () => defaults,
         state.fps
       );
-      saveClips(clips, { origin: "detail-strip" });
-      context.render();
-    }, operation.cancel);
-  };
+    },
+    onApplied: () => context.render()
+  });
   var buildInitVideoSection = (context, clip, clipIdx, open = false) => {
     const { wrap, col } = buildStackSection(
       "init-video",
@@ -11365,32 +11865,6 @@
     }
     return policy.supportsFirst ? "This clip supports only the first frame. Turn this off to repair an older final-frame value." : "This clip supports only the final frame. Turn this on to repair an older first-frame value.";
   };
-
-  // frontend/imageSource.ts
-  var buildImageSourceOptions = (currentValue = "") => {
-    const options = [
-      { value: REF_SOURCE_BASE, label: "Base Output" },
-      { value: REF_SOURCE_REFINER, label: "Refiner Output" },
-      { value: REF_SOURCE_UPLOAD, label: "Upload" }
-    ];
-    for (const editRef of getBase2EditStageRefs()) {
-      const editStage = parseBase2EditStageIndex(editRef);
-      options.push({
-        value: editRef,
-        label: `Base2Edit Edit ${editStage} Output`
-      });
-    }
-    preserveSelectedOption(options, currentValue, "start", (value) => {
-      const isBase2Edit = parseBase2EditStageIndex(value) != null;
-      return {
-        value,
-        label: isBase2Edit ? `Missing Base2Edit ${value}` : value,
-        disabled: isBase2Edit
-      };
-    });
-    return options;
-  };
-  var resolveImageSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, REF_SOURCE_REFINER);
 
   // frontend/detailStrip/refPanel.ts
   var buildRefSection = (ctx, clipIdx, selectedRefIdx, clips, fps, open = selectedRefIdx !== null) => {
@@ -12319,6 +12793,18 @@
       body.appendChild(section);
     };
     appendCapabilitySection(
+      "clipReferences",
+      clip.references.length > 0,
+      () => buildClipReferenceSection(
+        context,
+        clipIdx,
+        selection.kind === "clip-ref" ? selection.referenceIdx : null,
+        clips,
+        state.fps,
+        selection.kind === "clip-ref"
+      )
+    );
+    appendCapabilitySection(
       "frameReferences",
       clip.frameRefs.length > 0,
       () => buildRefSection(
@@ -12953,6 +13439,9 @@
     if (selection.kind === "ref") {
       return selection.refIdx >= 0 && selection.refIdx < clip.frameRefs.length ? selection : { kind: "none" };
     }
+    if (selection.kind === "clip-ref") {
+      return selection.referenceIdx >= 0 && selection.referenceIdx < clip.references.length ? selection : { kind: "clip", clipIdx: selection.clipIdx, stageIdx: 0 };
+    }
     if (selection.kind === "ic-lora") {
       return selection.entryIdx >= 0 && selection.entryIdx < clip.icLoras.length ? selection : { kind: "clip", clipIdx: selection.clipIdx, stageIdx: 0 };
     }
@@ -12971,6 +13460,12 @@
         return clips[selection.clipIdx]?.stages.length === 0 ? `Clip ${selection.clipIdx} · Source only` : `Clip ${selection.clipIdx} · ${stageChipLabel(selection.stageIdx)}`;
       case "ref":
         return `Ref${selection.refIdx} · Clip ${selection.clipIdx}`;
+      case "clip-ref": {
+        const tag = clipReferenceTags(
+          clips[selection.clipIdx]?.references ?? []
+        )[selection.referenceIdx];
+        return `${tag ?? "Reference"} · Clip ${selection.clipIdx}`;
+      }
       case "ic-lora":
         return `IC-LoRA ${selection.entryIdx} · Clip ${selection.clipIdx}`;
       case "audio":
@@ -13032,6 +13527,8 @@
       case "clip":
         return buildClipBody(context, selection, state);
       case "ref":
+        return buildClipBody(context, selection, state);
+      case "clip-ref":
         return buildClipBody(context, selection, state);
       case "ic-lora":
         return buildClipBody(context, selection, state);
@@ -13259,6 +13756,52 @@
           }
         };
       });
+    };
+    const addClipReference = (clipIdx) => {
+      structuralCommit((clips) => {
+        const clip = clips[clipIdx];
+        const { capabilities } = captureAuthoringTransaction();
+        if (!clip?.id || !capabilities.forClip(clip).decision("clipReferences").supported) {
+          return null;
+        }
+        return {
+          command: {
+            type: "clip-reference.add",
+            clipId: clip.id,
+            reference: {
+              ...buildDefaultClipReference(),
+              id: createEntityId("clip_reference")
+            }
+          },
+          selection: {
+            kind: "clip-ref",
+            clipIdx,
+            referenceIdx: clip.references.length
+          }
+        };
+      });
+    };
+    const deleteClipReference = (clipIdx, referenceIdx) => {
+      commitRemoval(
+        (clips) => {
+          const clip = clips[clipIdx];
+          const reference = clip?.references[referenceIdx];
+          if (!clip?.id || !reference?.id) {
+            return null;
+          }
+          return {
+            command: {
+              type: "clip-reference.remove",
+              clipId: clip.id,
+              referenceId: reference.id
+            },
+            remaining: clip.references.length - 1
+          };
+        },
+        referenceIdx,
+        (index) => ({ kind: "clip-ref", clipIdx, referenceIdx: index }),
+        { kind: "clip", clipIdx, stageIdx: 0 }
+      );
     };
     const addPromptWindow = (clipIdx) => {
       structuralCommit(
@@ -13572,6 +14115,8 @@
     return {
       addRefEntry,
       deleteRefEntry,
+      addClipReference,
+      deleteClipReference,
       addPromptWindow,
       deleteWindowEntry,
       createRetake,
@@ -13710,6 +14255,8 @@
       authoring: () => activeSnapshot ?? captureAuthoringTransactionSnapshot(),
       addRefEntry: selectionOperations.addRefEntry,
       deleteRefEntry: selectionOperations.deleteRefEntry,
+      addClipReference: selectionOperations.addClipReference,
+      deleteClipReference: selectionOperations.deleteClipReference,
       addPromptWindow: selectionOperations.addPromptWindow,
       deleteWindowEntry: selectionOperations.deleteWindowEntry,
       createRetake: selectionOperations.createRetake,

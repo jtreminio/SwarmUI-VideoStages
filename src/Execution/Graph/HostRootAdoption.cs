@@ -40,20 +40,15 @@ internal sealed class HostRootAdoption(
     private bool _claimed;
 
     /// <summary>
-    /// The ids a text stage should build its sampler and decode under, or nulls to let the host
-    /// allocate fresh ones. There is one host root, so this is granted at most once.
-    /// </summary>
-    internal HostRootClaim ClaimTextRoot(ClipPlan clip, StagePlan stage) =>
-        TryClaim(clip, stage, [SamplerNodeId, DecodeNodeId])
-            ? new HostRootClaim { Sampler = SamplerNodeId, Decode = DecodeNodeId }
-            : HostRootClaim.None;
-
-    /// <summary>
-    /// The same claim, plus core's empty latent and conditioning pair — for a family that builds
-    /// those through the typed bridge, which never consults
-    /// <see cref="WorkflowGenerator.CreateNode(string, Newtonsoft.Json.Linq.JObject, string, bool)"/>'s dedup cache. The others build them through that
-    /// cache and land on core's nodes unaided, so taking the ids from them would only cost them the
-    /// collapse they already get: claiming an id retires its dedup entry.
+    /// The ids a text stage should build core's root roles under, or nulls to let the host allocate
+    /// fresh ones. There is one host root, so this is granted at most once.
+    /// <para>
+    /// The sampler and decode are always claimed. The empty latent and the conditioning pair are
+    /// asked for by a family that builds them through the typed bridge, which never consults
+    /// <see cref="WorkflowGenerator.CreateNode(string, Newtonsoft.Json.Linq.JObject, string, bool)"/>'s dedup cache. A family
+    /// that builds them through that cache lands on core's nodes unaided, so taking the ids from it
+    /// would only cost it the collapse it already gets: claiming an id retires its dedup entry.
+    /// </para>
     /// <para>
     /// All or nothing, so a request where core allocates no positive conditioning — an H3 positive
     /// with reference media returns before the reserved id is used — leaves this family without the
@@ -61,20 +56,32 @@ internal sealed class HostRootAdoption(
     /// same either way; only which clip owns core's ids moves.
     /// </para>
     /// </summary>
-    internal HostRootClaim ClaimWholeTextRoot(ClipPlan clip, StagePlan stage) =>
-        TryClaim(
-            clip,
-            stage,
-            [SamplerNodeId, DecodeNodeId, LatentNodeId, PositiveNodeId, NegativeNodeId])
+    internal HostRootClaim ClaimTextRoot(
+        ClipPlan clip,
+        StagePlan stage,
+        bool includeLatent = false,
+        bool includeConditioning = false)
+    {
+        List<string> ids = [SamplerNodeId, DecodeNodeId];
+        if (includeLatent)
+        {
+            ids.Add(LatentNodeId);
+        }
+        if (includeConditioning)
+        {
+            ids.AddRange([PositiveNodeId, NegativeNodeId]);
+        }
+        return TryClaim(clip, stage, ids)
             ? new HostRootClaim
             {
                 Sampler = SamplerNodeId,
                 Decode = DecodeNodeId,
-                Latent = LatentNodeId,
-                Positive = PositiveNodeId,
-                Negative = NegativeNodeId,
+                Latent = includeLatent ? LatentNodeId : null,
+                Positive = includeConditioning ? PositiveNodeId : null,
+                Negative = includeConditioning ? NegativeNodeId : null,
             }
             : HostRootClaim.None;
+    }
 
     private bool TryClaim(ClipPlan clip, StagePlan stage, IReadOnlyCollection<string> ids)
     {

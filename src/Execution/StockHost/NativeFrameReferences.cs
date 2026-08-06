@@ -93,8 +93,7 @@ internal static class NativeFrameReferences
             }
             bool supportedSource = StringUtils.Equals(reference.Source, "Upload")
                 || allowHostStageSources
-                    && (StringUtils.Equals(reference.Source, "Base")
-                        || StringUtils.Equals(reference.Source, "Refiner"));
+                    && ImageReferenceSyntax.IsHostStageSource(reference.Source);
             if (!supportedSource)
             {
                 Ignore(

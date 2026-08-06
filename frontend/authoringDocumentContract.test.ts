@@ -109,6 +109,34 @@ const contractState = (): VideoStagesConfig => ({
                 startSeconds: 1,
                 lengthSeconds: 3,
             },
+            references: [
+                {
+                    id: "clip-reference-0",
+                    kind: "image",
+                    source: "Upload",
+                    uploadedMedia: {
+                        data: "data:image/png;base64,QUJD",
+                        fileName: "subject.png",
+                    },
+                    includeSoundtrack: false,
+                    mediaDurationSeconds: 0,
+                    drivesClipLength: false,
+                    mediaScale: 1,
+                },
+                {
+                    id: "clip-reference-1",
+                    kind: "video",
+                    source: "Upload",
+                    uploadedMedia: {
+                        data: "data:video/mp4;base64,REVG",
+                        fileName: "motion.mp4",
+                    },
+                    includeSoundtrack: true,
+                    mediaDurationSeconds: 4.5,
+                    drivesClipLength: true,
+                    mediaScale: 0.5,
+                },
+            ],
             frameRefs: [
                 {
                     id: "ref-0",
@@ -182,6 +210,7 @@ const contractState = (): VideoStagesConfig => ({
             promptWindows: [],
             retake: null,
             initVideo: null,
+            references: [],
             frameRefs: [],
             stages: [
                 {

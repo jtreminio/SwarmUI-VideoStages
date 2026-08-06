@@ -91,6 +91,7 @@ public class MiniMaxArchitectureTests
         Assert.Equal(
             [
                 "frameReferences",
+                "clipReferences",
                 "referenceFraming",
                 "audioBoundaryCarry",
                 "latentUpscale",
@@ -385,6 +386,188 @@ public class MiniMaxArchitectureTests
             compilation.Diagnostics,
             diagnostic => diagnostic.Code
                 == "effective-request.minimax-middle-frame-reference-ignored");
+    }
+
+    [Fact]
+    public void Clip_references_compile_in_authored_order_with_their_paired_soundtrack()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clipObject = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clipObject["references"] = new JArray
+        {
+            ClipReference("image", "Upload", "subject.png", "data:image/png;base64,QUJD"),
+            ClipReference("image", "Base", null, null),
+            ClipReference(
+                "video",
+                "Upload",
+                "motion.mp4",
+                "data:video/mp4;base64,REVG",
+                includeSoundtrack: true,
+                mediaScale: 0.5),
+            ClipReference(
+                "audio",
+                "Upload",
+                "voice.wav",
+                "data:audio/wav;base64,QUJD",
+                mediaScale: 0.25),
+        };
+
+        ArchitectureClipCompilation compilation = Compile(
+            ParseClip(clipObject, models),
+            models);
+
+        Assert.Empty(compilation.Diagnostics);
+        MiniMaxClipPayload payload =
+            Assert.IsType<MiniMaxClipPayload>(compilation.Payload);
+        Assert.Equal(
+            [
+                ClipReferenceKind.Image,
+                ClipReferenceKind.Image,
+                ClipReferenceKind.Video,
+                ClipReferenceKind.Audio,
+            ],
+            payload.References.Select(reference => reference.Kind));
+        Assert.Equal("Base", payload.References[1].Source);
+        Assert.Null(payload.References[1].Media);
+        Assert.True(payload.References[2].IncludeSoundtrack);
+        Assert.False(payload.References[3].IncludeSoundtrack);
+        // Only a video reference has frames to downsample.
+        Assert.Equal([1, 1, 0.5, 1], payload.References.Select(r => r.MediaScale));
+    }
+
+    /// <summary>
+    /// Base2Edit publishes each edit stage's image for other extensions to build on, so an image
+    /// reference may name one exactly as it names the host's own base and refiner outputs.
+    /// </summary>
+    [Fact]
+    public void An_image_clip_reference_can_name_a_base2edit_edit_stage()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clipObject = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clipObject["references"] = new JArray
+        {
+            ClipReference("image", "edit2", null, null),
+        };
+
+        ArchitectureClipCompilation compilation = Compile(
+            ParseClip(clipObject, models),
+            models);
+
+        Assert.Empty(compilation.Diagnostics);
+        MiniMaxReferencePlan reference = Assert.Single(
+            Assert.IsType<MiniMaxClipPayload>(compilation.Payload).References);
+        Assert.Equal("edit2", reference.Source);
+        Assert.Null(reference.Media);
+    }
+
+    [Theory]
+    [InlineData("video", "Base", "minimax.clip-reference.source-ignored")]
+    [InlineData("audio", "Refiner", "minimax.clip-reference.source-ignored")]
+    [InlineData("image", "ControlNet 1", "minimax.clip-reference.source-ignored")]
+    public void A_clip_reference_from_an_unreadable_source_is_warned_and_dropped(
+        string kind,
+        string source,
+        string expectedCode)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clipObject = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clipObject["references"] = new JArray
+        {
+            ClipReference(kind, source, "media.bin", "data:x;base64,QQ=="),
+        };
+
+        ArchitectureClipCompilation compilation = Compile(
+            ParseClip(clipObject, models),
+            models);
+
+        PlanDiagnostic warning = Assert.Single(compilation.Diagnostics);
+        Assert.Equal(PlanDiagnosticSeverity.Warning, warning.Severity);
+        Assert.Equal(expectedCode, warning.Code);
+        Assert.Empty(Assert.IsType<MiniMaxClipPayload>(compilation.Payload).References);
+    }
+
+    [Fact]
+    public void An_uploaded_clip_reference_with_no_media_is_warned_and_dropped()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clipObject = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clipObject["references"] = new JArray
+        {
+            ClipReference("image", "Upload", null, null),
+        };
+
+        ArchitectureClipCompilation compilation = Compile(
+            ParseClip(clipObject, models),
+            models);
+
+        Assert.Equal(
+            "minimax.clip-reference.media-missing",
+            Assert.Single(compilation.Diagnostics).Code);
+        Assert.Empty(Assert.IsType<MiniMaxClipPayload>(compilation.Payload).References);
+    }
+
+    [Fact]
+    public void References_past_the_node_input_cap_stay_saved_but_are_ignored()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clipObject = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clipObject["references"] = new JArray(
+            Enumerable.Range(0, MiniMaxClipReferences.MaxVideos + 2).Select(index =>
+                ClipReference(
+                    "video",
+                    "Upload",
+                    $"motion{index}.mp4",
+                    "data:video/mp4;base64,REVG")));
+
+        ArchitectureClipCompilation compilation = Compile(
+            ParseClip(clipObject, models),
+            models);
+
+        Assert.Equal(
+            MiniMaxClipReferences.MaxVideos,
+            Assert.IsType<MiniMaxClipPayload>(compilation.Payload).References.Count);
+        Assert.Equal(2, compilation.Diagnostics.Count);
+        Assert.All(
+            compilation.Diagnostics,
+            diagnostic => Assert.Equal(
+                "minimax.clip-reference.limit-exceeded",
+                diagnostic.Code));
+    }
+
+    private static JObject ClipReference(
+        string kind,
+        string source,
+        string fileName,
+        string data,
+        bool includeSoundtrack = false,
+        double mediaScale = 1)
+    {
+        JObject reference = new()
+        {
+            ["kind"] = kind,
+            ["source"] = source,
+            ["includeSoundtrack"] = includeSoundtrack,
+            ["mediaScale"] = mediaScale,
+        };
+        if (data is not null)
+        {
+            reference["uploadedMedia"] = new JObject
+            {
+                ["data"] = data,
+                ["fileName"] = fileName,
+            };
+        }
+        return reference;
     }
 
     private static IReadOnlyList<PlanDiagnostic> CompileDiagnostics(

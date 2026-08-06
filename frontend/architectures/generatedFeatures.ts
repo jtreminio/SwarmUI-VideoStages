@@ -3,6 +3,7 @@
 export const AUTHORING_FEATURE_LABELS = {
     promptRelay: "Relay prompts",
     frameReferences: "Frame references",
+    clipReferences: "Clip references",
     referenceFraming: "Reference framing",
     retake: "Retake",
     audioBoundaryCarry: "Boundary audio carry",

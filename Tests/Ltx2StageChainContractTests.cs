@@ -736,41 +736,6 @@ public class Ltx2StageChainContractTests
     }
 
 
-    private static WorkflowGenerator.WorkflowGenStep PublishBase2EditImageStep(int editStageIndex) =>
-        new(g =>
-        {
-            using WorkflowBridge bridge = BridgeSync.For(g);
-            SwarmLoadImageB64Node published = bridge.AddNode(
-                new SwarmLoadImageB64Node().With(ImageBase64: "data:image/png;base64,QUJDREVGRw=="));
-
-            JObject media = new()
-            {
-                ["path"] = new JArray(published.Id, 0),
-                ["dataType"] = WGNodeData.DT_IMAGE,
-                ["width"] = VideoStagesWorkflowFixture.Width,
-                ["height"] = VideoStagesWorkflowFixture.Height,
-            };
-            if (g.CurrentCompat()?.ID is string compatId)
-            {
-                media["compatId"] = compatId;
-            }
-            JObject payload = new() { ["media"] = media };
-            if (g.CurrentVae?.Path is JArray { Count: 2 } vaePath)
-            {
-                JObject vae = new()
-                {
-                    ["path"] = new JArray(vaePath[0], vaePath[1]),
-                    ["dataType"] = WGNodeData.DT_VAE,
-                };
-                if (g.CurrentVae.Compat?.ID is string vaeCompatId)
-                {
-                    vae["compatId"] = vaeCompatId;
-                }
-                payload["vae"] = vae;
-            }
-            g.NodeHelpers[$"b2e.published.edit.{editStageIndex}"] = payload.ToString(Formatting.None);
-        }, Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);
-
     [Fact]
     public async Task Native_ltx_stage_can_use_base2edit_edit_stage_as_clip_ref_image()
     {
