@@ -22,18 +22,18 @@ internal static class RootPlanCompiler
         bool hasGeneratedClip = clips.Any(clip => clip.InitVideo is null);
         bool firstClipHasInitVideo = clips[0].InitVideo is not null;
         bool initVideoLeadWithGeneratedClips = firstClipHasInitVideo && hasGeneratedClip;
-        bool discardsRoot = environment.HostKind == HostRootKind.TextToVideoRoot
+        bool discardsRoot = environment.HostKind == HostRootKind.TextToVideo
             || !hasGeneratedClip;
-        bool interceptsHostCore = discardsRoot || environment.CanHandoffHostCore;
+        bool interceptsHostCore = discardsRoot || environment.CanInterceptHostCore;
         return new RootPlan(
             HostKind: environment.HostKind,
             DiscardsRoot: discardsRoot,
             UsesGeneratedClipDonor: !discardsRoot && initVideoLeadWithGeneratedClips,
             InterceptsHostCore: interceptsHostCore,
             UsesStageHandoff: interceptsHostCore && !firstClipHasInitVideo,
-            DropsTextToVideoRootDonor: environment.HostKind == HostRootKind.TextToVideoRoot
+            DropsTextToVideoRootDonor: environment.HostKind == HostRootKind.TextToVideo
                 && initVideoLeadWithGeneratedClips,
-            DiscardsTextToVideoRoot: environment.HostKind == HostRootKind.TextToVideoRoot
+            DiscardsTextToVideoRoot: environment.HostKind == HostRootKind.TextToVideo
                 && discardsRoot);
     }
 }

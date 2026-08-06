@@ -12,8 +12,8 @@ public class RootPlanTests
     {
         RootPlan root = RootPlanCompiler.Compile(
             new RootEnvironment(
-                HostRootKind.TextToVideoRoot,
-                CanHandoffHostCore: true),
+                HostRootKind.TextToVideo,
+                CanInterceptHostCore: true),
             []);
 
         Assert.False(root.DiscardsRoot);
@@ -29,7 +29,7 @@ public class RootPlanTests
     {
         VideoExecutionPlan plan = Compile(
             isTextToVideo: true,
-            new RootEnvironment(HostRootKind.TextToVideoRoot, CanHandoffHostCore: true),
+            new RootEnvironment(HostRootKind.TextToVideo, CanInterceptHostCore: true),
             GeneratedClip(0));
         RootPlan root = plan.Root;
         ClipPlan clip = Assert.Single(plan.Clips);
@@ -45,7 +45,7 @@ public class RootPlanTests
     {
         VideoExecutionPlan plan = Compile(
             isTextToVideo: false,
-            new RootEnvironment(HostRootKind.ImageToVideo, CanHandoffHostCore: true),
+            new RootEnvironment(HostRootKind.ImageToVideo, CanInterceptHostCore: true),
             GeneratedClip(0));
         RootPlan root = plan.Root;
         ClipPlan clip = Assert.Single(plan.Clips);
@@ -60,7 +60,7 @@ public class RootPlanTests
     {
         VideoExecutionPlan plan = Compile(
             isTextToVideo: true,
-            new RootEnvironment(HostRootKind.TextToVideoRoot, CanHandoffHostCore: true),
+            new RootEnvironment(HostRootKind.TextToVideo, CanInterceptHostCore: true),
             InitVideoClip(0),
             GeneratedClip(1));
         RootPlan root = plan.Root;
@@ -77,7 +77,7 @@ public class RootPlanTests
     {
         VideoExecutionPlan plan = Compile(
             isTextToVideo: false,
-            new RootEnvironment(HostRootKind.ImageToVideo, CanHandoffHostCore: true),
+            new RootEnvironment(HostRootKind.ImageToVideo, CanInterceptHostCore: true),
             InitVideoClip(0));
         RootPlan root = plan.Root;
 

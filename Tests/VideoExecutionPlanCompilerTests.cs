@@ -81,7 +81,7 @@ public class VideoExecutionPlanCompilerTests
         ClipSpec initVideoLead = InitVideoClip(0);
         VideoExecutionPlan plan = TestPlanCompiler.Compile(
             Spec(false, initVideoLead, GeneratedClip(1, Stage(11))),
-            new RootEnvironment(HostRootKind.ImageToVideo, CanHandoffHostCore: true));
+            new RootEnvironment(HostRootKind.ImageToVideo, CanInterceptHostCore: true));
 
         Assert.False(plan.Root.DiscardsRoot);
         Assert.True(plan.Root.InterceptsHostCore);
@@ -506,7 +506,7 @@ public class VideoExecutionPlanCompilerTests
                 GeneratedClip(4, Stage(10))),
             new RootEnvironment(
                 HostRootKind.ImageToVideo,
-                CanHandoffHostCore: true));
+                CanInterceptHostCore: true));
 
         ClipPlan surviving = Assert.Single(plan.Clips);
         Assert.Equal(ArchitectureEntryMode.InitVideo, surviving.EntryMode);

@@ -41,7 +41,7 @@ internal sealed record RootPlan(
 internal enum HostRootKind
 {
     ImageToVideo,
-    TextToVideoRoot,
+    TextToVideo,
 }
 
 /// <summary>
@@ -50,10 +50,10 @@ internal enum HostRootKind
 /// </summary>
 internal sealed record RootEnvironment(
     HostRootKind HostKind,
-    bool CanHandoffHostCore = false)
+    bool CanInterceptHostCore = false)
 {
     public static RootEnvironment FromSpec(TimelineSpec spec) => new(
-        spec.IsTextToVideo ? HostRootKind.TextToVideoRoot : HostRootKind.ImageToVideo);
+        spec.IsTextToVideo ? HostRootKind.TextToVideo : HostRootKind.ImageToVideo);
 }
 
 internal sealed record ClipPlan(

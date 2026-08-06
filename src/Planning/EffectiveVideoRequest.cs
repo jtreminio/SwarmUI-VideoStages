@@ -34,7 +34,7 @@ internal static class EffectiveVideoRequestProjector
             clip => clip.InitVideo is null
                 && clip.Stages is { Count: > 0 });
         bool rootCanForceTextToVideoGeneration =
-            rootEnvironment.HostKind == HostRootKind.TextToVideoRoot;
+            rootEnvironment.HostKind == HostRootKind.TextToVideo;
         List<PlanDiagnostic> diagnostics = [];
         for (int timelineIndex = 0; timelineIndex < clips.Length; timelineIndex++)
         {

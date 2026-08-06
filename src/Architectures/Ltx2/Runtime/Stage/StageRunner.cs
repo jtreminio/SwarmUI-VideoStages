@@ -102,7 +102,7 @@ internal class StageRunner
         List<ResolvedClipRef> clipRefs = _clipRefResolver.ResolveStageClipRefs(
             clipContext.PlannedClip,
             stage,
-            clipContext.Plan.Root.HostKind == HostRootKind.TextToVideoRoot,
+            clipContext.Plan.Root.HostKind == HostRootKind.TextToVideo,
             refStore,
             postVideoChain,
             sourceMedia,
