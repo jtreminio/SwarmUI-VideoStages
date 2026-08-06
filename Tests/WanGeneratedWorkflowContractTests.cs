@@ -2184,7 +2184,7 @@ public class WanGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    // ---- timeline assembly --------------------------------------------------------------
+    // ---- timeline merge ----------------------------------------------------------------
 
     /// <summary>
     /// A clip's length reaches WAN's 4k+1 grid from either direction — the request's frame count is
@@ -2416,7 +2416,7 @@ public class WanGeneratedWorkflowContractTests
 
     /// <summary>
     /// The request's frame trim is a property of the finished timeline, not of each clip: one trim
-    /// node either way, taking its frames off the front of the whole assembly.
+    /// node either way, taking its frames off the front of the whole timeline.
     /// </summary>
     [Theory]
     [InlineData(1)]
@@ -2756,7 +2756,7 @@ public class WanGeneratedWorkflowContractTests
     /// A WAN source clip beside a generated LTX-2 clip: the WAN stage refines its own footage and
     /// never the host root image, the LTX-2 clip drives from the host root and never the footage,
     /// and each clip contributes its own audio span — real audio for LTX-2, silence the length of
-    /// the conformed window for WAN. The request's trim lands once, on the assembled timeline and
+    /// the conformed window for WAN. The request's trim lands once, on the merged timeline and
     /// its audio alike.
     /// </summary>
     [Theory]

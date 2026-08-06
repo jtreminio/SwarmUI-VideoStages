@@ -8,7 +8,7 @@ using VideoStages.Planning;
 
 namespace VideoStages;
 
-/// <summary>Combines one clip's base and overlay audio before cross-clip assembly.</summary>
+/// <summary>Combines one clip's base and overlay audio before the cross-clip merge.</summary>
 internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
 {
     private const long SilenceSampleRate = 44100;

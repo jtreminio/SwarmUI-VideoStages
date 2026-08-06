@@ -222,7 +222,7 @@ public sealed class ArchitectureContractGraphTests
     /// <summary>
     /// The same claim across the two families that generate native audio, so the join reconciles two
     /// audio tracks as well as two video tracks. Their frame grids disagree (8k+1 against 17k+5), so
-    /// the assembled length is asymmetric.
+    /// the merged length is asymmetric.
     /// </summary>
     [Theory]
     [InlineData("ltx2", "minimax")]

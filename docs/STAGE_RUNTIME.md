@@ -23,7 +23,7 @@ hidden authoring document + host request
     → VideoArchitectureExecutionHost
     → one session per active architecture, selected for each clip
     → DecodedClipArtifact per clip
-    → TimelineAssemblySession
+    → TimelineBoundaries
     → OutputPublisher
 ```
 
@@ -243,10 +243,10 @@ The `none` architecture uses `SourceOnlyGenerationSession` and
 `InitVideoClipInstaller`. It creates no model, latent, sampler, or VAE generation
 path, but returns the same decoded artifact contract.
 
-## 7. Assembly and publication
+## 7. Merge and publication
 
-`TimelineAssemblySession` routes descriptor-supported crossfades through
-`DecodedCrossfadeAssembler`, joins architecture runs with neutral hard cuts,
+`TimelineBoundaries` routes descriptor-supported crossfades through
+`DecodedVideoJoiner`, joins architecture runs with neutral hard cuts,
 and assembles decoded audio.
 
 `RootRuntimeSession` restores the captured host save set and publishes the final
@@ -278,7 +278,7 @@ Diagnostics divide responsibility:
 | Architecture dependencies | Active runtime provider during request preparation |
 | Ordinary model-path validity already owned by a supported SwarmUI primitive | SwarmUI core during graph construction |
 | Returned identity and decoded media shape | `VideoArchitectureExecutionHost` |
-| Cross-clip run validity and final publication contract | `TimelineAssemblySession` / `OutputPublisher` |
+| Cross-clip run validity and final publication contract | `TimelineBoundaries` / `OutputPublisher` |
 
 ## 9. Generated binding retention audit
 

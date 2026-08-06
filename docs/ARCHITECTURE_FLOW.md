@@ -31,7 +31,7 @@ classes whose stock video graph branches have been verified.
 | Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `ModelsAPI.DoModelDownloadWS` |
 | Request reading and product planning | Common backend | `RequestReader`, `ArchitecturePlanResolver`, `VideoExecutionPlanCompiler` |
 | Model-family planning and execution | Selected backend module | `IVideoArchitectureModule.ValidateAndCompileClip`, `IVideoGenerationSession` |
-| Runtime dispatch and timeline assembly | Common backend | `VideoArchitectureExecutionHost`, `TimelineAssemblySession` |
+| Runtime dispatch and timeline merge | Common backend | `VideoArchitectureExecutionHost`, `TimelineBoundaries` |
 | Final host publication | SwarmUI adapter | `RootRuntimeSession`, `OutputPublisher` |
 
 The boundary in one sentence:
@@ -652,9 +652,9 @@ architecture/clip provenance. It cannot carry a latent, VAE, model
 compatibility, or architecture payload.
 
 `VideoArchitectureExecutionHost` verifies returned identity and calls `ValidateDecoded`.
-`TimelineAssemblySession` then:
+`TimelineBoundaries` then:
 
-- routes supported crossfades through `DecodedCrossfadeAssembler`;
+- routes supported crossfades through `DecodedVideoJoiner`;
 - joins architecture runs with neutral hard cuts;
 - assembles decoded audio;
 - installs the final decoded media.
@@ -677,7 +677,7 @@ Publication ends the timeline; no architecture finalization step follows it.
 | Missing or corrupt host root handoff | `VideoArchitectureExecutionHost` |
 | Missing provider/session | `VideoArchitectureExecutionHost` |
 | Wrong returned identity or decoded media | Execution-host identity checks / `DecodedClipArtifact.ValidateDecoded` |
-| Invalid cross-architecture non-cut run | `MultiClipParallelMerger` |
+| Invalid cross-architecture non-cut run | `TimelineMerger` |
 | Unpublishable final media | `RootRuntimeSession` / `OutputPublisher` |
 
 ## Invariants

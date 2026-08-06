@@ -15,7 +15,7 @@ internal enum DecodedMediaKind
 
 /// <summary>
 /// A narrow graph-output identity. It carries no model compatibility, VAE, latent, or nested host
-/// media object and is resolved only when the generic timeline assembler builds its final graph.
+/// media object and is resolved only when the timeline merger builds its final graph.
 /// </summary>
 internal sealed record DecodedOutputHandle(
     string NodeId,
@@ -42,7 +42,7 @@ internal sealed record DecodedOutputHandle(
 }
 
 /// <summary>
-/// The architecture-neutral handoff from one completed clip to timeline assembly.
+/// The architecture-neutral handoff from one completed clip to the timeline merge.
 /// </summary>
 internal sealed record DecodedClipArtifact(
     DecodedOutputHandle Video,

@@ -25,7 +25,7 @@ internal sealed class TimelineMerger(WorkflowGenerator g)
             resolvedOutputs.Add(bridge.ResolvePath(clip.Video.ToPath())
                 ?? throw Invariant.Failure(
                     $"clip {clip.ClipId} left no video output in the workflow, so the timeline "
-                    + "cannot be assembled."));
+                    + "cannot be merged."));
         }
 
         // Conform before overlap planning so every downstream graph uses the same geometry.
@@ -36,7 +36,7 @@ internal sealed class TimelineMerger(WorkflowGenerator g)
             boundaries);
         PlanDiagnosticReporter.ThrowIfBlocking(
             conform.Diagnostics,
-            "VideoStages timeline assembly");
+            "VideoStages timeline merge");
         PlanDiagnosticReporter.ReportToRequest(conform.Diagnostics, g.UserInput);
         IReadOnlyList<DecodedClipArtifact> generatedClips = conform.Clips;
         IReadOnlyList<INodeOutput> generatedVideoOutputs = conform.VideoOutputs;

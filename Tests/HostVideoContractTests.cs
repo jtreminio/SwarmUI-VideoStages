@@ -15,7 +15,7 @@ namespace VideoStages.Tests;
 
 /// <summary>
 /// Two things that are not about any one architecture, generated through the real Comfy API POST
-/// path: the timeline's output plumbing (global frame trim, multi-clip assembly, which node each
+/// path: the timeline's output plumbing (global frame trim, multi-clip merging, which node each
 /// publication is bound to), exercised on LTX-2; and the generic host-video fallback that drives
 /// any video model the extension has no module for.
 /// <para>
@@ -246,7 +246,7 @@ public class HostVideoContractTests
     }
 
     /// <summary>
-    /// With more than one clip the global trim moves past the assembly: it wraps the merged batch
+    /// With more than one clip the global trim moves past the merge: it wraps the merged batch
     /// once rather than each clip, and the published frame count drops by the trim once.
     /// </summary>
     [Fact]

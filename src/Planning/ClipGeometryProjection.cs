@@ -54,7 +54,7 @@ internal static class ClipGeometryProjection
                     PlanDiagnosticSeverity.Warning,
                     "clip-geometry-will-conform",
                     $"clip {clipId} is planned to finish at {width}x{height} and will be conformed "
-                    + $"to {targetWidth}x{targetHeight} before the timeline is assembled",
+                    + $"to {targetWidth}x{targetHeight} before the timeline is merged",
                     clipId));
         }
         return diagnostics;

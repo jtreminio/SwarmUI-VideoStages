@@ -35,7 +35,7 @@ internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
             diagnostics.Add(WarnAndSkip(
                 "'Video Frame Interpolation' is request-global and can only be applied to a "
                 + $"single completed clip. This timeline has {plan.Clips.Count} clips joined by "
-                + $"{plan.Boundaries.Count} {boundaryLabel}; interpolating the assembled video "
+                + $"{plan.Boundaries.Count} {boundaryLabel}; interpolating the merged video "
                 + "would synthesize frames across authored boundaries."));
         }
         if (HasDynamicLength(plan))

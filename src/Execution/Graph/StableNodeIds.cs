@@ -7,7 +7,7 @@ internal static class StableNodeIds
     /// <summary>Per-stage intermediate save nodes, offset by stage ordinal.</summary>
     internal const int IntermediateStageSave = 52100;
 
-    /// <summary>The one assembled-timeline save emitted before frame interpolation.</summary>
+    /// <summary>The one merged-timeline save emitted before frame interpolation.</summary>
     internal const int PreInterpolationSave = 52900;
 
     /// <summary>The one fallback final save node.</summary>

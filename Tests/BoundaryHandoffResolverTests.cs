@@ -11,7 +11,7 @@ namespace VideoStages.Tests;
 
 /// <summary>
 /// A non-cut boundary is all-or-nothing: every prerequisite the previous clip's output fails to
-/// supply must take the whole boundary down to a cut, so timeline assembly never trims an overlap
+/// supply must take the whole boundary down to a cut, so the timeline merge never trims an overlap
 /// whose conditioning was never applied.
 /// </summary>
 [Collection("VideoStagesTests")]

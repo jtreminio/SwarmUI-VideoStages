@@ -12,7 +12,7 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
-/// <summary>Graph-shape tests for neutral multi-clip assembly.</summary>
+/// <summary>Graph-shape tests for neutral multi-clip merging.</summary>
 [Collection("VideoStagesTests")]
 public class MultiClipBoundaryJoinTests
 {

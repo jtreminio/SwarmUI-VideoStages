@@ -85,7 +85,7 @@ internal static class TimelineGeometryConform
                 "timeline-geometry-conformed",
                 $"clip {clip.ClipId} finished at {clip.Width}x{clip.Height}@"
                 + $"{clip.FramesPerSecond} and was conformed to {target.Width}x{target.Height}@"
-                + $"{target.FramesPerSecond} for timeline assembly",
+                + $"{target.FramesPerSecond} for the timeline merge",
                 clip.ClipId));
             INodeOutput conformed = Conform(bridge, videoOutputs[i], clip, target);
             conformedOutputs.Add(conformed);

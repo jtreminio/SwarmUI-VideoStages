@@ -37,7 +37,7 @@ internal static class DecodedAudioJoiner
             outputs.Add(clip.Audio.Resolve(bridge)
                 ?? throw Invariant.Failure(
                     $"clip {clip.ClipId} decoded audio could not be resolved "
-                    + "for timeline assembly."));
+                    + "for the timeline merge."));
         }
         return outputs;
     }
