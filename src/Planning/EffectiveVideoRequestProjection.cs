@@ -45,7 +45,7 @@ internal static class EffectiveVideoRequestProjection
             {
                 continue;
             }
-            WarnAboutResolvedIdentityHints(clip, assignment, diagnostics);
+            WarnAboutStaleIdentityHints(clip, assignment, diagnostics);
             bool architectureResolutionBlocked = architecturePlanning.Diagnostics.Any(diagnostic =>
                 diagnostic.Severity == PlanDiagnosticSeverity.Error
                 && diagnostic.ClipId == clip.Id);
@@ -69,7 +69,7 @@ internal static class EffectiveVideoRequestProjection
             Array.AsReadOnly(diagnostics.ToArray()));
     }
 
-    private static void WarnAboutResolvedIdentityHints(
+    private static void WarnAboutStaleIdentityHints(
         ClipSpec authored,
         ClipArchitectureAssignment assignment,
         ICollection<PlanDiagnostic> diagnostics)
