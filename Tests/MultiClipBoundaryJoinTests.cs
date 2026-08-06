@@ -71,7 +71,7 @@ public class MultiClipBoundaryJoinTests
     private static int CountOf<T>(WorkflowBridge bridge) where T : ComfyNode =>
         bridge.Graph.NodesOfType<T>().Count;
 
-    private static TimelineMerger Merger(WorkflowGenerator generator) =>
+    private static Timeline.Merger Merger(WorkflowGenerator generator) =>
         new(generator);
 
     private static void MergeAndPublish(

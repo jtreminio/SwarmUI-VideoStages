@@ -73,7 +73,7 @@ internal sealed class VideoArchitectureExecutionHost
     {
         UploadedMediaPreflight media = new(_generator.UserInput);
         List<PlanDiagnostic> diagnostics = [
-            .. new TimelineFrameInterpolator(_generator).Preflight(_plan),
+            .. new Timeline.FrameInterpolator(_generator).Preflight(_plan),
             .. media.Preflight(_plan),
             .. NativeFrameReferences.PreflightUploads(media, _plan)
         ];
@@ -124,7 +124,7 @@ internal sealed class VideoArchitectureExecutionHost
             return;
         }
         RootRuntimeSession rootSession = RootRuntimeSession.Capture(_generator, _plan);
-        TimelineMerger merger = new(_generator);
+        Timeline.Merger merger = new(_generator);
         AudioRuntimeSources preparedAudioSources = new AudioRuntimeSourceResolver(
             _generator,
             new AudioHandler(_generator)).Resolve(_plan);
@@ -132,7 +132,7 @@ internal sealed class VideoArchitectureExecutionHost
         _generator.LastID = Math.Max(
             _generator.LastID,
             Constants.StagedNodeIdReservationFloor);
-        TimelineBoundaries boundaries = new(_generator, merger, _plan);
+        Timeline.Boundaries boundaries = new(_generator, merger, _plan);
         ArchitectureTimelineSessionContext sessionContext = new(
             _plan,
             preparedAudioSources,
@@ -223,8 +223,8 @@ internal sealed class VideoArchitectureExecutionHost
                 }
             }
         }
-        finalArtifact = new GlobalVideoFrameTrimmer(_generator).Apply(finalArtifact);
-        finalArtifact = new TimelineFrameInterpolator(_generator).Apply(
+        finalArtifact = new Timeline.GlobalVideoFrameTrimmer(_generator).Apply(finalArtifact);
+        finalArtifact = new Timeline.FrameInterpolator(_generator).Apply(
             finalArtifact,
             _plan);
         if (finalArtifact.Media is not null)

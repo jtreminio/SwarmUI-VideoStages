@@ -23,7 +23,7 @@ hidden authoring document + host request
     → VideoArchitectureExecutionHost
     → one session per active architecture, selected for each clip
     → DecodedClipArtifact per clip
-    → TimelineBoundaries
+    → Timeline.Boundaries
     → OutputPublisher
 ```
 
@@ -245,8 +245,8 @@ path, but returns the same decoded artifact contract.
 
 ## 7. Merge and publication
 
-`TimelineBoundaries` routes descriptor-supported crossfades through
-`DecodedVideoJoiner`, joins architecture runs with neutral hard cuts,
+`Timeline.Boundaries` routes descriptor-supported crossfades through
+`Timeline.DecodedVideoJoiner`, joins architecture runs with neutral hard cuts,
 and assembles decoded audio.
 
 `RootRuntimeSession` restores the captured host save set and publishes the final
@@ -278,7 +278,7 @@ Diagnostics divide responsibility:
 | Architecture dependencies | Active runtime provider during request preparation |
 | Ordinary model-path validity already owned by a supported SwarmUI primitive | SwarmUI core during graph construction |
 | Returned identity and decoded media shape | `VideoArchitectureExecutionHost` |
-| Cross-clip run validity and final publication contract | `TimelineBoundaries` / `OutputPublisher` |
+| Cross-clip run validity and final publication contract | `Timeline.Boundaries` / `OutputPublisher` |
 
 ## 9. Generated binding retention audit
 

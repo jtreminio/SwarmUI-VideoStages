@@ -182,7 +182,7 @@ public class RuntimeArtifactTests
         JObject before = (JObject)workflow.DeepClone();
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => new GlobalVideoFrameTrimmer(generator).Apply(artifact));
+            () => new Timeline.GlobalVideoFrameTrimmer(generator).Apply(artifact));
 
         Assert.Contains("is not a decoded audio stream", error.Message);
         Assert.True(JToken.DeepEquals(before, workflow));
@@ -208,7 +208,7 @@ public class RuntimeArtifactTests
         JObject before = (JObject)workflow.DeepClone();
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => new GlobalVideoFrameTrimmer(generator).Apply(artifact));
+            () => new Timeline.GlobalVideoFrameTrimmer(generator).Apply(artifact));
 
         Assert.Contains("no decoded output to trim", error.Message);
         Assert.True(JToken.DeepEquals(before, workflow));

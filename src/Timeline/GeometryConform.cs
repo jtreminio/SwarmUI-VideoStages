@@ -3,10 +3,10 @@ using ComfyTyped.Generated;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Timeline;
 
 /// <summary>One geometry every clip shares once the timeline has been conformed.</summary>
-internal sealed record TimelineGeometry(int Width, int Height, int FramesPerSecond)
+internal sealed record Geometry(int Width, int Height, int FramesPerSecond)
 {
     internal bool Matches(DecodedClipArtifact clip) =>
         clip.Width == Width && clip.Height == Height && clip.FramesPerSecond == FramesPerSecond;
@@ -23,16 +23,16 @@ internal sealed record TimelineGeometry(int Width, int Height, int FramesPerSeco
 /// <summary>
 /// Conforms decoded clips to one geometry before overlap or concatenation.
 /// </summary>
-internal static class TimelineGeometryConform
+internal static class GeometryConform
 {
     internal sealed record ConformResult(
-        TimelineGeometry Target,
+        Geometry Target,
         IReadOnlyList<DecodedClipArtifact> Clips,
         IReadOnlyList<INodeOutput> VideoOutputs,
         IReadOnlyList<BoundaryPlan> Boundaries,
         IReadOnlyList<PlanDiagnostic> Diagnostics);
 
-    private static TimelineGeometry ResolveTarget(IReadOnlyList<DecodedClipArtifact> clips) =>
+    private static Geometry ResolveTarget(IReadOnlyList<DecodedClipArtifact> clips) =>
         new(
             clips.Min(clip => clip.Width),
             clips.Min(clip => clip.Height),
@@ -51,7 +51,7 @@ internal static class TimelineGeometryConform
         ArgumentNullException.ThrowIfNull(bridge);
         ArgumentNullException.ThrowIfNull(clips);
         ArgumentNullException.ThrowIfNull(videoOutputs);
-        TimelineGeometry target = ResolveTarget(clips);
+        Geometry target = ResolveTarget(clips);
         IReadOnlyList<BoundaryPlan> sourceBoundaries = boundaries ?? [];
         List<PlanDiagnostic> diagnostics = [
             .. clips
@@ -110,7 +110,7 @@ internal static class TimelineGeometryConform
         WorkflowBridge bridge,
         INodeOutput source,
         DecodedClipArtifact clip,
-        TimelineGeometry target)
+        Geometry target)
     {
         INodeOutput conformed = source;
         if (clip.FramesPerSecond != target.FramesPerSecond)
@@ -140,7 +140,7 @@ internal static class TimelineGeometryConform
     private static IReadOnlyList<BoundaryPlan> ConformBoundaries(
         IReadOnlyList<DecodedClipArtifact> clips,
         IReadOnlyList<BoundaryPlan> boundaries,
-        TimelineGeometry target)
+        Geometry target)
     {
         if (boundaries.Count != clips.Count - 1
             || clips.All(clip => clip.FramesPerSecond == target.FramesPerSecond))

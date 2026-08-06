@@ -6,13 +6,13 @@ using SwarmUI.Text2Image;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Timeline;
 
 /// <summary>
 /// Applies request-global frame interpolation to a single completed clip. Unsupported timeline or
 /// backend configurations are reported during preflight and skipped at runtime.
 /// </summary>
-internal sealed class TimelineFrameInterpolator(WorkflowGenerator g)
+internal sealed class FrameInterpolator(WorkflowGenerator g)
 {
     private const string Rife = "RIFE";
     private const string Film = "FILM";

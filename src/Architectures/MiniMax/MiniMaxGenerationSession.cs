@@ -19,7 +19,7 @@ internal sealed class MiniMaxGenerationSession(
     VideoExecutionPlan plan,
     HostVideoRootSources rootSources,
     AudioRuntimeSources audioSources,
-    TimelineBoundaries boundaries,
+    Timeline.Boundaries boundaries,
     CapturedHostReference baseReference,
     CapturedHostReference refinerReference,
     VideoStageRunner stageRunner,

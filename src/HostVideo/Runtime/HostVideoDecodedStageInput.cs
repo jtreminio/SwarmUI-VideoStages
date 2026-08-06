@@ -176,7 +176,7 @@ internal sealed class HostVideoDecodedStageInput
     /// </summary>
     private void DropHostStageTrim()
     {
-        if (!GlobalVideoFrameTrimmer.IsRequested(_generator.UserInput)
+        if (!Timeline.GlobalVideoFrameTrimmer.IsRequested(_generator.UserInput)
             || _generator.CurrentMedia?.Path is not JArray { Count: 2 } path)
         {
             return;

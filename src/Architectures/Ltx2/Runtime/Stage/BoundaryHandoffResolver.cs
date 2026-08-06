@@ -13,7 +13,7 @@ internal sealed class BoundaryHandoffResolver(
     ContinuityGuideBuilder continuityGuideBuilder)
 {
     internal LtxBoundaryAudioCarry Resolve(
-        TimelineBoundaries boundaries,
+        Timeline.Boundaries boundaries,
         ClipPlan previousClip,
         WGNodeData previousOutput,
         ClipPlan nextClip,
@@ -69,7 +69,7 @@ internal sealed class BoundaryHandoffResolver(
                 previousClip,
                 previousOutput,
                 continuityWindow,
-                new TimelineGeometry(
+                new Timeline.Geometry(
                     clipContext.Dimensions.Width,
                     clipContext.Dimensions.Height,
                     clipContext.Plan.FramesPerSecond));

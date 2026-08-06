@@ -83,12 +83,12 @@ public class BoundaryHandoffResolverTests
         return media;
     }
 
-    private static (BoundaryHandoffResolver Resolver, TimelineBoundaries Boundaries, ClipContext Context)
+    private static (BoundaryHandoffResolver Resolver, Timeline.Boundaries Boundaries, ClipContext Context)
         Arrange(WorkflowGenerator g, VideoExecutionPlan plan) =>
         (new BoundaryHandoffResolver(
                 g,
                 new ContinuityGuideBuilder(g)),
-            new TimelineBoundaries(g, new TimelineMerger(g), plan),
+            new Timeline.Boundaries(g, new Timeline.Merger(g), plan),
             new ClipContext(plan, plan.Clips[1], null, null));
 
     public static TheoryData<string> MissingCarryPrerequisites() =>
@@ -101,7 +101,7 @@ public class BoundaryHandoffResolverTests
     {
         WorkflowGenerator g = NewGenerator();
         VideoExecutionPlan plan = CrossfadeCarryPlan();
-        (BoundaryHandoffResolver resolver, TimelineBoundaries boundaries, ClipContext context) =
+        (BoundaryHandoffResolver resolver, Timeline.Boundaries boundaries, ClipContext context) =
             Arrange(g, plan);
         Assert.True(boundaries.TryGetAudioCarryWindow(0, out _));
 
@@ -138,7 +138,7 @@ public class BoundaryHandoffResolverTests
     {
         WorkflowGenerator g = NewGenerator();
         VideoExecutionPlan plan = CrossfadeCarryPlan();
-        (BoundaryHandoffResolver resolver, TimelineBoundaries boundaries, ClipContext context) =
+        (BoundaryHandoffResolver resolver, Timeline.Boundaries boundaries, ClipContext context) =
             Arrange(g, plan);
 
         LtxBoundaryAudioCarry carry = resolver.Resolve(

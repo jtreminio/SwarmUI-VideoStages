@@ -2,7 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using VideoStages.Execution;
 
-namespace VideoStages;
+namespace VideoStages.Timeline;
 
 /// <summary>Resolves clip audio and joins it on the same boundary timeline as the video.</summary>
 internal static class DecodedAudioJoiner

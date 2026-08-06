@@ -17,7 +17,7 @@ internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)
         ClipPlan previousClip,
         WGNodeData previousOutput,
         int window,
-        TimelineGeometry nextGeometry)
+        Timeline.Geometry nextGeometry)
     {
         ArgumentNullException.ThrowIfNull(previousClip);
         ArgumentNullException.ThrowIfNull(nextGeometry);
@@ -74,7 +74,7 @@ internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)
         WGNodeData previousOutput,
         int previousFps,
         int window,
-        TimelineGeometry nextGeometry)
+        Timeline.Geometry nextGeometry)
     {
         INodeOutput conformed = tail;
         if (previousFps != nextGeometry.FramesPerSecond)

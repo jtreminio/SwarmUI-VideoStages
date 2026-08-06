@@ -3,22 +3,22 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Timeline;
 
 /// <summary>
 /// The run's boundaries: planned joins plus whatever the architectures degraded at runtime. Merges
-/// the finished clips on those boundaries, with <see cref="TimelineMerger"/> building the graph.
+/// the finished clips on those boundaries, with <see cref="Merger"/> building the graph.
 /// </summary>
-internal sealed class TimelineBoundaries
+internal sealed class Boundaries
 {
     private readonly WorkflowGenerator _generator;
-    private readonly TimelineMerger _merger;
+    private readonly Merger _merger;
     private readonly VideoExecutionPlan _plan;
     private readonly List<BoundaryPlan> _effectiveBoundaries;
 
-    public TimelineBoundaries(
+    public Boundaries(
         WorkflowGenerator generator,
-        TimelineMerger merger,
+        Merger merger,
         VideoExecutionPlan plan)
     {
         _generator = generator;

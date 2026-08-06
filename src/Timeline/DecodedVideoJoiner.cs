@@ -3,7 +3,7 @@ using ComfyTyped.Generated;
 using VideoStages.Execution;
 using VideoStages.Generated;
 
-namespace VideoStages;
+namespace VideoStages.Timeline;
 
 /// <summary>Joins clips into one image batch, blending overlapped boundaries in pixel space.</summary>
 internal static class DecodedVideoJoiner

@@ -155,7 +155,7 @@ public class BackendConsolidationTests
         }
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-            () => new GlobalVideoFrameTrimmer(generator).Apply(artifact));
+            () => new Timeline.GlobalVideoFrameTrimmer(generator).Apply(artifact));
 
         Assert.Contains("global frame trim", error.Message);
     }
@@ -172,7 +172,7 @@ public class BackendConsolidationTests
 
         RuntimeArtifact artifact = new(null, null);
 
-        Assert.Same(artifact, new GlobalVideoFrameTrimmer(generator).Apply(artifact));
+        Assert.Same(artifact, new Timeline.GlobalVideoFrameTrimmer(generator).Apply(artifact));
         Assert.Null(generator.CurrentMedia);
     }
 

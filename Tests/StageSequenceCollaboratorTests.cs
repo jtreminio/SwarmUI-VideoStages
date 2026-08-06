@@ -71,7 +71,7 @@ public class StageSequenceCollaboratorTests
                 typeof(ClipPlan),
                 typeof(WGNodeData),
                 typeof(int),
-                typeof(TimelineGeometry)
+                typeof(Timeline.Geometry)
             ],
             parameterTypes);
         Assert.DoesNotContain(typeof(ClipSpec), parameterTypes);
@@ -100,7 +100,7 @@ public class StageSequenceCollaboratorTests
             previousClip,
             previousOutput,
             window: 9,
-            new TimelineGeometry(plan.Width, plan.Height, plan.FramesPerSecond));
+            new Timeline.Geometry(plan.Width, plan.Height, plan.FramesPerSecond));
 
         Assert.NotNull(guide);
         Assert.Equal(9, guide.Frames);
@@ -136,7 +136,7 @@ public class StageSequenceCollaboratorTests
             previousClip,
             previousOutput,
             window: 4,
-            new TimelineGeometry(1024, 1024, 12));
+            new Timeline.Geometry(1024, 1024, 12));
 
         Assert.NotNull(guide);
         // Four frames at 12 fps span eight source frames at 24 fps.

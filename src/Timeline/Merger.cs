@@ -5,14 +5,14 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Timeline;
 
 /// <summary>
 /// Builds the timeline's single video and audio output from the clips that ran. Conforms geometry,
 /// re-resolves boundaries against real clip lengths, discards pre-roll a degraded boundary left
 /// behind, then hands each stream to its joiner.
 /// </summary>
-internal sealed class TimelineMerger(WorkflowGenerator g)
+internal sealed class Merger(WorkflowGenerator g)
 {
     internal RuntimeArtifact Merge(
         IReadOnlyList<DecodedClipArtifact> clipArtifacts,
@@ -29,7 +29,7 @@ internal sealed class TimelineMerger(WorkflowGenerator g)
         }
 
         // Conform before overlap planning so every downstream graph uses the same geometry.
-        TimelineGeometryConform.ConformResult conform = TimelineGeometryConform.Apply(
+        GeometryConform.ConformResult conform = GeometryConform.Apply(
             bridge,
             clipArtifacts,
             resolvedOutputs,
