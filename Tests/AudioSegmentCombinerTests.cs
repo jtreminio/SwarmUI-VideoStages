@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Authoring;
 using VideoStages.Execution.Audio;
 using VideoStages.Planning;
 using Xunit;
@@ -32,11 +33,11 @@ public class AudioSegmentCombinerTests
     private static WGNodeData BaseAudio(WorkflowGenerator g) =>
         new(new JArray("203", 0), g, WGNodeData.DT_AUDIO, T2IModelClassSorter.CompatLtxv2);
 
-    private static AudioMediaIdentityPlan Upload(string base64 = "QUJD") =>
+    private static UploadedMediaSpec Upload(string base64 = "QUJD") =>
         new($"data:audio/wav;base64,{base64}", "seg.wav");
 
     private static AudioSegmentItemPlan UploadSegment(
-        AudioMediaIdentityPlan source,
+        UploadedMediaSpec source,
         double StartSeconds,
         double TrimStartSeconds,
         double LengthSeconds,

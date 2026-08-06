@@ -1,4 +1,5 @@
 using SwarmUI.Text2Image;
+using VideoStages.Authoring;
 
 namespace VideoStages.Planning;
 
@@ -64,7 +65,7 @@ internal sealed class UploadedMediaPreflight(T2IParamInput input)
             ? null
             : Unreadable(error, clipId, stageId);
 
-    private void Audio(List<PlanDiagnostic> diagnostics, AudioMediaIdentityPlan media, int clipId)
+    private void Audio(List<PlanDiagnostic> diagnostics, UploadedMediaSpec media, int clipId)
     {
         if (AudioDiagnostic(media?.Data, media?.FileName, clipId) is { } unreadable)
         {

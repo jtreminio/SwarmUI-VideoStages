@@ -14,21 +14,12 @@ internal enum AudioLengthOwner
     ControlNet
 }
 
-internal sealed record AudioMediaIdentityPlan(
-    string Data,
-    string FileName)
-{
-    internal static AudioMediaIdentityPlan From(UploadedMediaSpec media) => media is null
-        ? null
-        : new(media.Data, media.FileName);
-}
-
 internal sealed record AudioBaseSourcePlan(
     AudioSourceKind Kind,
     string RawSource,
     int? AceStepFunTrack,
     bool HasConfiguredTrack,
-    AudioMediaIdentityPlan UploadedMedia);
+    UploadedMediaSpec UploadedMedia);
 
 internal sealed record AudioLengthPlan(AudioLengthOwner Owner);
 
@@ -38,7 +29,7 @@ internal sealed record AudioSegmentItemPlan(
     double StartSeconds,
     double TrimStartSeconds,
     double LengthSeconds,
-    AudioMediaIdentityPlan UploadedMedia,
+    UploadedMediaSpec UploadedMedia,
     double Volume = 1);
 
 /// <summary>

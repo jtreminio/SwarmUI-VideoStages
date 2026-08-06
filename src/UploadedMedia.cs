@@ -17,9 +17,6 @@ internal static class UploadedMedia
     public static AudioFile GetAudio(T2IParamInput input, UploadedMediaSpec spec) =>
         GetAudio(input, spec?.Data, spec?.FileName);
 
-    public static AudioFile GetAudio(T2IParamInput input, AudioMediaIdentityPlan media) =>
-        GetAudio(input, media?.Data, media?.FileName);
-
     private static AudioFile GetAudio(T2IParamInput input, string data, string fileName)
     {
         if (!TryGetAudio(input, data, fileName, out AudioFile audio, out string error))

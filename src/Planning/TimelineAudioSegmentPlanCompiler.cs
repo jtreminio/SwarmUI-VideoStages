@@ -177,7 +177,7 @@ internal static class TimelineAudioSegmentPlanCompiler
             source = new(
                 AudioSourceKind.Upload,
                 null,
-                AudioMediaIdentityPlan.From(segment.Source));
+                segment.Source);
             return true;
         }
         source = null;
@@ -300,7 +300,7 @@ internal static class TimelineAudioSegmentPlanCompiler
     private sealed record ResolvedSource(
         AudioSourceKind Kind,
         int? AceStepFunTrack,
-        AudioMediaIdentityPlan UploadedMedia);
+        UploadedMediaSpec UploadedMedia);
 
     private sealed record ClipWindow(
         int ClipId,

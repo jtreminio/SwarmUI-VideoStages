@@ -44,7 +44,7 @@ internal static class AudioPlanCompiler
             selection.AceStepFunTrack,
             hasConfiguredTrack,
             selection.Kind == AudioSourceKind.Upload
-                ? AudioMediaIdentityPlan.From(clip.UploadedAudio)
+                ? clip.UploadedAudio
                 : null);
 
         AudioLengthOwner lengthOwner;
