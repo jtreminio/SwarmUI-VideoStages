@@ -20,9 +20,10 @@ internal static class HostVideoStageGeometry
             {
                 continue;
             }
-            (width, height) = DimensionSnap.Snap(
-                width * upscale.Factor,
-                height * upscale.Factor);
+            (width, height) = StageUpscaleGraph.ResolveTargetDimensions(
+                width,
+                height,
+                upscale.Factor);
         }
         return (width, height);
     }

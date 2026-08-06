@@ -224,6 +224,32 @@ public class StageRunnerCollaboratorTests
             StageUpscaleGraph.ResolveTargetDimensions(256, 416, 1.1));
     }
 
+    /// <summary>A projection that disagrees with the runtime warns about a conform that will not
+    /// happen.</summary>
+    [Fact]
+    public void Host_video_geometry_projects_the_dimensions_the_runtime_will_produce()
+    {
+        StagePlan template = MakePlan().Stage;
+        StagePlan stage = template with
+        {
+            Input = StageInputKind.PreviousStage,
+            ArchitecturePayload = new StockHostVideoStagePayload(
+                new("unit-test"),
+                "unit-test-model",
+                "unit-test-compatibility",
+                NormalLoraTargetPolicy.ModelOnly,
+                template.Core with
+                {
+                    Upscale = new(StageUpscaleMode.Pixel, 1.75, "unit-test", "unit-test"),
+                }),
+        };
+
+        (int Width, int Height) projected =
+            HostVideoStageGeometry.ProjectFinalDimensions([stage], 832, 480);
+
+        Assert.Equal((1472, 832), projected);
+    }
+
     [Theory]
     [InlineData((int)StageUpscaleMode.Pixel, 768)]
     [InlineData((int)StageUpscaleMode.Model, 768)]
