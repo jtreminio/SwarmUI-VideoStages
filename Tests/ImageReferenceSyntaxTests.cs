@@ -1,4 +1,5 @@
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Authoring;
 using Xunit;
 
 namespace VideoStages.Tests;

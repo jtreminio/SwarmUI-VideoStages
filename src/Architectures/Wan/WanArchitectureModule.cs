@@ -1,6 +1,7 @@
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan.Planning;
+using VideoStages.Authoring;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;

@@ -1,3 +1,5 @@
+using VideoStages.Authoring;
+
 namespace VideoStages.Architectures.Ltx2.Planning;
 
 internal static class IcLoraDriveMediaKinds

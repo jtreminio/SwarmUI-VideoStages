@@ -1,4 +1,4 @@
-namespace VideoStages;
+namespace VideoStages.Authoring;
 
 public sealed record LoraRef(
     string Name,

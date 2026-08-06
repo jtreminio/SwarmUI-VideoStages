@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Authoring;
 using VideoStages.HostVideo;
 using VideoStages.Planning;
 

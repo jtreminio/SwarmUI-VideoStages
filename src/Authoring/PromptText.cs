@@ -1,7 +1,7 @@
 using FreneticUtilities.FreneticExtensions;
 using SwarmUI.Utils;
 
-namespace VideoStages;
+namespace VideoStages.Authoring;
 
 internal static class PromptText
 {

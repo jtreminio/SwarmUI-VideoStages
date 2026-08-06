@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using VideoStages.Authoring;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2.Planning;

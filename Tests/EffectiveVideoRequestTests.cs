@@ -8,6 +8,7 @@ using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
 using VideoStages.Architectures.Wan.Planning;
+using VideoStages.Authoring;
 using VideoStages.HostVideo;
 using VideoStages.Planning;
 using Xunit;

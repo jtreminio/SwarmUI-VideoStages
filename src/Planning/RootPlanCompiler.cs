@@ -1,3 +1,5 @@
+using VideoStages.Authoring;
+
 namespace VideoStages.Planning;
 
 /// <summary>Plans ownership of the host root independently from clip and graph execution.</summary>

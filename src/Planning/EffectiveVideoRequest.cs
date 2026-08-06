@@ -1,5 +1,6 @@
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Authoring;
 
 namespace VideoStages.Planning;
 

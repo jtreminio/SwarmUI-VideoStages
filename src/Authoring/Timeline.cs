@@ -1,6 +1,6 @@
 using Newtonsoft.Json.Linq;
 
-namespace VideoStages;
+namespace VideoStages.Authoring;
 
 /// <summary>
 /// Reads time-based clip media and root audio segments.

@@ -1,6 +1,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Utils;
+using VideoStages.Authoring;
 
 namespace VideoStages;
 

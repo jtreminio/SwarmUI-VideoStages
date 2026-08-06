@@ -1,7 +1,7 @@
 using System.Globalization;
 using Newtonsoft.Json.Linq;
 
-namespace VideoStages;
+namespace VideoStages.Authoring;
 
 internal static class Loras
 {

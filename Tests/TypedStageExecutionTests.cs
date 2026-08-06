@@ -1,4 +1,5 @@
 using System.Reflection;
+using VideoStages.Authoring;
 using VideoStages.Planning;
 using Xunit;
 

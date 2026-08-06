@@ -7,6 +7,7 @@ using SwarmUI.Utils;
 using SwarmUI.Text2Image;
 using SwarmUI.WebAPI;
 using VideoStages.Architectures;
+using VideoStages.Authoring;
 
 namespace VideoStages;
 

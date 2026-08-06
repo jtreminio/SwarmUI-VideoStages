@@ -3,7 +3,7 @@ using FreneticUtilities.FreneticExtensions;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 
-namespace VideoStages;
+namespace VideoStages.Authoring;
 
 internal static class PromptTags
 {

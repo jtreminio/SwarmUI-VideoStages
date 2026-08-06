@@ -8,6 +8,7 @@ using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.Ltx2.Planning;
+using VideoStages.Authoring;
 using VideoStages.Planning;
 using Xunit;
 

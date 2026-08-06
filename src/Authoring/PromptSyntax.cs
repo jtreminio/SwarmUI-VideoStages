@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using FreneticUtilities.FreneticExtensions;
 
-namespace VideoStages;
+namespace VideoStages.Authoring;
 
 internal static class PromptSyntax
 {

@@ -1,4 +1,5 @@
 using VideoStages.Architectures.Ltx2;
+using VideoStages.Authoring;
 using Xunit;
 
 namespace VideoStages.Tests;

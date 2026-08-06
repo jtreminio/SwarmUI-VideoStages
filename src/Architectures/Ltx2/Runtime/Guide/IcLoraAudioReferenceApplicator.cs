@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using VideoStages.Architectures.Ltx2.Planning;
+using VideoStages.Authoring;
 using VideoStages.Generated;
 using VideoStages.Planning;
 

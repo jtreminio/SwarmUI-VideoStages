@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 
-namespace VideoStages;
+namespace VideoStages.Authoring;
 
 internal sealed record AuthoringDocument(
     int? Width,

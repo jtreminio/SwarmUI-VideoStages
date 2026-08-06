@@ -1,3 +1,5 @@
+using VideoStages.Authoring;
+
 namespace VideoStages.Planning;
 
 /// <summary>

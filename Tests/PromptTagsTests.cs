@@ -1,5 +1,6 @@
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Authoring;
 using Xunit;
 
 namespace VideoStages.Tests;

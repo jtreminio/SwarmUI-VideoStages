@@ -1,6 +1,7 @@
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Authoring;
 using VideoStages.Planning;
 
 namespace VideoStages;

@@ -5,6 +5,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
+using VideoStages.Authoring;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 

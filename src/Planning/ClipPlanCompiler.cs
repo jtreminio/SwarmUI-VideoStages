@@ -2,6 +2,7 @@ namespace VideoStages.Planning;
 
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Authoring;
 
 /// <summary>Compiles one executable clip and its ordered stage chain.</summary>
 internal static class ClipPlanCompiler

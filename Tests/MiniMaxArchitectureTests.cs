@@ -4,6 +4,7 @@ using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.MiniMax;
+using VideoStages.Authoring;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;

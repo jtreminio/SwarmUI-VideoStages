@@ -1,3 +1,4 @@
+using VideoStages.Authoring;
 using Xunit;
 
 namespace VideoStages.Tests;

@@ -1,4 +1,5 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Authoring;
 
 namespace VideoStages;
 

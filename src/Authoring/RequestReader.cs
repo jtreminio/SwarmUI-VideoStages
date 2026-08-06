@@ -4,7 +4,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Authoring;
 
 internal static class RequestReader
 {

@@ -1,4 +1,4 @@
-namespace VideoStages;
+namespace VideoStages.Authoring;
 
 /// <summary>Parses and formats the authored stage-reference source syntax (<c>Stage3</c>, <c>edit2</c>).</summary>
 public static class ImageReferenceSyntax

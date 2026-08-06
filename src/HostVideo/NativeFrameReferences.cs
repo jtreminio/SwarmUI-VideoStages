@@ -1,6 +1,7 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Authoring;
 using VideoStages.Planning;
 using Image = SwarmUI.Utils.Image;
 

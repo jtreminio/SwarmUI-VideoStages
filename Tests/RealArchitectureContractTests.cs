@@ -3,6 +3,7 @@ using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
+using VideoStages.Authoring;
 using VideoStages.Planning;
 using Xunit;
 

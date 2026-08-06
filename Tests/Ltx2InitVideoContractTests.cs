@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Authoring;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;

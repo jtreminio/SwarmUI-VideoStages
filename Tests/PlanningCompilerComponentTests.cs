@@ -1,3 +1,4 @@
+using VideoStages.Authoring;
 using VideoStages.Planning;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;

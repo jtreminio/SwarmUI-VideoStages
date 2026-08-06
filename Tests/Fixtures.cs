@@ -2,6 +2,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
+using VideoStages.Authoring;
 
 namespace VideoStages.Tests;
 

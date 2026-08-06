@@ -6,6 +6,7 @@ using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.Wan;
+using VideoStages.Authoring;
 
 /// <summary>
 /// Compiles a parsed specification into a deterministic plan without inspecting or mutating the
