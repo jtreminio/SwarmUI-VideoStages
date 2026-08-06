@@ -6,7 +6,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Audio;
 
 /// <summary>Combines one clip's base and overlay audio before the cross-clip merge.</summary>
 internal sealed class AudioSegmentCombiner(WorkflowGenerator g)

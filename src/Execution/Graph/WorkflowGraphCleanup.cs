@@ -1,6 +1,6 @@
 using ComfyTyped.Core;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Graph;
 
 /// <summary>
 /// Every walk here reads its upstream neighbours through <see cref="ComfyGraph.FindUpstream"/>, not

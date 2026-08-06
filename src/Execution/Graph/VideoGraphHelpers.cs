@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Graph;
 
 /// <summary>
 /// Provides the common <c>NodeHelpers</c> accessors/codecs and is the sole owner of invalidation

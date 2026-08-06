@@ -4,6 +4,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Authoring;
+using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 using VideoStages.Planning;
 

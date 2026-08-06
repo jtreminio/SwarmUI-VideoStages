@@ -1,9 +1,10 @@
 using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Audio;
 
 /// <summary>Builds audio latents that preserve only authored time windows.</summary>
 internal static class AudioPreserveWindowBuilder

@@ -1,7 +1,7 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Graph;
 
 /// <summary>
 /// Lets the first generated stage of a text-to-video timeline build on SwarmUI's own root chain

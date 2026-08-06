@@ -1,7 +1,8 @@
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Execution.Graph;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Parameters;
 
 /// <summary>Applies one stage's LoRAs and keeps its host model-loader cache in that scope.</summary>
 internal sealed class StageModelLoadScope : IDisposable

@@ -3,7 +3,7 @@ using SwarmUI.Text2Image;
 using VideoStages.Authoring;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution;
 
 internal sealed class PlannedStagePromptResolver(WorkflowGenerator g)
 {

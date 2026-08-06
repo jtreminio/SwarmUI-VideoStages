@@ -2,9 +2,10 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Execution.Graph;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution;
 
 internal sealed class StageUpscaleGraph(WorkflowGenerator g)
 {

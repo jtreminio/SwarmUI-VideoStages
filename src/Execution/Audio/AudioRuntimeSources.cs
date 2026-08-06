@@ -1,6 +1,6 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Audio;
 
 /// <summary>Resolved graph-backed audio sources shared by root and clip execution.</summary>
 internal sealed record AudioRuntimeSources(

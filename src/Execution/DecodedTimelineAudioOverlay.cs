@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Execution.Audio;
 using VideoStages.Planning;
 
 namespace VideoStages.Execution;

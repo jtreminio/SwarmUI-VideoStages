@@ -1,7 +1,7 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Audio;
 
 /// <summary>Selects one already-resolved runtime source from a compiled base-audio policy.</summary>
 internal static class PlannedAudioSourceSelector

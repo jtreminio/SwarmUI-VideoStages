@@ -1,4 +1,5 @@
 using VideoStages.Authoring;
+using VideoStages.Execution.Audio;
 
 namespace VideoStages.Planning;
 

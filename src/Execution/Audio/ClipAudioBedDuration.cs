@@ -1,7 +1,7 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Audio;
 
 internal static class ClipAudioBedDuration
 {

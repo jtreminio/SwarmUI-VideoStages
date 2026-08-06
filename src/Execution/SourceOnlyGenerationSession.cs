@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Execution.Audio;
 using VideoStages.Planning;
 
 namespace VideoStages.Execution;

@@ -5,7 +5,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Graph;
 
 /// <summary>Captures each active core video ControlNet's host image, apply node and audio.</summary>
 internal sealed class ControlNetCoreMediaCapture(WorkflowGenerator g)

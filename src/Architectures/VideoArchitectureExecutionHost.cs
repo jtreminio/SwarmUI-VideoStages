@@ -3,6 +3,8 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Execution.Audio;
+using VideoStages.Execution.Graph;
 using VideoStages.Execution;
 using VideoStages.HostVideo;
 using VideoStages.Planning;

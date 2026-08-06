@@ -1,9 +1,10 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Execution.Graph;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Audio;
 
 public sealed class AudioHandler(WorkflowGenerator g)
 {

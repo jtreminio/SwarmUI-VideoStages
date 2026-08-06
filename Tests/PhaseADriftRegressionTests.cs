@@ -7,6 +7,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using VideoStages.Authoring;
+using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 using Xunit;
 

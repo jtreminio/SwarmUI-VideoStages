@@ -2,9 +2,10 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Execution.Graph;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Audio;
 
 internal sealed class AudioRuntimeSourceResolver(
     WorkflowGenerator g,

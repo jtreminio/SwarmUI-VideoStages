@@ -1,6 +1,6 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Graph;
 
 internal static class StableNodeIds
 {

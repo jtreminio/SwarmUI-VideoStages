@@ -4,11 +4,12 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
+using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution;
 
 /// <summary>Loads and conforms init-video footage to its compiled clip window.</summary>
 internal sealed class InitVideoClipInstaller(WorkflowGenerator g)

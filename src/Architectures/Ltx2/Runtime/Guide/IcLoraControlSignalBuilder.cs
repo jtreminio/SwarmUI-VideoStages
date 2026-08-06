@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Ltx2.Planning;
+using VideoStages.Execution.Graph;
 
 namespace VideoStages.Architectures.Ltx2;
 

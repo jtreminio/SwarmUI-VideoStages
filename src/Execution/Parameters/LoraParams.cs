@@ -2,7 +2,7 @@ using SwarmUI.Text2Image;
 using System.Globalization;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Parameters;
 
 /// <summary>Shared append logic for the four LoRA list params. Persisted clip/stage LoRAs and
 /// prompt-scoped LoRAs pad the parallel lists, append video-section-confined rows, and swap the

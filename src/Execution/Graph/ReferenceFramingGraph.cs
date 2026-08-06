@@ -3,7 +3,7 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using VideoStages.Generated;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Graph;
 
 /// <summary>Builds and reuses the graph branch for one clip's reference-framing policy.</summary>
 internal static class ReferenceFramingGraph

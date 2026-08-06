@@ -1,6 +1,6 @@
 using SwarmUI.Text2Image;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Parameters;
 
 /// <summary>Captures the raw values of the given param types at creation, then reverts them to
 /// that captured state on <see cref="Restore"/> (called by <see cref="Dispose"/>) — restoring

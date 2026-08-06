@@ -7,6 +7,8 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Execution.Audio;
+using VideoStages.Execution.Graph;
 using VideoStages.Planning;
 using Xunit;
 

@@ -2,8 +2,9 @@ using ComfyTyped.Core;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Execution.Graph;
 
-namespace VideoStages;
+namespace VideoStages.Execution;
 
 /// <summary>Prepares guide media for a consumer's dimensions and framing policy.</summary>
 internal static class GuideMediaPreparation

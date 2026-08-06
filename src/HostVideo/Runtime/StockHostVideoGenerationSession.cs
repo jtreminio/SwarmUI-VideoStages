@@ -6,6 +6,8 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan;
+using VideoStages.Execution.Graph;
+using VideoStages.Execution.Parameters;
 using VideoStages.Execution;
 using VideoStages.Planning;
 

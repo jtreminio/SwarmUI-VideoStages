@@ -2,7 +2,7 @@ using System.Globalization;
 using SwarmUI.Text2Image;
 using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Parameters;
 
 /// <summary>Selects prompt-section-confined LoRAs for one clip stage and appends them to its parameter scope.</summary>
 internal static class VideoScopedLoraSelector

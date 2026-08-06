@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Graph;
 
 /// <summary>Rebuilds <see cref="WGNodeData"/> from stage-reference fields shared by pipe and JSON marker codecs.</summary>
 internal static class WGNodeDataMarkerCodec

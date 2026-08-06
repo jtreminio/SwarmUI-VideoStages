@@ -2,7 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 
-namespace VideoStages;
+namespace VideoStages.Execution.Graph;
 
 /// <summary>Creates image scale nodes and retargets an unused input scale when safe.</summary>
 internal static class ImageScaleReuse

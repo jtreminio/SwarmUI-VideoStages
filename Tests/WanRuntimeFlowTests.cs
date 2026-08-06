@@ -9,6 +9,7 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Wan;
 using VideoStages.Authoring;
+using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 using VideoStages.HostVideo;
 using VideoStages.HostVideo.Runtime;
