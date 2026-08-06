@@ -89,11 +89,11 @@ internal static class WanClipPlanCompiler
                     previousModel.CompatibilityClassId,
                     resolved.CompatibilityClassId,
                     StringComparison.Ordinal);
-            ImmutableArray<NormalLoraPlan> loras =
-                NormalLoraPlanCompiler.Compile(
+            ImmutableArray<LoraPlan> loras =
+                LoraPlanCompiler.Compile(
                     clip,
                     stage,
-                    NormalLoraTargetPolicy.ModelOnly);
+                    LoraTarget.ModelOnly);
             WarnAndNormalize(
                 !firstStage
                     // Text-root parsing canonicalizes selectors to Generated. Other later stages
@@ -122,7 +122,7 @@ internal static class WanClipPlanCompiler
                     WanArchitectureModule.ArchitectureId,
                     resolved.ModelClassId,
                     resolved.CompatibilityClassId,
-                    NormalLoraTargetPolicy.ModelOnly,
+                    LoraTarget.ModelOnly,
                     new StageCorePlan(
                         stage.Control,
                         stage.Steps,

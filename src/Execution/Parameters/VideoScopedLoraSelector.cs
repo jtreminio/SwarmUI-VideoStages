@@ -11,8 +11,8 @@ internal static class VideoScopedLoraSelector
         T2IParamInput input,
         int clipIndex,
         int stageSectionId,
-        NormalLoraTargetPolicy targetPolicy =
-            NormalLoraTargetPolicy.ModelAndTextEncoder,
+        LoraTarget target =
+            LoraTarget.ModelAndTextEncoder,
         int? targetSectionId = null)
     {
         if (!input.TryGet(T2IParamTypes.Loras, out List<string> loras)
@@ -58,7 +58,7 @@ internal static class VideoScopedLoraSelector
             string textEncoderWeight = index < textEncoderWeights.Count ? textEncoderWeights[index] : weight;
             // Preserve malformed values for the host's existing validation path, but do not
             // project a well-formed zero-model row into a model-only architecture scope.
-            if (targetPolicy == NormalLoraTargetPolicy.ModelOnly
+            if (target == LoraTarget.ModelOnly
                 && double.TryParse(
                     weight,
                     NumberStyles.Float,

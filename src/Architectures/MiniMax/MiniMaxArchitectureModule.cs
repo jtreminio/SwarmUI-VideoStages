@@ -155,10 +155,10 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         {
             // Assignments are resolver-vetted; a missing key is a caller contract violation.
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
-            NormalLoraTargetPolicy loraTargetPolicy =
+            LoraTarget loraTargetPolicy =
                 resolved.LorasTargetTextEncoder == false
-                    ? NormalLoraTargetPolicy.ModelOnly
-                    : NormalLoraTargetPolicy.ModelAndTextEncoder;
+                    ? LoraTarget.ModelOnly
+                    : LoraTarget.ModelAndTextEncoder;
             bool passthrough = StagePassthroughPolicy.IsPassthrough(stage, Descriptor);
             if ((context.EntryMode == ArchitectureEntryMode.InitVideo
                     || stage.ClipStageIndex > 0)
@@ -201,7 +201,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                     stage.Sampler,
                     stage.Scheduler,
                     StageUpscalePlanCompiler.Compile(stage),
-                    NormalLoraPlanCompiler.Compile(clip, stage, loraTargetPolicy)));
+                    LoraPlanCompiler.Compile(clip, stage, loraTargetPolicy)));
         }
 
         return new(

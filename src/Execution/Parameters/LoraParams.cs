@@ -18,7 +18,7 @@ internal static class LoraParams
     /// </summary>
     public static ParamSnapshot ApplyNormalLoras(
         T2IParamInput input,
-        IReadOnlyList<NormalLoraPlan> plans,
+        IReadOnlyList<LoraPlan> plans,
         int? targetSectionId = null)
     {
         if (plans is null || plans.Count == 0)

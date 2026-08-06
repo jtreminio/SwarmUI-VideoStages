@@ -763,7 +763,7 @@ public class WanArchitectureTests
             Assert.Single(Compile(GeneratedClip(0, stage)).Clips).Stages)
             .RequireStockHostVideoPayload(WanArchitectureModule.ArchitectureId, "Wan");
 
-        Assert.Equal(NormalLoraTargetPolicy.ModelOnly, payload.LoraTargetPolicy);
+        Assert.Equal(LoraTarget.ModelOnly, payload.LoraTargetPolicy);
         Assert.Equal("stage-model", Assert.Single(payload.Core.Loras).Name);
     }
 

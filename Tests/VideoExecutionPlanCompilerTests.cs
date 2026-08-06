@@ -169,7 +169,7 @@ public class VideoExecutionPlanCompilerTests
                 TestPlanCompiler.Compile(
                     Spec(false, GeneratedClip(0, stage))).Clips).Stages)
             .RequireLtx2Payload();
-        NormalLoraPlan lora = Assert.Single(payload.Core.Loras);
+        LoraPlan lora = Assert.Single(payload.Core.Loras);
 
         Assert.Equal("stage-text-only", lora.Name);
         Assert.Equal(0, lora.ModelWeight);
@@ -343,7 +343,7 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(StageAudioAction.CaptureForReuse, ltx.AudioAction);
         Assert.True(compiled.IsIntermediateStage);
 
-        NormalLoraPlan plannedLora = compiled.Core.Loras[1];
+        LoraPlan plannedLora = compiled.Core.Loras[1];
         Assert.Equal("stage.safetensors", plannedLora.Name);
         Assert.Equal(plannedLora.ModelWeight, plannedLora.TextEncoderWeight);
     }

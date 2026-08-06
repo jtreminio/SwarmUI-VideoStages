@@ -44,7 +44,7 @@ internal static class Ltx2ClipPlanCompiler
                     stage.Sampler,
                     stage.Scheduler,
                     StageUpscalePlanCompiler.Compile(stage),
-                    NormalLoraPlanCompiler.Compile(clip, stage)),
+                    LoraPlanCompiler.Compile(clip, stage)),
                 CompileGuideReference(stage.ImageReference),
                 stage.ImageRefWasExplicit,
                 icLoras.Stages[stage.ClipStageRawIndex],

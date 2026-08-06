@@ -237,7 +237,7 @@ public class StageRunnerCollaboratorTests
                 new("unit-test"),
                 "unit-test-model",
                 "unit-test-compatibility",
-                NormalLoraTargetPolicy.ModelOnly,
+                LoraTarget.ModelOnly,
                 template.Core with
                 {
                     Upscale = new(StageUpscaleMode.Pixel, 1.75, "unit-test", "unit-test"),
@@ -269,7 +269,7 @@ public class StageRunnerCollaboratorTests
                 new("unit-test"),
                 "unit-test-model",
                 "unit-test-compatibility",
-                NormalLoraTargetPolicy.ModelOnly,
+                LoraTarget.ModelOnly,
                 template.Core with
                 {
                     Upscale = new(mode, 1.5, "unit-test", "unit-test"),

@@ -111,8 +111,8 @@ public class HostVideoArchitectureTests
             compilation.StagePayloads[0]);
         Assert.Equal(
             targetsTextEncoder
-                ? NormalLoraTargetPolicy.ModelAndTextEncoder
-                : NormalLoraTargetPolicy.ModelOnly,
+                ? LoraTarget.ModelAndTextEncoder
+                : LoraTarget.ModelOnly,
             payload.LoraTargetPolicy);
         Assert.Equal(expectedLoras, payload.Core.Loras.Length);
     }

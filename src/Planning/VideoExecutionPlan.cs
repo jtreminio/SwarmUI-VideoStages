@@ -108,7 +108,7 @@ internal sealed record StageCorePlan(
     string Sampler,
     string Scheduler,
     StageUpscalePlan Upscale,
-    ImmutableArray<NormalLoraPlan> Loras);
+    ImmutableArray<LoraPlan> Loras);
 
 internal enum StageInputKind
 {

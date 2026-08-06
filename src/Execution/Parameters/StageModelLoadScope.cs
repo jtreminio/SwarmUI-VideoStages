@@ -18,8 +18,8 @@ internal sealed class StageModelLoadScope : IDisposable
         ClipPlan clip,
         StagePlan stage,
         int stageSectionId,
-        NormalLoraTargetPolicy targetPolicy =
-            NormalLoraTargetPolicy.ModelAndTextEncoder,
+        LoraTarget target =
+            LoraTarget.ModelAndTextEncoder,
         int? targetSectionId = null)
     {
         ArgumentNullException.ThrowIfNull(generator);
@@ -31,7 +31,7 @@ internal sealed class StageModelLoadScope : IDisposable
             generator.UserInput,
             clip.ClipId,
             stageSectionId,
-            targetPolicy,
+            target,
             targetSectionId);
         try
         {
