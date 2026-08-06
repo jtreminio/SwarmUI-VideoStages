@@ -227,12 +227,11 @@ export interface Clip {
      * tail as opening generation context for the next clip.
      */
     boundaryOutCarryAudio: boolean;
-    /**
-     * "continue" boundary overlap in frames (multiple of 8): the next clip is
-     * generated with this clip's last overlap+1 frames as frozen latent
-     * context, and the merge collapses the duplicated frames. Ignored for
-     * "cut"/"crossfade".
-     */
+    /** Scale applied to an automatic reference-mode Continue video. */
+    boundaryOutReferenceScale: number;
+    /** Whether that automatic reference video also supplies its soundtrack. */
+    boundaryOutReferenceIncludeSoundtrack: boolean;
+    /** Architecture-normalized frame window used by the selected outgoing join. */
     boundaryOutOverlap: number;
     duration: number;
     /** How reference media is fitted to this clip's generation dimensions. */

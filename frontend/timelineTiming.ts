@@ -1,5 +1,5 @@
 import type { CapabilityViewResolver } from "./architectures/policy";
-import { crossfadePlanForClips } from "./boundaryPlan";
+import { boundaryPlanForClips } from "./boundaryPlan";
 import { executableBoundaries, executableClipIndexes } from "./clipSemantics";
 import { framesForClip, NEUTRAL_FRAME_GRID } from "./renderUtils";
 import { safeFps } from "./timelineDetail";
@@ -11,6 +11,8 @@ export interface TimelineBoundaryImpact {
     rightIdx: number;
     requestedMode: BoundaryOut;
     effectiveMode: BoundaryOut;
+    continuityWindowFrames: number;
+    continuityWindowSeconds: number;
     overlapFrames: number;
     overlapSeconds: number;
     handleFrames: number;
@@ -37,7 +39,7 @@ export interface TimelineTiming {
 /**
  * Mirrors the compiled timeline's frame accounting:
  *
- * output = generated clip frames - resolved boundary windows.
+ * output = generated clip frames - resolved pixel overlaps.
  *
  * Capability views are required for architecture-specific details such as
  * LTX Continue's extra continuity frame and unsupported-mode fallbacks.
@@ -70,29 +72,35 @@ export const resolveTimelineTiming = (
         return { ...clip, boundaryOut: effective };
     });
     const plan = capabilities
-        ? crossfadePlanForClips(
+        ? boundaryPlanForClips(
               compacted,
               fps,
               (_left, position, mode) =>
                   capabilities
                       .forBoundaryIndex(clips, indexes[position])
-                      .overlapConstraints(mode),
+                      .windowConstraints(mode),
               (clip) => capabilities.forClip(clip).frameGrid,
           )
-        : crossfadePlanForClips(compacted, fps);
+        : boundaryPlanForClips(compacted, fps);
     const seams = executableBoundaries(clips);
     const boundaries = seams.map((seam) => {
         const requestedMode = clips[seam.leftIdx].boundaryOut ?? "cut";
         const policyEffective = compacted[seam.position].boundaryOut ?? "cut";
         const overlapFrames = Math.max(0, plan.overlaps[seam.position] ?? 0);
+        const continuityWindowFrames = Math.max(
+            0,
+            plan.continuityWindows[seam.position] ?? 0,
+        );
         const effectiveMode =
-            overlapFrames > 0 ? policyEffective : ("cut" as const);
+            overlapFrames > 0 || continuityWindowFrames > 0
+                ? policyEffective
+                : ("cut" as const);
         const continuityExtraFrames =
             effectiveMode === "continue"
                 ? (capabilities
                       ?.forBoundaryIndex(clips, seam.leftIdx)
-                      .overlapConstraints(effectiveMode)
-                      .continuityExtraFrames ?? 1)
+                      .windowConstraints(effectiveMode).continuityExtraFrames ??
+                  1)
                 : 0;
         const handleFrames =
             effectiveMode === "continue"
@@ -106,6 +114,8 @@ export const resolveTimelineTiming = (
             ...seam,
             requestedMode,
             effectiveMode,
+            continuityWindowFrames,
+            continuityWindowSeconds: continuityWindowFrames / fps,
             overlapFrames,
             overlapSeconds: overlapFrames / fps,
             handleFrames,
@@ -155,6 +165,21 @@ export const boundaryImpactForLeftClip = (
 ): TimelineBoundaryImpact | null =>
     timing.boundaries.find((boundary) => boundary.leftIdx === leftClipIdx) ??
     null;
+
+export const incomingReferenceContinueForClip = (
+    clips: readonly Clip[],
+    rawFps: number,
+    capabilities: CapabilityViewResolver,
+    rightClipIdx: number,
+): TimelineBoundaryImpact | null =>
+    resolveTimelineTiming(clips, rawFps, capabilities).boundaries.find(
+        (boundary) =>
+            boundary.rightIdx === rightClipIdx &&
+            boundary.effectiveMode === "continue" &&
+            capabilities
+                .forBoundaryIndex(clips, boundary.leftIdx)
+                .windowConstraints("continue").continueMode === "reference",
+    ) ?? null;
 
 /**
  * The editable ruler keeps dormant cards reachable. When every card executes,

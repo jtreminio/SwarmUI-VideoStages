@@ -15,7 +15,10 @@ let anchor: SelectionAnchor = NO_SELECTION;
 const selectionSubscribers = new Set<(sel: TimelineSelection) => void>();
 
 const clipIdxOf = (sel: TimelineSelection): number | null =>
-    sel.kind === "none" || sel.kind === "boundary" || sel.kind === "audio-track"
+    sel.kind === "none" ||
+    sel.kind === "boundary" ||
+    sel.kind === "boundary-ref" ||
+    sel.kind === "audio-track"
         ? null
         : sel.clipIdx;
 

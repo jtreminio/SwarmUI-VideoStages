@@ -56,6 +56,12 @@ internal static class ArchitectureCatalogSerializer
         ["maxFrames"] = value.MaxFrames,
         ["defaultFrames"] = value.DefaultFrames,
         ["continuityExtraFrames"] = value.ContinuityExtraFrames,
+        ["continueMode"] = value.ContinueMode switch
+        {
+            ContinueBoundaryMode.Overlap => "overlap",
+            ContinueBoundaryMode.Reference => "reference",
+            _ => throw new ArgumentOutOfRangeException(nameof(value.ContinueMode)),
+        },
         ["targetRequiresGeneratedEntry"] = value.TargetRequiresGeneratedEntry,
         ["targetRequiresStage"] = value.TargetRequiresStage,
         ["targetDisallowsInitialReference"] = value.TargetDisallowsInitialReference,

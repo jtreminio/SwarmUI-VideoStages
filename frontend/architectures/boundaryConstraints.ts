@@ -1,19 +1,21 @@
 import type { CapabilityRuleDecision } from "./types";
 
-export interface BoundaryOverlapConstraints {
+export interface BoundaryWindowConstraints {
     frameStep: number;
     minFrames: number;
     maxFrames: number;
     defaultFrames: number;
     continuityExtraFrames: number;
+    continueMode: "overlap" | "reference";
 }
 
-const GENERIC_BOUNDARY_CONSTRAINTS: BoundaryOverlapConstraints = {
+const GENERIC_BOUNDARY_CONSTRAINTS: BoundaryWindowConstraints = {
     frameStep: 1,
     minFrames: 1,
     maxFrames: Number.MAX_SAFE_INTEGER,
     defaultFrames: 1,
     continuityExtraFrames: 0,
+    continueMode: "overlap",
 };
 
 const finitePositive = (
@@ -27,9 +29,9 @@ const finitePositive = (
         : fallback;
 };
 
-export const boundaryOverlapConstraints = (
+export const boundaryWindowConstraints = (
     rule: CapabilityRuleDecision | null | undefined,
-): BoundaryOverlapConstraints => {
+): BoundaryWindowConstraints => {
     const raw = rule?.constraints;
     const frameStep = finitePositive(
         raw?.frameStep,
@@ -57,12 +59,14 @@ export const boundaryOverlapConstraints = (
             GENERIC_BOUNDARY_CONSTRAINTS.continuityExtraFrames,
             true,
         ),
+        continueMode:
+            raw?.continueMode === "reference" ? "reference" : "overlap",
     };
 };
 
-export const normalizeBoundaryOverlap = (
+export const normalizeBoundaryWindow = (
     value: unknown,
-    constraints: BoundaryOverlapConstraints,
+    constraints: BoundaryWindowConstraints,
 ): number => {
     const numeric = Math.trunc(Number(value));
     if (!Number.isFinite(numeric) || numeric <= 0) {
@@ -82,8 +86,8 @@ export const normalizeBoundaryOverlap = (
     );
 };
 
-export const boundaryOverlapChoices = (
-    constraints: BoundaryOverlapConstraints,
+export const boundaryWindowChoices = (
+    constraints: BoundaryWindowConstraints,
 ): number[] => {
     const choices: number[] = [];
     for (

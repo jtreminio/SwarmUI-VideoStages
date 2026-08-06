@@ -11,6 +11,7 @@ import {
 } from "@jest/globals";
 import { resetArchitectureCatalogForTests } from "./__test_helpers__/architectureCatalog";
 import {
+    testArchitectureCapabilities,
     testArchitectureCatalog,
     testArchitectureCatalogDto,
 } from "./__test_helpers__/architectureFixtures";
@@ -37,7 +38,7 @@ import {
     type TimelineDetailStrip,
 } from "./timelineDetailStrip";
 import { renderTimeline } from "./timelineView";
-import type { Clip } from "./types";
+import type { Clip, ClipReference } from "./types";
 
 interface StageFixture {
     model?: string;
@@ -83,6 +84,7 @@ interface ClipFixture {
         startSeconds: number;
         lengthSeconds: number;
     };
+    references?: Partial<ClipReference>[];
 }
 
 const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
@@ -106,6 +108,7 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
         steps: s.steps,
     })),
     frameRefs: clip.frameRefs ?? [],
+    references: clip.references ?? [],
     promptWindows: [],
     ...(clip.retake ? { retake: clip.retake } : {}),
     ...(clip.initVideo ? { initVideo: clip.initVideo } : {}),
@@ -3298,6 +3301,113 @@ describe("createTimelineDetailStrip", () => {
             expect(savedClips(saveSpy)[0].stages[0].steps).toBe(14);
         });
 
+        it("keeps incoming Continue numbering after a reference value edit", async () => {
+            const catalog = testArchitectureCatalog();
+            catalog.architectures[0].capabilities =
+                testArchitectureCapabilities({
+                    features: [
+                        ...testArchitectureCapabilities().features,
+                        "clipReferences",
+                    ],
+                });
+            const constraints =
+                catalog.architectures[0].boundaryRules.continue.constraints;
+            if (!constraints) {
+                throw new Error("continue constraints missing");
+            }
+            constraints.continueMode = "reference";
+            constraints.continuityExtraFrames = 0;
+            resetArchitectureCatalogForTests();
+            setVideoStagesHostBridgeForTests({
+                ...createDefaultVideoStagesHostBridge(),
+                requestJson: async () => testArchitectureCatalogDto(catalog),
+            });
+            await loadAuthoritativeArchitectureCatalog();
+            setup([
+                {
+                    duration: 4,
+                    boundaryOut: "continue",
+                    stages: [{}],
+                },
+                {
+                    duration: 4,
+                    stages: [{}],
+                    references: [{ kind: "video", mediaScale: 1 }],
+                },
+            ]);
+            wireLiveRenders();
+            setSelection({ kind: "clip-ref", clipIdx: 1, referenceIdx: 0 });
+            expect(crumbText()).toBe("<Video 2> · Clip 1");
+            const scale =
+                fieldByLabel(
+                    "Reference scale",
+                ).querySelector<HTMLSelectElement>("select");
+            if (!scale) {
+                throw new Error("reference scale missing");
+            }
+            scale.value = "0.5";
+            scale.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(crumbText()).toBe("<Video 2> · Clip 1");
+            expect(savedClips(saveSpy)[1].references[0].mediaScale).toBe(0.5);
+
+            document
+                .querySelector<HTMLElement>(".vst-clip-ref-join-tab")
+                ?.click();
+            expect(getSelection()).toEqual({
+                kind: "boundary-ref",
+                leftClipIdx: 0,
+            });
+            expect(crumbText()).toBe(
+                "<Video 1> (from Join with Clip 0) · Clip 1",
+            );
+            const joinScale =
+                fieldByLabel(
+                    "Reference scale",
+                ).querySelector<HTMLSelectElement>("select");
+            const soundtrack = fieldByLabel(
+                "Include soundtrack",
+            ).querySelector<HTMLInputElement>('input[type="checkbox"]');
+            if (!joinScale || !soundtrack) {
+                throw new Error("incoming reference controls missing");
+            }
+            joinScale.value = "0.25";
+            joinScale.dispatchEvent(new Event("change", { bubbles: true }));
+            soundtrack.checked = false;
+            soundtrack.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(getSelection()).toEqual({
+                kind: "boundary-ref",
+                leftClipIdx: 0,
+            });
+            expect(crumbText()).toBe(
+                "<Video 1> (from Join with Clip 0) · Clip 1",
+            );
+            expect(savedClips(saveSpy)[0]).toMatchObject({
+                boundaryOutReferenceScale: 0.25,
+                boundaryOutReferenceIncludeSoundtrack: false,
+            });
+            const stored = JSON.parse(
+                document.querySelector<HTMLTextAreaElement>(
+                    "#input_videostages",
+                )?.value ?? "{}",
+            );
+            expect(stored.clips[0]).toMatchObject({
+                boundaryOutReferenceScale: 0.25,
+                boundaryOutReferenceIncludeSoundtrack: false,
+            });
+            expect(stored.clips[1].references).toHaveLength(1);
+            expect(stored.clips[1].references[0]).toMatchObject({
+                kind: "video",
+                mediaScale: 0.5,
+            });
+            expect(
+                document.querySelector(
+                    ".vst-detail-join-ref-editor .vst-detail-field-label",
+                ),
+            ).not.toBeNull();
+        });
+
         it("syncs the upscale-method gate live without rebuilding the method select", () => {
             setup([{ duration: 4, stages: [{}, { upscale: 2 }] }]);
             wireLiveRenders();
@@ -4363,6 +4473,36 @@ describe("createTimelineDetailStrip", () => {
             expect(infoText()).toContain(
                 "audio tail becomes preserved opening context",
             );
+        });
+
+        it("labels reference Continue as requested context and hides overlap audio carry", async () => {
+            const catalog = testArchitectureCatalog();
+            const constraints =
+                catalog.architectures[0].boundaryRules.continue.constraints;
+            if (!constraints) {
+                throw new Error("continue constraints missing");
+            }
+            constraints.continueMode = "reference";
+            constraints.continuityExtraFrames = 0;
+            resetArchitectureCatalogForTests();
+            setVideoStagesHostBridgeForTests({
+                ...createDefaultVideoStagesHostBridge(),
+                requestJson: async () => testArchitectureCatalogDto(catalog),
+            });
+            await loadAuthoritativeArchitectureCatalog();
+
+            setup([
+                { duration: 4, boundaryOut: "continue", stages: [{}] },
+                { duration: 4, stages: [{}] },
+            ]);
+            setSelection({ kind: "boundary", leftClipIdx: 0 });
+
+            expect(fieldByLabel("Reference window")).not.toBeNull();
+            expect(overlapSelect()).toBeNull();
+            expect(carryAudioCheckbox()).toBeNull();
+            expect(infoText()).toContain("requests up to ~");
+            expect(infoText()).toContain("as reference context");
+            expect(infoText()).not.toContain("receives this clip's last");
         });
 
         it("hides audio carry when the architecture does not support it", async () => {

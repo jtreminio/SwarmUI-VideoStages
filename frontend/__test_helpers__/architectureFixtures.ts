@@ -59,6 +59,7 @@ export const testArchitectureCatalog = (
                         maxFrames: 48,
                         defaultFrames: 8,
                         continuityExtraFrames: 1,
+                        continueMode: "overlap",
                     },
                 },
                 crossfade: {
@@ -75,6 +76,7 @@ export const testArchitectureCatalog = (
                         maxFrames: 48,
                         defaultFrames: 8,
                         continuityExtraFrames: 0,
+                        continueMode: "overlap",
                     },
                 },
             },

@@ -163,6 +163,8 @@ public class AuthoringDocumentContractTests
         Assert.Equal(Constants.BoundaryOutContinue, clip.BoundaryOut);
         Assert.Equal(8, clip.BoundaryOutOverlap);
         Assert.True(clip.BoundaryOutCarryAudio);
+        Assert.Equal(0.5, clip.BoundaryOutReferenceScale);
+        Assert.False(clip.BoundaryOutReferenceIncludeSoundtrack);
         Assert.Equal(ReferenceFramingMode.FitGreen, clip.ReferenceFraming);
         Assert.Equal("ltx2", clip.AuthoredArchitectureHint);
         Assert.Equal("ltx-2.3", clip.AuthoredModelProfileHint);

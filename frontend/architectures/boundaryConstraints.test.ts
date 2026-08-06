@@ -1,13 +1,13 @@
 import { describe, expect, it } from "@jest/globals";
 import {
-    boundaryOverlapChoices,
-    boundaryOverlapConstraints,
-    normalizeBoundaryOverlap,
+    boundaryWindowChoices,
+    boundaryWindowConstraints,
+    normalizeBoundaryWindow,
 } from "./boundaryConstraints";
 
 describe("catalog boundary constraints", () => {
     it("drives choices and normalization from a future architecture's grid", () => {
-        const constraints = boundaryOverlapConstraints({
+        const constraints = boundaryWindowConstraints({
             support: "conditional",
             code: "future.boundary.continue",
             reason: "Future architecture continuity.",
@@ -20,13 +20,13 @@ describe("catalog boundary constraints", () => {
             },
         });
 
-        expect(boundaryOverlapChoices(constraints)).toEqual([5, 10, 15, 20]);
-        expect(normalizeBoundaryOverlap(18, constraints)).toBe(15);
+        expect(boundaryWindowChoices(constraints)).toEqual([5, 10, 15, 20]);
+        expect(normalizeBoundaryWindow(18, constraints)).toBe(15);
         expect(constraints.continuityExtraFrames).toBe(2);
     });
 
     it("snaps relative to a non-zero minimum", () => {
-        const constraints = boundaryOverlapConstraints({
+        const constraints = boundaryWindowConstraints({
             support: "conditional",
             code: "future.boundary.offset-grid",
             reason: "Offset frame grid.",
@@ -38,7 +38,7 @@ describe("catalog boundary constraints", () => {
             },
         });
 
-        expect(boundaryOverlapChoices(constraints)).toEqual([5, 9, 13, 17]);
-        expect(normalizeBoundaryOverlap(14, constraints)).toBe(13);
+        expect(boundaryWindowChoices(constraints)).toEqual([5, 9, 13, 17]);
+        expect(normalizeBoundaryWindow(14, constraints)).toBe(13);
     });
 });

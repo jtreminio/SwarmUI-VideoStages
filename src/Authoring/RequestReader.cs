@@ -214,6 +214,17 @@ internal static class RequestReader
                 clipObject,
                 "boundaryOutCarryAudio",
                 false),
+            BoundaryOutReferenceScale: NormalizeReferenceScale(
+                DocumentJson.GetOptionalDouble(
+                    clipObject,
+                    "boundaryOutReferenceScale",
+                    1,
+                    location,
+                    context.Warn)),
+            BoundaryOutReferenceIncludeSoundtrack: DocumentJson.GetOptionalBool(
+                clipObject,
+                "boundaryOutReferenceIncludeSoundtrack",
+                true),
             ReferenceFraming: ReferenceFraming.Parse(
                 DocumentJson.GetString(clipObject, "refFraming")),
             References: ClipReferences.Read(clipObject, clipIndex, context.Warn))
@@ -226,6 +237,9 @@ internal static class RequestReader
                 "modelProfileId")?.Trim().ToLowerInvariant(),
             AuthoredStages = ProjectAuthoredStages(rawStages),
         };
+
+        static double NormalizeReferenceScale(double scale) =>
+            scale is 0.5 or 0.25 ? scale : 1;
     }
 
     private static List<StageSpec> ReadStages(

@@ -346,7 +346,7 @@ describe("architecture catalog wire contract", () => {
             right,
         );
 
-        expect(boundary.overlapConstraints("continue")).toMatchObject({
+        expect(boundary.windowConstraints("continue")).toMatchObject({
             frameStep: 8,
             minFrames: 8,
             maxFrames: 48,

@@ -194,14 +194,13 @@ public sealed record ClipSpec(
     // "continue" (architecture-owned generation-time continuity), or "crossfade" (pixel dissolve
     // over an overlap window). Only meaningful for non-final clips in a multi-clip request.
     string BoundaryOut = Constants.BoundaryOutCut,
-    // Authored boundary overlap in frames; the selected architecture normalizes its own grid:
-    // for "continue" the frozen-context length (window = overlap+1), for "crossfade" the requested
-    // dissolve length; ignored for "cut".
+    // Authored outgoing join window in frames; the selected architecture owns its meaning and grid.
     int BoundaryOutOverlap = 0,
     InitVideoSpec InitVideo = null,
-    // When true on a non-cut boundary, the next generated clip receives the outgoing audio tail
-    // as preserved opening context and generates the continuation after that window.
+    // Overlap-mode joins can preserve the outgoing audio tail as opening generation context.
     bool BoundaryOutCarryAudio = false,
+    double BoundaryOutReferenceScale = 1,
+    bool BoundaryOutReferenceIncludeSoundtrack = true,
     ReferenceFramingMode ReferenceFraming = ReferenceFramingMode.Crop,
     // Whole-clip references with no frame position; only architectures declaring
     // ArchitectureFeature.ClipReferences consume them.

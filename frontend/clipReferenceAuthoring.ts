@@ -82,16 +82,24 @@ export const clipReferenceCanDriveLength = (
  */
 export const clipReferenceTags = (
     references: readonly Pick<ClipReference, "kind" | "includeSoundtrack">[],
+    precedingReferences: readonly Pick<
+        ClipReference,
+        "kind" | "includeSoundtrack"
+    >[] = [],
 ): string[] => {
+    const allReferences = [...precedingReferences, ...references];
     const used: Record<ClipReferenceKind, number> = {
         image: 0,
         video: 0,
-        audio: references.filter(
+        audio: allReferences.filter(
             (reference) =>
                 reference.kind === "video" &&
                 reference.includeSoundtrack === true,
         ).length,
     };
+    for (const reference of precedingReferences) {
+        used[reference.kind] += 1;
+    }
     return references.map((reference) => {
         used[reference.kind] += 1;
         return `<${CLIP_REFERENCE_KIND_INFO[reference.kind].tag} ${used[reference.kind]}>`;

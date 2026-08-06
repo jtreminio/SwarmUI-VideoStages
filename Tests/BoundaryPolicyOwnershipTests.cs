@@ -77,7 +77,7 @@ public class BoundaryPolicyOwnershipTests
 
         Assert.Equal(BoundaryJoinType.Continue, boundary.Effective);
         Assert.Equal(
-            BoundaryPlanCompiler.NormalizeOverlap(continueMode, 22),
+            BoundaryPlanCompiler.NormalizeWindow(continueMode, 22),
             boundary.OverlapFrames);
         Assert.Equal(20, boundary.OverlapFrames);
         Assert.Equal(continueMode.Constraints.FrameStep, boundary.FrameStep);

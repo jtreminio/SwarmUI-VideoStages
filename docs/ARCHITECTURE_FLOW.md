@@ -526,6 +526,17 @@ MiniMax procedure owns H3 prompt/model preparation, selected/timeline audio
 combination and preserve-window encoding or native audio creation outside those
 windows, audio-derived `17k+5` joint-latent length, joint audio-video latent
 construction, first/last-frame keyframes, sampling, and joint decode.
+For Continue, the session slices the previous decoded video at the seam before
+model preparation. It conforms the tail to the reference node by resampling to
+24 fps, snapping to H3's `17k+5` frame-count grid, capping to the target length,
+and applying the authored reference scale. The video occupies `ref_video_0`.
+When soundtrack inclusion is enabled, the matching audio tail occupies
+`ref_video_audio_0`; otherwise that paired slot stays unset. Authored video and
+audio tags shift only for the slots the boundary reference consumes. This is
+reference context rather than a generated handle: the timeline does not reduce
+either clip at the seam and joins them directly. Reference conditioning receives
+the resolved stage prompt without adding continuation tokens or other prompt
+text.
 
 ### B6c. WAN on the shared stock-host runtime
 

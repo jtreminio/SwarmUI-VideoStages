@@ -3,7 +3,10 @@ import { NEUTRAL_FRAME_GRID } from "../../renderUtils";
 import type { Clip, Stage } from "../../types";
 import { effectiveClipCapabilities } from "../modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "../none/identity";
-import { resolveClipFrameGridForLookup } from "../temporalGrid";
+import {
+    clipHasGenerationStageForLookup,
+    resolveClipFrameGridForLookup,
+} from "../temporalGrid";
 import type {
     ArchitectureCatalogEntryDto,
     ArchitectureModelEntry,
@@ -106,6 +109,11 @@ export const createClipStageCapabilityViews = (
             (model) => modelByName.get(model),
             (architectureId) => architectureById.get(architectureId),
         );
+        const hasGenerationStage = clipHasGenerationStageForLookup(
+            clip,
+            (model) => modelByName.get(model),
+            (architectureId) => architectureById.get(architectureId),
+        );
         const view: ClipCapabilityView = {
             architectureId,
             architectureLabel: label,
@@ -118,6 +126,7 @@ export const createClipStageCapabilityViews = (
                       }
                     : NEUTRAL_FRAME_GRID,
             frameGridResolution,
+            hasGenerationStage,
             audioSourceKinds: capabilities?.audioSourceKinds ?? [],
             clipAudio: {
                 supported: supportsClipAudio(

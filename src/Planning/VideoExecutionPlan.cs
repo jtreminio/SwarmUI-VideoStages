@@ -136,6 +136,8 @@ internal sealed record BoundaryPlan(
     int ContinuityWindowFrames,
     BoundaryFallbackReason Fallback)
 {
+    public ContinueBoundaryMode ContinueMode { get; init; } = ContinueBoundaryMode.Overlap;
+
     public int FrameStep { get; init; } = 1;
 
     public int MinFrames { get; init; } = 1;
@@ -144,6 +146,10 @@ internal sealed record BoundaryPlan(
     /// Whether the next clip receives the outgoing audio tail as generation-time conditioning.
     /// </summary>
     public bool CarryAudio { get; init; }
+
+    public double ReferenceScale { get; init; } = 1;
+
+    public bool ReferenceIncludeSoundtrack { get; init; } = true;
 }
 
 internal enum BoundaryJoinType

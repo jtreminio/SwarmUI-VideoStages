@@ -14,6 +14,7 @@ import {
 } from "../__test_helpers__/architectureFixtures";
 import { mountPromptBox, mountVideoStagesData } from "../__test_helpers__/dom";
 import type { ArchitectureModelCatalog } from "../architectures/types";
+import { resetRememberedAccordionSections } from "../detailWidgets";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import {
     __resetPersistenceForTests,
@@ -23,6 +24,7 @@ import {
 import type { Clip, ClipReference } from "../types";
 import { buildClipReferenceSection } from "./clipReferencePanel";
 import type { DetailStripContext } from "./context";
+import { clampDetailSelection, detailBreadcrumb } from "./panelRouter";
 
 const catalogSupportingClipReferences = (): ArchitectureModelCatalog => {
     const catalog = testArchitectureCatalog();
@@ -75,6 +77,7 @@ const tabLabels = (body: HTMLElement): string[] =>
 describe("buildClipReferenceSection", () => {
     beforeEach(() => {
         __resetPersistenceForTests();
+        resetRememberedAccordionSections();
         document.body.innerHTML = "";
         mountPromptBox("");
     });
@@ -102,6 +105,192 @@ describe("buildClipReferenceSection", () => {
             "<Picture 2>",
             "<Audio 1>",
         ]);
+    });
+
+    it("edits only scale and soundtrack on the non-deleteable incoming Continue reference", () => {
+        const catalog = catalogSupportingClipReferences();
+        const constraints =
+            catalog.architectures[0].boundaryRules.continue.constraints;
+        if (!constraints) {
+            throw new Error("continue constraints missing");
+        }
+        constraints.continueMode = "reference";
+        constraints.continuityExtraFrames = 0;
+        mountVideoStagesData({
+            clips: [
+                {
+                    duration: 5,
+                    boundaryOut: "continue",
+                    boundaryOutOverlap: 8,
+                    stages: [{ model: "ltx-2.3.safetensors" }],
+                    references: [],
+                },
+                {
+                    duration: 5,
+                    stages: [{ model: "ltx-2.3.safetensors" }],
+                    references: [{ kind: "video" }, { kind: "audio" }],
+                },
+            ],
+        });
+        const clips = getClips();
+        const render = jest.fn();
+        const context = {
+            authoring: () => testAuthoringTransactionSnapshot(catalog),
+            commit: (mutate: (target: Clip[]) => void) => mutate(clips),
+            render,
+        } as unknown as DetailStripContext;
+        const build = () =>
+            buildClipReferenceSection(
+                context,
+                1,
+                null,
+                clips,
+                getState().fps,
+                true,
+                true,
+            );
+        const body = build();
+
+        expect(tabLabels(body)).toEqual([
+            "<Video 1> (from Join with Clip 0)",
+            "<Video 2>",
+            "<Audio 2>",
+        ]);
+        const capabilities =
+            testAuthoringTransactionSnapshot(catalog).capabilities;
+        expect(
+            detailBreadcrumb(
+                { kind: "clip-ref", clipIdx: 1, referenceIdx: 0 },
+                clips,
+                getState().fps,
+                capabilities,
+            ),
+        ).toBe("<Video 2> · Clip 1");
+        expect(
+            detailBreadcrumb(
+                { kind: "clip-ref", clipIdx: 1, referenceIdx: 1 },
+                clips,
+                getState().fps,
+                capabilities,
+            ),
+        ).toBe("<Audio 2> · Clip 1");
+        const join = body.querySelector<HTMLElement>(".vst-clip-ref-join-tab");
+        expect(join?.hasAttribute("aria-disabled")).toBe(false);
+        expect(join?.tabIndex).toBe(0);
+        const group = body
+            .querySelector(".vst-clip-ref-join-tab")
+            ?.closest(".vst-detail-repeating-group");
+        expect(
+            group?.querySelector<HTMLElement>(
+                ".vst-detail-repeating-group-content",
+            )?.hidden,
+        ).toBe(false);
+        expect(
+            Array.from(
+                group?.querySelectorAll(".vst-detail-field-label") ?? [],
+            ).map((label) => label.textContent),
+        ).toEqual(["Reference scale", "Include soundtrack"]);
+        expect(
+            group?.querySelector(".vst-detail-repeating-group-delete"),
+        ).toBeNull();
+
+        const scale = group?.querySelector<HTMLSelectElement>("select");
+        if (!scale) {
+            throw new Error("automatic reference scale missing");
+        }
+        scale.value = "0.5";
+        scale.dispatchEvent(new Event("change", { bubbles: true }));
+        const soundtrack = group?.querySelector<HTMLInputElement>(
+            'input[type="checkbox"]',
+        );
+        if (!soundtrack) {
+            throw new Error("automatic reference soundtrack toggle missing");
+        }
+        soundtrack.checked = false;
+        soundtrack.dispatchEvent(new Event("change", { bubbles: true }));
+        expect(clips[0].boundaryOutReferenceScale).toBe(0.5);
+        expect(clips[0].boundaryOutReferenceIncludeSoundtrack).toBe(false);
+        expect(render).toHaveBeenCalledTimes(1);
+        expect(
+            detailBreadcrumb(
+                { kind: "clip-ref", clipIdx: 1, referenceIdx: 1 },
+                clips,
+                getState().fps,
+                capabilities,
+            ),
+        ).toBe("<Audio 1> · Clip 1");
+        const boundarySelection = {
+            kind: "boundary-ref" as const,
+            leftClipIdx: 0,
+        };
+        expect(
+            clampDetailSelection(
+                boundarySelection,
+                clips,
+                [],
+                getState().fps,
+                capabilities,
+            ),
+        ).toEqual(boundarySelection);
+        clips[0].boundaryOut = "cut";
+        expect(
+            clampDetailSelection(
+                boundarySelection,
+                clips,
+                [],
+                getState().fps,
+                capabilities,
+            ),
+        ).toEqual({ kind: "none" });
+    });
+
+    it("omits the join reference when the target has no generating stage", () => {
+        const catalog = catalogSupportingClipReferences();
+        const constraints =
+            catalog.architectures[0].boundaryRules.continue.constraints;
+        if (!constraints) {
+            throw new Error("continue constraints missing");
+        }
+        constraints.continueMode = "reference";
+        constraints.continuityExtraFrames = 0;
+        constraints.targetRequiresGeneratedEntry = false;
+        mountVideoStagesData({
+            clips: [
+                {
+                    duration: 5,
+                    boundaryOut: "continue",
+                    boundaryOutOverlap: 8,
+                    stages: [{ model: "ltx-2.3.safetensors" }],
+                },
+                {
+                    duration: 5,
+                    initVideo: {
+                        data: "data:video/mp4;base64,AA==",
+                        fileName: "source.mp4",
+                        fps: 24,
+                        durationSeconds: 5,
+                        startSeconds: 0,
+                        lengthSeconds: 5,
+                    },
+                    stages: [{ model: "ltx-2.3.safetensors", control: 0 }],
+                    references: [{ kind: "video" }],
+                },
+            ],
+        });
+        const clips = getClips();
+        const body = buildClipReferenceSection(
+            {
+                authoring: () => testAuthoringTransactionSnapshot(catalog),
+            } as unknown as DetailStripContext,
+            1,
+            0,
+            clips,
+            getState().fps,
+            true,
+        );
+
+        expect(tabLabels(body)).toEqual(["<Video 1>"]);
+        expect(body.querySelector(".vst-clip-ref-join-tab")).toBeNull();
     });
 
     it("offers an image source only for image references", () => {

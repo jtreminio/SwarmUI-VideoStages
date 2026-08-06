@@ -1422,6 +1422,8 @@ public class RequestReaderTests
 
         Assert.Equal(Constants.BoundaryOutCut, parsed.BoundaryOut);
         Assert.False(parsed.BoundaryOutCarryAudio);
+        Assert.Equal(1, parsed.BoundaryOutReferenceScale);
+        Assert.True(parsed.BoundaryOutReferenceIncludeSoundtrack);
     }
 
     [Fact]
@@ -1436,6 +1438,26 @@ public class RequestReaderTests
         ClipSpec parsed = RequestReader.Read(input).Clips.Single();
 
         Assert.True(parsed.BoundaryOutCarryAudio);
+    }
+
+    [Theory]
+    [InlineData(0.25, 0.25)]
+    [InlineData(0.5, 0.5)]
+    [InlineData(0.75, 1)]
+    public void ReadClips_BoundaryReferenceSettings_NormalizeAndPersist(
+        double rawScale,
+        double expectedScale)
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")]);
+        clip["boundaryOutReferenceScale"] = rawScale;
+        clip["boundaryOutReferenceIncludeSoundtrack"] = false;
+        T2IParamInput input = BuildGenerator(
+            JsonConvert.SerializeObject(new JArray(clip)));
+
+        ClipSpec parsed = RequestReader.Read(input).Clips.Single();
+
+        Assert.Equal(expectedScale, parsed.BoundaryOutReferenceScale);
+        Assert.False(parsed.BoundaryOutReferenceIncludeSoundtrack);
     }
 
     // Adds a source video while leaving FPS unset to exercise the 24 FPS fallback.

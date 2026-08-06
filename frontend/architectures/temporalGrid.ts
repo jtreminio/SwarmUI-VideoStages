@@ -153,6 +153,15 @@ const effectiveGridModels = (
         .map((stage) => stage.model);
 };
 
+export const clipHasGenerationStageForLookup = (
+    clip: TemporalClip,
+    modelForName: (model: string) => ArchitectureModelEntry | undefined,
+    architectureForId: (
+        architectureId: string,
+    ) => ArchitectureCatalogEntryDto | undefined,
+): boolean =>
+    effectiveGridModels(clip, modelForName, architectureForId).length > 0;
+
 export const resolveClipFrameGridForLookup = (
     clip: TemporalClip,
     modelForName: (model: string) => ArchitectureModelEntry | undefined,

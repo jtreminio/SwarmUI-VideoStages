@@ -1,5 +1,6 @@
 using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
@@ -60,6 +61,31 @@ internal sealed class Boundaries
             return window > 0;
         }
         window = 0;
+        return false;
+    }
+
+    public bool TryGetReferenceContinueInput(
+        int fromClipId,
+        out int windowFrames,
+        out double scale,
+        out bool includeSoundtrack)
+    {
+        int boundaryIndex = BoundaryIndex(fromClipId);
+        if (boundaryIndex >= 0
+            && _effectiveBoundaries[boundaryIndex] is BoundaryPlan
+            {
+                Effective: BoundaryJoinType.Continue,
+                ContinueMode: ContinueBoundaryMode.Reference,
+            } boundary)
+        {
+            windowFrames = boundary.ContinuityWindowFrames;
+            scale = boundary.ReferenceScale;
+            includeSoundtrack = boundary.ReferenceIncludeSoundtrack;
+            return true;
+        }
+        windowFrames = 0;
+        scale = 1;
+        includeSoundtrack = true;
         return false;
     }
 

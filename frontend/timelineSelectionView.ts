@@ -48,6 +48,7 @@ export const applySelectionHighlight = (body: HTMLElement): void => {
             selector = `.vst-retake[data-clip-idx="${sel.clipIdx}"]`;
             break;
         case "boundary":
+        case "boundary-ref":
             selector = `.vst-boundary-chip[data-left-clip-idx="${sel.leftClipIdx}"]`;
             break;
         default:

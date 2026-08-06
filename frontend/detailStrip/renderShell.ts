@@ -17,6 +17,8 @@ export const revealRepeaterKey = (
     switch (selection.kind) {
         case "ref":
             return "references";
+        case "boundary-ref":
+            return "clip-references";
         case "audio-track":
             return "audio-tracks";
         case "prompt-minor":
@@ -36,14 +38,19 @@ export const renderDetailShell = (options: {
     selection: TimelineSelection;
     revealSelection: boolean;
 }): void => {
-    const clips = options.state.clips;
     const previousBody =
         options.detail.querySelector<HTMLElement>(".vst-detail-body");
     const savedScroll = previousBody?.scrollTop ?? 0;
     options.focus.capture();
     options.detail.className = DETAIL_CLASS;
     options.detail.innerHTML = "";
-    options.detail.appendChild(buildDetailHeader(options.selection, clips));
+    options.detail.appendChild(
+        buildDetailHeader(
+            options.selection,
+            options.state,
+            options.context.authoring().capabilities,
+        ),
+    );
     const body = buildDetailPanelBody(
         options.context,
         options.selection,

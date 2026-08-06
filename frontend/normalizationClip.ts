@@ -1,8 +1,8 @@
 import { normalizeArchitectureIcLoras } from "./architectures/behaviorRegistry";
 import {
-    type BoundaryOverlapConstraints,
-    boundaryOverlapConstraints,
-    normalizeBoundaryOverlap,
+    type BoundaryWindowConstraints,
+    boundaryWindowConstraints,
+    normalizeBoundaryWindow,
 } from "./architectures/boundaryConstraints";
 import {
     architectureForModel,
@@ -13,6 +13,7 @@ import { normalizeClipArchitecture } from "./architectures/identity";
 import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
 import { AUDIO_SOURCE_NATIVE } from "./audioSource";
 import { normalizeStoredHue, UNASSIGNED_HUE } from "./clipColor";
+import { normalizeClipReferenceScale } from "./clipReferenceAuthoring";
 import {
     CLIP_DURATION_MIN,
     DEFAULT_CLIP_DURATION_SECONDS,
@@ -66,12 +67,12 @@ export const normalizeBoundaryOut = (value: unknown): BoundaryOut => {
  */
 export const normalizeContinueOverlap = (
     value: unknown,
-    constraints: BoundaryOverlapConstraints = boundaryOverlapConstraints(null),
+    constraints: BoundaryWindowConstraints = boundaryWindowConstraints(null),
 ): number => {
     const numeric = Math.trunc(Number(value));
     return Number.isFinite(numeric) && numeric > 0
         ? numeric
-        : normalizeBoundaryOverlap(value, constraints);
+        : normalizeBoundaryWindow(value, constraints);
 };
 
 const normalizeReferenceFraming = (value: unknown): ReferenceFraming =>
@@ -133,8 +134,10 @@ export const buildDefaultClip = (
         hue: UNASSIGNED_HUE,
         boundaryOut: "cut",
         boundaryOutCarryAudio: false,
+        boundaryOutReferenceScale: 1,
+        boundaryOutReferenceIncludeSoundtrack: true,
         boundaryOutOverlap:
-            boundaryOverlapConstraints(continueRule).defaultFrames,
+            boundaryWindowConstraints(continueRule).defaultFrames,
         duration: previousClip
             ? previousClip.duration
             : snapDurationToFps(
@@ -339,9 +342,14 @@ export const normalizeClip = (
         hue: normalizeStoredHue(rawClip.hue),
         boundaryOut,
         boundaryOutCarryAudio: !!rawClip.boundaryOutCarryAudio,
+        boundaryOutReferenceScale: normalizeClipReferenceScale(
+            rawClip.boundaryOutReferenceScale,
+        ),
+        boundaryOutReferenceIncludeSoundtrack:
+            rawClip.boundaryOutReferenceIncludeSoundtrack !== false,
         boundaryOutOverlap: normalizeContinueOverlap(
             rawClip.boundaryOutOverlap,
-            boundaryOverlapConstraints(boundaryRule),
+            boundaryWindowConstraints(boundaryRule),
         ),
         duration,
         refFraming: normalizeReferenceFraming(rawClip.refFraming),

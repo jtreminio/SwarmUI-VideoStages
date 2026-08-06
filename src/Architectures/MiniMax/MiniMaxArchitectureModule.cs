@@ -34,9 +34,21 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             [BoundaryJoinType.Cut] = RuleDecision.Supported(
                 "minimax.boundary.cut",
                 "Decoded MiniMax H3 clips can be joined with a hard cut."),
-            [BoundaryJoinType.Continue] = RuleDecision.Unsupported(
-                "minimax.boundary.continue.unsupported",
-                "MiniMax H3 has no N-frame latent-tail continuation path."),
+            [BoundaryJoinType.Continue] = RuleDecision.Conditional(
+                "minimax.boundary.continue",
+                "MiniMax H3 conditions the next generated clip on the previous clip's video and optional audio tail.",
+                new BoundaryRuleConstraints(
+                    FrameStep: FrameGrid,
+                    MinFrames: FrameGridOrigin,
+                    MaxFrames: 362,
+                    DefaultFrames: 39,
+                    ContinuityExtraFrames: 0,
+                    TargetRequiresGeneratedEntry: false,
+                    TargetRequiresStage: true,
+                    TargetDisallowsInitialReference: false)
+                {
+                    ContinueMode = ContinueBoundaryMode.Reference,
+                }),
             [BoundaryJoinType.Crossfade] = RuleDecision.Conditional(
                 "minimax.boundary.crossfade",
                 "Decoded MiniMax H3 clips can be crossfaded.",

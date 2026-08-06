@@ -115,6 +115,8 @@ const CLIP_ENTITY = defineList<CanonicalVideoStagesConfig, CanonicalClip>()({
         "hue",
         "boundaryOut",
         "boundaryOutCarryAudio",
+        "boundaryOutReferenceScale",
+        "boundaryOutReferenceIncludeSoundtrack",
         "boundaryOutOverlap",
         "duration",
         "refFraming",

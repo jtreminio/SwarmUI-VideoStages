@@ -1,10 +1,9 @@
 import {
-    activeStageCount,
     executableBoundaries,
     executableBoundaryForLeftClip,
 } from "../../clipSemantics";
 import type { BoundaryOut, Clip } from "../../types";
-import { boundaryOverlapConstraints } from "../boundaryConstraints";
+import { boundaryWindowConstraints } from "../boundaryConstraints";
 import { resolvedClipArchitectureId } from "../clipIdentity";
 import type {
     ArchitectureCatalogEntryDto,
@@ -76,8 +75,7 @@ export const createBoundaryCapabilityViews = (
                     reference.fromEnd !== true &&
                     Math.max(1, Math.round(reference.frame)) === 1,
             ) ?? false;
-        const rightHasActiveStage =
-            right !== null && activeStageCount(right) > 0;
+        const rightHasGenerationStage = rightView?.hasGenerationStage === true;
         const supportsMode = (mode: BoundaryOut): boolean => {
             const rule = leftDescriptor?.boundaryRules[mode];
             if (!rule || rule.support === "unsupported") {
@@ -96,7 +94,7 @@ export const createBoundaryCapabilityViews = (
             if (
                 constraints?.targetRequiresStage === true &&
                 right !== null &&
-                !rightHasActiveStage
+                !rightHasGenerationStage
             ) {
                 return false;
             }
@@ -127,8 +125,8 @@ export const createBoundaryCapabilityViews = (
             modes,
             crossArchitecture,
             reason,
-            overlapConstraints: (mode) =>
-                boundaryOverlapConstraints(
+            windowConstraints: (mode) =>
+                boundaryWindowConstraints(
                     leftDescriptor?.boundaryRules[mode] ?? null,
                 ),
             effective: (requested) =>

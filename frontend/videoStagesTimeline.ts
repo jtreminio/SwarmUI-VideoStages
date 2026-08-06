@@ -219,6 +219,10 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 const prevJoin = clips[clips.length - 2];
                 prev.boundaryOut = prevJoin.boundaryOut;
                 prev.boundaryOutCarryAudio = prevJoin.boundaryOutCarryAudio;
+                prev.boundaryOutReferenceScale =
+                    prevJoin.boundaryOutReferenceScale;
+                prev.boundaryOutReferenceIncludeSoundtrack =
+                    prevJoin.boundaryOutReferenceIncludeSoundtrack;
                 prev.boundaryOutOverlap = prevJoin.boundaryOutOverlap;
             }
             clips.push(

@@ -1,7 +1,7 @@
 import {
-    type BoundaryOverlapConstraints,
-    boundaryOverlapConstraints,
-    normalizeBoundaryOverlap,
+    type BoundaryWindowConstraints,
+    boundaryWindowConstraints,
+    normalizeBoundaryWindow,
 } from "./architectures/boundaryConstraints";
 import {
     type FrameGridSpec,
@@ -14,7 +14,7 @@ export type BoundaryConstraintResolver = (
     leftClip: Clip,
     leftClipIdx: number,
     mode: BoundaryOut,
-) => BoundaryOverlapConstraints;
+) => BoundaryWindowConstraints;
 
 export type ClipFrameGridResolver = (
     clip: Clip,
@@ -24,20 +24,22 @@ export type ClipFrameGridResolver = (
 export interface BoundaryPlan {
     /** Overlap frames removed at each interior boundary i (between clip i and i+1). */
     overlaps: number[];
-    /** True when the whole plan degraded to a hard cut (a clip is too short for the overlaps). */
+    /** Planned continuity context requested for the next generation. */
+    continuityWindows: number[];
+    /** True when every requested non-cut boundary degraded to a hard cut. */
     fallback: boolean;
 }
 
 /**
- * Frontend preview of backend overlap budgeting. A boundary may shrink only
+ * Frontend preview of backend boundary budgeting. An overlap may shrink only
  * along its architecture's minimum-relative grid; when the minimum still
- * cannot fit, that boundary becomes a cut.
+ * cannot fit, that overlap becomes a cut.
  */
-export const crossfadePlanForClips = (
+export const boundaryPlanForClips = (
     clips: Clip[],
     fps: number,
     resolveConstraints: BoundaryConstraintResolver = (clip, _index, mode) => {
-        const generic = boundaryOverlapConstraints(null);
+        const generic = boundaryWindowConstraints(null);
         const persisted = Math.trunc(Number(clip.boundaryOutOverlap));
         return {
             ...generic,
@@ -51,21 +53,18 @@ export const crossfadePlanForClips = (
 ): BoundaryPlan => {
     const count = clips.length;
     const boundaryCount = Math.max(0, count - 1);
-    const noOverlap = (): number[] => new Array(boundaryCount).fill(0);
+    const zeroBoundaries = (): number[] => new Array(boundaryCount).fill(0);
     if (count < 2) {
-        return { overlaps: noOverlap(), fallback: false };
+        return {
+            overlaps: zeroBoundaries(),
+            continuityWindows: zeroBoundaries(),
+            fallback: false,
+        };
     }
-    let requested = 0;
     const modes: BoundaryOut[] = [];
     for (let i = 0; i < count - 1; i++) {
         const b = clips[i].boundaryOut ?? "cut";
         modes[i] = b;
-        if (b === "crossfade" || b === "continue") {
-            requested++;
-        }
-    }
-    if (requested === 0) {
-        return { overlaps: noOverlap(), fallback: false };
     }
     const frames = clips.map((clip, index) =>
         framesForClip(clip.duration, fps, resolveFrameGrid(clip, index)),
@@ -74,23 +73,50 @@ export const crossfadePlanForClips = (
         resolveConstraints(clip, index, clip.boundaryOut ?? "cut"),
     );
     const prefs = clips.map((clip, index) =>
-        normalizeBoundaryOverlap(clip.boundaryOutOverlap, constraints[index]),
+        normalizeBoundaryWindow(clip.boundaryOutOverlap, constraints[index]),
     );
+    const hasRequestedBoundary = modes.some((mode) => mode !== "cut");
     const active = (index: number): boolean =>
-        modes[index] === "continue" || modes[index] === "crossfade";
+        modes[index] === "crossfade" ||
+        (modes[index] === "continue" &&
+            constraints[index].continueMode === "overlap");
     const trim = (index: number): number =>
         modes[index] === "continue"
-            ? prefs[index] + constraints[index].continuityExtraFrames
+            ? constraints[index].continueMode === "overlap"
+                ? prefs[index] + constraints[index].continuityExtraFrames
+                : 0
             : modes[index] === "crossfade"
               ? prefs[index]
               : 0;
+    const hasBudgetedOverlap = modes.some((_mode, index) => active(index));
+    const continuityWindows = (): number[] =>
+        modes
+            .slice(0, boundaryCount)
+            .map((mode, index) =>
+                mode === "continue"
+                    ? constraints[index].continueMode === "reference"
+                        ? prefs[index]
+                        : trim(index)
+                    : 0,
+            );
+    if (!hasBudgetedOverlap) {
+        return {
+            overlaps: zeroBoundaries(),
+            continuityWindows: continuityWindows(),
+            fallback: false,
+        };
+    }
     while (true) {
         let overBudgetClip = -1;
         for (let i = 0; i < count; i++) {
             const left = i > 0 ? trim(i - 1) : 0;
             const right = i < boundaryCount ? trim(i) : 0;
             const incomingHandle =
-                i > 0 && modes[i - 1] === "continue" ? prefs[i - 1] : 0;
+                i > 0 &&
+                modes[i - 1] === "continue" &&
+                constraints[i - 1].continueMode === "overlap"
+                    ? prefs[i - 1]
+                    : 0;
             if (left + right > frames[i] + incomingHandle - 1) {
                 overBudgetClip = i;
                 break;
@@ -104,7 +130,14 @@ export const crossfadePlanForClips = (
                   ? overBudgetClip - 1
                   : -1;
         if (candidate < 0) {
-            return { overlaps: noOverlap(), fallback: true };
+            for (let i = 0; i < boundaryCount; i++) {
+                if (active(i)) modes[i] = "cut";
+            }
+            return {
+                overlaps: zeroBoundaries(),
+                continuityWindows: continuityWindows(),
+                fallback: !modes.some((mode) => mode !== "cut"),
+            };
         }
         const reduced = prefs[candidate] - constraints[candidate].frameStep;
         if (reduced < constraints[candidate].minFrames) {
@@ -119,6 +152,7 @@ export const crossfadePlanForClips = (
         .map((_mode, index) => trim(index));
     return {
         overlaps,
-        fallback: requested > 0 && !modes.some((_mode, index) => active(index)),
+        continuityWindows: continuityWindows(),
+        fallback: hasRequestedBoundary && !modes.some((mode) => mode !== "cut"),
     };
 };

@@ -67,6 +67,8 @@ const clip = (id: string): CanonicalClip => ({
     hue: 0,
     boundaryOut: "cut",
     boundaryOutCarryAudio: false,
+    boundaryOutReferenceScale: 1,
+    boundaryOutReferenceIncludeSoundtrack: true,
     boundaryOutOverlap: 9,
     duration: 4,
     refFraming: "crop",

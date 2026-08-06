@@ -771,24 +771,29 @@ export const buildRepeatingEditor = (
     const explicitActiveIndex = spec.items.findIndex(
         (item) => item.active === true,
     );
+    const isValidIndex = (index: number | null | undefined): index is number =>
+        index !== null &&
+        index !== undefined &&
+        index >= 0 &&
+        index < spec.items.length;
     const rememberedIndex = rememberedRepeaterItems.get(spec.key);
-    const validRememberedIndex =
-        rememberedIndex !== undefined &&
-        rememberedIndex >= 0 &&
-        rememberedIndex < spec.items.length
-            ? rememberedIndex
-            : null;
+    const validRememberedIndex = isValidIndex(rememberedIndex)
+        ? rememberedIndex
+        : null;
     if (rememberedIndex !== undefined && validRememberedIndex === null) {
         rememberedRepeaterItems.delete(spec.key);
         forceOpenRepeaterKeys.delete(spec.key);
     }
     const forceOpen =
         forceOpenRepeaterKeys.has(spec.key) && validRememberedIndex !== null;
+    const defaultActiveIndex = isValidIndex(spec.defaultActiveIndex)
+        ? spec.defaultActiveIndex
+        : null;
     const activeIndex = forceOpen
         ? validRememberedIndex
         : explicitActiveIndex >= 0
           ? explicitActiveIndex
-          : (validRememberedIndex ?? spec.defaultActiveIndex ?? null);
+          : (validRememberedIndex ?? defaultActiveIndex);
     if (explicitActiveIndex >= 0 && !forceOpen) {
         rememberedRepeaterItems.set(spec.key, explicitActiveIndex);
     } else if (activeIndex !== null) {

@@ -86,6 +86,8 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     hue: 210,
     boundaryOut: "cut",
     boundaryOutCarryAudio: false,
+    boundaryOutReferenceScale: 1,
+    boundaryOutReferenceIncludeSoundtrack: true,
     boundaryOutOverlap: 8,
     duration: 2,
     refFraming: "crop",

@@ -1338,6 +1338,7 @@ public class ArchitectureFoundationTests
         Assert.Equal(8, crossfadeRule["constraints"]["defaultFrames"]);
         JObject continueRule = (JObject)ltx["boundaryRules"]["continue"];
         Assert.Equal(1, continueRule["constraints"]["continuityExtraFrames"]);
+        Assert.Equal("overlap", continueRule["constraints"]["continueMode"]);
         Assert.True(continueRule["constraints"]["targetRequiresGeneratedEntry"].Value<bool>());
         JObject wan = Assert.Single(
             architectures.Values<JObject>(),

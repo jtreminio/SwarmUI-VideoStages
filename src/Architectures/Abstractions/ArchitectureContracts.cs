@@ -77,6 +77,12 @@ internal enum RuleSupport
     Conditional,
 }
 
+internal enum ContinueBoundaryMode
+{
+    Overlap,
+    Reference,
+}
+
 internal sealed record BoundaryRuleConstraints(
     int FrameStep,
     int MinFrames,
@@ -85,7 +91,10 @@ internal sealed record BoundaryRuleConstraints(
     int ContinuityExtraFrames,
     bool TargetRequiresGeneratedEntry,
     bool TargetRequiresStage,
-    bool TargetDisallowsInitialReference);
+    bool TargetDisallowsInitialReference)
+{
+    public ContinueBoundaryMode ContinueMode { get; init; } = ContinueBoundaryMode.Overlap;
+}
 
 internal sealed record RuleDecision(
     RuleSupport Support,

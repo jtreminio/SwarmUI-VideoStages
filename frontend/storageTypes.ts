@@ -56,6 +56,8 @@ export const STORED_CLIP_KEYS = [
     "skipped",
     "boundaryOut",
     "boundaryOutCarryAudio",
+    "boundaryOutReferenceScale",
+    "boundaryOutReferenceIncludeSoundtrack",
     "boundaryOutOverlap",
     "duration",
     "refFraming",

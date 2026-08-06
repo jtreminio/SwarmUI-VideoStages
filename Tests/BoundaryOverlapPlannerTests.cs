@@ -97,6 +97,31 @@ public class BoundaryOverlapPlannerTests
     }
 
     [Fact]
+    public void ReferenceContinue_UsesContextWithoutCreatingAnOverlap()
+    {
+        BoundaryPlan boundary = Boundary(
+            0,
+            BoundaryJoinType.Continue,
+            overlap: 0,
+            continuityWindow: 39) with
+        {
+            ContinueMode = ContinueBoundaryMode.Reference,
+        };
+
+        BoundaryBudgetResolution resolution = BoundaryOverlapPlanner.FitPlanToFrameBudgets(
+            [10, 10],
+            [boundary]);
+
+        BoundaryPlan planned = Assert.Single(resolution.Boundaries);
+        Assert.Equal(BoundaryJoinType.Continue, planned.Effective);
+        Assert.Equal(39, planned.ContinuityWindowFrames);
+        Assert.Equal(0, BoundaryOverlapPlanner.EffectiveOverlapFrames(planned));
+        Assert.Equal(0, BoundaryOverlapPlanner.IncomingHandleFrames(planned));
+        Assert.Equal(0, BoundaryOverlapPlanner.TimelineReductionFrames(planned));
+        Assert.Null(BoundaryOverlapPlanner.ToOverlapPlan(resolution.Boundaries));
+    }
+
+    [Fact]
     public void BoundaryPolicy_NormalizesRelativeToItsMinimumInsteadOfZero()
     {
         RuleDecision policy = RuleDecision.Conditional(
@@ -112,11 +137,11 @@ public class BoundaryOverlapPlannerTests
                 TargetRequiresStage: false,
                 TargetDisallowsInitialReference: false));
 
-        Assert.Equal(9, BoundaryPlanCompiler.NormalizeOverlap(policy, 0));
-        Assert.Equal(5, BoundaryPlanCompiler.NormalizeOverlap(policy, 4));
-        Assert.Equal(5, BoundaryPlanCompiler.NormalizeOverlap(policy, 8));
-        Assert.Equal(9, BoundaryPlanCompiler.NormalizeOverlap(policy, 10));
-        Assert.Equal(21, BoundaryPlanCompiler.NormalizeOverlap(policy, 999));
+        Assert.Equal(9, BoundaryPlanCompiler.NormalizeWindow(policy, 0));
+        Assert.Equal(5, BoundaryPlanCompiler.NormalizeWindow(policy, 4));
+        Assert.Equal(5, BoundaryPlanCompiler.NormalizeWindow(policy, 8));
+        Assert.Equal(9, BoundaryPlanCompiler.NormalizeWindow(policy, 10));
+        Assert.Equal(21, BoundaryPlanCompiler.NormalizeWindow(policy, 999));
     }
 
     [Fact]

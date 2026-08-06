@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { describe, expect, it } from "@jest/globals";
 
 import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
-import { boundaryOverlapConstraints } from "./architectures/boundaryConstraints";
+import { boundaryWindowConstraints } from "./architectures/boundaryConstraints";
 import { parseVideoArchitectureCatalog } from "./architectures/catalog";
 import {
     DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT,
@@ -19,7 +19,7 @@ import {
 import { upscaleModeForMethod } from "./architectures/policy";
 import type { ArchitectureCatalogEntryDto } from "./architectures/types";
 import { canUseClipLengthFromAudio } from "./audioSource";
-import { crossfadePlanForClips } from "./boundaryPlan";
+import { boundaryPlanForClips } from "./boundaryPlan";
 import { dimensionsFor } from "./dimensionPresets";
 import { snapDimensions } from "./dimensionSnap";
 import { framesForClip } from "./renderUtils";
@@ -36,7 +36,7 @@ const ltxBoundaryConstraints = (
     _index: number,
     mode: BoundaryOut,
 ) =>
-    boundaryOverlapConstraints(
+    boundaryWindowConstraints(
         testArchitectureCatalog().architectures[0].boundaryRules[mode],
     );
 
@@ -125,7 +125,7 @@ describe("cross-language mirror: M2 frame alignment (renderUtils.framesForClip)"
     });
 });
 
-describe("cross-language mirror: M1 crossfade plan (boundaryPlan.crossfadePlanForClips)", () => {
+describe("cross-language mirror: M1 crossfade plan (boundaryPlan.boundaryPlanForClips)", () => {
     interface PlanCase {
         name: string;
         frames: number[];
@@ -166,7 +166,7 @@ describe("cross-language mirror: M1 crossfade plan (boundaryPlan.crossfadePlanFo
         const clips = frames.map((f, i) =>
             clipFor(f, boundaries[i], boundaryOverlaps[i]),
         );
-        const plan = crossfadePlanForClips(
+        const plan = boundaryPlanForClips(
             clips,
             1,
             ltxBoundaryConstraints,

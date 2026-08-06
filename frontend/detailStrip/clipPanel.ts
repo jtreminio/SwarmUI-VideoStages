@@ -1,4 +1,5 @@
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
+import { executableBoundaryForLeftClip } from "../clipSemantics";
 import { buildStaticSection } from "../detailWidgets";
 import type { TimelineSelection, VideoStagesConfig } from "../types";
 import { applyPersistedCapabilityRepair } from "./capabilityUi";
@@ -20,14 +21,36 @@ export const buildClipBody = (
     context: DetailStripContext,
     selection: Extract<
         TimelineSelection,
-        { kind: "clip" | "ref" | "clip-ref" | "ic-lora" | "retake" }
+        {
+            kind:
+                | "clip"
+                | "ref"
+                | "clip-ref"
+                | "boundary-ref"
+                | "ic-lora"
+                | "retake";
+        }
     >,
     state: VideoStagesConfig,
 ): HTMLElement => {
     const clips = state.clips;
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-clip-body";
-    const { clipIdx } = selection;
+    let clipIdx: number;
+    if (selection.kind === "boundary-ref") {
+        const incomingBoundary = executableBoundaryForLeftClip(
+            clips,
+            selection.leftClipIdx,
+        );
+        if (!incomingBoundary) {
+            throw new Error(
+                "boundary reference selection has no executable seam",
+            );
+        }
+        clipIdx = incomingBoundary.rightIdx;
+    } else {
+        clipIdx = selection.clipIdx;
+    }
     const stageIdx = selection.kind === "clip" ? selection.stageIdx : 0;
     const clip = clips[clipIdx];
     body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
@@ -118,7 +141,8 @@ export const buildClipBody = (
             selection.kind === "clip-ref" ? selection.referenceIdx : null,
             clips,
             state.fps,
-            selection.kind === "clip-ref",
+            selection.kind === "clip-ref" || selection.kind === "boundary-ref",
+            selection.kind === "boundary-ref",
         ),
     );
     appendCapabilitySection("frameReferences", clip.frameRefs.length > 0, () =>

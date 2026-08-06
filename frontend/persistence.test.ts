@@ -326,6 +326,8 @@ describe("persistence", () => {
                     skipped: false,
                     boundaryOut: "cut",
                     boundaryOutCarryAudio: false,
+                    boundaryOutReferenceScale: 1,
+                    boundaryOutReferenceIncludeSoundtrack: true,
                     boundaryOutOverlap: 8,
                     duration: 3,
                     refFraming: "crop",

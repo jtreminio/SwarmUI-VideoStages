@@ -1,4 +1,5 @@
 using VideoStages.Execution;
+using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.Planning;
 
@@ -258,18 +259,28 @@ internal static class BoundaryOverlapPlanner
         };
 
     private static bool IsOverlapped(BoundaryPlan boundary) =>
-        boundary?.Effective is BoundaryJoinType.Continue or BoundaryJoinType.Crossfade;
+        boundary?.Effective == BoundaryJoinType.Crossfade
+        || boundary is
+        {
+            Effective: BoundaryJoinType.Continue,
+            ContinueMode: ContinueBoundaryMode.Overlap,
+        };
 
     internal static int EffectiveOverlapFrames(BoundaryPlan boundary) =>
         boundary.Effective switch
         {
-            BoundaryJoinType.Continue => Math.Max(1, boundary.ContinuityWindowFrames),
+            BoundaryJoinType.Continue when boundary.ContinueMode == ContinueBoundaryMode.Overlap =>
+                Math.Max(1, boundary.ContinuityWindowFrames),
             BoundaryJoinType.Crossfade => Math.Max(1, boundary.OverlapFrames),
             _ => 0,
         };
 
     internal static int IncomingHandleFrames(BoundaryPlan boundary) =>
-        boundary?.Effective == BoundaryJoinType.Continue
+        boundary is
+        {
+            Effective: BoundaryJoinType.Continue,
+            ContinueMode: ContinueBoundaryMode.Overlap,
+        }
             ? Math.Max(0, boundary.OverlapFrames)
             : 0;
 

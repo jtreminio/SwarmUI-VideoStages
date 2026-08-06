@@ -64,6 +64,8 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         renderEnabled = true;
         renderImplementation(meta, snapshot);
     };
+    const authoring = (): AuthoringTransactionSnapshot =>
+        activeSnapshot ?? captureAuthoringTransactionSnapshot();
 
     let renderedSelection: TimelineSelection | null = null;
     const focus = createDetailFocusSession({
@@ -72,14 +74,19 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         flushPending: () => draftQueue?.flush(),
     });
     const syncValueDerivedUi = (selection: TimelineSelection | null): void => {
-        if (!selection || !dockEl || !renderedSelection) {
+        if (!selection || !dockEl) {
             return;
         }
-        const clips = getState().clips;
+        const state = getState();
         const breadcrumb =
             dockEl.querySelector<HTMLElement>(".vst-detail-crumb");
         if (breadcrumb) {
-            breadcrumb.textContent = detailBreadcrumb(renderedSelection, clips);
+            breadcrumb.textContent = detailBreadcrumb(
+                selection,
+                state.clips,
+                state.fps,
+                authoring().capabilities,
+            );
         }
     };
     draftQueue = createDetailDraftQueue({
@@ -108,8 +115,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         buildClampedNumber: draftQueue.buildClampedNumber,
         structuralCommit: draftQueue.structuralCommit,
         render,
-        authoring: () =>
-            activeSnapshot ?? captureAuthoringTransactionSnapshot(),
+        authoring,
         addRefEntry: selectionOperations.addRefEntry,
         deleteRefEntry: selectionOperations.deleteRefEntry,
         addClipReference: selectionOperations.addClipReference,
@@ -172,6 +178,8 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
                 rawSelection,
                 clips,
                 state.audioTracks,
+                state.fps,
+                snapshot.capabilities,
             );
             if (!isSameSelection(rawSelection, selection)) {
                 setSelection(selection);

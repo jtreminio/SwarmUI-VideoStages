@@ -21,6 +21,7 @@ import {
 import { probeMediaDurationSeconds } from "../initVideoProbe";
 import { setSelection } from "../selection";
 import { applyClipDurationResize } from "../timelineEdit";
+import { incomingReferenceContinueForClip } from "../timelineTiming";
 import {
     type Clip,
     type ClipReference,
@@ -105,16 +106,81 @@ export const buildClipReferenceSection = (
     clips: Clip[],
     fps: number,
     open = selectedIdx !== null,
+    incomingSelected = false,
 ): HTMLElement => {
     const clip = clips[clipIdx];
     const references = clip.references;
     const { capabilities, defaults } = ctx.authoring();
     const decision = capabilities.forClip(clip).decision("clipReferences");
-    const tags = clipReferenceTags(references);
+    const incomingBoundary = incomingReferenceContinueForClip(
+        clips,
+        fps,
+        capabilities,
+        clipIdx,
+    );
+    const incomingReference = {
+        kind: "video" as const,
+        includeSoundtrack: incomingBoundary
+            ? clips[incomingBoundary.leftIdx]
+                  .boundaryOutReferenceIncludeSoundtrack
+            : false,
+    };
+    const tags = clipReferenceTags(
+        references,
+        incomingBoundary ? [incomingReference] : [],
+    );
+    const itemOffset = incomingBoundary ? 1 : 0;
     const activeIdx =
-        references.length === 0
+        references.length === 0 || selectedIdx === null
             ? null
-            : clamp(selectedIdx ?? 0, 0, references.length - 1);
+            : clamp(selectedIdx, 0, references.length - 1);
+    const buildIncomingEditor = (): HTMLElement | undefined => {
+        if (!incomingBoundary) {
+            return undefined;
+        }
+        const sourceClip = clips[incomingBoundary.leftIdx];
+        const patchIncoming = (mutate: (source: Clip) => void): void => {
+            ctx.commit((cs) => {
+                const source = cs[incomingBoundary.leftIdx];
+                if (source) {
+                    mutate(source);
+                }
+            });
+        };
+        const fields = document.createElement("div");
+        fields.className =
+            "vst-detail-col vst-detail-instance-fields vst-detail-clip-ref-editor vst-detail-join-ref-editor";
+        fields.appendChild(
+            buildField(
+                "Reference scale",
+                buildOptionSelect(
+                    CLIP_REFERENCE_SCALES.map((scale) => ({
+                        value: `${scale.value}`,
+                        label: scale.label,
+                    })),
+                    `${sourceClip.boundaryOutReferenceScale}`,
+                    (value) => {
+                        patchIncoming((source) => {
+                            source.boundaryOutReferenceScale = Number(value);
+                        });
+                    },
+                ),
+            ),
+        );
+        fields.appendChild(
+            buildCheckbox(
+                "Include soundtrack",
+                sourceClip.boundaryOutReferenceIncludeSoundtrack,
+                (value) => {
+                    patchIncoming((source) => {
+                        source.boundaryOutReferenceIncludeSoundtrack = value;
+                    });
+                    ctx.render();
+                },
+            ),
+        );
+        return fields;
+    };
     const buildSection = (
         editorForItem?: (index: number) => HTMLElement | undefined,
     ): HTMLElement =>
@@ -123,20 +189,40 @@ export const buildClipReferenceSection = (
             label: "References",
             sectionClass: "vst-detail-clip-ref-section",
             open,
-            items: references.map((reference, index) => ({
-                label: tags[index],
-                focusKey: `clip-reference-tab-${index}`,
-                title: `Edit ${CLIP_REFERENCE_KIND_INFO[reference.kind].label} reference ${tags[index]}`,
-                active: index === activeIdx,
-                className: "vst-clip-ref-tab",
-                onSelect: () =>
-                    setSelection({
-                        kind: "clip-ref",
-                        clipIdx,
-                        referenceIdx: index,
-                    }),
-                onShiftDelete: () => ctx.deleteClipReference(clipIdx, index),
-            })),
+            items: [
+                ...(incomingBoundary
+                    ? [
+                          {
+                              label: `<Video 1> (from Join with Clip ${incomingBoundary.leftIdx})`,
+                              title: `Edit the reference supplied by the Continue join from Clip ${incomingBoundary.leftIdx}`,
+                              focusKey: `clip-reference-join-${incomingBoundary.leftIdx}`,
+                              active: incomingSelected,
+                              className:
+                                  "vst-clip-ref-tab vst-clip-ref-join-tab",
+                              onSelect: () =>
+                                  setSelection({
+                                      kind: "boundary-ref",
+                                      leftClipIdx: incomingBoundary.leftIdx,
+                                  }),
+                          },
+                      ]
+                    : []),
+                ...references.map((reference, index) => ({
+                    label: tags[index],
+                    focusKey: `clip-reference-tab-${index}`,
+                    title: `Edit ${CLIP_REFERENCE_KIND_INFO[reference.kind].label} reference ${tags[index]}`,
+                    active: index === activeIdx,
+                    className: "vst-clip-ref-tab",
+                    onSelect: () =>
+                        setSelection({
+                            kind: "clip-ref",
+                            clipIdx,
+                            referenceIdx: index,
+                        }),
+                    onShiftDelete: () =>
+                        ctx.deleteClipReference(clipIdx, index),
+                })),
+            ],
             add: {
                 title: decision.supported
                     ? "Add a reference the prompt can name by tag"
@@ -153,7 +239,15 @@ export const buildClipReferenceSection = (
                         : `Delete reference ${tags[activeIdx]}`,
                 className: "vst-detail-delete-clip-ref",
             },
-            editorForItem,
+            editorForItem:
+                incomingBoundary === null && editorForItem === undefined
+                    ? undefined
+                    : (itemIndex) => {
+                          if (itemIndex < itemOffset) {
+                              return buildIncomingEditor();
+                          }
+                          return editorForItem?.(itemIndex - itemOffset);
+                      },
         }).section;
 
     if (activeIdx === null) {

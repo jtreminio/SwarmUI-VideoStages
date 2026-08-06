@@ -33,6 +33,8 @@ internal sealed class MiniMaxGenerationSession(
 
     private readonly PlannedStagePromptResolver _prompts = new(g);
     private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
+    private readonly MiniMaxBoundaryReferenceBuilder _boundaryReferenceBuilder =
+        new(g, plan, boundaries);
 
     private readonly (int Width, int Height) _dimensions =
         DimensionSnap.Snap(plan.Width, plan.Height);
@@ -41,6 +43,7 @@ internal sealed class MiniMaxGenerationSession(
     private WGNodeData _endFrame;
     private WGNodeData _reusedAudio;
     private WGNodeData _boundaryCarryAudio;
+    private MiniMaxBoundaryReference _boundaryReference;
     private double _boundaryCarryDuration;
     private double _boundaryCarrySourceStart;
     private ReferenceFramingMode _referenceFraming;
@@ -53,6 +56,9 @@ internal sealed class MiniMaxGenerationSession(
         ClipPlan clip = context.Clip;
         MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
         _reusedAudio = null;
+        _boundaryReference = _boundaryReferenceBuilder.TryBuild(
+            context,
+            ResolveFrames(context.Clip));
         PrepareBoundaryAudioCarry(context);
         _referenceFraming = payload.ReferenceFraming;
         _entryFirstFrame = ResolveFrameReference(
@@ -654,8 +660,12 @@ internal sealed class MiniMaxGenerationSession(
         WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         List<JArray> images = [];
-        List<JArray> videos = [];
-        List<JArray> videoAudios = [];
+        List<JArray> videos = _boundaryReference is null
+            ? []
+            : [_boundaryReference.Video];
+        List<JArray> videoAudios = _boundaryReference is null
+            ? []
+            : [_boundaryReference.Audio];
         List<JArray> audios = [];
         foreach (MiniMaxReferencePlan reference in references)
         {
@@ -670,6 +680,15 @@ internal sealed class MiniMaxGenerationSession(
                     }
                     break;
                 case ClipReferenceKind.Video:
+                    if (videos.Count >= MiniMaxClipReferences.MaxVideos)
+                    {
+                        PlanDiagnosticReporter.TrackRequestWarning(
+                            g.UserInput,
+                            $"VideoStages: {descriptor} exceeds MiniMax H3's "
+                                + $"{MiniMaxClipReferences.MaxVideos}-video limit because "
+                                + "Continue reserves reference video 0; ignoring it for this generation.");
+                        break;
+                    }
                     WGNodeData video = g.LoadImage(
                         UploadedMedia.GetVideo(
                             g.UserInput,

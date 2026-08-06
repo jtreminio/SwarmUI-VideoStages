@@ -45,6 +45,7 @@
           "maxFrames": 48,
           "defaultFrames": 8,
           "continuityExtraFrames": 1,
+          "continueMode": "overlap",
           "targetRequiresGeneratedEntry": true,
           "targetRequiresStage": true,
           "targetDisallowsInitialReference": true
@@ -61,6 +62,7 @@
           "maxFrames": 48,
           "defaultFrames": 8,
           "continuityExtraFrames": 0,
+          "continueMode": "overlap",
           "targetRequiresGeneratedEntry": false,
           "targetRequiresStage": false,
           "targetDisallowsInitialReference": false

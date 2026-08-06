@@ -1,7 +1,9 @@
+import type { CapabilityViewResolver } from "../architectures/policy";
 import { clipReferenceTags } from "../clipReferenceAuthoring";
 import { executableBoundaryForLeftClip } from "../clipSemantics";
 import { clamp } from "../constants";
 import { stageChipLabel } from "../timelineDetail";
+import { incomingReferenceContinueForClip } from "../timelineTiming";
 import type {
     AudioTrack,
     Clip,
@@ -22,6 +24,8 @@ export const clampDetailSelection = (
     selection: TimelineSelection,
     clips: Clip[],
     audioTracks: AudioTrack[] = [],
+    fps?: number,
+    capabilities?: CapabilityViewResolver,
 ): TimelineSelection => {
     if (selection.kind === "none") {
         return selection;
@@ -30,6 +34,22 @@ export const clampDetailSelection = (
         return selection.leftClipIdx >= 0 &&
             selection.leftClipIdx <= clips.length - 2
             ? selection
+            : { kind: "none" };
+    }
+    if (selection.kind === "boundary-ref") {
+        const seam = executableBoundaryForLeftClip(
+            clips,
+            selection.leftClipIdx,
+        );
+        return seam && fps !== undefined && capabilities !== undefined
+            ? incomingReferenceContinueForClip(
+                  clips,
+                  fps,
+                  capabilities,
+                  seam.rightIdx,
+              )
+                ? selection
+                : { kind: "none" }
             : { kind: "none" };
     }
     if (selection.kind === "audio-track") {
@@ -83,6 +103,8 @@ export const clampDetailSelection = (
 export const detailBreadcrumb = (
     selection: TimelineSelection,
     clips: Clip[],
+    fps?: number,
+    capabilities?: CapabilityViewResolver,
 ): string => {
     switch (selection.kind) {
         case "clip":
@@ -92,10 +114,38 @@ export const detailBreadcrumb = (
         case "ref":
             return `Ref${selection.refIdx} · Clip ${selection.clipIdx}`;
         case "clip-ref": {
+            const incomingBoundary =
+                fps === undefined || capabilities === undefined
+                    ? null
+                    : incomingReferenceContinueForClip(
+                          clips,
+                          fps,
+                          capabilities,
+                          selection.clipIdx,
+                      );
             const tag = clipReferenceTags(
                 clips[selection.clipIdx]?.references ?? [],
+                incomingBoundary
+                    ? [
+                          {
+                              kind: "video",
+                              includeSoundtrack:
+                                  clips[incomingBoundary.leftIdx]
+                                      .boundaryOutReferenceIncludeSoundtrack,
+                          },
+                      ]
+                    : [],
             )[selection.referenceIdx];
             return `${tag ?? "Reference"} · Clip ${selection.clipIdx}`;
+        }
+        case "boundary-ref": {
+            const seam = executableBoundaryForLeftClip(
+                clips,
+                selection.leftClipIdx,
+            );
+            return seam
+                ? `<Video 1> (from Join with Clip ${selection.leftClipIdx}) · Clip ${seam.rightIdx}`
+                : "Reference";
         }
         case "ic-lora":
             return `IC-LoRA ${selection.entryIdx} · Clip ${selection.clipIdx}`;
@@ -140,13 +190,19 @@ export const detailBreadcrumb = (
 
 export const buildDetailHeader = (
     selection: TimelineSelection,
-    clips: Clip[],
+    state: VideoStagesConfig,
+    capabilities: CapabilityViewResolver,
 ): HTMLElement => {
     const header = document.createElement("div");
     header.className = "vst-detail-head";
     const breadcrumb = document.createElement("span");
     breadcrumb.className = "vst-detail-crumb";
-    breadcrumb.textContent = detailBreadcrumb(selection, clips);
+    breadcrumb.textContent = detailBreadcrumb(
+        selection,
+        state.clips,
+        state.fps,
+        capabilities,
+    );
 
     const settings = document.createElement("button");
     settings.type = "button";
@@ -171,6 +227,8 @@ export const buildDetailPanelBody = (
         case "ref":
             return buildClipBody(context, selection, state);
         case "clip-ref":
+            return buildClipBody(context, selection, state);
+        case "boundary-ref":
             return buildClipBody(context, selection, state);
         case "ic-lora":
             return buildClipBody(context, selection, state);

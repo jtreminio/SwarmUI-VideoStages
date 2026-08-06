@@ -710,6 +710,7 @@
       );
     }).map((stage) => stage.model);
   };
+  var clipHasGenerationStageForLookup = (clip, modelForName, architectureForId) => effectiveGridModels(clip, modelForName, architectureForId).length > 0;
   var resolveClipFrameGridForLookup = (clip, modelForName, architectureForId) => {
     const activeStages = clip.stages.slice(0, activeStageCount(clip));
     if (activeStages.length === 0) {
@@ -812,10 +813,13 @@
       "maxFrames",
       "defaultFrames",
       "continuityExtraFrames",
+      "continueMode",
       "targetRequiresGeneratedEntry",
       "targetRequiresStage",
       "targetDisallowsInitialReference"
-    ]) || constraints.sameArchitecture !== true || typeof constraints.targetRequiresGeneratedEntry !== "boolean" || typeof constraints.targetRequiresStage !== "boolean" || typeof constraints.targetDisallowsInitialReference !== "boolean" || !integers.every(Number.isInteger)) {
+    ]) || constraints.sameArchitecture !== true || !["overlap", "reference"].includes(
+      constraints.continueMode
+    ) || typeof constraints.targetRequiresGeneratedEntry !== "boolean" || typeof constraints.targetRequiresStage !== "boolean" || typeof constraints.targetDisallowsInitialReference !== "boolean" || !integers.every(Number.isInteger)) {
       return false;
     }
     const frameStep = constraints.frameStep;
@@ -1065,13 +1069,14 @@
     minFrames: 1,
     maxFrames: Number.MAX_SAFE_INTEGER,
     defaultFrames: 1,
-    continuityExtraFrames: 0
+    continuityExtraFrames: 0,
+    continueMode: "overlap"
   };
   var finitePositive = (value, fallback, allowZero = false) => {
     const numeric = Math.trunc(Number(value));
     return Number.isFinite(numeric) && (allowZero ? numeric >= 0 : numeric > 0) ? numeric : fallback;
   };
-  var boundaryOverlapConstraints = (rule) => {
+  var boundaryWindowConstraints = (rule) => {
     const raw = rule?.constraints;
     const frameStep = finitePositive(
       raw?.frameStep,
@@ -1098,10 +1103,11 @@
         raw?.continuityExtraFrames,
         GENERIC_BOUNDARY_CONSTRAINTS.continuityExtraFrames,
         true
-      )
+      ),
+      continueMode: raw?.continueMode === "reference" ? "reference" : "overlap"
     };
   };
-  var normalizeBoundaryOverlap = (value, constraints) => {
+  var normalizeBoundaryWindow = (value, constraints) => {
     const numeric = Math.trunc(Number(value));
     if (!Number.isFinite(numeric) || numeric <= 0) {
       return constraints.defaultFrames;
@@ -1114,7 +1120,7 @@
       Math.min(constraints.maxFrames, snapped)
     );
   };
-  var boundaryOverlapChoices = (constraints) => {
+  var boundaryWindowChoices = (constraints) => {
     const choices = [];
     for (let value = constraints.minFrames; value <= constraints.maxFrames; value += constraints.frameStep) {
       choices.push(value);
@@ -1145,7 +1151,7 @@
       const hasInitialReference = right?.frameRefs.some(
         (reference) => reference.fromEnd !== true && Math.max(1, Math.round(reference.frame)) === 1
       ) ?? false;
-      const rightHasActiveStage = right !== null && activeStageCount(right) > 0;
+      const rightHasGenerationStage = rightView?.hasGenerationStage === true;
       const supportsMode = (mode) => {
         const rule = leftDescriptor?.boundaryRules[mode];
         if (!rule || rule.support === "unsupported") {
@@ -1158,7 +1164,7 @@
         if (constraints?.targetRequiresGeneratedEntry === true && right?.initVideo !== null) {
           return false;
         }
-        if (constraints?.targetRequiresStage === true && right !== null && !rightHasActiveStage) {
+        if (constraints?.targetRequiresStage === true && right !== null && !rightHasGenerationStage) {
           return false;
         }
         if (constraints?.targetDisallowsInitialReference === true && hasInitialReference) {
@@ -1178,7 +1184,7 @@
         modes,
         crossArchitecture,
         reason,
-        overlapConstraints: (mode) => boundaryOverlapConstraints(
+        windowConstraints: (mode) => boundaryWindowConstraints(
           leftDescriptor?.boundaryRules[mode] ?? null
         ),
         effective: (requested) => supportsMode(requested) ? requested : "cut"
@@ -1265,6 +1271,11 @@
         (model) => modelByName.get(model),
         (architectureId2) => architectureById.get(architectureId2)
       );
+      const hasGenerationStage = clipHasGenerationStageForLookup(
+        clip,
+        (model) => modelByName.get(model),
+        (architectureId2) => architectureById.get(architectureId2)
+      );
       const view = {
         architectureId,
         architectureLabel: label,
@@ -1274,6 +1285,7 @@
           frameGridOrigin: frameGridResolution.frameGridOrigin
         } : NEUTRAL_FRAME_GRID,
         frameGridResolution,
+        hasGenerationStage,
         audioSourceKinds: capabilities?.audioSourceKinds ?? [],
         clipAudio: {
           supported: supportsClipAudio(
@@ -2413,14 +2425,18 @@
     mediaScale: 1
   });
   var clipReferenceCanDriveLength = (reference) => reference.kind === "video" || reference.kind === "audio";
-  var clipReferenceTags = (references) => {
+  var clipReferenceTags = (references, precedingReferences = []) => {
+    const allReferences = [...precedingReferences, ...references];
     const used = {
       image: 0,
       video: 0,
-      audio: references.filter(
+      audio: allReferences.filter(
         (reference) => reference.kind === "video" && reference.includeSoundtrack === true
       ).length
     };
+    for (const reference of precedingReferences) {
+      used[reference.kind] += 1;
+    }
     return references.map((reference) => {
       used[reference.kind] += 1;
       return `<${CLIP_REFERENCE_KIND_INFO[reference.kind].tag} ${used[reference.kind]}>`;
@@ -3581,9 +3597,9 @@
     const raw = trimmedText(value).toLowerCase();
     return raw === "continue" || raw === "crossfade" ? raw : "cut";
   };
-  var normalizeContinueOverlap = (value, constraints = boundaryOverlapConstraints(null)) => {
+  var normalizeContinueOverlap = (value, constraints = boundaryWindowConstraints(null)) => {
     const numeric = Math.trunc(Number(value));
-    return Number.isFinite(numeric) && numeric > 0 ? numeric : normalizeBoundaryOverlap(value, constraints);
+    return Number.isFinite(numeric) && numeric > 0 ? numeric : normalizeBoundaryWindow(value, constraints);
   };
   var normalizeReferenceFraming = (value) => value === "stretch" || value === "fit" || value === "fit-green" ? value : "crop";
   var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
@@ -3618,7 +3634,9 @@
       hue: UNASSIGNED_HUE,
       boundaryOut: "cut",
       boundaryOutCarryAudio: false,
-      boundaryOutOverlap: boundaryOverlapConstraints(continueRule).defaultFrames,
+      boundaryOutReferenceScale: 1,
+      boundaryOutReferenceIncludeSoundtrack: true,
+      boundaryOutOverlap: boundaryWindowConstraints(continueRule).defaultFrames,
       duration: previousClip ? previousClip.duration : snapDurationToFps(
         Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
         defaults.fps
@@ -3782,9 +3800,13 @@
       hue: normalizeStoredHue(rawClip.hue),
       boundaryOut,
       boundaryOutCarryAudio: !!rawClip.boundaryOutCarryAudio,
+      boundaryOutReferenceScale: normalizeClipReferenceScale(
+        rawClip.boundaryOutReferenceScale
+      ),
+      boundaryOutReferenceIncludeSoundtrack: rawClip.boundaryOutReferenceIncludeSoundtrack !== false,
       boundaryOutOverlap: normalizeContinueOverlap(
         rawClip.boundaryOutOverlap,
-        boundaryOverlapConstraints(boundaryRule)
+        boundaryWindowConstraints(boundaryRule)
       ),
       duration,
       refFraming: normalizeReferenceFraming(rawClip.refFraming),
@@ -3844,6 +3866,8 @@
         skipped: clip.skipped,
         boundaryOut: clip.boundaryOut,
         boundaryOutCarryAudio: clip.boundaryOutCarryAudio,
+        boundaryOutReferenceScale: clip.boundaryOutReferenceScale,
+        boundaryOutReferenceIncludeSoundtrack: clip.boundaryOutReferenceIncludeSoundtrack,
         boundaryOutOverlap: clip.boundaryOutOverlap,
         duration: clip.duration,
         refFraming: clip.refFraming,
@@ -4338,6 +4362,8 @@
       "hue",
       "boundaryOut",
       "boundaryOutCarryAudio",
+      "boundaryOutReferenceScale",
+      "boundaryOutReferenceIncludeSoundtrack",
       "boundaryOutOverlap",
       "duration",
       "refFraming",
@@ -6633,6 +6659,7 @@
       case "audio-track":
         return null;
       case "boundary":
+      case "boundary-ref":
         return selection.leftClipIdx;
       default:
         return selection.clipIdx;
@@ -6697,6 +6724,8 @@
         return selection;
       case "boundary":
         return { kind: "boundary", leftClipIdx: clipIdx };
+      case "boundary-ref":
+        return { kind: "boundary-ref", leftClipIdx: clipIdx };
       default:
         return { ...selection, clipIdx };
     }
@@ -6774,6 +6803,8 @@
         return true;
       case "boundary":
         return a.leftClipIdx === b.leftClipIdx;
+      case "boundary-ref":
+        return a.leftClipIdx === b.leftClipIdx;
       case "audio-track":
         return a.trackIdx === b.trackIdx;
       case "clip":
@@ -6796,7 +6827,7 @@
   var NO_SELECTION = { selection: { kind: "none" } };
   var anchor = NO_SELECTION;
   var selectionSubscribers = /* @__PURE__ */ new Set();
-  var clipIdxOf = (sel) => sel.kind === "none" || sel.kind === "boundary" || sel.kind === "audio-track" ? null : sel.clipIdx;
+  var clipIdxOf = (sel) => sel.kind === "none" || sel.kind === "boundary" || sel.kind === "boundary-ref" || sel.kind === "audio-track" ? null : sel.clipIdx;
   var getSelection = () => resolveSelection(anchor);
   var getSelectedClipIndex = () => clipIdxOf(getSelection());
   var notify = () => {
@@ -6912,8 +6943,8 @@
   };
 
   // frontend/boundaryPlan.ts
-  var crossfadePlanForClips = (clips, fps, resolveConstraints = (clip, _index, mode) => {
-    const generic = boundaryOverlapConstraints(null);
+  var boundaryPlanForClips = (clips, fps, resolveConstraints = (clip, _index, mode) => {
+    const generic = boundaryWindowConstraints(null);
     const persisted = Math.trunc(Number(clip.boundaryOutOverlap));
     return {
       ...generic,
@@ -6922,21 +6953,18 @@
   }, resolveFrameGrid = () => NEUTRAL_FRAME_GRID) => {
     const count = clips.length;
     const boundaryCount = Math.max(0, count - 1);
-    const noOverlap = () => new Array(boundaryCount).fill(0);
+    const zeroBoundaries = () => new Array(boundaryCount).fill(0);
     if (count < 2) {
-      return { overlaps: noOverlap(), fallback: false };
+      return {
+        overlaps: zeroBoundaries(),
+        continuityWindows: zeroBoundaries(),
+        fallback: false
+      };
     }
-    let requested = 0;
     const modes = [];
     for (let i = 0; i < count - 1; i++) {
       const b = clips[i].boundaryOut ?? "cut";
       modes[i] = b;
-      if (b === "crossfade" || b === "continue") {
-        requested++;
-      }
-    }
-    if (requested === 0) {
-      return { overlaps: noOverlap(), fallback: false };
     }
     const frames = clips.map(
       (clip, index) => framesForClip(clip.duration, fps, resolveFrameGrid(clip, index))
@@ -6945,16 +6973,28 @@
       (clip, index) => resolveConstraints(clip, index, clip.boundaryOut ?? "cut")
     );
     const prefs = clips.map(
-      (clip, index) => normalizeBoundaryOverlap(clip.boundaryOutOverlap, constraints[index])
+      (clip, index) => normalizeBoundaryWindow(clip.boundaryOutOverlap, constraints[index])
     );
-    const active = (index) => modes[index] === "continue" || modes[index] === "crossfade";
-    const trim = (index) => modes[index] === "continue" ? prefs[index] + constraints[index].continuityExtraFrames : modes[index] === "crossfade" ? prefs[index] : 0;
+    const hasRequestedBoundary = modes.some((mode) => mode !== "cut");
+    const active = (index) => modes[index] === "crossfade" || modes[index] === "continue" && constraints[index].continueMode === "overlap";
+    const trim = (index) => modes[index] === "continue" ? constraints[index].continueMode === "overlap" ? prefs[index] + constraints[index].continuityExtraFrames : 0 : modes[index] === "crossfade" ? prefs[index] : 0;
+    const hasBudgetedOverlap = modes.some((_mode, index) => active(index));
+    const continuityWindows = () => modes.slice(0, boundaryCount).map(
+      (mode, index) => mode === "continue" ? constraints[index].continueMode === "reference" ? prefs[index] : trim(index) : 0
+    );
+    if (!hasBudgetedOverlap) {
+      return {
+        overlaps: zeroBoundaries(),
+        continuityWindows: continuityWindows(),
+        fallback: false
+      };
+    }
     while (true) {
       let overBudgetClip = -1;
       for (let i = 0; i < count; i++) {
         const left = i > 0 ? trim(i - 1) : 0;
         const right = i < boundaryCount ? trim(i) : 0;
-        const incomingHandle = i > 0 && modes[i - 1] === "continue" ? prefs[i - 1] : 0;
+        const incomingHandle = i > 0 && modes[i - 1] === "continue" && constraints[i - 1].continueMode === "overlap" ? prefs[i - 1] : 0;
         if (left + right > frames[i] + incomingHandle - 1) {
           overBudgetClip = i;
           break;
@@ -6963,7 +7003,14 @@
       if (overBudgetClip < 0) break;
       const candidate = overBudgetClip < boundaryCount && active(overBudgetClip) ? overBudgetClip : overBudgetClip > 0 && active(overBudgetClip - 1) ? overBudgetClip - 1 : -1;
       if (candidate < 0) {
-        return { overlaps: noOverlap(), fallback: true };
+        for (let i = 0; i < boundaryCount; i++) {
+          if (active(i)) modes[i] = "cut";
+        }
+        return {
+          overlaps: zeroBoundaries(),
+          continuityWindows: continuityWindows(),
+          fallback: !modes.some((mode) => mode !== "cut")
+        };
       }
       const reduced = prefs[candidate] - constraints[candidate].frameStep;
       if (reduced < constraints[candidate].minFrames) {
@@ -6976,7 +7023,8 @@
     const overlaps = modes.slice(0, boundaryCount).map((_mode, index) => trim(index));
     return {
       overlaps,
-      fallback: requested > 0 && !modes.some((_mode, index) => active(index))
+      continuityWindows: continuityWindows(),
+      fallback: hasRequestedBoundary && !modes.some((mode) => mode !== "cut")
     };
   };
 
@@ -7114,19 +7162,23 @@
       }
       return { ...clip, boundaryOut: effective };
     });
-    const plan = capabilities ? crossfadePlanForClips(
+    const plan = capabilities ? boundaryPlanForClips(
       compacted,
       fps,
-      (_left, position, mode) => capabilities.forBoundaryIndex(clips, indexes[position]).overlapConstraints(mode),
+      (_left, position, mode) => capabilities.forBoundaryIndex(clips, indexes[position]).windowConstraints(mode),
       (clip) => capabilities.forClip(clip).frameGrid
-    ) : crossfadePlanForClips(compacted, fps);
+    ) : boundaryPlanForClips(compacted, fps);
     const seams = executableBoundaries(clips);
     const boundaries = seams.map((seam) => {
       const requestedMode = clips[seam.leftIdx].boundaryOut ?? "cut";
       const policyEffective = compacted[seam.position].boundaryOut ?? "cut";
       const overlapFrames = Math.max(0, plan.overlaps[seam.position] ?? 0);
-      const effectiveMode = overlapFrames > 0 ? policyEffective : "cut";
-      const continuityExtraFrames = effectiveMode === "continue" ? capabilities?.forBoundaryIndex(clips, seam.leftIdx).overlapConstraints(effectiveMode).continuityExtraFrames ?? 1 : 0;
+      const continuityWindowFrames = Math.max(
+        0,
+        plan.continuityWindows[seam.position] ?? 0
+      );
+      const effectiveMode = overlapFrames > 0 || continuityWindowFrames > 0 ? policyEffective : "cut";
+      const continuityExtraFrames = effectiveMode === "continue" ? capabilities?.forBoundaryIndex(clips, seam.leftIdx).windowConstraints(effectiveMode).continuityExtraFrames ?? 1 : 0;
       const handleFrames = effectiveMode === "continue" ? Math.max(0, overlapFrames - continuityExtraFrames) : 0;
       const timelineReductionFrames = Math.max(
         0,
@@ -7136,6 +7188,8 @@
         ...seam,
         requestedMode,
         effectiveMode,
+        continuityWindowFrames,
+        continuityWindowSeconds: continuityWindowFrames / fps,
         overlapFrames,
         overlapSeconds: overlapFrames / fps,
         handleFrames,
@@ -7175,6 +7229,9 @@
     };
   };
   var boundaryImpactForLeftClip = (timing, leftClipIdx) => timing.boundaries.find((boundary) => boundary.leftIdx === leftClipIdx) ?? null;
+  var incomingReferenceContinueForClip = (clips, rawFps, capabilities, rightClipIdx) => resolveTimelineTiming(clips, rawFps, capabilities).boundaries.find(
+    (boundary) => boundary.rightIdx === rightClipIdx && boundary.effectiveMode === "continue" && capabilities.forBoundaryIndex(clips, boundary.leftIdx).windowConstraints("continue").continueMode === "reference"
+  ) ?? null;
   var timelineDisplaySeconds = (clips, timing) => timing.outputGeometryAvailable ? timing.outputSeconds : clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
 
   // frontend/timelineAuthoringSettings.ts
@@ -8515,14 +8572,16 @@
     const explicitActiveIndex = spec.items.findIndex(
       (item) => item.active === true
     );
+    const isValidIndex = (index) => index !== null && index !== void 0 && index >= 0 && index < spec.items.length;
     const rememberedIndex = rememberedRepeaterItems.get(spec.key);
-    const validRememberedIndex = rememberedIndex !== void 0 && rememberedIndex >= 0 && rememberedIndex < spec.items.length ? rememberedIndex : null;
+    const validRememberedIndex = isValidIndex(rememberedIndex) ? rememberedIndex : null;
     if (rememberedIndex !== void 0 && validRememberedIndex === null) {
       rememberedRepeaterItems.delete(spec.key);
       forceOpenRepeaterKeys.delete(spec.key);
     }
     const forceOpen = forceOpenRepeaterKeys.has(spec.key) && validRememberedIndex !== null;
-    const activeIndex = forceOpen ? validRememberedIndex : explicitActiveIndex >= 0 ? explicitActiveIndex : validRememberedIndex ?? spec.defaultActiveIndex ?? null;
+    const defaultActiveIndex = isValidIndex(spec.defaultActiveIndex) ? spec.defaultActiveIndex : null;
+    const activeIndex = forceOpen ? validRememberedIndex : explicitActiveIndex >= 0 ? explicitActiveIndex : validRememberedIndex ?? defaultActiveIndex;
     if (explicitActiveIndex >= 0 && !forceOpen) {
       rememberedRepeaterItems.set(spec.key, explicitActiveIndex);
     } else if (activeIndex !== null) {
@@ -10087,9 +10146,12 @@
     const capability = capabilities.forBoundaryIndex(clips, leftClipIdx);
     const seam = executableBoundaryForLeftClip(clips, leftClipIdx);
     const fps = Math.round(safeFps(state.fps));
-    const carryTargetHasStage = capability.rightClipIdx !== null && activeStageCount(clips[capability.rightClipIdx]) > 0;
+    const overlapPolicy = capability.windowConstraints(value);
+    const isReferenceContinue = value === "continue" && overlapPolicy.continueMode === "reference";
+    const referenceTailLabel = clip?.boundaryOutReferenceIncludeSoundtrack === false ? "video tail" : "video and audio tail";
+    const carryTargetHasStage = capability.rightClipIdx !== null && capabilities.forClip(clips[capability.rightClipIdx]).hasGenerationStage;
     const carryAudioSupported = clip !== void 0 && capabilities.forClip(clip).decision("audioBoundaryCarry").supported;
-    const carryAudioActive = carryAudioSupported && clip?.boundaryOutCarryAudio === true && carryTargetHasStage;
+    const carryAudioActive = carryAudioSupported && !isReferenceContinue && clip?.boundaryOutCarryAudio === true && carryTargetHasStage;
     const joinSpecs = capability.modes.map((mode) => ({
       value: mode,
       label: `${BOUNDARY_LABEL[mode]} ${BOUNDARY_GLYPH[mode]}`
@@ -10127,10 +10189,9 @@
         })
       );
     }
-    const overlapPolicy = capability.overlapConstraints(value);
     if (value !== "cut" && capability.modes.includes(value)) {
       const overlapValue = clip?.boundaryOutOverlap ?? overlapPolicy.defaultFrames;
-      const overlapSpecs = boundaryOverlapChoices(
+      const overlapSpecs = boundaryWindowChoices(
         overlapPolicy
       ).map((frames) => ({
         value: `${frames}`,
@@ -10150,7 +10211,7 @@
           ctx.commit((cs) => {
             const c = cs[leftClipIdx];
             if (c) {
-              c.boundaryOutOverlap = normalizeBoundaryOverlap(
+              c.boundaryOutOverlap = normalizeBoundaryWindow(
                 next,
                 overlapPolicy
               );
@@ -10161,13 +10222,13 @@
       );
       fields.appendChild(
         buildField(
-          "Overlap",
+          isReferenceContinue ? "Reference window" : "Overlap",
           overlapSelect,
           void 0,
-          "How many frames the two clips share at the join. For continue this is the frozen context handed to the next clip; for crossfade it is the length of the dissolve. A clip too short for the overlap falls back to a cut."
+          isReferenceContinue ? `Requested duration of the previous clip's ${referenceTailLabel} used as reference context.` : "How many frames the clips share at the join. For Continue this is frozen context; for Crossfade it is the dissolve length."
         )
       );
-      if (carryAudioSupported) {
+      if (carryAudioSupported && !isReferenceContinue) {
         fields.appendChild(
           buildCheckbox(
             "Continue outgoing audio into next clip",
@@ -10189,19 +10250,9 @@
         );
       }
     }
-    const executable = executableClipIndexes(clips);
-    const plannedWindow = () => {
-      if (seam === null) {
-        return 0;
-      }
-      const plan = crossfadePlanForClips(
-        executable.map((clipIdx) => clips[clipIdx]),
-        fps,
-        (_left, position, mode) => capabilities.forBoundaryIndex(clips, executable[position]).overlapConstraints(mode),
-        (target) => capabilities.forClip(target).frameGrid
-      );
-      return plan.fallback ? 0 : plan.overlaps[seam.position] ?? 0;
-    };
+    const timing = seam === null ? null : resolveTimelineTiming(clips, fps, capabilities);
+    const impact = timing === null ? null : boundaryImpactForLeftClip(timing, leftClipIdx);
+    const plannedWindow = impact === null ? 0 : value === "continue" ? impact.continuityWindowFrames : impact.overlapFrames;
     const info = document.createElement("div");
     info.className = "vst-boundary-info";
     const effective = capability.effective(value);
@@ -10211,15 +10262,15 @@
     } else if (value === "cut") {
       info.textContent = "Hard cut — clips are concatenated with no overlap.";
     } else if (value === "continue") {
-      const window2 = plannedWindow();
+      const window2 = plannedWindow;
       if (window2 <= 0) {
         info.classList.add("vst-boundary-warn");
-        info.textContent = "This continue will fall back to a cut — a clip is too short for the overlap.";
+        info.textContent = `This continue will fall back to a cut — a clip is too short for the requested ${isReferenceContinue ? "reference window" : "overlap"}.`;
       } else {
-        const requested = (clip?.boundaryOutOverlap ?? overlapPolicy.defaultFrames) + overlapPolicy.continuityExtraFrames;
-        let text2 = `Continue — the next clip is generated with this clip's last ${window2} frame${window2 === 1 ? "" : "s"} (~${formatOverlapSeconds(window2, fps)}) as frozen context, and the merge collapses the duplicated frames.`;
+        const requested = (clip?.boundaryOutOverlap ?? overlapPolicy.defaultFrames) + (overlapPolicy.continueMode === "overlap" ? overlapPolicy.continuityExtraFrames : 0);
+        let text2 = isReferenceContinue ? `Continue — requests up to ~${formatOverlapSeconds(window2, fps)} of this clip's ${referenceTailLabel} as reference context.` : `Continue — the next clip is generated with this clip's last ${window2} frame${window2 === 1 ? "" : "s"} (~${formatOverlapSeconds(window2, fps)}) as frozen context, and the merge collapses the duplicated frames.`;
         if (window2 < requested) {
-          text2 += " The window was reduced because a clip is too short.";
+          text2 += " The window was reduced to fit clip or model limits.";
         }
         if (carryAudioActive) {
           text2 += " Its audio tail becomes preserved opening context for the next clip's generated audio.";
@@ -10227,12 +10278,12 @@
         info.textContent = text2;
       }
     } else {
-      const overlapFrames = plannedWindow();
+      const overlapFrames = plannedWindow;
       if (overlapFrames <= 0) {
         info.classList.add("vst-boundary-warn");
         info.textContent = "This crossfade will fall back to a cut — a clip is too short for the overlap window.";
       } else {
-        const requested = clip?.boundaryOutOverlap ?? capability.overlapConstraints(value).defaultFrames;
+        const requested = clip?.boundaryOutOverlap ?? capability.windowConstraints(value).defaultFrames;
         let text2 = `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} (~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
         if (overlapFrames < requested) {
           text2 += " The window was reduced because a clip is too short.";
@@ -10244,55 +10295,51 @@
       }
     }
     fields.appendChild(info);
-    if (seam !== null) {
-      const timing = resolveTimelineTiming(clips, fps, capabilities);
-      const impact = boundaryImpactForLeftClip(timing, leftClipIdx);
-      if (impact) {
-        const leftFrames = timing.clipFrames[impact.leftIdx] ?? 0;
-        const rightFrames = timing.clipFrames[impact.rightIdx] ?? 0;
-        const combinedFrames = Math.max(
-          0,
-          leftFrames + rightFrames + impact.handleFrames - impact.overlapFrames
-        );
-        const impactBlock = document.createElement("div");
-        impactBlock.className = "vst-boundary-impact";
-        const heading = document.createElement("div");
-        heading.className = "vst-detail-crumb vst-detail-subsection-crumb vst-boundary-impact-title";
-        heading.textContent = "Output impact";
-        impactBlock.appendChild(heading);
-        const rows = document.createElement("div");
-        rows.className = "vst-boundary-impact-rows";
-        const addRow = (label, frames, sign = "", strong = false) => {
-          const row = document.createElement("div");
-          row.className = `vst-boundary-impact-row${strong ? " vst-boundary-impact-total" : ""}`;
-          const name = document.createElement("span");
-          name.textContent = label;
-          const value2 = document.createElement("span");
-          value2.textContent = `${sign}${frames}f · ${sign}${formatSecondsTenth(frames / fps)}`;
-          row.append(name, value2);
-          rows.appendChild(row);
-        };
-        addRow(`Clip ${impact.leftIdx}`, leftFrames);
-        addRow(`Clip ${impact.rightIdx}`, rightFrames, "+");
-        if (impact.handleFrames > 0) {
-          addRow("Incoming Continue handle", impact.handleFrames, "+");
-        }
-        addRow(
-          `${BOUNDARY_LABEL[impact.effectiveMode]} shared`,
-          impact.overlapFrames,
-          impact.overlapFrames > 0 ? "−" : ""
-        );
-        addRow("Pair after this join", combinedFrames, "", true);
-        impactBlock.appendChild(rows);
-        if (value === "continue" && impact.overlapFrames > 0 && overlapPolicy.continuityExtraFrames > 0) {
-          const note = document.createElement("div");
-          note.className = "vst-boundary-impact-note";
-          const selectedFrames = impact.handleFrames;
-          note.textContent = `${selectedFrames}f selected + ${overlapPolicy.continuityExtraFrames} LTX continuation frame = ${impact.overlapFrames}f effective shared window.`;
-          impactBlock.appendChild(note);
-        }
-        fields.appendChild(impactBlock);
+    if (timing !== null && impact !== null) {
+      const leftFrames = timing.clipFrames[impact.leftIdx] ?? 0;
+      const rightFrames = timing.clipFrames[impact.rightIdx] ?? 0;
+      const combinedFrames = Math.max(
+        0,
+        leftFrames + rightFrames + impact.handleFrames - impact.overlapFrames
+      );
+      const impactBlock = document.createElement("div");
+      impactBlock.className = "vst-boundary-impact";
+      const heading = document.createElement("div");
+      heading.className = "vst-detail-crumb vst-detail-subsection-crumb vst-boundary-impact-title";
+      heading.textContent = "Output impact";
+      impactBlock.appendChild(heading);
+      const rows = document.createElement("div");
+      rows.className = "vst-boundary-impact-rows";
+      const addRow = (label, frames, sign = "", strong = false) => {
+        const row = document.createElement("div");
+        row.className = `vst-boundary-impact-row${strong ? " vst-boundary-impact-total" : ""}`;
+        const name = document.createElement("span");
+        name.textContent = label;
+        const value2 = document.createElement("span");
+        value2.textContent = `${sign}${frames}f · ${sign}${formatSecondsTenth(frames / fps)}`;
+        row.append(name, value2);
+        rows.appendChild(row);
+      };
+      addRow(`Clip ${impact.leftIdx}`, leftFrames);
+      addRow(`Clip ${impact.rightIdx}`, rightFrames, "+");
+      if (impact.handleFrames > 0) {
+        addRow("Incoming Continue handle", impact.handleFrames, "+");
       }
+      addRow(
+        `${BOUNDARY_LABEL[impact.effectiveMode]} shared`,
+        impact.overlapFrames,
+        impact.overlapFrames > 0 ? "−" : ""
+      );
+      addRow("Pair after this join", combinedFrames, "", true);
+      impactBlock.appendChild(rows);
+      if (value === "continue" && impact.overlapFrames > 0 && overlapPolicy.continuityExtraFrames > 0) {
+        const note = document.createElement("div");
+        note.className = "vst-boundary-impact-note";
+        const selectedFrames = impact.handleFrames;
+        note.textContent = `${selectedFrames}f selected + ${overlapPolicy.continuityExtraFrames} LTX continuation frame = ${impact.overlapFrames}f effective shared window.`;
+        impactBlock.appendChild(note);
+      }
+      fields.appendChild(impactBlock);
     }
     body.appendChild(
       buildStaticSection({
@@ -11408,31 +11455,106 @@ ${slot}`;
     },
     onApplied: () => ctx.render()
   });
-  var buildClipReferenceSection = (ctx, clipIdx, selectedIdx, clips, fps, open = selectedIdx !== null) => {
+  var buildClipReferenceSection = (ctx, clipIdx, selectedIdx, clips, fps, open = selectedIdx !== null, incomingSelected = false) => {
     const clip = clips[clipIdx];
     const references = clip.references;
     const { capabilities, defaults } = ctx.authoring();
     const decision = capabilities.forClip(clip).decision("clipReferences");
-    const tags = clipReferenceTags(references);
-    const activeIdx = references.length === 0 ? null : clamp(selectedIdx ?? 0, 0, references.length - 1);
+    const incomingBoundary = incomingReferenceContinueForClip(
+      clips,
+      fps,
+      capabilities,
+      clipIdx
+    );
+    const incomingReference = {
+      kind: "video",
+      includeSoundtrack: incomingBoundary ? clips[incomingBoundary.leftIdx].boundaryOutReferenceIncludeSoundtrack : false
+    };
+    const tags = clipReferenceTags(
+      references,
+      incomingBoundary ? [incomingReference] : []
+    );
+    const itemOffset = incomingBoundary ? 1 : 0;
+    const activeIdx = references.length === 0 || selectedIdx === null ? null : clamp(selectedIdx, 0, references.length - 1);
+    const buildIncomingEditor = () => {
+      if (!incomingBoundary) {
+        return void 0;
+      }
+      const sourceClip = clips[incomingBoundary.leftIdx];
+      const patchIncoming = (mutate) => {
+        ctx.commit((cs) => {
+          const source = cs[incomingBoundary.leftIdx];
+          if (source) {
+            mutate(source);
+          }
+        });
+      };
+      const fields = document.createElement("div");
+      fields.className = "vst-detail-col vst-detail-instance-fields vst-detail-clip-ref-editor vst-detail-join-ref-editor";
+      fields.appendChild(
+        buildField(
+          "Reference scale",
+          buildOptionSelect(
+            CLIP_REFERENCE_SCALES.map((scale) => ({
+              value: `${scale.value}`,
+              label: scale.label
+            })),
+            `${sourceClip.boundaryOutReferenceScale}`,
+            (value) => {
+              patchIncoming((source) => {
+                source.boundaryOutReferenceScale = Number(value);
+              });
+            }
+          )
+        )
+      );
+      fields.appendChild(
+        buildCheckbox(
+          "Include soundtrack",
+          sourceClip.boundaryOutReferenceIncludeSoundtrack,
+          (value) => {
+            patchIncoming((source) => {
+              source.boundaryOutReferenceIncludeSoundtrack = value;
+            });
+            ctx.render();
+          }
+        )
+      );
+      return fields;
+    };
     const buildSection = (editorForItem) => buildRepeatingEditor({
       key: "clip-references",
       label: "References",
       sectionClass: "vst-detail-clip-ref-section",
       open,
-      items: references.map((reference, index) => ({
-        label: tags[index],
-        focusKey: `clip-reference-tab-${index}`,
-        title: `Edit ${CLIP_REFERENCE_KIND_INFO[reference.kind].label} reference ${tags[index]}`,
-        active: index === activeIdx,
-        className: "vst-clip-ref-tab",
-        onSelect: () => setSelection({
-          kind: "clip-ref",
-          clipIdx,
-          referenceIdx: index
-        }),
-        onShiftDelete: () => ctx.deleteClipReference(clipIdx, index)
-      })),
+      items: [
+        ...incomingBoundary ? [
+          {
+            label: `<Video 1> (from Join with Clip ${incomingBoundary.leftIdx})`,
+            title: `Edit the reference supplied by the Continue join from Clip ${incomingBoundary.leftIdx}`,
+            focusKey: `clip-reference-join-${incomingBoundary.leftIdx}`,
+            active: incomingSelected,
+            className: "vst-clip-ref-tab vst-clip-ref-join-tab",
+            onSelect: () => setSelection({
+              kind: "boundary-ref",
+              leftClipIdx: incomingBoundary.leftIdx
+            })
+          }
+        ] : [],
+        ...references.map((reference, index) => ({
+          label: tags[index],
+          focusKey: `clip-reference-tab-${index}`,
+          title: `Edit ${CLIP_REFERENCE_KIND_INFO[reference.kind].label} reference ${tags[index]}`,
+          active: index === activeIdx,
+          className: "vst-clip-ref-tab",
+          onSelect: () => setSelection({
+            kind: "clip-ref",
+            clipIdx,
+            referenceIdx: index
+          }),
+          onShiftDelete: () => ctx.deleteClipReference(clipIdx, index)
+        }))
+      ],
       add: {
         title: decision.supported ? "Add a reference the prompt can name by tag" : decision.reason,
         label: "+ Add Reference",
@@ -11444,7 +11566,12 @@ ${slot}`;
         title: activeIdx === null ? "No reference to delete" : `Delete reference ${tags[activeIdx]}`,
         className: "vst-detail-delete-clip-ref"
       },
-      editorForItem
+      editorForItem: incomingBoundary === null && editorForItem === void 0 ? void 0 : (itemIndex) => {
+        if (itemIndex < itemOffset) {
+          return buildIncomingEditor();
+        }
+        return editorForItem?.(itemIndex - itemOffset);
+      }
     }).section;
     if (activeIdx === null) {
       return buildSection();
@@ -12722,7 +12849,21 @@ ${slot}`;
     const clips = state.clips;
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-clip-body";
-    const { clipIdx } = selection;
+    let clipIdx;
+    if (selection.kind === "boundary-ref") {
+      const incomingBoundary = executableBoundaryForLeftClip(
+        clips,
+        selection.leftClipIdx
+      );
+      if (!incomingBoundary) {
+        throw new Error(
+          "boundary reference selection has no executable seam"
+        );
+      }
+      clipIdx = incomingBoundary.rightIdx;
+    } else {
+      clipIdx = selection.clipIdx;
+    }
     const stageIdx = selection.kind === "clip" ? selection.stageIdx : 0;
     const clip = clips[clipIdx];
     body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
@@ -12801,7 +12942,8 @@ ${slot}`;
         selection.kind === "clip-ref" ? selection.referenceIdx : null,
         clips,
         state.fps,
-        selection.kind === "clip-ref"
+        selection.kind === "clip-ref" || selection.kind === "boundary-ref",
+        selection.kind === "boundary-ref"
       )
     );
     appendCapabilitySection(
@@ -13415,12 +13557,24 @@ ${slot}`;
   };
 
   // frontend/detailStrip/panelRouter.ts
-  var clampDetailSelection = (selection, clips, audioTracks = []) => {
+  var clampDetailSelection = (selection, clips, audioTracks = [], fps, capabilities) => {
     if (selection.kind === "none") {
       return selection;
     }
     if (selection.kind === "boundary") {
       return selection.leftClipIdx >= 0 && selection.leftClipIdx <= clips.length - 2 ? selection : { kind: "none" };
+    }
+    if (selection.kind === "boundary-ref") {
+      const seam = executableBoundaryForLeftClip(
+        clips,
+        selection.leftClipIdx
+      );
+      return seam && fps !== void 0 && capabilities !== void 0 ? incomingReferenceContinueForClip(
+        clips,
+        fps,
+        capabilities,
+        seam.rightIdx
+      ) ? selection : { kind: "none" } : { kind: "none" };
     }
     if (selection.kind === "audio-track") {
       return audioTracks[selection.trackIdx] ? selection : { kind: "none" };
@@ -13454,17 +13608,36 @@ ${slot}`;
     }
     return selection;
   };
-  var detailBreadcrumb = (selection, clips) => {
+  var detailBreadcrumb = (selection, clips, fps, capabilities) => {
     switch (selection.kind) {
       case "clip":
         return clips[selection.clipIdx]?.stages.length === 0 ? `Clip ${selection.clipIdx} · Source only` : `Clip ${selection.clipIdx} · ${stageChipLabel(selection.stageIdx)}`;
       case "ref":
         return `Ref${selection.refIdx} · Clip ${selection.clipIdx}`;
       case "clip-ref": {
+        const incomingBoundary = fps === void 0 || capabilities === void 0 ? null : incomingReferenceContinueForClip(
+          clips,
+          fps,
+          capabilities,
+          selection.clipIdx
+        );
         const tag = clipReferenceTags(
-          clips[selection.clipIdx]?.references ?? []
+          clips[selection.clipIdx]?.references ?? [],
+          incomingBoundary ? [
+            {
+              kind: "video",
+              includeSoundtrack: clips[incomingBoundary.leftIdx].boundaryOutReferenceIncludeSoundtrack
+            }
+          ] : []
         )[selection.referenceIdx];
         return `${tag ?? "Reference"} · Clip ${selection.clipIdx}`;
+      }
+      case "boundary-ref": {
+        const seam = executableBoundaryForLeftClip(
+          clips,
+          selection.leftClipIdx
+        );
+        return seam ? `<Video 1> (from Join with Clip ${selection.leftClipIdx}) · Clip ${seam.rightIdx}` : "Reference";
       }
       case "ic-lora":
         return `IC-LoRA ${selection.entryIdx} · Clip ${selection.clipIdx}`;
@@ -13505,12 +13678,17 @@ ${slot}`;
         return "Timeline settings";
     }
   };
-  var buildDetailHeader = (selection, clips) => {
+  var buildDetailHeader = (selection, state, capabilities) => {
     const header = document.createElement("div");
     header.className = "vst-detail-head";
     const breadcrumb = document.createElement("span");
     breadcrumb.className = "vst-detail-crumb";
-    breadcrumb.textContent = detailBreadcrumb(selection, clips);
+    breadcrumb.textContent = detailBreadcrumb(
+      selection,
+      state.clips,
+      state.fps,
+      capabilities
+    );
     const settings = document.createElement("button");
     settings.type = "button";
     settings.className = "basic-button small-button vst-detail-settings-button";
@@ -13529,6 +13707,8 @@ ${slot}`;
       case "ref":
         return buildClipBody(context, selection, state);
       case "clip-ref":
+        return buildClipBody(context, selection, state);
+      case "boundary-ref":
         return buildClipBody(context, selection, state);
       case "ic-lora":
         return buildClipBody(context, selection, state);
@@ -13555,6 +13735,8 @@ ${slot}`;
     switch (selection.kind) {
       case "ref":
         return "references";
+      case "boundary-ref":
+        return "clip-references";
       case "audio-track":
         return "audio-tracks";
       case "prompt-minor":
@@ -13566,13 +13748,18 @@ ${slot}`;
     }
   };
   var renderDetailShell = (options) => {
-    const clips = options.state.clips;
     const previousBody = options.detail.querySelector(".vst-detail-body");
     const savedScroll = previousBody?.scrollTop ?? 0;
     options.focus.capture();
     options.detail.className = DETAIL_CLASS;
     options.detail.innerHTML = "";
-    options.detail.appendChild(buildDetailHeader(options.selection, clips));
+    options.detail.appendChild(
+      buildDetailHeader(
+        options.selection,
+        options.state,
+        options.context.authoring().capabilities
+      )
+    );
     const body = buildDetailPanelBody(
       options.context,
       options.selection,
@@ -14211,6 +14398,7 @@ ${slot}`;
       renderEnabled = true;
       renderImplementation(meta, snapshot);
     };
+    const authoring = () => activeSnapshot ?? captureAuthoringTransactionSnapshot();
     let renderedSelection = null;
     const focus = createDetailFocusSession({
       getDock: () => dockEl,
@@ -14218,13 +14406,18 @@ ${slot}`;
       flushPending: () => draftQueue?.flush()
     });
     const syncValueDerivedUi = (selection) => {
-      if (!selection || !dockEl || !renderedSelection) {
+      if (!selection || !dockEl) {
         return;
       }
-      const clips = getState().clips;
+      const state = getState();
       const breadcrumb = dockEl.querySelector(".vst-detail-crumb");
       if (breadcrumb) {
-        breadcrumb.textContent = detailBreadcrumb(renderedSelection, clips);
+        breadcrumb.textContent = detailBreadcrumb(
+          selection,
+          state.clips,
+          state.fps,
+          authoring().capabilities
+        );
       }
     };
     draftQueue = createDetailDraftQueue({
@@ -14252,7 +14445,7 @@ ${slot}`;
       buildClampedNumber: draftQueue.buildClampedNumber,
       structuralCommit: draftQueue.structuralCommit,
       render,
-      authoring: () => activeSnapshot ?? captureAuthoringTransactionSnapshot(),
+      authoring,
       addRefEntry: selectionOperations.addRefEntry,
       deleteRefEntry: selectionOperations.deleteRefEntry,
       addClipReference: selectionOperations.addClipReference,
@@ -14301,7 +14494,9 @@ ${slot}`;
         const selection = clampDetailSelection(
           rawSelection,
           clips,
-          state.audioTracks
+          state.audioTracks,
+          state.fps,
+          snapshot.capabilities
         );
         if (!isSameSelection(rawSelection, selection)) {
           setSelection(selection);
@@ -14643,6 +14838,7 @@ ${slot}`;
         selector = `.vst-retake[data-clip-idx="${sel.clipIdx}"]`;
         break;
       case "boundary":
+      case "boundary-ref":
         selector = `.vst-boundary-chip[data-left-clip-idx="${sel.leftClipIdx}"]`;
         break;
       default:
@@ -16321,6 +16517,8 @@ ${slot}`;
           const prevJoin = clips[clips.length - 2];
           prev.boundaryOut = prevJoin.boundaryOut;
           prev.boundaryOutCarryAudio = prevJoin.boundaryOutCarryAudio;
+          prev.boundaryOutReferenceScale = prevJoin.boundaryOutReferenceScale;
+          prev.boundaryOutReferenceIncludeSoundtrack = prevJoin.boundaryOutReferenceIncludeSoundtrack;
           prev.boundaryOutOverlap = prevJoin.boundaryOutOverlap;
         }
         clips.push(

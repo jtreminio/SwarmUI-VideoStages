@@ -57,6 +57,7 @@ const clipOwnerIndex = (selection: TimelineSelection): number | null => {
         case "audio-track":
             return null;
         case "boundary":
+        case "boundary-ref":
             return selection.leftClipIdx;
         default:
             return selection.clipIdx;
@@ -144,6 +145,8 @@ const withClipIndex = (
             return selection;
         case "boundary":
             return { kind: "boundary", leftClipIdx: clipIdx };
+        case "boundary-ref":
+            return { kind: "boundary-ref", leftClipIdx: clipIdx };
         default:
             return { ...selection, clipIdx };
     }
@@ -265,6 +268,8 @@ const sameSelectionShape = (
         case "none":
             return true;
         case "boundary":
+            return a.leftClipIdx === (b as typeof a).leftClipIdx;
+        case "boundary-ref":
             return a.leftClipIdx === (b as typeof a).leftClipIdx;
         case "audio-track":
             return a.trackIdx === (b as typeof a).trackIdx;

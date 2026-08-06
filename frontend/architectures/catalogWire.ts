@@ -74,11 +74,15 @@ const isBoundaryRule = (value: unknown): value is CapabilityRuleDecision => {
             "maxFrames",
             "defaultFrames",
             "continuityExtraFrames",
+            "continueMode",
             "targetRequiresGeneratedEntry",
             "targetRequiresStage",
             "targetDisallowsInitialReference",
         ]) ||
         constraints.sameArchitecture !== true ||
+        !["overlap", "reference"].includes(
+            constraints.continueMode as string,
+        ) ||
         typeof constraints.targetRequiresGeneratedEntry !== "boolean" ||
         typeof constraints.targetRequiresStage !== "boolean" ||
         typeof constraints.targetDisallowsInitialReference !== "boolean" ||

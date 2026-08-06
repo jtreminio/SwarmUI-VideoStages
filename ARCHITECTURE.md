@@ -198,6 +198,10 @@ sampler builders. Refinement must rebuild both halves together:
 decoded clip through the stock host builder would hand the transformer a latent
 missing its audio half. Init-video installation preserves its source audio for
 that joint re-encoding. H3's generated counts use the `17k + 5` frame grid.
+An H3 Continue boundary uses the previous decoded video and optional audio tail
+as reference conditioning rather than an overlapping latent handle. The prompt
+remains unchanged, and the decoded clips are concatenated without overlap removal; the
+graph details live in [ARCHITECTURE_FLOW.md](docs/ARCHITECTURE_FLOW.md#b6b-minimax-h3-graph-execution).
 
 ## Capability catalog
 
@@ -271,15 +275,15 @@ unsupported, blocks generation; a join that merely does not apply to its target
 reference, an unknown mode, or an insufficient frame budget — degrades to a cut
 with a warning that now actually reaches the user. Within one architecture, its
 boundary rules determine whether continue or crossfade is valid and how the
-overlap snaps to that architecture's grid. A non-cut boundary may also carry
-the outgoing audio tail into the next clip, which requires the target to have a
-generation stage that can consume it.
+join window snaps to that architecture's grid. An overlap-mode Continue or
+Crossfade may also carry the outgoing audio tail into the next clip, which
+requires the target to have a generation stage that can consume it.
 
-A continue boundary's frozen tail is an explicit boundary artifact, not an
-implicit incoming guide, and the two follow different stage rules. The implicit
-host image is the opening stage's guide only; every later defaulted stage
-refines its incoming latent directly. The continuity tail instead applies at
-*every* stage of the target clip that regenerates the clip's opening frames,
+An overlap-mode Continue's frozen tail is an explicit boundary artifact, not
+an implicit incoming guide, and the two follow different stage rules. The
+implicit host image is the opening stage's guide only; every later defaulted
+stage refines its incoming latent directly. The continuity tail instead applies
+at *every* stage of the target clip that regenerates the clip's opening frames,
 because a later stage's denoise would otherwise wash the seam out. It is sliced
 and frame-rate-conformed once, at clip level, and kept at the previous clip's
 own resolution; each consuming stage conforms it spatially to that stage's

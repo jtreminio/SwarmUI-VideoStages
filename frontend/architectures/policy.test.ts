@@ -107,6 +107,23 @@ describe("catalog-backed authoring policy", () => {
         ).toBe(false);
     });
 
+    it("tracks generation stages independently of frame-grid applicability", () => {
+        const resolver = createCapabilityViewResolver(catalog());
+        const derivedDuration = minimalClip({
+            clipLengthFromControlNet: true,
+        });
+        expect(resolver.forClip(derivedDuration)).toMatchObject({
+            frameGridResolution: { status: "not-applicable" },
+            hasGenerationStage: true,
+        });
+
+        const passthrough = minimalClip({
+            initVideo: initVideoFixture(),
+            stages: [minimalStage({ control: 0 })],
+        });
+        expect(resolver.forClip(passthrough).hasGenerationStage).toBe(false);
+    });
+
     it("uses scoped capabilities and keeps unsupported persisted values removable", () => {
         const view = createCapabilityViewResolver(catalog()).forClip(
             fakeClip(),

@@ -31,6 +31,10 @@ const makeBody = (): HTMLElement => {
                 `</div>`,
         )
         .join("");
+    body.insertAdjacentHTML(
+        "beforeend",
+        '<button class="vst-boundary-chip" data-left-clip-idx="0">join</button>',
+    );
     document.body.appendChild(body);
     return body;
 };
@@ -113,5 +117,18 @@ describe("applySelectionHighlight owns the clip highlight", () => {
         setSelection({ kind: "audio-track", trackIdx: 0 });
         applySelectionHighlight(body);
         expect(selectedRegions(body)).toEqual([]);
+    });
+
+    it("highlights the source boundary for an automatic reference", () => {
+        const body = makeBody();
+        setSelection({ kind: "boundary-ref", leftClipIdx: 0 });
+
+        applySelectionHighlight(body);
+
+        expect(
+            body
+                .querySelector(".vst-boundary-chip")
+                ?.classList.contains("vst-selected"),
+        ).toBe(true);
     });
 });

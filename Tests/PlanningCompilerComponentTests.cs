@@ -126,6 +126,7 @@ public class PlanningCompilerComponentTests
             {
                 BoundaryOut = Constants.BoundaryOutContinue,
                 BoundaryOutOverlap = 18,
+                BoundaryOutCarryAudio = true,
             },
             InitVideoClip(1, Stage(11)) with
             {
@@ -152,6 +153,51 @@ public class PlanningCompilerComponentTests
         Assert.Equal(15, boundary.OverlapFrames);
         Assert.Equal(18, boundary.ContinuityWindowFrames);
         Assert.Equal(5, boundary.FrameStep);
+    }
+
+    [Fact]
+    public void BoundaryPlanCompiler_SeparatesReferenceContextFromPixelOverlap()
+    {
+        TimelineSpec spec = new(640, 360, 24, false,
+        [
+            GeneratedClip(0, Stage(10)) with
+            {
+                BoundaryOut = Constants.BoundaryOutContinue,
+                BoundaryOutOverlap = 18,
+            },
+            GeneratedClip(1, Stage(11)),
+        ]);
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
+        BoundaryRuleConstraints constraints = FakeBoundaryPolicy
+            .Rules[BoundaryJoinType.Continue]
+            .Constraints with
+        {
+            ContinueMode = ContinueBoundaryMode.Reference,
+        };
+        ArchitectureBoundaryPolicy policy = new(new Dictionary<BoundaryJoinType, RuleDecision>
+        {
+            [BoundaryJoinType.Continue] = RuleDecision.Conditional(
+                "fake.reference-continue",
+                "Reference context.",
+                constraints),
+        });
+        ClipPlan[] planned =
+        [
+            plan.Clips[0] with
+            {
+                Architecture = plan.Clips[0].Architecture with { BoundaryPolicy = policy },
+            },
+            plan.Clips[1],
+        ];
+
+        BoundaryPlan boundary = Assert.Single(
+            BoundaryPlanCompiler.Compile(spec.Clips, planned).Boundaries);
+
+        Assert.Equal(BoundaryJoinType.Continue, boundary.Effective);
+        Assert.Equal(ContinueBoundaryMode.Reference, boundary.ContinueMode);
+        Assert.Equal(0, boundary.OverlapFrames);
+        Assert.Equal(15, boundary.ContinuityWindowFrames);
+        Assert.False(boundary.CarryAudio);
     }
 
     [Fact]

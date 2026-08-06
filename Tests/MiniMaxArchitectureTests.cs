@@ -102,9 +102,14 @@ public class MiniMaxArchitectureTests
         Assert.Equal(
             "supported",
             architecture["boundaryRules"]["cut"].Value<string>("support"));
+        JObject continueRule = (JObject)architecture["boundaryRules"]["continue"];
+        Assert.Equal("conditional", continueRule.Value<string>("support"));
         Assert.Equal(
-            "unsupported",
-            architecture["boundaryRules"]["continue"].Value<string>("support"));
+            "reference",
+            continueRule["constraints"].Value<string>("continueMode"));
+        Assert.Equal(17, continueRule["constraints"].Value<int>("frameStep"));
+        Assert.Equal(5, continueRule["constraints"].Value<int>("minFrames"));
+        Assert.Equal(39, continueRule["constraints"].Value<int>("defaultFrames"));
         Assert.Equal(
             "conditional",
             architecture["boundaryRules"]["crossfade"].Value<string>("support"));

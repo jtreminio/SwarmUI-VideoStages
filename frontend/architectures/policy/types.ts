@@ -1,6 +1,6 @@
 import type { FrameGridSpec } from "../../renderUtils";
 import type { BoundaryOut, Clip, Stage } from "../../types";
-import type { BoundaryOverlapConstraints } from "../boundaryConstraints";
+import type { BoundaryWindowConstraints } from "../boundaryConstraints";
 import type { FrameGridResolution } from "../temporalGrid";
 import type {
     ArchitectureModelCatalog,
@@ -29,6 +29,7 @@ export interface ClipCapabilityView {
     frameGrid: FrameGridSpec;
     /** Distinguishes a neutral grid from missing facts or an unrepresentable combination. */
     frameGridResolution: FrameGridResolution;
+    hasGenerationStage: boolean;
     audioSourceKinds: readonly string[];
     /** Audio sourcing is stated by `audioSourceKinds`, not by a feature flag. */
     clipAudio: CapabilityDecision;
@@ -55,7 +56,7 @@ export interface BoundaryCapabilityView {
     modes: readonly BoundaryOut[];
     crossArchitecture: boolean;
     reason: string;
-    overlapConstraints(mode: BoundaryOut): BoundaryOverlapConstraints;
+    windowConstraints(mode: BoundaryOut): BoundaryWindowConstraints;
     effective(requested: BoundaryOut): BoundaryOut;
 }
 

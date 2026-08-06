@@ -93,13 +93,18 @@ internal static class BoundaryPlanCompiler
                 fallback = BoundaryFallbackReason.TargetHasDerivedDuration;
             }
 
-            int overlap = effective == BoundaryJoinType.Cut
+            int requestedWindow = effective == BoundaryJoinType.Cut
                 ? 0
                 : modePolicy is null
                     ? Math.Max(1, authoredFrom.BoundaryOutOverlap)
-                    : NormalizeOverlap(modePolicy, authoredFrom.BoundaryOutOverlap);
+                    : NormalizeWindow(modePolicy, authoredFrom.BoundaryOutOverlap);
+            bool referenceContinue = effective == BoundaryJoinType.Continue
+                && constraints?.ContinueMode == ContinueBoundaryMode.Reference;
+            int overlap = referenceContinue ? 0 : requestedWindow;
             int continuityWindow = effective == BoundaryJoinType.Continue
-                ? overlap + (constraints?.ContinuityExtraFrames ?? 0)
+                ? requestedWindow + (referenceContinue
+                    ? 0
+                    : constraints?.ContinuityExtraFrames ?? 0)
                 : 0;
             if (fallback != BoundaryFallbackReason.None && !fallbackReported)
             {
@@ -127,19 +132,24 @@ internal static class BoundaryPlanCompiler
                 continuityWindow,
                 fallback)
             {
+                ContinueMode = constraints?.ContinueMode ?? ContinueBoundaryMode.Overlap,
                 FrameStep = constraints?.FrameStep ?? 1,
                 MinFrames = effective == BoundaryJoinType.Cut
                     ? 0
                     : constraints?.MinFrames ?? 1,
                 CarryAudio = effective != BoundaryJoinType.Cut
+                    && !referenceContinue
                     && authoredFrom.BoundaryOutCarryAudio
                     && targetHasGenerationStage,
+                ReferenceScale = authoredFrom.BoundaryOutReferenceScale,
+                ReferenceIncludeSoundtrack =
+                    authoredFrom.BoundaryOutReferenceIncludeSoundtrack,
             });
         }
         return new BoundaryPlanningResult(boundaries.ToImmutable(), diagnostics.ToImmutable());
     }
 
-    internal static int NormalizeOverlap(RuleDecision rule, int authoredFrames)
+    internal static int NormalizeWindow(RuleDecision rule, int authoredFrames)
     {
         if (rule.Support == RuleSupport.Unsupported || rule.Constraints is null)
         {
