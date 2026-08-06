@@ -274,9 +274,8 @@ public class VideoExecutionPlanCompilerTests
             ],
             InitVideo: new InitVideoSpec("data", "source.mp4", 0));
 
-        StagePlan compiled = TestPlanCompiler
-            .Compile(Spec(false, clip))
-            .Clips[0].Stages[1];
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, clip));
+        StagePlan compiled = plan.Clips[0].Stages[1];
         Ltx2StagePayload ltx = compiled.RequireLtx2Payload();
 
         Assert.Equal(StageGuideReferenceKind.Base2Edit, ltx.Guide.Kind);
@@ -342,6 +341,7 @@ public class VideoExecutionPlanCompilerTests
             });
         Assert.Equal(StageAudioAction.CaptureForReuse, ltx.AudioAction);
         Assert.True(compiled.IsIntermediateStage);
+        Assert.True(plan.Clips[0].SavesAudioTrack);
 
         LoraPlan plannedLora = compiled.Core.Loras[1];
         Assert.Equal("stage.safetensors", plannedLora.Name);
