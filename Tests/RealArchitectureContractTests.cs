@@ -112,6 +112,16 @@ public class RealArchitectureContractTests
     }
 
     [Fact]
+    public void Only_host_video_and_wan_run_on_the_stock_host_sampler()
+    {
+        Assert.Equal(
+            ["wan22", "host-video"],
+            VideoArchitectureManifest.ProductionDescriptors
+                .Where(descriptor => descriptor.RunsOnStockHostSampler)
+                .Select(descriptor => descriptor.Id.Value));
+    }
+
+    [Fact]
     public void Registry_accepts_all_real_architecture_modules()
     {
         VideoArchitectureRegistry registry = RealRegistry();

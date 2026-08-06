@@ -187,8 +187,9 @@ internal sealed record VideoArchitectureDescriptor(
     public bool ConsumesTimelineAudio { get; init; }
 
     /// <summary>
-    /// True when this architecture samples through SwarmUI's own video pipeline rather than its own,
-    /// so the host's request-global video settings would otherwise apply to it.
+    /// True when this architecture's stages are sampled by the host's own <c>CreateImageToVideo</c>
+    /// pass, so request-global video settings reach the graph unless the architecture nulls them
+    /// out. Every other architecture builds its own sampler and never sees them.
     /// </summary>
     public bool RunsOnStockHostSampler { get; init; }
 
