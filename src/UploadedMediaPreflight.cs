@@ -1,7 +1,8 @@
 using SwarmUI.Text2Image;
 using VideoStages.Authoring;
+using VideoStages.Planning;
 
-namespace VideoStages.Planning;
+namespace VideoStages;
 
 /// <summary>
 /// Proves every uploaded media payload in a compiled plan is loadable before graph mutation begins,
