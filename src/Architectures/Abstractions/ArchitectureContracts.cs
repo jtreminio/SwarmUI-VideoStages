@@ -180,17 +180,14 @@ internal sealed record VideoArchitectureDescriptor(
         BoundaryPolicy.Rules;
 }
 
-// --- A host model bound to the architecture that claimed it ---
-
-/// <param name="ReferencePositions">
-/// Frame positions accepted by this model's native image-conditioning path. Values are
-/// stable wire names such as <c>first</c>, <c>last</c>, and <c>any</c>.
-/// </param>
-/// <param name="LorasTargetTextEncoder">
-/// Core-owned LoRA targeting fact from the resolved model compatibility.
-/// False means normal LoRAs must not become effective solely through their
+/// <summary>A host model bound to the architecture that claimed it.</summary>
+/// <remarks>
+/// <see cref="ReferencePositions"/> carries stable wire names — <c>first</c>, <c>last</c>,
+/// <c>any</c> — for the frame positions this model's native image-conditioning path accepts.
+/// <see cref="LorasTargetTextEncoder"/> is a core-owned fact from the resolved model
+/// compatibility: false means normal LoRAs must not become effective solely through their
 /// text-encoder weight.
-/// </param>
+/// </remarks>
 internal sealed record ResolvedVideoModel(
     string ModelName,
     ModelProfileId ModelProfileId,

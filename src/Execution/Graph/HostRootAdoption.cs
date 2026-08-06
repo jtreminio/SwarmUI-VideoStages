@@ -7,7 +7,7 @@ namespace VideoStages.Execution.Graph;
 /// Lets the first generated stage of a text-to-video timeline build on SwarmUI's own root chain
 /// instead of beside it, by taking over the node ids core reserves for its base sampler and decode.
 /// <para>
-/// The stage already loads its model through core's loader — <see cref="WorkflowGenerator.CreateNode"/>'s
+/// The stage already loads its model through core's loader — <see cref="WorkflowGenerator.CreateNode(string, Newtonsoft.Json.Linq.JObject, string, bool)"/>'s
 /// dedup cache collapses that onto core's node on its own, as it does for the empty latent and the
 /// conditioning pair of every family that builds them through it. The sampler and decode cannot
 /// collapse that way, because a stage's seed and step range differ from the request's, so they are
@@ -51,7 +51,7 @@ internal sealed class HostRootAdoption(
     /// <summary>
     /// The same claim, plus core's empty latent and conditioning pair — for a family that builds
     /// those through the typed bridge, which never consults
-    /// <see cref="WorkflowGenerator.CreateNode"/>'s dedup cache. The others build them through that
+    /// <see cref="WorkflowGenerator.CreateNode(string, Newtonsoft.Json.Linq.JObject, string, bool)"/>'s dedup cache. The others build them through that
     /// cache and land on core's nodes unaided, so taking the ids from them would only cost them the
     /// collapse they already get: claiming an id retires its dedup entry.
     /// <para>
