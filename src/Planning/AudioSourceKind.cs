@@ -22,7 +22,6 @@ internal enum AudioSourceKind
     External,
 }
 
-/// <summary>Shared source-kind prerequisites for architecture capability validation.</summary>
 internal static class AudioSourceKindPolicy
 {
     /// <summary>

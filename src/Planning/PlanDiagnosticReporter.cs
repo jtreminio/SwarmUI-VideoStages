@@ -57,8 +57,8 @@ internal static class PlanDiagnosticReporter
     }
 
     /// <summary>
-    /// Emits every non-blocking diagnostic exactly once. Duplicate lines are collapsed because the
-    /// same planner rule can legitimately fire for several clips with identical wording.
+    /// Duplicate lines are collapsed: the same planner rule can legitimately fire for several clips
+    /// with identical wording.
     /// </summary>
     internal static void Report(
         IEnumerable<PlanDiagnostic> diagnostics,

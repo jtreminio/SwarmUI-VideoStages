@@ -19,9 +19,8 @@ internal static class StaticGeneratedFrameGrid
     }
 
     /// <summary>
-    /// Snaps a known static generated pixel-frame request down to the nearest architecture-grid
-    /// count.
-    /// Non-positive requests retain Wan's existing minimum-one-frame behavior.
+    /// Snaps a static generated pixel-frame request down to the nearest grid count; a request below
+    /// <paramref name="gridOrigin"/> returns the origin.
     /// </summary>
     internal static int SnapDown(int requestedPixelFrames, int frameGrid, int gridOrigin = 1)
     {
@@ -43,9 +42,8 @@ internal static class StaticGeneratedFrameGrid
     }
 
     /// <summary>
-    /// Returns the smallest grid satisfying every active stage handler. A mixed 6/8 request, for
-    /// example, resolves to 24 rather than silently inheriting whichever architecture was globally
-    /// coarsest.
+    /// The smallest grid satisfying every active stage model. A mixed 6/8 request resolves to 24
+    /// rather than the coarsest single grid.
     /// </summary>
     internal static int CompatibleGrid(IEnumerable<int> frameGrids)
     {
