@@ -67,7 +67,7 @@ internal static class WanClipPlanCompiler
                 ? null
                 : stageModels[previousStage.ClipStageRawIndex];
             int continuationStartStep =
-                HostVideoStageSchedulePolicy.StartStep(stage.Steps, stage.Control);
+                StageSchedulePolicy.StartStep(stage.Steps, stage.Control);
             bool continuesPreviousSampling =
                 context.EntryMode != ArchitectureEntryMode.TextToVideo
                 && !previousStageContinuesSampling
@@ -113,7 +113,7 @@ internal static class WanClipPlanCompiler
                 decodedStageInput
                     && double.IsFinite(stage.Control)
                     && stage.Control > 0
-                    && HostVideoStageSchedulePolicy.IsQuantizedZeroPartial(
+                    && StageSchedulePolicy.IsQuantizedZeroPartial(
                         stage.Steps,
                         stage.Control),
                 "decoded-input partial control that quantizes to sampler start step 0",

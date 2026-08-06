@@ -35,18 +35,6 @@ internal static class StockHostVideoStagePayloadExtensions
     }
 }
 
-/// <summary>
-/// Shared sampler-step arithmetic for stock-host decoded-video refinement.
-/// </summary>
-internal static class HostVideoStageSchedulePolicy
-{
-    internal static int StartStep(int steps, double control) =>
-        (int)Math.Floor(steps * (1 - control));
-
-    internal static bool IsQuantizedZeroPartial(int steps, double control) =>
-        control < 1 && StartStep(steps, control) == 0;
-}
-
 internal static class HostVideoStageGeometry
 {
     internal static (int Width, int Height) ProjectFinalDimensions(

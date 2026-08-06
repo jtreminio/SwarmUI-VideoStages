@@ -114,7 +114,7 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
             }
             if (decodedInput
                 && stage.Control > 0
-                && HostVideoStageSchedulePolicy.IsQuantizedZeroPartial(
+                && StageSchedulePolicy.IsQuantizedZeroPartial(
                     stage.Steps,
                     stage.Control))
             {

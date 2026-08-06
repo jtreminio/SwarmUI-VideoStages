@@ -150,7 +150,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             if ((context.EntryMode == ArchitectureEntryMode.InitVideo
                     || stage.ClipStageIndex > 0)
                 && !passthrough
-                && HostVideoStageSchedulePolicy.IsQuantizedZeroPartial(
+                && StageSchedulePolicy.IsQuantizedZeroPartial(
                     stage.Steps,
                     stage.Control))
             {

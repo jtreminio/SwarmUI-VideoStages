@@ -35,11 +35,13 @@ internal sealed class LtxStageLatentBuilder
         ClipPlan clip = stageFrame.ClipContext.PlannedClip
             ?? throw Invariant.Failure(
                 "LTX stage execution requires the compiled clip plan.");
-        genInfo.StartStep = (int)Math.Floor(payload.Core.Steps * (1 - payload.Core.Control));
-        // The noise mask, not StartStep, limits regeneration during retakes.
+        genInfo.StartStep = StageSchedulePolicy.StartStep(
+            payload.Core.Steps,
+            payload.Core.Control);
         bool retakeActive = stage.HasActiveRetakeMask();
         if (retakeActive)
         {
+            // The noise mask, not StartStep, limits regeneration during retakes.
             genInfo.StartStep = 0;
         }
         JArray controlNetLengthFrames =

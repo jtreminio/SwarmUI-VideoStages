@@ -231,7 +231,7 @@ internal sealed class StockHostVideoGenerationSession(
             stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
             return false;
         }
-        int startStep = HostVideoStageSchedulePolicy.StartStep(
+        int startStep = StageSchedulePolicy.StartStep(
             stage.Core.Steps,
             stage.Core.Control);
         stageInput.Configure(clip, stage, genInfo, startStep);
@@ -271,7 +271,7 @@ internal sealed class StockHostVideoGenerationSession(
             stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
             return false;
         }
-        int startStep = HostVideoStageSchedulePolicy.StartStep(
+        int startStep = StageSchedulePolicy.StartStep(
             stage.Core.Steps,
             stage.Core.Control);
         if (!materializedFirstFrame)
@@ -597,7 +597,7 @@ internal sealed class StockHostVideoGenerationSession(
             VideoSwapModel = continuationModel,
             VideoSwapPercent = continuation is null
                 ? 0.5
-                : 1d - (double)HostVideoStageSchedulePolicy.StartStep(
+                : 1d - (double)StageSchedulePolicy.StartStep(
                     continuation.Core.Steps,
                     continuation.Core.Control) / continuation.Core.Steps,
             Frames = frames,
