@@ -1,7 +1,7 @@
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 
-namespace VideoStages.HostVideo;
+namespace VideoStages.Execution.StockHost;
 
 /// <summary>
 /// Stock-host-only model facts paired with the common generated-stage settings.

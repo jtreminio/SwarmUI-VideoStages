@@ -1,9 +1,8 @@
 using ComfyTyped.Core;
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Execution;
 using VideoStages.Planning;
 
-namespace VideoStages.HostVideo.Runtime;
+namespace VideoStages.Execution.StockHost;
 
 /// <summary>Host media captured before clip execution.</summary>
 internal sealed record HostVideoRootSources(WGNodeData Media, WGNodeData Vae);

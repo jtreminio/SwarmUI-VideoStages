@@ -5,7 +5,7 @@ using VideoStages.Authoring;
 using VideoStages.Planning;
 using Image = SwarmUI.Utils.Image;
 
-namespace VideoStages.HostVideo;
+namespace VideoStages.Execution.StockHost;
 
 /// <summary>An authored image reference bound for a model's native first/last frame input.</summary>
 internal sealed record NativeFrameReferencePlan(

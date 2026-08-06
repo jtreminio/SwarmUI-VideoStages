@@ -6,7 +6,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Execution.Graph;
 using VideoStages.Planning;
 
-namespace VideoStages.HostVideo.Runtime;
+namespace VideoStages.Execution.StockHost;
 
 /// <summary>
 /// Adapts a completed decoded stage into the host image-to-video builder's refinement contract.

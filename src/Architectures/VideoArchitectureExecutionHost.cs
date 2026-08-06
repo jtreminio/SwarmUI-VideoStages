@@ -6,7 +6,7 @@ using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution.Audio;
 using VideoStages.Execution.Graph;
 using VideoStages.Execution;
-using VideoStages.HostVideo;
+using VideoStages.Execution.StockHost;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures;

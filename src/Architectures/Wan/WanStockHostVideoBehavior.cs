@@ -6,7 +6,7 @@ using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Execution.Graph;
-using VideoStages.HostVideo;
+using VideoStages.Execution.StockHost;
 using VideoStages.Planning;
 using Image = SwarmUI.Utils.Image;
 

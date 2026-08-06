@@ -1,7 +1,7 @@
 using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
-using VideoStages.HostVideo;
+using VideoStages.Execution.StockHost;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan.Planning;

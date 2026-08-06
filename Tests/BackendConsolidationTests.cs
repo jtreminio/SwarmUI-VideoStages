@@ -7,7 +7,7 @@ using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 using VideoStages.Execution;
-using VideoStages.HostVideo;
+using VideoStages.Execution.StockHost;
 using VideoStages.Planning;
 using Xunit;
 

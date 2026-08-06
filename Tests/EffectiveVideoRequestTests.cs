@@ -9,7 +9,7 @@ using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
 using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Authoring;
-using VideoStages.HostVideo;
+using VideoStages.Execution.StockHost;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
