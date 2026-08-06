@@ -24,10 +24,10 @@ internal sealed class UploadedMediaPreflight(T2IParamInput input)
             {
                 diagnostics.Add(Unreadable(videoError, clip.ClipId));
             }
-            Audio(diagnostics, clip.Audio?.Base?.UploadedMedia, clip.ClipId);
+            AddAudioDiagnostic(diagnostics, clip.Audio?.Base?.UploadedMedia, clip.ClipId);
             foreach (AudioSegmentItemPlan segment in clip.Audio?.Segments?.Items ?? [])
             {
-                Audio(diagnostics, segment.UploadedMedia, clip.ClipId);
+                AddAudioDiagnostic(diagnostics, segment.UploadedMedia, clip.ClipId);
             }
         }
         return diagnostics.AsReadOnly();
@@ -66,7 +66,10 @@ internal sealed class UploadedMediaPreflight(T2IParamInput input)
             ? null
             : Unreadable(error, clipId, stageId);
 
-    private void Audio(List<PlanDiagnostic> diagnostics, UploadedMediaSpec media, int clipId)
+    private void AddAudioDiagnostic(
+        List<PlanDiagnostic> diagnostics,
+        UploadedMediaSpec media,
+        int clipId)
     {
         if (AudioDiagnostic(media?.Data, media?.FileName, clipId) is { } unreadable)
         {
