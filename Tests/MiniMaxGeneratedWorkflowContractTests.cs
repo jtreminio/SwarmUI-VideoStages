@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
@@ -948,7 +949,7 @@ public class MiniMaxGeneratedWorkflowContractTests
             bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
         Assert.NotNull(keyframes.FirstFrame.Connection);
         Assert.Contains(
-            bridge.Graph.NodesOfType<VAEDecodeNode>(),
+            bridge.Graph.NodesOfType<IVaeDecode>(),
             decode => ReachesUpstream(bridge, keyframes.FirstFrame.Connection.Node, decode.Id));
 
         AssertImageSource(keyframes.FirstFrame.Connection?.Node, "first_frame");
