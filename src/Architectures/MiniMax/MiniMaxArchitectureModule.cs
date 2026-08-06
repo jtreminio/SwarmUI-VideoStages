@@ -159,7 +159,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 resolved.LorasTargetTextEncoder == false
                     ? NormalLoraTargetPolicy.ModelOnly
                     : NormalLoraTargetPolicy.ModelAndTextEncoder;
-            bool passthrough = ArchitectureStageActivity.IsPassthrough(stage, Descriptor);
+            bool passthrough = StagePassthroughPolicy.IsPassthrough(stage, Descriptor);
             if ((context.EntryMode == ArchitectureEntryMode.InitVideo
                     || stage.ClipStageIndex > 0)
                 && !passthrough

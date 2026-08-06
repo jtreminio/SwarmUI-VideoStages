@@ -34,7 +34,7 @@ internal static class ClipPlanCompiler
                 stage.ClipStageIndex,
                 stage.ClipStageRawIndex,
                 ResolveStageInput(context.EntryMode, i),
-                ArchitectureStageActivity.IsPassthrough(
+                StagePassthroughPolicy.IsPassthrough(
                     stage,
                     context.Architecture?.Architecture),
                 architectureCompilation?.StagePayloads[stage.ClipStageRawIndex],

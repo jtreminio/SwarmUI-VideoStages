@@ -51,13 +51,19 @@ internal static class StageUpscalePlanCompiler
         return StageUpscaleMode.Unsupported;
     }
 
-    internal static StageUpscalePlan Compile(StageSpec stage)
+    /// <summary>The mode a stage actually authored: a factor of 1 upscales nothing.</summary>
+    internal static StageUpscaleMode Mode(StageSpec stage)
     {
         ArgumentNullException.ThrowIfNull(stage);
-        string raw = stage.UpscaleMethod?.Trim() ?? "";
-        StageUpscaleMode mode = stage.Upscale == 1
+        return stage.Upscale == 1
             ? StageUpscaleMode.None
-            : Classify(raw);
+            : Classify(stage.UpscaleMethod);
+    }
+
+    internal static StageUpscalePlan Compile(StageSpec stage)
+    {
+        StageUpscaleMode mode = Mode(stage);
+        string raw = stage.UpscaleMethod?.Trim() ?? "";
         int separator = raw.IndexOf('-');
         string methodName = separator >= 0 && separator < raw.Length - 1
             ? raw[(separator + 1)..].Trim()

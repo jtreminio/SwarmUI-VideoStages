@@ -166,9 +166,8 @@ internal static class ArchitectureCapabilityValidator
                     stage.Id,
                     stage.ClipStageRawIndex));
             }
-            StageUpscaleMode upscaleMode =
-                StageUpscalePlanCompiler.Classify(stage.UpscaleMethod);
-            if (stage.Upscale != 1 && upscaleMode == StageUpscaleMode.Unsupported)
+            StageUpscaleMode upscaleMode = StageUpscalePlanCompiler.Mode(stage);
+            if (upscaleMode == StageUpscaleMode.Unsupported)
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Warning,
@@ -179,11 +178,8 @@ internal static class ArchitectureCapabilityValidator
                     stage.Id,
                     stage.ClipStageRawIndex));
             }
-            else if (stage.Upscale != 1
-                && ((upscaleMode == StageUpscaleMode.Latent
-                        && Unsupported(ArchitectureFeature.LatentUpscale))
-                    || (upscaleMode == StageUpscaleMode.LatentModel
-                        && Unsupported(ArchitectureFeature.LatentModelUpscale))))
+            else if (upscaleMode is StageUpscaleMode.Latent or StageUpscaleMode.LatentModel
+                && !StagePassthroughPolicy.RunsLatentUpscale(stage, descriptor))
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Warning,

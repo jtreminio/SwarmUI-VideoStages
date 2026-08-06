@@ -277,7 +277,7 @@ public class MiniMaxArchitectureTests
         StageSpec stage = clip.Stages[^1];
         VideoArchitectureDescriptor descriptor = MiniMaxArchitectureModule.Instance.Descriptor;
 
-        Assert.False(ArchitectureStageActivity.IsPassthrough(stage, descriptor));
+        Assert.False(StagePassthroughPolicy.IsPassthrough(stage, descriptor));
     }
 
     [Fact]
@@ -306,7 +306,7 @@ public class MiniMaxArchitectureTests
                 descriptor,
                 ArchitectureEntryMode.ImageToVideo);
 
-        Assert.True(ArchitectureStageActivity.IsPassthrough(clip.Stages[^1], descriptor));
+        Assert.True(StagePassthroughPolicy.IsPassthrough(clip.Stages[^1], descriptor));
         Assert.Contains(
             diagnostics,
             diagnostic => diagnostic.Code

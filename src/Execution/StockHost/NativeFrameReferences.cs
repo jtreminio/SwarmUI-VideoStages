@@ -80,7 +80,7 @@ internal static class NativeFrameReferences
             if (isFirst
                 && !Declares(
                     activeStages.FirstOrDefault(stage =>
-                        !ArchitectureStageActivity.IsPassthrough(stage, architecture)),
+                        !StagePassthroughPolicy.IsPassthrough(stage, architecture)),
                     "first",
                     out string firstModel))
             {
@@ -116,7 +116,7 @@ internal static class NativeFrameReferences
             if (isLast
                 && !Declares(
                     activeStages.LastOrDefault(stage =>
-                        !ArchitectureStageActivity.IsPassthrough(stage, architecture)),
+                        !StagePassthroughPolicy.IsPassthrough(stage, architecture)),
                     "last",
                     out string terminalModel))
             {

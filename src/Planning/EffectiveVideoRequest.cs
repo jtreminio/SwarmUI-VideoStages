@@ -166,7 +166,7 @@ internal static class EffectiveVideoRequestProjector
 
         List<int> activeGrids = [];
         foreach (StageSpec stage in clip.Stages.Where(stage =>
-            !ArchitectureStageActivity.IsPassthrough(
+            !StagePassthroughPolicy.IsPassthrough(
                 stage,
                 assignment.Architecture)
             || (forceRootStageGeneration && stage.ClipStageIndex == 0)))

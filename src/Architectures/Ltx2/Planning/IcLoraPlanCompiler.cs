@@ -92,7 +92,7 @@ internal static class IcLoraPlanCompiler
             foreach (StageSpec stage in ApplicableStages(clip, entry))
             {
                 int reportedBefore = stageDiagnostics.Count;
-                if (ArchitectureStageActivity.IsPassthrough(
+                if (StagePassthroughPolicy.IsPassthrough(
                         stage,
                         Ltx2ArchitectureModule.Instance.Descriptor))
                 {
