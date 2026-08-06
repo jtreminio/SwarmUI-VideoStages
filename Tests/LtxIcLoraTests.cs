@@ -189,9 +189,7 @@ public sealed class LtxIcLoraTests
             StageInputKind.EmptyLatent,
             IsPassthrough: false,
             ArchitecturePayload: null,
-            new StageOutputPlan(
-                IntermediateOutputEligibility.NotEligible,
-                PreserveConfiguredAudioTrackSave: false));
+            IsIntermediateStage: false);
 
         bool resolved = new IcLoraVisualGuideResolver(generator).TryResolve(
             bridge,

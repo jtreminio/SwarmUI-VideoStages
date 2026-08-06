@@ -285,9 +285,7 @@ public class ArchitectureRuntimeOwnershipTests
             stageInput,
             IsPassthrough: false,
             payload,
-            new(
-                IntermediateOutputEligibility.NotEligible,
-                PreserveConfiguredAudioTrackSave: false));
+            IsIntermediateStage: false);
         return new(
             id,
             25,

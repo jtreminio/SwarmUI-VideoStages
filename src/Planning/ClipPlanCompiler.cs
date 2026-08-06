@@ -38,11 +38,7 @@ internal static class ClipPlanCompiler
                     stage,
                     context.Architecture?.Architecture),
                 architectureCompilation?.StagePayloads[stage.ClipStageRawIndex],
-                new StageOutputPlan(
-                    context.FirstStageOrdinal + i < context.TotalStageCount - 1
-                        ? IntermediateOutputEligibility.ControlledByHostSetting
-                        : IntermediateOutputEligibility.NotEligible,
-                    clip.SaveAudioTrack))
+                context.FirstStageOrdinal + i < context.TotalStageCount - 1)
             {
                 ResolvedModel = resolvedModel,
             });
@@ -54,7 +50,8 @@ internal static class ClipPlanCompiler
             context.EntryMode,
             initVideo,
             Array.AsReadOnly(stages.ToArray()),
-            audio)
+            audio,
+            clip.SaveAudioTrack)
         {
             Architecture = context.Architecture?.Architecture,
             ArchitecturePayload = architectureCompilation?.Payload,

@@ -340,10 +340,7 @@ public class VideoExecutionPlanCompilerTests
                 Assert.Equal(0.9, reference.Strength);
             });
         Assert.Equal(StageAudioAction.CaptureForReuse, ltx.AudioAction);
-        Assert.Equal(
-            IntermediateOutputEligibility.ControlledByHostSetting,
-            compiled.Output.IntermediatePolicy);
-        Assert.True(compiled.Output.PreserveConfiguredAudioTrackSave);
+        Assert.True(compiled.IsIntermediateStage);
 
         NormalLoraPlan plannedLora = compiled.Core.Loras[1];
         Assert.Equal("stage.safetensors", plannedLora.Name);

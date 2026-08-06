@@ -47,7 +47,7 @@ public sealed class AudioHandler(WorkflowGenerator g)
                 continue;
             }
             usedTracks.Add(trackIndex);
-            if (clip.Stages.Any(stage => stage.Output.PreserveConfiguredAudioTrackSave))
+            if (clip.SavesAudioTrack)
             {
                 savedTracks.Add(trackIndex);
             }

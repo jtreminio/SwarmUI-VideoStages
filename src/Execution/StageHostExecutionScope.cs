@@ -127,8 +127,7 @@ internal sealed class StageHostExecutionScope : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(stage);
-        if (!_publishIntermediateStages
-            || stage.Output.IntermediatePolicy != IntermediateOutputEligibility.ControlledByHostSetting)
+        if (!_publishIntermediateStages || !stage.IsIntermediateStage)
         {
             return;
         }

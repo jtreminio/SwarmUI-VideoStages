@@ -588,9 +588,7 @@ public class DecisionOwnerRegressionTests
                 StageInputKind.RootMedia,
                 IsPassthrough: false,
                 ArchitecturePayload: null,
-                new(
-                    IntermediateOutputEligibility.NotEligible,
-                    PreserveConfiguredAudioTrackSave: false))
+                IsIntermediateStage: false)
         ],
         Audio: null)
     {

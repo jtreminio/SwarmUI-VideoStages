@@ -339,7 +339,7 @@ public class MiniMaxArchitectureTests
             StageInputKind.PreviousStage,
             false,
             compilation.StagePayloads[authoredUpscale.ClipStageRawIndex],
-            new(IntermediateOutputEligibility.NotEligible, false));
+            false);
         ClipPlan scaled = new(
             0,
             49,

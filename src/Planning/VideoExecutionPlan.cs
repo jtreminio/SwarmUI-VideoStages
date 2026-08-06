@@ -62,7 +62,8 @@ internal sealed record ClipPlan(
     ArchitectureEntryMode EntryMode,
     InitVideoPlan InitVideo,
     IReadOnlyList<StagePlan> Stages,
-    AudioPlan Audio)
+    AudioPlan Audio,
+    bool SavesAudioTrack = false)
 {
     /// <summary>The one architecture established for this clip before graph mutation begins.</summary>
     public VideoArchitectureDescriptor Architecture { get; init; }
@@ -86,7 +87,7 @@ internal sealed record StagePlan(
     StageInputKind Input,
     bool IsPassthrough,
     IArchitectureStagePayload ArchitecturePayload,
-    StageOutputPlan Output)
+    bool IsIntermediateStage)
 {
     public ResolvedVideoModel ResolvedModel { get; init; }
 
@@ -117,16 +118,6 @@ internal enum StageInputKind
     PreviousStage,
 }
 
-
-internal enum IntermediateOutputEligibility
-{
-    NotEligible,
-    ControlledByHostSetting,
-}
-
-internal sealed record StageOutputPlan(
-    IntermediateOutputEligibility IntermediatePolicy,
-    bool PreserveConfiguredAudioTrackSave);
 
 /// <summary>A normalized outgoing boundary from clip N to clip N + 1.</summary>
 internal sealed record BoundaryPlan(
