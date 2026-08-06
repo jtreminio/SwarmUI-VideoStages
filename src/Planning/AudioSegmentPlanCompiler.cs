@@ -9,7 +9,7 @@ internal static class AudioSegmentPlanCompiler
     private const string SegmentIgnoredNoSource = "audio.segment.ignored_no_source";
     private const string SegmentIgnoredInvalidWindow = "audio.segment.ignored_invalid_window";
 
-    internal static AudioPlanComponentResult<AudioSegmentPlan> Compile(
+    internal static AudioSegmentCompilation Compile(
         IEnumerable<AudioSegmentItemPlan> segments,
         AudioBaseSourcePlan baseSource)
     {
@@ -66,3 +66,7 @@ internal static class AudioSegmentPlanCompiler
         return new(new(ordered), diagnostics.ToImmutable());
     }
 }
+
+internal sealed record AudioSegmentCompilation(
+    AudioSegmentPlan Plan,
+    ImmutableArray<PlanDiagnostic> Diagnostics);

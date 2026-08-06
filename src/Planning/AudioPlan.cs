@@ -36,11 +36,6 @@ internal sealed record AudioSegmentItemPlan(
 /// </summary>
 internal sealed record AudioSegmentPlan(ImmutableArray<AudioSegmentItemPlan> Items);
 
-/// <summary>Output from one independently testable portion of audio planning.</summary>
-internal sealed record AudioPlanComponentResult<TPlan>(
-    TPlan Plan,
-    ImmutableArray<PlanDiagnostic> Diagnostics);
-
 /// <summary>
 /// Pure projection of one <see cref="ClipSpec"/>'s audio policy. This contains no graph paths and
 /// makes every audio ownership decision before workflow construction begins.

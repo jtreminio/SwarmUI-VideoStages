@@ -207,7 +207,7 @@ public class AudioPlanCompilerTests
     [Fact]
     public void Compile_segments_without_a_base_use_preserve_windows()
     {
-        AudioPlanComponentResult<AudioSegmentPlan> result = AudioSegmentPlanCompiler.Compile(
+        AudioSegmentCompilation result = AudioSegmentPlanCompiler.Compile(
             [new(AudioSourceKind.Upload, null, 1, 0, 2,
                 new("data:audio/wav;base64,QUJD", "clip.wav"))],
             Base(hasConfiguredTrack: false));
@@ -246,7 +246,7 @@ public class AudioPlanCompilerTests
     [Fact]
     public void Compile_segments_rejects_invalid_windows_and_sources()
     {
-        AudioPlanComponentResult<AudioSegmentPlan> result =
+        AudioSegmentCompilation result =
             AudioSegmentPlanCompiler.Compile(
                 [
                     new(AudioSourceKind.Upload, null, -1, 0, 1, null),

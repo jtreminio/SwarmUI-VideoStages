@@ -81,7 +81,7 @@ internal static class TimelineAudioSegmentPlanCompiler
         {
             return clip;
         }
-        AudioPlanComponentResult<AudioSegmentPlan> compiled =
+        AudioSegmentCompilation compiled =
             AudioSegmentPlanCompiler.Compile(
                 clip.Audio.Segments.Items.AddRange(projected),
                 clip.Audio.Base);
