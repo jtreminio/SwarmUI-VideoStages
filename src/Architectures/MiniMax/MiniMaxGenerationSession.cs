@@ -446,7 +446,7 @@ internal sealed class MiniMaxGenerationSession(
             out WGNodeData selectedAudio,
             out IReadOnlyList<(double Start, double End)> preserveWindows);
         JArray framesConnection = null;
-        if (clip.Audio.Length.Owner == AudioLengthOwner.Audio
+        if (clip.Audio.LengthOwner == AudioLengthOwner.Audio
             && MiniMaxArchitectureModule.Instance.Descriptor.AudioSourceKinds.Contains(
                 clip.Audio.Base.Kind)
             && selectedAudio is not null

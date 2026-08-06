@@ -21,8 +21,6 @@ internal sealed record AudioBaseSourcePlan(
     bool HasConfiguredTrack,
     UploadedMediaSpec UploadedMedia);
 
-internal sealed record AudioLengthPlan(AudioLengthOwner Owner);
-
 internal sealed record AudioSegmentItemPlan(
     AudioSourceKind SourceKind,
     int? AceStepFunTrack,
@@ -49,6 +47,6 @@ internal sealed record AudioPlanComponentResult<TPlan>(
 /// </summary>
 internal sealed record AudioPlan(
     AudioBaseSourcePlan Base,
-    AudioLengthPlan Length,
+    AudioLengthOwner LengthOwner,
     AudioSegmentPlan Segments,
     ImmutableArray<PlanDiagnostic> Diagnostics);

@@ -43,7 +43,7 @@ internal sealed class BoundaryHandoffResolver(
                 boundaries.DegradeToCut(previousClip.ClipId);
                 return null;
             }
-            if (nextClip.Audio.Length.Owner != AudioLengthOwner.Timeline
+            if (nextClip.Audio.LengthOwner != AudioLengthOwner.Timeline
                 || nextClip.Frames is not int targetFrames
                 || targetFrames <= 0
                 || targetFrames > int.MaxValue - continueHandleFrames)

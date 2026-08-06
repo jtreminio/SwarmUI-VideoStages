@@ -46,7 +46,7 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
         }
         ClipPlan dynamicLengthClip = context.Plan.Clips.FirstOrDefault(
             clip => clip.Architecture.Id == ArchitectureId
-                && clip.Audio.Length.Owner == AudioLengthOwner.Audio
+                && clip.Audio.LengthOwner == AudioLengthOwner.Audio
                 && clip.Architecture.AudioSourceKinds.Contains(clip.Audio.Base.Kind));
         if (dynamicLengthClip is not null && context.Plan.Clips.Count != 1)
         {

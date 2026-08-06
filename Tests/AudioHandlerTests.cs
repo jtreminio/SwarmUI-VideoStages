@@ -243,7 +243,7 @@ public class AudioHandlerTests
         ClipPlan authored = Clip(0, MediaSource.ControlNet, saveAudioTrack: false);
         ClipPlan clip = authored with
         {
-            Audio = authored.Audio with { Length = new(AudioLengthOwner.ControlNet) },
+            Audio = authored.Audio with { LengthOwner = AudioLengthOwner.ControlNet },
         };
 
         TimelineExecutor(generator).ApplyControlNetClipLength(clip);
@@ -263,7 +263,7 @@ public class AudioHandlerTests
             saveAudioTrack: false,
             clipLengthFromControlNet: true);
 
-        Assert.Equal(AudioLengthOwner.ControlNet, clip.Audio.Length.Owner);
+        Assert.Equal(AudioLengthOwner.ControlNet, clip.Audio.LengthOwner);
         Assert.Null(clip.RequireLtx2Payload().ControlNetSourceIndex);
         Assert.Null(
             new LtxStageLatentAudioFactory(generator)
@@ -277,7 +277,7 @@ public class AudioHandlerTests
         ClipPlan authored = Clip(0, MediaSource.ControlNet, saveAudioTrack: false);
         ClipPlan clip = authored with
         {
-            Audio = authored.Audio with { Length = new(AudioLengthOwner.ControlNet) },
+            Audio = authored.Audio with { LengthOwner = AudioLengthOwner.ControlNet },
             ArchitecturePayload = authored.RequireLtx2Payload() with
             {
                 ControlNetSourceIndex = 0,

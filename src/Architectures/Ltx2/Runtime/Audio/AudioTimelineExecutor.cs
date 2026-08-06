@@ -295,7 +295,7 @@ internal sealed class AudioTimelineExecutor
     public void ApplyControlNetClipLength(ClipPlan plannedClip)
     {
         ArgumentNullException.ThrowIfNull(plannedClip);
-        if (plannedClip.Audio.Length.Owner != AudioLengthOwner.ControlNet
+        if (plannedClip.Audio.LengthOwner != AudioLengthOwner.ControlNet
             || plannedClip.Stages.Count == 0)
         {
             return;

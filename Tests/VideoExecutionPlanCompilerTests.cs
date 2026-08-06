@@ -133,7 +133,7 @@ public class VideoExecutionPlanCompilerTests
         ClipPlan compiled = Assert.Single(plan.Clips);
         Ltx2ClipPayload ltxClip = Assert.IsType<Ltx2ClipPayload>(
             compiled.ArchitecturePayload);
-        Assert.Equal(AudioLengthOwner.Audio, compiled.Audio.Length.Owner);
+        Assert.Equal(AudioLengthOwner.Audio, compiled.Audio.LengthOwner);
         Assert.Equal(ReferenceFramingMode.FitGreen, ltxClip.ReferenceFraming);
         Assert.Equal(
             PromptRelayMode.Relay,
@@ -404,7 +404,7 @@ public class VideoExecutionPlanCompilerTests
         // Both duration owners defer identically; assert the arm actually resolved the one it authored.
         Assert.Equal(
             controlNetOwnsLength ? AudioLengthOwner.ControlNet : AudioLengthOwner.Audio,
-            compiled.Audio.Length.Owner);
+            compiled.Audio.LengthOwner);
         PromptRelayPlan relay = compiled
             .Stages[0].RequireLtx2Payload().PromptRelay;
         // The frame count is only known at runtime, so the authored windows ride along

@@ -99,7 +99,7 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
             JToken guideFrames = ResolveGuideFrameCount(
                 genInfo,
                 frameCount,
-                clip.Audio.Length.Owner == AudioLengthOwner.ControlNet,
+                clip.Audio.LengthOwner == AudioLengthOwner.ControlNet,
                 drive.ControlNetIndex);
             int guideHandleFrames = entry.Plan.Drive.Source == IcLoraMediaSourceKind.Incoming
                 && incomingMediaIncludesContinueHandle

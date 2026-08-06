@@ -124,7 +124,7 @@ public class AudioPlanCompilerTests
             icLoras: [controlNetDrive]);
         AudioPlan plan = AudioPlanCompiler.Compile(clip);
 
-        Assert.Equal(AudioLengthOwner.ControlNet, plan.Length.Owner);
+        Assert.Equal(AudioLengthOwner.ControlNet, plan.LengthOwner);
         Assert.Equal(1, CompileIcLoras(clip).PrimaryControlNetSourceIndex);
         Assert.Contains(plan.Diagnostics, d => d.Code == "audio.length.controlnet_overrides_audio");
     }
@@ -134,7 +134,7 @@ public class AudioPlanCompilerTests
     {
         AudioPlan plan = AudioPlanCompiler.Compile(Clip(source: MediaSource.Upload, uploadedAudio: Upload()));
 
-        Assert.Equal(AudioLengthOwner.Timeline, plan.Length.Owner);
+        Assert.Equal(AudioLengthOwner.Timeline, plan.LengthOwner);
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class AudioPlanCompilerTests
         AudioPlan plan = AudioPlanCompiler.Compile(clip);
         Ltx2AudioPlan ltx = CompileLtxAudio(clip);
 
-        Assert.Equal(AudioLengthOwner.ControlNet, plan.Length.Owner);
+        Assert.Equal(AudioLengthOwner.ControlNet, plan.LengthOwner);
         Assert.Null(CompileIcLoras(clip).PrimaryControlNetSourceIndex);
         Assert.DoesNotContain(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.length.controlnet_owner_has_no_source");
@@ -163,7 +163,7 @@ public class AudioPlanCompilerTests
 
         Assert.Equal(
             AudioLengthOwner.Timeline,
-            AudioPlanCompiler.Compile(nativeClip).Length.Owner);
+            AudioPlanCompiler.Compile(nativeClip).LengthOwner);
         // Native injection length matching belongs to the LTX plan, not the shared audio plan.
         Ltx2AudioInjectionPlan native = CompileLtxAudio(nativeClip).Injection;
         Ltx2AudioInjectionPlan upload = CompileLtxAudio(uploadClip).Injection;

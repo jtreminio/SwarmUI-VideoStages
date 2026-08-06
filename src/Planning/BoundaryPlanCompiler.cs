@@ -42,7 +42,7 @@ internal static class BoundaryPlanCompiler
             BoundaryJoinType effective = effectiveRequested;
             bool targetHasGenerationStage = to.Stages.Any(stage => !stage.IsPassthrough);
             bool targetHasDerivedDuration =
-                to.Audio.Length.Owner != AudioLengthOwner.Timeline;
+                to.Audio.LengthOwner != AudioLengthOwner.Timeline;
             RuleDecision modePolicy = from.Architecture?.BoundaryPolicy
                 ?.Rules.GetValueOrDefault(effectiveRequested);
             BoundaryRuleConstraints constraints = modePolicy?.Constraints;

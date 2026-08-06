@@ -182,7 +182,7 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
 
     internal JArray TryResolveControlNetLengthFrames(ClipPlan clip)
     {
-        if (clip.Audio.Length.Owner != AudioLengthOwner.ControlNet)
+        if (clip.Audio.LengthOwner != AudioLengthOwner.ControlNet)
         {
             return null;
         }
@@ -200,7 +200,7 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
     }
 
     internal static bool ShouldMatchStageLengthToAudio(AudioPlan audio) =>
-        audio.Length.Owner == AudioLengthOwner.Audio
+        audio.LengthOwner == AudioLengthOwner.Audio
         && audio.Base.Kind is AudioSourceKind.Upload
             or AudioSourceKind.AceStepFun
             or AudioSourceKind.ControlNet;

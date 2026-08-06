@@ -186,7 +186,7 @@ internal sealed class FrameInterpolator(WorkflowGenerator g)
             : [FrameInterpsFeature];
 
     private static bool HasDynamicLength(VideoExecutionPlan plan) =>
-        plan.Clips.Any(clip => clip.Audio.Length.Owner != AudioLengthOwner.Timeline);
+        plan.Clips.Any(clip => clip.Audio.LengthOwner != AudioLengthOwner.Timeline);
 
     private static PlanDiagnostic Refuse(string message) => new(
         PlanDiagnosticSeverity.Error,

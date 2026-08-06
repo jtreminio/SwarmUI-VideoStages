@@ -695,7 +695,7 @@ public class ArchitectureFoundationTests
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
         ClipPlan compiled = Assert.Single(plan.Clips);
         Assert.NotNull(compiled.ArchitecturePayload);
-        Assert.Equal(AudioLengthOwner.Timeline, compiled.Audio.Length.Owner);
+        Assert.Equal(AudioLengthOwner.Timeline, compiled.Audio.LengthOwner);
         Assert.Equal(33, compiled.Frames);
         Assert.Equal(Assert.Single(authoredLengthPlan.Clips).Frames, compiled.Frames);
     }

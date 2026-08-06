@@ -79,7 +79,7 @@ internal static class AudioPlanCompiler
         // Root timeline segments are added after boundary planning.
         return new(
             baseSource,
-            new(lengthOwner),
+            lengthOwner,
             new(ImmutableArray<AudioSegmentItemPlan>.Empty),
             diagnostics.ToImmutable());
     }
