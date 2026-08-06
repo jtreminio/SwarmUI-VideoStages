@@ -1,4 +1,8 @@
 import {
+    CONTROLNET_SOURCE_OPTIONS,
+    canonicalControlNetSource,
+} from "../../controlNetSource";
+import {
     IC_LORA_ATTENTION_DEFAULT,
     IC_LORA_ATTENTION_MAX,
     IC_LORA_ATTENTION_MIN,
@@ -30,32 +34,6 @@ import {
     IC_LORA_PRESET_CUSTOM_ID,
     icLoraDriveMediaContractForData,
 } from "./icLoraPresets";
-
-const CONTROLNET_SOURCE_OPTIONS = [
-    "ControlNet 1",
-    "ControlNet 2",
-    "ControlNet 3",
-] as const;
-
-const controlNetSourceIndex = (value: unknown): number | null => {
-    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
-    if (!compact.startsWith("controlnet")) {
-        return null;
-    }
-    const rawIndex = compact.slice("controlnet".length);
-    if (!/^[+-]?\d+$/.test(rawIndex)) {
-        return null;
-    }
-    const oneBased = Number(rawIndex);
-    return Number.isSafeInteger(oneBased) && oneBased >= 1 && oneBased <= 3
-        ? oneBased - 1
-        : null;
-};
-
-const canonicalControlNetSource = (value: unknown): string | null => {
-    const index = controlNetSourceIndex(value);
-    return index === null ? null : CONTROLNET_SOURCE_OPTIONS[index];
-};
 
 export const normalizeControlNetSource = (value: unknown): string => {
     return canonicalControlNetSource(value) ?? CONTROLNET_SOURCE_OPTIONS[0];
@@ -257,4 +235,6 @@ export const canonicalizeIcLoraFields = (entry: IcLora): void => {
 
 /** True when any entry is driven by a captured core "ControlNet N" branch. */
 export const hasSlotSourcedIcLora = (icLoras: IcLora[]): boolean =>
-    icLoras.some((entry) => controlNetSourceIndex(entry.driveSource) !== null);
+    icLoras.some(
+        (entry) => canonicalControlNetSource(entry.driveSource) !== null,
+    );

@@ -99,20 +99,6 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
         return true;
     }
 
-    internal static JArray PeelSingleFrameWrap(
-        WorkflowBridge bridge,
-        JArray imagePath)
-    {
-        if (bridge.NodeAt<ImageFromBatchNode>(imagePath) is ImageFromBatchNode batch
-            && batch.BatchIndex.LiteralAsInt() == 0
-            && batch.Length.LiteralAsInt() == 1
-            && batch.Image.Connection is INodeOutput imageIn)
-        {
-            return WorkflowBridge.ToPath(imageIn);
-        }
-        return new JArray(imagePath[0], imagePath[1]);
-    }
-
     private void Clear(int index)
     {
         VideoGraphHelpers.RemoveCached(g, ImageKey(index));

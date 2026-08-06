@@ -2546,8 +2546,7 @@
       const reference = {
         id: normalizeOptionalEntityId(raw.id),
         kind,
-        // Only image references can name a host capture.
-        source: kind === "image" ? source : REF_SOURCE_UPLOAD,
+        source,
         uploadedMedia: normalizeUploadedMedia(raw.uploadedMedia),
         includeSoundtrack: kind === "video" && raw.includeSoundtrack === true,
         mediaDurationSeconds,
@@ -2981,13 +2980,13 @@
     return changed;
   };
 
-  // frontend/architectures/ltx2/icLoraNormalization.ts
+  // frontend/controlNetSource.ts
   var CONTROLNET_SOURCE_OPTIONS = [
     "ControlNet 1",
     "ControlNet 2",
     "ControlNet 3"
   ];
-  var controlNetSourceIndex = (value) => {
+  var canonicalControlNetSource = (value) => {
     const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
     if (!compact.startsWith("controlnet")) {
       return null;
@@ -2997,12 +2996,10 @@
       return null;
     }
     const oneBased = Number(rawIndex);
-    return Number.isSafeInteger(oneBased) && oneBased >= 1 && oneBased <= 3 ? oneBased - 1 : null;
+    return Number.isSafeInteger(oneBased) && oneBased >= 1 && oneBased <= 3 ? CONTROLNET_SOURCE_OPTIONS[oneBased - 1] : null;
   };
-  var canonicalControlNetSource = (value) => {
-    const index = controlNetSourceIndex(value);
-    return index === null ? null : CONTROLNET_SOURCE_OPTIONS[index];
-  };
+
+  // frontend/architectures/ltx2/icLoraNormalization.ts
   var defaultIcLora = (overrides = {}) => ({
     lora: "",
     preset: IC_LORA_PRESET_CUSTOM_ID,
@@ -3139,7 +3136,9 @@
       entry.driveData
     );
   };
-  var hasSlotSourcedIcLora = (icLoras) => icLoras.some((entry) => controlNetSourceIndex(entry.driveSource) !== null);
+  var hasSlotSourcedIcLora = (icLoras) => icLoras.some(
+    (entry) => canonicalControlNetSource(entry.driveSource) !== null
+  );
 
   // frontend/architectures/ltx2/identity.ts
   var LTX2_ARCHITECTURE_ID = "ltx2";
@@ -11385,7 +11384,7 @@ ${slot}`;
   };
 
   // frontend/imageSource.ts
-  var buildImageSourceOptions = (currentValue = "") => {
+  var buildImageSourceOptions = (currentValue = "", includeControlNet = false) => {
     const options = [
       { value: REF_SOURCE_BASE, label: "Base Output" },
       { value: REF_SOURCE_REFINER, label: "Refiner Output" },
@@ -11398,6 +11397,11 @@ ${slot}`;
         label: `Base2Edit Edit ${editStage} Output`
       });
     }
+    if (includeControlNet) {
+      for (const source of CONTROLNET_SOURCE_OPTIONS) {
+        options.push({ value: source, label: source });
+      }
+    }
     preserveSelectedOption(options, currentValue, "start", (value) => {
       const isBase2Edit = parseBase2EditStageIndex(value) != null;
       return {
@@ -11409,6 +11413,43 @@ ${slot}`;
     return options;
   };
   var resolveImageSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, REF_SOURCE_REFINER);
+
+  // frontend/clipReferenceSource.ts
+  var buildClipReferenceSourceOptions = (kind, currentValue = "") => {
+    if (kind === "image") {
+      return buildImageSourceOptions(currentValue, true);
+    }
+    const options = [
+      { value: REF_SOURCE_UPLOAD, label: "Upload" },
+      ...CONTROLNET_SOURCE_OPTIONS.map((source) => ({
+        value: source,
+        label: source
+      }))
+    ];
+    if (kind === "audio") {
+      options.push(
+        ...buildSegmentAudioSourceOptions(currentValue).filter(
+          (option) => option.value !== REF_SOURCE_UPLOAD
+        )
+      );
+    }
+    preserveSelectedOption(options, currentValue, "start", (value) => ({
+      value,
+      label: `${value} (unsupported persisted value)`
+    }));
+    return options;
+  };
+  var resolveClipReferenceSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, REF_SOURCE_UPLOAD);
+  var clipReferenceSourceSupportsKind = (kind, source) => {
+    const value = `${source ?? ""}`.trim();
+    if (value === REF_SOURCE_UPLOAD || canonicalControlNetSource(value)) {
+      return true;
+    }
+    if (kind === "audio") {
+      return isAceStepFunAudioSource(value);
+    }
+    return kind === "image" && (value === REF_SOURCE_BASE || value === REF_SOURCE_REFINER || parseBase2EditStageIndex(value) !== null);
+  };
 
   // frontend/detailStrip/clipReferencePanel.ts
   var claimClipLength = (clip, referenceIdx, getDefaults, fps) => {
@@ -11608,7 +11649,10 @@ ${slot}`;
                 target.includeSoundtrack = false;
                 target.mediaDurationSeconds = 0;
                 target.drivesClipLength = false;
-                if (target.kind !== "image") {
+                if (!clipReferenceSourceSupportsKind(
+                  target.kind,
+                  target.source
+                )) {
                   target.source = REF_SOURCE_UPLOAD;
                 }
               });
@@ -11619,31 +11663,37 @@ ${slot}`;
           `What this reference is. The prompt names it as ${tags[editorIdx]} — a reference the prompt never mentions still costs sampling time.`
         )
       );
-      const options = buildImageSourceOptions(reference.source ?? "");
-      const source = resolveImageSourceValue(reference.source ?? "", options);
-      if (reference.kind === "image") {
-        fields.appendChild(
-          buildField(
-            "Image Source",
-            buildOptionSelect(options, source, (value) => {
-              patch((target) => {
-                const resolved = resolveImageSourceValue(
-                  value,
-                  buildImageSourceOptions(value)
-                );
-                target.source = resolved;
-                if (resolved !== REF_SOURCE_UPLOAD) {
-                  target.uploadedMedia = null;
-                }
-              });
-              ctx.render();
-            }),
-            void 0,
-            "Where this reference image comes from — an upload, or another clip's rendered frame."
-          )
-        );
-      }
-      if (reference.kind !== "image" || source === REF_SOURCE_UPLOAD) {
+      const options = buildClipReferenceSourceOptions(
+        reference.kind,
+        reference.source ?? ""
+      );
+      const source = resolveClipReferenceSourceValue(
+        reference.source ?? "",
+        options
+      );
+      fields.appendChild(
+        buildField(
+          "Source",
+          buildOptionSelect(options, source, (value) => {
+            patch((target) => {
+              const resolved = resolveClipReferenceSourceValue(
+                value,
+                buildClipReferenceSourceOptions(target.kind, value)
+              );
+              target.source = resolved;
+              if (resolved !== REF_SOURCE_UPLOAD) {
+                target.uploadedMedia = null;
+                target.mediaDurationSeconds = 0;
+                target.drivesClipLength = false;
+              }
+            });
+            ctx.render();
+          }),
+          void 0,
+          "Where this reference comes from — an upload, a ControlNet input, or another source available for this media kind."
+        )
+      );
+      if (source === REF_SOURCE_UPLOAD) {
         const data = reference.uploadedMedia?.data;
         if (reference.kind === "image" && data) {
           const preview = document.createElement("div");

@@ -76,10 +76,11 @@ public enum ClipReferenceKind
 
 /// <summary>
 /// One whole-clip reference: media the architecture conditions on without attaching it to any
-/// frame position. <c>Source</c> is "Upload" for <c>Media</c>, or a host capture name ("Base",
-/// "Refiner") for image references. <c>IncludeSoundtrack</c> asks a video reference to also pass
-/// its own audio track as the paired reference audio. <c>MediaScale</c> downsamples a video
-/// reference before it is presented, trading detail for reference tokens.
+/// frame position. <c>Source</c> is "Upload" for <c>Media</c>, a ControlNet input for any kind,
+/// a host capture name ("Base", "Refiner") for images, or an AceStepFun track for audio.
+/// <c>IncludeSoundtrack</c> asks a video reference to also pass its own audio track as the paired
+/// reference audio. <c>MediaScale</c> downsamples a video reference before it is presented,
+/// trading detail for reference tokens.
 /// </summary>
 public sealed record ClipReferenceSpec(
     ClipReferenceKind Kind,

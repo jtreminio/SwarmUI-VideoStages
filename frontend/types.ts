@@ -147,9 +147,10 @@ export type ClipReferenceKind = "image" | "video" | "audio";
  * One whole-clip reference: media the model conditions on with no frame
  * position. The architecture presents references to its text encoder as
  * numbered items the prompt names by tag, so the authored order is meaningful.
- * `source` is "Upload" for `uploadedMedia`, or a host capture ("Base",
- * "Refiner") for image references. `includeSoundtrack` asks a video reference
- * to also pass its own audio track as the paired reference audio.
+ * `source` is "Upload" for `uploadedMedia`, a ControlNet input for any media
+ * kind, a host capture ("Base", "Refiner") for images, or an AceStepFun track
+ * for audio. `includeSoundtrack` asks a video reference to also pass its own
+ * audio track as the paired reference audio.
  * `mediaDurationSeconds` is the browser-probed length of the picked media
  * (0 = unknown); when `drivesClipLength` is set the clip's own duration follows
  * it, so at most one reference per clip may claim it. `mediaScale` downsamples

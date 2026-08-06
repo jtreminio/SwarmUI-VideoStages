@@ -78,6 +78,30 @@ internal sealed class ControlNetCoreMediaCapture(WorkflowGenerator g)
         return true;
     }
 
+    /// <summary>Returns the original full video batch behind core's single-frame wrapper and
+    /// attaches the soundtrack captured from the same host ControlNet input.</summary>
+    internal bool TryGetCapturedControlVideo(int index, out WGNodeData controlVideo)
+    {
+        controlVideo = null;
+        if (!TryGetCapturedControlImage(index, out WGNodeData controlImage)
+            || controlImage.Path is not JArray { Count: 2 } imagePath)
+        {
+            return false;
+        }
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        JArray fullVideoPath = PeelSingleFrameWrap(bridge, imagePath);
+        controlVideo = new WGNodeData(
+            fullVideoPath,
+            g,
+            WGNodeData.DT_IMAGE,
+            g.CurrentCompat());
+        if (TryGetCapturedAudio(index, out WGNodeData audio))
+        {
+            controlVideo.AttachedAudio = audio;
+        }
+        return true;
+    }
+
     internal bool TryGetCapturedAudio(int index, out WGNodeData audio)
     {
         audio = null;
@@ -159,6 +183,20 @@ internal sealed class ControlNetCoreMediaCapture(WorkflowGenerator g)
             }
         }
         return false;
+    }
+
+    internal static JArray PeelSingleFrameWrap(
+        WorkflowBridge bridge,
+        JArray imagePath)
+    {
+        if (bridge.NodeAt<ImageFromBatchNode>(imagePath) is ImageFromBatchNode batch
+            && batch.BatchIndex.LiteralAsInt() == 0
+            && batch.Length.LiteralAsInt() == 1
+            && batch.Image.Connection is INodeOutput imageIn)
+        {
+            return WorkflowBridge.ToPath(imageIn);
+        }
+        return new JArray(imagePath[0], imagePath[1]);
     }
 
     private bool TryFindCoreApply(

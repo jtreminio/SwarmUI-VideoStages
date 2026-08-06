@@ -13,6 +13,7 @@ import {
     testAuthoringTransactionSnapshot,
 } from "../__test_helpers__/architectureFixtures";
 import { mountPromptBox, mountVideoStagesData } from "../__test_helpers__/dom";
+import { stubAceStepFunRegistry } from "../__test_helpers__/registries";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { resetRememberedAccordionSections } from "../detailWidgets";
 import { setVideoStagesHostBridgeForTests } from "../host";
@@ -293,18 +294,43 @@ describe("buildClipReferenceSection", () => {
         expect(body.querySelector(".vst-clip-ref-join-tab")).toBeNull();
     });
 
-    it("offers an image source only for image references", () => {
-        const labels = (body: HTMLElement) =>
-            Array.from(body.querySelectorAll(".vst-detail-field-label")).map(
-                (el) => el.textContent,
+    it("offers a Source field with the sources supported by each reference kind", () => {
+        stubAceStepFunRegistry(["audio0", "audio2"]);
+        const sourceValues = (body: HTMLElement) => {
+            const field = Array.from(
+                body.querySelectorAll<HTMLElement>(".vst-detail-field"),
+            ).find(
+                (candidate) =>
+                    candidate.querySelector(".vst-detail-field-label")
+                        ?.textContent === "Source",
             );
+            return Array.from(
+                field?.querySelectorAll<HTMLOptionElement>("option") ?? [],
+            ).map((option) => option.value);
+        };
 
-        expect(labels(buildBody([{ kind: "image" }], 0))).toContain(
-            "Image Source",
-        );
-        expect(labels(buildBody([{ kind: "audio" }], 0))).not.toContain(
-            "Image Source",
-        );
+        expect(sourceValues(buildBody([{ kind: "image" }], 0))).toEqual([
+            "Base",
+            "Refiner",
+            "Upload",
+            "ControlNet 1",
+            "ControlNet 2",
+            "ControlNet 3",
+        ]);
+        expect(sourceValues(buildBody([{ kind: "video" }], 0))).toEqual([
+            "Upload",
+            "ControlNet 1",
+            "ControlNet 2",
+            "ControlNet 3",
+        ]);
+        expect(sourceValues(buildBody([{ kind: "audio" }], 0))).toEqual([
+            "Upload",
+            "ControlNet 1",
+            "ControlNet 2",
+            "ControlNet 3",
+            "audio0",
+            "audio2",
+        ]);
     });
 
     it("shows the soundtrack toggle only on a video reference", () => {

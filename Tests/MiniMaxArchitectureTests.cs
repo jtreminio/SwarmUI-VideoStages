@@ -472,7 +472,7 @@ public class MiniMaxArchitectureTests
     [Theory]
     [InlineData("video", "Base", "minimax.clip-reference.source-ignored")]
     [InlineData("audio", "Refiner", "minimax.clip-reference.source-ignored")]
-    [InlineData("image", "ControlNet 1", "minimax.clip-reference.source-ignored")]
+    [InlineData("video", "audio0", "minimax.clip-reference.source-ignored")]
     public void A_clip_reference_from_an_unreadable_source_is_warned_and_dropped(
         string kind,
         string source,
@@ -495,6 +495,35 @@ public class MiniMaxArchitectureTests
         Assert.Equal(PlanDiagnosticSeverity.Warning, warning.Severity);
         Assert.Equal(expectedCode, warning.Code);
         Assert.Empty(Assert.IsType<MiniMaxClipPayload>(compilation.Payload).References);
+    }
+
+    [Theory]
+    [InlineData("image", "ControlNet 1")]
+    [InlineData("video", "ControlNet 2")]
+    [InlineData("audio", "ControlNet 3")]
+    [InlineData("audio", "audio0")]
+    public void A_clip_reference_can_name_an_external_media_source(
+        string kind,
+        string source)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clipObject = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clipObject["references"] = new JArray
+        {
+            ClipReference(kind, source, null, null),
+        };
+
+        ArchitectureClipCompilation compilation = Compile(
+            ParseClip(clipObject, models),
+            models);
+
+        Assert.Empty(compilation.Diagnostics);
+        MiniMaxReferencePlan reference = Assert.Single(
+            Assert.IsType<MiniMaxClipPayload>(compilation.Payload).References);
+        Assert.Equal(source, reference.Source);
+        Assert.Null(reference.Media);
     }
 
     [Fact]

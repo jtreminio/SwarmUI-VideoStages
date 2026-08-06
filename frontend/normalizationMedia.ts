@@ -165,8 +165,7 @@ export const normalizeClipReferences = (
         const reference: ClipReference = {
             id: normalizeOptionalEntityId(raw.id),
             kind,
-            // Only image references can name a host capture.
-            source: kind === "image" ? source : REF_SOURCE_UPLOAD,
+            source,
             uploadedMedia: normalizeUploadedMedia(raw.uploadedMedia),
             includeSoundtrack:
                 kind === "video" && raw.includeSoundtrack === true,

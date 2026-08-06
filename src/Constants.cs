@@ -30,14 +30,15 @@ public static class Constants
     public const double DefaultStageControlNetStrength = 0.8;
 
     internal const string ComfyUIFeatureFlag = "comfyui";
+    public const string MediaSourceUpload = "Upload";
     public const string AudioSourceNative = "Native";
-    public const string AudioSourceUpload = "Upload";
+    public const string AudioSourceUpload = MediaSourceUpload;
     public const string AudioSourceControlNet = "ControlNet";
     public const string ControlNetSourceOne = "ControlNet 1";
     public const string ControlNetSourceTwo = "ControlNet 2";
     public const string ControlNetSourceThree = "ControlNet 3";
 
-    public const string IcLoraSourceUpload = "Upload";
+    public const string IcLoraSourceUpload = MediaSourceUpload;
     public const string IcLoraSourceIncoming = "Incoming";
     internal const string IcLoraLegacySourceStageInput = "Stage Input";
     public const string IcLoraControlNone = "none";

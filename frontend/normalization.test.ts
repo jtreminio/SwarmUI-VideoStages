@@ -1360,8 +1360,7 @@ describe("normalizeClipReferences", () => {
             {
                 id: undefined,
                 kind: "video",
-                // Video and audio references can only come from an upload.
-                source: "Upload",
+                source: "Refiner",
                 uploadedMedia: {
                     data: "data:video/mp4;base64,REVG",
                     fileName: "motion.mp4",
@@ -1372,6 +1371,17 @@ describe("normalizeClipReferences", () => {
                 mediaScale: 1,
             },
         ]);
+    });
+
+    it("preserves ControlNet sources on every kind and AceStepFun on audio", () => {
+        expect(
+            normalizeClipReferences([
+                { kind: "image", source: "ControlNet 1" },
+                { kind: "video", source: "ControlNet 2" },
+                { kind: "audio", source: "ControlNet 3" },
+                { kind: "audio", source: "audio0" },
+            ]).map((reference) => reference.source),
+        ).toEqual(["ControlNet 1", "ControlNet 2", "ControlNet 3", "audio0"]);
     });
 
     it("keeps an unusable entry rather than silently dropping a prompt tag", () => {

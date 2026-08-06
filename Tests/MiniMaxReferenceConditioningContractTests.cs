@@ -2,6 +2,10 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
+using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Text2Image;
+using VideoStages.Execution.Audio;
+using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -103,6 +107,84 @@ public class MiniMaxReferenceConditioningContractTests
 
         live.AssertLive(keyframes);
         AssertShippable(bridge, workflow, live);
+    }
+
+    [Theory]
+    [InlineData("image", Constants.ControlNetSourceOne, 0)]
+    [InlineData("video", Constants.ControlNetSourceTwo, 1)]
+    [InlineData("audio", Constants.ControlNetSourceThree, 2)]
+    public async Task ControlNet_clip_reference_sources_reach_the_matching_H3_input(
+        string kind,
+        string source,
+        int controlNetIndex)
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["references"] = new JArray(
+            ExternalClipReference(kind, source, includeSoundtrack: kind == "video"));
+
+        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+            fixture.Post(MakeDocument(clip)),
+            extraSteps: [SeedControlNetReferenceSource(controlNetIndex)]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode referenceNode = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
+        GetVideoComponentsNode captured = Assert.Single(
+            bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        if (kind == "image")
+        {
+            ImageFromBatchNode image = bridge.NodeAt<ImageFromBatchNode>(
+                (JArray)inputs["ref_images.ref_image_0"]);
+            Assert.Same(captured.Images, image.Image.Connection);
+        }
+        else if (kind == "video")
+        {
+            Assert.Same(
+                captured.Images,
+                bridge.ResolvePath((JArray)inputs["ref_videos.ref_video_0"]));
+            Assert.Same(
+                captured.Audio,
+                bridge.ResolvePath((JArray)inputs["ref_video_audios.ref_video_audio_0"]));
+        }
+        else
+        {
+            Assert.Same(
+                captured.Audio,
+                bridge.ResolvePath((JArray)inputs["ref_audios.ref_audio_0"]));
+        }
+
+        Assert.Same(referenceNode, StageSampler(bridge, 0).Positive.Connection?.Node);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
+    }
+
+    [Fact]
+    public async Task AceStepFun_audio_clip_reference_reaches_the_H3_audio_input()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["references"] = new JArray(ExternalClipReference("audio", "audio0"));
+
+        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+            fixture.Post(MakeDocument(clip)),
+            extraSteps: [SeedAceStepFunReferenceSource(0)]);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode referenceNode = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
+        Assert.Equal(
+            AudioHandler.MakeAceStepFunDecodeId(0),
+            ((JArray)inputs["ref_audios.ref_audio_0"])[0].ToString());
+        Assert.Same(referenceNode, StageSampler(bridge, 0).Positive.Connection?.Node);
+        AssertNoDanglingNodeRefs(workflow);
+        AssertAcyclic(bridge);
     }
 
     [Fact]
@@ -429,5 +511,51 @@ public class MiniMaxReferenceConditioningContractTests
                 ["fileName"] = fileName,
             },
         };
+
+    private static JObject ExternalClipReference(
+        string kind,
+        string source,
+        bool includeSoundtrack = false) =>
+        new()
+        {
+            ["kind"] = kind,
+            ["source"] = source,
+            ["includeSoundtrack"] = includeSoundtrack,
+        };
+
+    private static WorkflowGenerator.WorkflowGenStep SeedControlNetReferenceSource(
+        int index) =>
+        new(g =>
+        {
+            UnitTestStubs.EnsureComfyControlNetParamsRegistered();
+            T2IModelHandler handler = new() { ModelType = "ControlNet" };
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            T2IModel model = TestStubModel.Create(
+                handler,
+                $"UnitTest_MiniMax_Reference_ControlNet_{index}.safetensors");
+            g.UserInput.Set(T2IParamTypes.Controlnets[index].Strength, 0.8);
+            g.UserInput.Set(T2IParamTypes.Controlnets[index].Model, model);
+            GetVideoComponentsNode components = bridge.AddNode(
+                new GetVideoComponentsNode(),
+                "901");
+            ControlNetLoaderNode loader = bridge.AddNode(
+                new ControlNetLoaderNode().With(
+                    ControlNetName: model.ToString(g.ModelFolderFormat)),
+                "911");
+            ControlNetApplyAdvancedNode apply = new();
+            apply.ControlNet.ConnectTo(loader.CONTROLNET);
+            apply.Image.ConnectTo(components.Images);
+            bridge.AddNode(apply, "921");
+        }, Constants.WorkflowStepPriority.ControlNetPreprocessors - 0.01);
+
+    private static WorkflowGenerator.WorkflowGenStep SeedAceStepFunReferenceSource(
+        int trackIndex) =>
+        new(g =>
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            bridge.AddNode(
+                new VAEDecodeAudioNode(),
+                AudioHandler.MakeAceStepFunDecodeId(trackIndex));
+        }, 11.05);
 
 }

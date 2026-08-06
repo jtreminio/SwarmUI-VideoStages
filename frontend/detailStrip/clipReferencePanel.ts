@@ -6,6 +6,11 @@ import {
     clipReferenceCanDriveLength,
     clipReferenceTags,
 } from "../clipReferenceAuthoring";
+import {
+    buildClipReferenceSourceOptions,
+    clipReferenceSourceSupportsKind,
+    resolveClipReferenceSourceValue,
+} from "../clipReferenceSource";
 import { CLIP_DURATION_MIN, clamp, mediaPreviewSrc } from "../constants";
 import {
     buildCheckbox,
@@ -14,10 +19,6 @@ import {
     buildOptionSelect,
     buildRepeatingEditor,
 } from "../detailWidgets";
-import {
-    buildImageSourceOptions,
-    resolveImageSourceValue,
-} from "../imageSource";
 import { probeMediaDurationSeconds } from "../initVideoProbe";
 import { setSelection } from "../selection";
 import { applyClipDurationResize } from "../timelineEdit";
@@ -287,7 +288,12 @@ export const buildClipReferenceSection = (
                             target.includeSoundtrack = false;
                             target.mediaDurationSeconds = 0;
                             target.drivesClipLength = false;
-                            if (target.kind !== "image") {
+                            if (
+                                !clipReferenceSourceSupportsKind(
+                                    target.kind,
+                                    target.source,
+                                )
+                            ) {
                                 target.source = REF_SOURCE_UPLOAD;
                             }
                         });
@@ -300,33 +306,39 @@ export const buildClipReferenceSection = (
             ),
         );
 
-        const options = buildImageSourceOptions(reference.source ?? "");
-        const source = resolveImageSourceValue(reference.source ?? "", options);
-        if (reference.kind === "image") {
-            fields.appendChild(
-                buildField(
-                    "Image Source",
-                    buildOptionSelect(options, source, (value) => {
-                        patch((target) => {
-                            const resolved = resolveImageSourceValue(
-                                value,
-                                buildImageSourceOptions(value),
-                            );
-                            target.source = resolved;
-                            if (resolved !== REF_SOURCE_UPLOAD) {
-                                target.uploadedMedia = null;
-                            }
-                        });
-                        ctx.render();
-                    }),
-                    undefined,
-                    "Where this reference image comes from — an upload, or " +
-                        "another clip's rendered frame.",
-                ),
-            );
-        }
+        const options = buildClipReferenceSourceOptions(
+            reference.kind,
+            reference.source ?? "",
+        );
+        const source = resolveClipReferenceSourceValue(
+            reference.source ?? "",
+            options,
+        );
+        fields.appendChild(
+            buildField(
+                "Source",
+                buildOptionSelect(options, source, (value) => {
+                    patch((target) => {
+                        const resolved = resolveClipReferenceSourceValue(
+                            value,
+                            buildClipReferenceSourceOptions(target.kind, value),
+                        );
+                        target.source = resolved;
+                        if (resolved !== REF_SOURCE_UPLOAD) {
+                            target.uploadedMedia = null;
+                            target.mediaDurationSeconds = 0;
+                            target.drivesClipLength = false;
+                        }
+                    });
+                    ctx.render();
+                }),
+                undefined,
+                "Where this reference comes from — an upload, a ControlNet input, " +
+                    "or another source available for this media kind.",
+            ),
+        );
 
-        if (reference.kind !== "image" || source === REF_SOURCE_UPLOAD) {
+        if (source === REF_SOURCE_UPLOAD) {
             const data = reference.uploadedMedia?.data;
             if (reference.kind === "image" && data) {
                 const preview = document.createElement("div");

@@ -5,6 +5,7 @@ using ComfyTyped.SwarmUI;
 using ComfyTyped.Types;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 using VideoStages.Architectures.Ltx2.Planning;
 
@@ -113,7 +114,7 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
         }
 
         JArray guideSource =
-            LtxControlNetMediaNormalizer.PeelSingleFrameWrap(
+            ControlNetCoreMediaCapture.PeelSingleFrameWrap(
                 bridge,
                 controlImagePath);
         if (incomingContinueHandleFrames > 0)

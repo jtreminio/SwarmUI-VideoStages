@@ -593,7 +593,7 @@ internal sealed class MiniMaxGenerationSession(
         NativeFrameReferencePlan reference,
         string descriptor)
     {
-        if (StringUtils.Equals(reference?.Source, "Upload"))
+        if (StringUtils.Equals(reference?.Source, Constants.MediaSourceUpload))
         {
             Image image = NativeFrameReferences.MaterializeUpload(g, reference, descriptor);
             return image is null
@@ -689,24 +689,20 @@ internal sealed class MiniMaxGenerationSession(
                                 + "Continue reserves reference video 0; ignoring it for this generation.");
                         break;
                     }
-                    WGNodeData video = g.LoadImage(
-                        UploadedMedia.GetVideo(
-                            g.UserInput,
-                            reference.Media.Data,
-                            reference.Media.FileName,
-                            descriptor),
-                        "${videostagesminimaxrefvideo}",
-                        resize: false);
+                    WGNodeData video = ResolveReferenceVideo(reference, descriptor);
+                    if (video is null)
+                    {
+                        break;
+                    }
                     videos.Add(ConformReferenceVideo(video, reference.MediaScale));
                     videoAudios.Add(
                         reference.IncludeSoundtrack ? video.AttachedAudio?.Path : null);
                     break;
                 default:
-                    audios.Add(new JArray(
-                        g.CreateAudioLoadNode(
-                            UploadedMedia.GetAudio(g.UserInput, reference.Media),
-                            "${videostagesminimaxrefaudio}"),
-                        0));
+                    if (ResolveReferenceAudio(reference, descriptor) is JArray audio)
+                    {
+                        audios.Add(audio);
+                    }
                     break;
             }
         }
@@ -793,7 +789,21 @@ internal sealed class MiniMaxGenerationSession(
         string descriptor,
         int index)
     {
-        if (!StringUtils.Equals(reference.Source, "Upload"))
+        if (ControlNetSourcePlan.TryParseIndex(reference.Source, out int controlNetIndex))
+        {
+            ControlNetCoreMediaCapture captures = new(g);
+            if (!captures.TryGetCapturedControlVideo(controlNetIndex, out WGNodeData video))
+            {
+                WarnUnavailableReferenceSource(reference.Source, descriptor);
+                return null;
+            }
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            ImageFromBatchNode first = bridge.AddNode(
+                new ImageFromBatchNode().With(BatchIndex: 0, Length: 1));
+            first.Image.ConnectFromPath(bridge, video.Path);
+            return WorkflowBridge.ToPath(first.IMAGE);
+        }
+        if (!StringUtils.Equals(reference.Source, Constants.MediaSourceUpload))
         {
             WGNodeData captured = ResolveHostCapture(reference.Source, $"{descriptor} {index}");
             if (captured is null)
@@ -814,6 +824,69 @@ internal sealed class MiniMaxGenerationSession(
             "${videostagesminimaxrefimage}",
             false).Path;
     }
+
+    private WGNodeData ResolveReferenceVideo(
+        MiniMaxReferencePlan reference,
+        string descriptor)
+    {
+        if (StringUtils.Equals(reference.Source, Constants.MediaSourceUpload))
+        {
+            return g.LoadImage(
+                UploadedMedia.GetVideo(
+                    g.UserInput,
+                    reference.Media.Data,
+                    reference.Media.FileName,
+                    descriptor),
+                "${videostagesminimaxrefvideo}",
+                resize: false);
+        }
+        if (ControlNetSourcePlan.TryParseIndex(reference.Source, out int controlNetIndex)
+            && new ControlNetCoreMediaCapture(g).TryGetCapturedControlVideo(
+                controlNetIndex,
+                out WGNodeData video))
+        {
+            return video;
+        }
+        WarnUnavailableReferenceSource(reference.Source, descriptor);
+        return null;
+    }
+
+    private JArray ResolveReferenceAudio(
+        MiniMaxReferencePlan reference,
+        string descriptor)
+    {
+        if (StringUtils.Equals(reference.Source, Constants.MediaSourceUpload))
+        {
+            return new JArray(
+                g.CreateAudioLoadNode(
+                    UploadedMedia.GetAudio(g.UserInput, reference.Media),
+                    "${videostagesminimaxrefaudio}"),
+                0);
+        }
+        if (ControlNetSourcePlan.TryParseIndex(reference.Source, out int controlNetIndex)
+            && new ControlNetCoreMediaCapture(g).TryGetCapturedAudio(
+                controlNetIndex,
+                out WGNodeData controlNetAudio))
+        {
+            return controlNetAudio.Path as JArray;
+        }
+        if (AudioHandler.TryParseAceStepFunAudioSource(reference.Source, out int trackIndex))
+        {
+            WGNodeData aceStepFunAudio = new AudioHandler(g).DetectAceStepFunAudio(trackIndex);
+            if (aceStepFunAudio is not null)
+            {
+                return aceStepFunAudio.Path as JArray;
+            }
+        }
+        WarnUnavailableReferenceSource(reference.Source, descriptor);
+        return null;
+    }
+
+    private void WarnUnavailableReferenceSource(string source, string descriptor) =>
+        PlanDiagnosticReporter.TrackRequestWarning(
+            g.UserInput,
+            $"VideoStages: {descriptor} source '{source}' was not available; "
+                + "ignoring it for this generation.");
 
     /// <summary>Uses the global final frame only when one clip has no authored reference.</summary>
     private WGNodeData ResolveEndFrame(NativeFrameReferencePlan authored)

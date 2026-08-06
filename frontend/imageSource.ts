@@ -1,4 +1,5 @@
 import { parseBase2EditStageIndex } from "./constants";
+import { CONTROLNET_SOURCE_OPTIONS } from "./controlNetSource";
 import { preserveSelectedOption, resolveSelectValue } from "./selectOption";
 import { getBase2EditStageRefs } from "./swarmInputs";
 import {
@@ -10,6 +11,7 @@ import {
 
 export const buildImageSourceOptions = (
     currentValue = "",
+    includeControlNet = false,
 ): ImageSourceOption[] => {
     const options: ImageSourceOption[] = [
         { value: REF_SOURCE_BASE, label: "Base Output" },
@@ -22,6 +24,11 @@ export const buildImageSourceOptions = (
             value: editRef,
             label: `Base2Edit Edit ${editStage} Output`,
         });
+    }
+    if (includeControlNet) {
+        for (const source of CONTROLNET_SOURCE_OPTIONS) {
+            options.push({ value: source, label: source });
+        }
     }
     preserveSelectedOption(options, currentValue, "start", (value) => {
         const isBase2Edit = parseBase2EditStageIndex(value) != null;

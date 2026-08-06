@@ -1,4 +1,5 @@
 using VideoStages.Authoring;
+using VideoStages.Execution.Audio;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.MiniMax;
@@ -31,10 +32,13 @@ internal static class MiniMaxClipReferences
 
         foreach (ClipReferenceSpec reference in clip.References ?? [])
         {
-            bool uploaded = StringUtils.Equals(reference.Source, "Upload");
+            bool uploaded = StringUtils.Equals(reference.Source, Constants.MediaSourceUpload);
             bool hostCapture = reference.Kind == ClipReferenceKind.Image
                 && ImageReferenceSyntax.IsHostStageSource(reference.Source);
-            if (!uploaded && !hostCapture)
+            bool controlNet = ControlNetSourcePlan.TryParseIndex(reference.Source, out _);
+            bool aceStepFun = reference.Kind == ClipReferenceKind.Audio
+                && AudioHandler.TryParseAceStepFunAudioSource(reference.Source, out _);
+            if (!uploaded && !hostCapture && !controlNet && !aceStepFun)
             {
                 Ignore(
                     "source-ignored",
@@ -87,7 +91,7 @@ internal static class MiniMaxClipReferences
             }
             foreach (MiniMaxReferencePlan reference in payload.References)
             {
-                if (!StringUtils.Equals(reference.Source, "Upload"))
+                if (!StringUtils.Equals(reference.Source, Constants.MediaSourceUpload))
                 {
                     continue;
                 }
