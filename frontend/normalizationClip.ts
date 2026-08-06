@@ -184,7 +184,7 @@ export const normalizeClip = (
     // Preserved exactly as authored: a source that cannot supply a length is
     // reported by architecture diagnostics, never silently erased here. Only
     // the mutual exclusion between the two flags is enforced, with ControlNet
-    // precedence matching RequestReader and AudioLengthPlanCompiler.
+    // precedence matching RequestReader and AudioPlanCompiler.
     const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
     const clipLengthFromAudio =
         !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;

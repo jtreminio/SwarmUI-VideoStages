@@ -31,8 +31,8 @@ internal sealed record AudioSegmentItemPlan(
     double Volume = 1);
 
 /// <summary>
-/// The declared segments are represented as simple values rather than graph paths. A later executor
-/// resolves uploads/tracks, reports unavailable runtime sources, and uses these windows unchanged.
+/// A later executor resolves uploads/tracks, reports unavailable runtime sources, and uses these
+/// windows unchanged.
 /// </summary>
 internal sealed record AudioSegmentPlan(ImmutableArray<AudioSegmentItemPlan> Items);
 
