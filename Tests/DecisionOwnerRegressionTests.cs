@@ -399,7 +399,8 @@ public class DecisionOwnerRegressionTests
             ArchitectureEntryMode.ImageToVideo,
             null,
             [],
-            Audio: null);
+            Audio: null,
+            SavesAudioTrack: false);
 
         Assert.Equal(2.0, ClipAudioBedDuration.Seconds(clip, 24, media));
         Assert.Equal(1.6, ClipAudioBedDuration.Seconds(clip, 0, media), 6);
@@ -415,7 +416,8 @@ public class DecisionOwnerRegressionTests
             ArchitectureEntryMode.InitVideo,
             new("data:video/mp4;base64,QUJD", "source.mp4", 0, 512, 512, 24),
             noStages,
-            Audio: null)
+            Audio: null,
+            SavesAudioTrack: false)
         {
             Architecture = NoneArchitecture.Descriptor,
         };
@@ -568,7 +570,8 @@ public class DecisionOwnerRegressionTests
         ArchitectureEntryMode.InitVideo,
         new("data:video/mp4;base64,QUJD", $"source-{id}.mp4", 0, 512, 512, 24),
         Stages: [],
-        Audio: null)
+        Audio: null,
+        SavesAudioTrack: false)
     {
         Architecture = architecture,
     };
@@ -590,7 +593,8 @@ public class DecisionOwnerRegressionTests
                 ArchitecturePayload: null,
                 IsIntermediateStage: false)
         ],
-        Audio: null)
+        Audio: null,
+        SavesAudioTrack: false)
     {
         Architecture = architecture,
     };

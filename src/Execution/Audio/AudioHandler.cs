@@ -31,10 +31,7 @@ public sealed class AudioHandler(WorkflowGenerator g)
         return decode is null ? null : CreateAudioNode(decode.AUDIO);
     }
 
-    /// <summary>
-    /// Prunes only compiled AceStepFun audio tracks. Save intent comes from the terminal stage output
-    /// plan, so this method never needs to rediscover clip audio source strings.
-    /// </summary>
+    /// <summary>Prunes compiled AceStepFun tracks no clip asked to save.</summary>
     internal void PruneAceStepFunUnsavedTracks(IReadOnlyList<ClipPlan> clips)
     {
         HashSet<int> usedTracks = [];

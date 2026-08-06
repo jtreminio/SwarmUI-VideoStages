@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 using VideoStages.Execution.Audio;
 using VideoStages.Planning;
@@ -336,6 +337,37 @@ public class AudioHandlerTests
 
         new AudioHandler(CreateGenerator(workflow)).PruneAceStepFunUnsavedTracks(
             [Clip(id: 0, audioSource: "audio0", saveAudioTrack: true)]);
+
+        using WorkflowBridge after = WorkflowBridge.Create(workflow);
+        Assert.NotNull(after.Graph.GetNode<SaveAudioMP3Node>("64170"));
+    }
+
+    [Fact]
+    public void PruneAceStepFunUnsavedTracks_keeps_save_for_a_clip_with_no_stages()
+    {
+        JObject workflow = [];
+        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
+        {
+            VAEDecodeAudioNode decode = bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(0));
+
+            SaveAudioMP3Node save = new SaveAudioMP3Node().With(FilenamePrefix: "SwarmUI_track_1_");
+            save.AudioInput.ConnectTo(decode.AUDIO);
+            bridge.AddNode(save, "64170");
+        }
+        ClipPlan sourced = new(
+            ClipId: 0,
+            Frames: 25,
+            EntryMode: ArchitectureEntryMode.InitVideo,
+            InitVideo: null,
+            Stages: [],
+            Audio: new(
+                new(AudioSourceKind.AceStepFun, "audio0", 0, true, null),
+                AudioLengthOwner.Timeline,
+                new([]),
+                []),
+            SavesAudioTrack: true);
+
+        new AudioHandler(CreateGenerator(workflow)).PruneAceStepFunUnsavedTracks([sourced]);
 
         using WorkflowBridge after = WorkflowBridge.Create(workflow);
         Assert.NotNull(after.Graph.GetNode<SaveAudioMP3Node>("64170"));

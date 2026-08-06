@@ -339,14 +339,15 @@ public class MiniMaxArchitectureTests
             StageInputKind.PreviousStage,
             false,
             compilation.StagePayloads[authoredUpscale.ClipStageRawIndex],
-            false);
+            IsIntermediateStage: false);
         ClipPlan scaled = new(
             0,
             49,
             ArchitectureEntryMode.ImageToVideo,
             null,
             [upscale],
-            AudioPlanCompiler.Compile(authored))
+            AudioPlanCompiler.Compile(authored),
+            SavesAudioTrack: false)
         {
             ArchitecturePayload = compilation.Payload,
         };

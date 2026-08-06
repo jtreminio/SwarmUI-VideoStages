@@ -26,7 +26,6 @@ internal static class ClipPlanCompiler
         for (int i = 0; i < (clip.Stages?.Count ?? 0); i++)
         {
             StageSpec stage = clip.Stages[i];
-            bool isClipTerminal = i == clip.Stages.Count - 1;
             ResolvedVideoModel resolvedModel = null;
             context.Architecture?.StageModels.TryGetValue(stage.ClipStageRawIndex, out resolvedModel);
             stages.Add(new StagePlan(

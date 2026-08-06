@@ -298,7 +298,8 @@ public class ArchitectureRuntimeOwnershipTests
                 new(AudioSourceKind.Disabled, "", null, false, null),
                 AudioLengthOwner.Timeline,
                 new([]),
-                []))
+                []),
+            SavesAudioTrack: false)
         {
             Architecture = architecture,
             ArchitecturePayload = payload,

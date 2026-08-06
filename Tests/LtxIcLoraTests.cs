@@ -181,7 +181,8 @@ public sealed class LtxIcLoraTests
             ArchitectureEntryMode.TextToVideo,
             InitVideo: null,
             Stages: [],
-            Audio: null);
+            Audio: null,
+            SavesAudioTrack: false);
         StagePlan stage = new(
             StageId: 11,
             ClipStageIndex: 0,

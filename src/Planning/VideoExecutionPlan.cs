@@ -63,7 +63,7 @@ internal sealed record ClipPlan(
     InitVideoPlan InitVideo,
     IReadOnlyList<StagePlan> Stages,
     AudioPlan Audio,
-    bool SavesAudioTrack = false)
+    bool SavesAudioTrack)
 {
     /// <summary>The one architecture established for this clip before graph mutation begins.</summary>
     public VideoArchitectureDescriptor Architecture { get; init; }

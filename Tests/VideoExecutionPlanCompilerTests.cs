@@ -96,6 +96,7 @@ public class VideoExecutionPlanCompilerTests
         StagePlan stage = plan.Clips[0].Stages[0];
         Assert.Equal(StageInputKind.RootMedia, stage.Input);
         Assert.False(stage.IsPassthrough);
+        Assert.False(stage.IsIntermediateStage);
     }
 
     [Theory]

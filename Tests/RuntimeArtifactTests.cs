@@ -226,7 +226,8 @@ public class RuntimeArtifactTests
         EntryMode: ArchitectureEntryMode.ImageToVideo,
         InitVideo: null,
         Stages: [],
-        Audio: null)
+        Audio: null,
+        SavesAudioTrack: false)
     {
         Architecture = Ltx2ArchitectureModule.Instance.Descriptor,
     };
