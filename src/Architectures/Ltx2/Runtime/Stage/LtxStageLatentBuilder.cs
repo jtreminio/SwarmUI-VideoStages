@@ -35,7 +35,7 @@ internal sealed class LtxStageLatentBuilder
         ClipPlan clip = stageFrame.ClipContext.PlannedClip
             ?? throw Invariant.Failure(
                 "LTX stage execution requires the compiled clip plan.");
-        genInfo.StartStep = StageSchedulePolicy.StartStep(
+        genInfo.StartStep = StageStartStepPolicy.StartStep(
             payload.Core.Steps,
             payload.Core.Control);
         bool retakeActive = stage.HasActiveRetakeMask();

@@ -193,7 +193,7 @@ internal sealed class MiniMaxGenerationSession(
                         "A MiniMax H3 refine stage's incoming media carries no audio input.");
                 }
                 firstFrame = null;
-                startStep = StageSchedulePolicy.StartStep(
+                startStep = StageStartStepPolicy.StartStep(
                     core.Steps,
                     core.Control);
             }

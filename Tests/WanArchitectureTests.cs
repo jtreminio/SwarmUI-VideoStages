@@ -954,7 +954,7 @@ public class WanArchitectureTests
         Assert.True(second.ContinuesSamplingFromPreviousStage);
         Assert.Equal(
             splitStep,
-            StageSchedulePolicy.StartStep(
+            StageStartStepPolicy.StartStep(
                 second.Core.Steps,
                 second.Core.Control));
     }
@@ -1351,9 +1351,9 @@ public class WanArchitectureTests
     [Fact]
     public void Schedule_policy_preserves_one_step_partial_boundary()
     {
-        Assert.True(StageSchedulePolicy.IsQuantizedZeroPartial(8, 0.9));
-        Assert.False(StageSchedulePolicy.IsQuantizedZeroPartial(8, 0.87));
-        Assert.Equal(1, StageSchedulePolicy.StartStep(8, 0.87));
+        Assert.True(StageStartStepPolicy.PartialControlRoundsToZero(8, 0.9));
+        Assert.False(StageStartStepPolicy.PartialControlRoundsToZero(8, 0.87));
+        Assert.Equal(1, StageStartStepPolicy.StartStep(8, 0.87));
     }
 
     private static void AssertIgnored(ClipSpec clip, string code)
