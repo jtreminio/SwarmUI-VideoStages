@@ -157,7 +157,6 @@ internal static class UnitTestStubs
         Ensure(ref ComfyUIBackendExtension.Sam2PointCoordsNegative, "SAM2 Negative Points", "[]");
         Ensure(ref ComfyUIBackendExtension.Sam2BBox, "SAM2 BBox", "");
         Ensure(ref ComfyUIBackendExtension.PixelDecoderModel, "Pixel Decoder Model", "");
-        Ensure(ref ComfyUIBackendExtension.SeedVRModel, "SeedVR Model", "");
         // Core reads these through TryGet without a null guard.
         Ensure(ref ComfyUIBackendExtension.RefinerHyperTile, "Refiner HyperTile", "256");
         Ensure(ref ComfyUIBackendExtension.RefinerSamplerParam, "Refiner Sampler", "euler");
