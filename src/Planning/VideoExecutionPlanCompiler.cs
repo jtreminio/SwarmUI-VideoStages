@@ -122,8 +122,6 @@ internal static class VideoExecutionPlanCompiler
                     spec.Width,
                     spec.Height,
                     spec.FPS,
-                    i == activeClips.Count - 1,
-                    activeClips.Count > 1,
                     totalStageCount,
                     firstStageOrdinal,
                     entryMode,

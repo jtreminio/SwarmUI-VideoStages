@@ -133,8 +133,6 @@ internal sealed record ClipPlanCompilationContext(
     int Width,
     int Height,
     int FramesPerSecond,
-    bool IsLastClip,
-    bool IsMultiClip,
     int TotalStageCount,
     int FirstStageOrdinal,
     ArchitectureEntryMode EntryMode,

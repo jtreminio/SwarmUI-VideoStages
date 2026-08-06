@@ -160,8 +160,6 @@ public class RealArchitectureContractTests
                 Width: 512,
                 Height: 512,
                 FramesPerSecond: 24,
-                IsLastClip: true,
-                IsMultiClip: false,
                 TotalStageCount: 1,
                 FirstStageOrdinal: 0,
                 EntryMode: ArchitectureEntryMode.ImageToVideo,
