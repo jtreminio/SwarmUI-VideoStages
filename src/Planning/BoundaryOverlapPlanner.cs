@@ -1,7 +1,6 @@
 using VideoStages.Execution;
-using VideoStages.Planning;
 
-namespace VideoStages;
+namespace VideoStages.Planning;
 
 /// <summary>Resolved video-frame overlap at every boundary, plus total frames removed from generated clips.</summary>
 internal sealed record BoundaryOverlapPlan(

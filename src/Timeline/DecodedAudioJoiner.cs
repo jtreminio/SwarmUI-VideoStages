@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using VideoStages.Execution;
+using VideoStages.Planning;
 
 namespace VideoStages.Timeline;
 
