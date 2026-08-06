@@ -4,8 +4,6 @@ namespace VideoStages.Planning;
 
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Architectures.HostVideo;
-using VideoStages.Architectures.Wan;
 using VideoStages.Authoring;
 
 /// <summary>
@@ -36,8 +34,7 @@ internal static class VideoExecutionPlanCompiler
         ];
         if (spec.LegacyVideoSwap?.IsConfigured == true
             && architecturePlanning.Clips.Values.Any(assignment =>
-                assignment?.Architecture.Id == HostVideoArchitectureModule.ArchitectureId
-                || assignment?.Architecture.Id == WanArchitectureModule.ArchitectureId))
+                assignment?.Architecture.RunsOnStockHostSampler == true))
         {
             diagnostics.Add(new(
                 PlanDiagnosticSeverity.Warning,

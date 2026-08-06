@@ -186,6 +186,12 @@ internal sealed record VideoArchitectureDescriptor(
     /// </summary>
     public bool ConsumesTimelineAudio { get; init; }
 
+    /// <summary>
+    /// True when this architecture samples through SwarmUI's own video pipeline rather than its own,
+    /// so the host's request-global video settings would otherwise apply to it.
+    /// </summary>
+    public bool RunsOnStockHostSampler { get; init; }
+
     public IReadOnlyDictionary<BoundaryJoinType, RuleDecision> BoundaryRules =>
         BoundaryPolicy.Rules;
 }

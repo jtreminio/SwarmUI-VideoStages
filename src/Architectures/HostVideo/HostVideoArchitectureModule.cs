@@ -32,6 +32,7 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
             "host-video",
             "Decoded host videos can be joined with a hard cut."))
     {
+        RunsOnStockHostSampler = true,
         // Unknown video families do not share one trustworthy temporal grid.
         FrameGrid = 1,
         StageGuideReferences = new(

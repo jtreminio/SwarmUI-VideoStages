@@ -56,6 +56,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             "wan22",
             "Decoded Wan clips can be joined with a hard cut."))
     {
+        RunsOnStockHostSampler = true,
         FrameGrid = FrameGrid,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
