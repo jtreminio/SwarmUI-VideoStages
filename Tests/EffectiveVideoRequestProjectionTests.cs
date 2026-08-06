@@ -7,7 +7,6 @@ using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
-using VideoStages.Architectures.Wan.Planning;
 using VideoStages.Authoring;
 using VideoStages.Execution.StockHost;
 using VideoStages.Planning;
