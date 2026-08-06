@@ -27,6 +27,14 @@ Before running it:
 
 If `./run-tests` fails with “No such file or directory”, you are in the wrong directory—use the path above or `cd` to the extension root (the directory that contains this `AGENTS.md` file).
 
+# SwarmUI core is king
+
+Use core's own code wherever it can do the job. Build on the node core already made instead of a parallel one beside it: call `g.CreateNode`, `g.CreateKSampler`, `g.CreateModelLoader`, `g.CreateConditioning`, `g.CreateImageToVideo` and their siblings rather than hand-assembling the same graph. Taking core's output and adjusting it afterwards beats forking it — reconciling a small difference is cheap, a snowflake implementation is not.
+
+This is settled direction, not an aspiration. Every architecture family now takes over core's sampler, decode, empty latent and conditioning instead of duplicating them, and a timeline stage loads its model through core's own loader. If you are about to write a node core already builds, stop and take core's.
+
+ComfyTyped and the Comfy graph tests are what make this safe: generated node types catch a wrong shape at compile time, and the graph tests assert the workflow actually emitted. So when core's behaviour is not quite right for a timeline, fix it at the seam — widen the node, retarget the save, override the parameter — instead of replacing core's path with your own.
+
 # How to change this codebase
 
 - **Reduce unnecessary abstraction and misdirection.** Delete wrappers that only carry another type, results objects with one producer, options records with one caller, interfaces with one implementer that buy no layering. A name must not promise something the code does not do.
