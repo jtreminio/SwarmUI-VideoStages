@@ -6,17 +6,17 @@ using VideoStages.Planning;
 namespace VideoStages;
 
 /// <summary>
-/// Assembles the final timeline from planned boundaries and runtime downgrades.
-/// <see cref="TimelineMerger"/> builds the graph.
+/// The run's boundaries: planned joins plus whatever the architectures degraded at runtime. Merges
+/// the finished clips on those boundaries, with <see cref="TimelineMerger"/> building the graph.
 /// </summary>
-internal sealed class TimelineAssemblySession
+internal sealed class TimelineBoundaries
 {
     private readonly WorkflowGenerator _generator;
     private readonly TimelineMerger _merger;
     private readonly VideoExecutionPlan _plan;
     private readonly List<BoundaryPlan> _effectiveBoundaries;
 
-    public TimelineAssemblySession(
+    public TimelineBoundaries(
         WorkflowGenerator generator,
         TimelineMerger merger,
         VideoExecutionPlan plan)
@@ -75,33 +75,25 @@ internal sealed class TimelineAssemblySession
             BoundaryOverlapPlanner.DegradeToCut(_effectiveBoundaries[boundaryIndex]);
     }
 
-    internal void ReportWarning(string warning) =>
-        PlanDiagnosticReporter.TrackRequestWarning(_generator.UserInput, warning);
-
-    public RuntimeArtifact Assemble(IReadOnlyList<DecodedClipArtifact> clipOutputs)
+    public RuntimeArtifact Merge(IReadOnlyList<DecodedClipArtifact> clipOutputs)
     {
         ArgumentNullException.ThrowIfNull(clipOutputs);
         if (clipOutputs.Count != _plan.Clips.Count)
         {
             throw Invariant.Failure(
-                $"timeline assembly expected {_plan.Clips.Count} clip outputs "
+                $"timeline merge expected {_plan.Clips.Count} clip outputs "
                 + $"but received {clipOutputs.Count}.");
+        }
+        if (clipOutputs.Count == 1)
+        {
+            // A single clip has no boundary to merge, but publication must still use the clip
+            // result rather than ambient media.
+            using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+            return RuntimeArtifact.FromDecoded(_generator, bridge, clipOutputs[0]);
         }
         return _merger.Merge(clipOutputs, _effectiveBoundaries);
     }
 
-    /// <summary>
-    /// Returns a single clip's decoded artifact as the timeline output, so publication uses the
-    /// clip result instead of ambient media.
-    /// </summary>
-    public RuntimeArtifact FinalizeSingleClip(DecodedClipArtifact clipOutput)
-    {
-        ArgumentNullException.ThrowIfNull(clipOutput);
-        using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
-        return RuntimeArtifact.FromDecoded(_generator, bridge, clipOutput);
-    }
-
     private int BoundaryIndex(int fromClipId) =>
         _effectiveBoundaries.FindIndex(boundary => boundary.FromClipId == fromClipId);
-
 }

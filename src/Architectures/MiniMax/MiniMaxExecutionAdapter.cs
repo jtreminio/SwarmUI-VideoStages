@@ -96,7 +96,7 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
             context.Plan,
             rootSources,
             context.AudioSources,
-            context.Assembly,
+            context.Boundaries,
             _baseReference,
             _refinerReference,
             new VideoStageRunner(

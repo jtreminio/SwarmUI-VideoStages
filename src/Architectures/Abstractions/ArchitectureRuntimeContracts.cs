@@ -84,7 +84,7 @@ internal sealed record ArchitectureRequestPreflightContext(
 internal sealed record ArchitectureTimelineSessionContext(
     VideoExecutionPlan Plan,
     AudioRuntimeSources AudioSources,
-    TimelineAssemblySession Assembly)
+    TimelineBoundaries Boundaries)
 {
     public bool OwnsGeneratedRoot { get; init; }
 

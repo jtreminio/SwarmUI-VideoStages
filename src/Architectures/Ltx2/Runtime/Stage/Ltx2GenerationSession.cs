@@ -113,7 +113,7 @@ internal sealed class Ltx2GenerationSession(
         }
 
         return boundaryHandoffResolver.Resolve(
-            session.Assembly,
+            session.Boundaries,
             context.PreviousClip,
             context.PreviousClipOutput?.ToHostMedia(g),
             context.Clip,

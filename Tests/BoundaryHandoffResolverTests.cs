@@ -83,12 +83,12 @@ public class BoundaryHandoffResolverTests
         return media;
     }
 
-    private static (BoundaryHandoffResolver Resolver, TimelineAssemblySession Assembly, ClipContext Context)
+    private static (BoundaryHandoffResolver Resolver, TimelineBoundaries Boundaries, ClipContext Context)
         Arrange(WorkflowGenerator g, VideoExecutionPlan plan) =>
         (new BoundaryHandoffResolver(
                 g,
                 new ContinuityGuideBuilder(g)),
-            new TimelineAssemblySession(g, new TimelineMerger(g), plan),
+            new TimelineBoundaries(g, new TimelineMerger(g), plan),
             new ClipContext(plan, plan.Clips[1], null, null));
 
     public static TheoryData<string> MissingCarryPrerequisites() =>
@@ -101,9 +101,9 @@ public class BoundaryHandoffResolverTests
     {
         WorkflowGenerator g = NewGenerator();
         VideoExecutionPlan plan = CrossfadeCarryPlan();
-        (BoundaryHandoffResolver resolver, TimelineAssemblySession assembly, ClipContext context) =
+        (BoundaryHandoffResolver resolver, TimelineBoundaries boundaries, ClipContext context) =
             Arrange(g, plan);
-        Assert.True(assembly.TryGetAudioCarryWindow(0, out _));
+        Assert.True(boundaries.TryGetAudioCarryWindow(0, out _));
 
         WGNodeData previousOutput = prerequisite switch
         {
@@ -117,7 +117,7 @@ public class BoundaryHandoffResolverTests
         };
 
         LtxBoundaryAudioCarry carry = resolver.Resolve(
-            assembly,
+            boundaries,
             plan.Clips[0],
             previousOutput,
             plan.Clips[1],
@@ -125,8 +125,8 @@ public class BoundaryHandoffResolverTests
 
         Assert.Null(carry);
         Assert.Null(context.ContinuityFrame);
-        Assert.False(assembly.TryGetAudioCarryWindow(0, out _));
-        Assert.False(assembly.TryGetContinueInput(0, out _, out _));
+        Assert.False(boundaries.TryGetAudioCarryWindow(0, out _));
+        Assert.False(boundaries.TryGetContinueInput(0, out _, out _));
         string warning = Assert.Single(
             Assert.IsType<List<string>>(g.UserInput.ExtraMeta["parser_warnings"]));
         Assert.Contains("cannot carry audio", warning, StringComparison.Ordinal);
@@ -138,18 +138,18 @@ public class BoundaryHandoffResolverTests
     {
         WorkflowGenerator g = NewGenerator();
         VideoExecutionPlan plan = CrossfadeCarryPlan();
-        (BoundaryHandoffResolver resolver, TimelineAssemblySession assembly, ClipContext context) =
+        (BoundaryHandoffResolver resolver, TimelineBoundaries boundaries, ClipContext context) =
             Arrange(g, plan);
 
         LtxBoundaryAudioCarry carry = resolver.Resolve(
-            assembly,
+            boundaries,
             plan.Clips[0],
             PreviousOutput(g),
             plan.Clips[1],
             context);
 
         Assert.NotNull(carry);
-        Assert.True(assembly.TryGetAudioCarryWindow(0, out int window));
+        Assert.True(boundaries.TryGetAudioCarryWindow(0, out int window));
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         Assert.Equal(window / 24.0, carry.DurationSeconds, precision: 6);
         Assert.Equal((ClipFrames - window) / 24.0, carry.SourceStartSeconds, precision: 6);

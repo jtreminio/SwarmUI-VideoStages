@@ -132,11 +132,11 @@ internal sealed class VideoArchitectureExecutionHost
         _generator.LastID = Math.Max(
             _generator.LastID,
             Constants.StagedNodeIdReservationFloor);
-        TimelineAssemblySession assembly = new(_generator, merger, _plan);
+        TimelineBoundaries boundaries = new(_generator, merger, _plan);
         ArchitectureTimelineSessionContext sessionContext = new(
             _plan,
             preparedAudioSources,
-            assembly)
+            boundaries)
         {
             RootAdoption = new HostRootAdoption(
                 _generator,
@@ -207,9 +207,7 @@ internal sealed class VideoArchitectureExecutionHost
                 previousClip = plannedClip;
             }
 
-            finalArtifact = _plan.Clips.Count > 1
-                ? assembly.Assemble(clipOutputs)
-                : assembly.FinalizeSingleClip(clipOutputs[0]);
+            finalArtifact = boundaries.Merge(clipOutputs);
         }
         finally
         {

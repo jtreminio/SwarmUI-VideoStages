@@ -19,7 +19,7 @@ internal sealed class MiniMaxGenerationSession(
     VideoExecutionPlan plan,
     HostVideoRootSources rootSources,
     AudioRuntimeSources audioSources,
-    TimelineAssemblySession assembly,
+    TimelineBoundaries boundaries,
     CapturedHostReference baseReference,
     CapturedHostReference refinerReference,
     VideoStageRunner stageRunner,
@@ -234,7 +234,7 @@ internal sealed class MiniMaxGenerationSession(
         _boundaryCarryDuration = 0;
         _boundaryCarrySourceStart = 0;
         if (context.PreviousClip is null
-            || !assembly.TryGetAudioCarryWindow(
+            || !boundaries.TryGetAudioCarryWindow(
                 context.PreviousClip.ClipId,
                 out int windowFrames))
         {
@@ -242,10 +242,11 @@ internal sealed class MiniMaxGenerationSession(
         }
         if (!context.Clip.Stages.Any(stage => !stage.IsPassthrough))
         {
-            assembly.ReportWarning(
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
                 $"VideoStages: Clip {context.Clip.ClipId} has no generating stage for its "
                     + "incoming audio carry; treating the boundary as a cut.");
-            assembly.DegradeToCut(context.PreviousClip.ClipId);
+            boundaries.DegradeToCut(context.PreviousClip.ClipId);
             return;
         }
 
@@ -256,11 +257,12 @@ internal sealed class MiniMaxGenerationSession(
             || windowFrames <= 0
             || windowFrames > previous.Frames)
         {
-            assembly.ReportWarning(
+            PlanDiagnosticReporter.TrackRequestWarning(
+                g.UserInput,
                 $"VideoStages: Clip {context.PreviousClip.ClipId} cannot carry audio into "
                     + $"Clip {context.Clip.ClipId} because its decoded audio timing is unavailable; "
                     + "treating the boundary as a cut.");
-            assembly.DegradeToCut(context.PreviousClip.ClipId);
+            boundaries.DegradeToCut(context.PreviousClip.ClipId);
             return;
         }
 
