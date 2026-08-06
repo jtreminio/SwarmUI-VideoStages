@@ -91,6 +91,11 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
         HostVideoRootSources rootSources = new(
             generator.CurrentMedia?.Duplicate(),
             generator.CurrentVae?.Duplicate());
+        HostVideoDecodedStageInput stageInput = new(
+            generator,
+            context.Plan.FramesPerSecond,
+            MiniMaxGenerationSession.ArchitectureLabel,
+            preserveAttachedAudio: true);
         return new MiniMaxGenerationSession(
             generator,
             context.Plan,
@@ -99,11 +104,8 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
             context.Boundaries,
             _baseReference,
             _refinerReference,
-            new VideoStageRunner(
-                generator,
-                context.Plan,
-                MiniMaxGenerationSession.ArchitectureLabel,
-                preserveAttachedAudio: true),
+            new VideoStageRunner(generator, context.Plan),
+            stageInput,
             context.RootAdoption);
     }
 }

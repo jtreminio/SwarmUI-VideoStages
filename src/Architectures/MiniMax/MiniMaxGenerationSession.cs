@@ -25,6 +25,7 @@ internal sealed class MiniMaxGenerationSession(
     CapturedHostReference baseReference,
     CapturedHostReference refinerReference,
     VideoStageRunner stageRunner,
+    HostVideoDecodedStageInput stageInput,
     HostRootAdoption rootAdoption) : IVideoGenerationSession
 {
     internal const string ArchitectureLabel = "MiniMax H3";
@@ -107,10 +108,16 @@ internal sealed class MiniMaxGenerationSession(
             g.CurrentMedia.AttachedAudio = null;
         }
 
-        return stageRunner.Execute(clip, ResolvePassthroughFrames, ExecuteGeneratingStage);
+        return stageRunner.Execute(clip, ExecutePassthroughStage, ExecuteGeneratingStage);
     }
 
     public void Dispose() => stageRunner.Dispose();
+
+    private void ExecutePassthroughStage(ClipPlan clip, StagePlan stage) =>
+        stageInput.ConfigurePassthrough(
+            clip,
+            stage,
+            ResolvePassthroughFrames(clip, stage));
 
     private int? ResolvePassthroughFrames(ClipPlan clip, StagePlan stage) =>
         stage.Input is StageInputKind.PreviousStage or StageInputKind.InitVideo
@@ -129,7 +136,6 @@ internal sealed class MiniMaxGenerationSession(
         ClipPlan clip,
         StagePlan stage,
         StagePlan continuation,
-        HostVideoDecodedStageInput stageInput,
         int sectionId)
     {
         if (continuation is not null)
@@ -156,7 +162,7 @@ internal sealed class MiniMaxGenerationSession(
             T2IParamTypes.PromptAudios.Type))
         {
             // H3 writes its own audio, so core's reference path must not also wire Prompt Audios
-            // into ref_audios. Dropped for this stage only; ParamSnapshot restores it on exit.
+            // into ref_audios.
             g.UserInput.InternalSet.ValuesInput.Remove(
                 T2IParamTypes.PromptAudios.Type.ID);
             WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(

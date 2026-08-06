@@ -7,48 +7,28 @@ namespace VideoStages.Execution.StockHost;
 /// <summary>Host media captured before clip execution.</summary>
 internal sealed record HostVideoRootSources(WGNodeData Media, WGNodeData Vae);
 
-/// <summary>
-/// Runs the shared authored-stage loop.
-/// </summary>
 internal sealed class VideoStageRunner : IDisposable
 {
     private readonly WorkflowGenerator _generator;
     private readonly StageUpscaleGraph _upscaleGraph;
-    private readonly HostVideoDecodedStageInput _decodedInput;
     private readonly StageHostExecutionScope _stageScope;
 
-    internal VideoStageRunner(
-        WorkflowGenerator generator,
-        VideoExecutionPlan plan,
-        string architectureDisplayLabel,
-        bool preserveAttachedAudio = false)
+    internal VideoStageRunner(WorkflowGenerator generator, VideoExecutionPlan plan)
     {
         ArgumentNullException.ThrowIfNull(generator);
         ArgumentNullException.ThrowIfNull(plan);
-        ArgumentException.ThrowIfNullOrWhiteSpace(architectureDisplayLabel);
         _generator = generator;
         _upscaleGraph = new(generator);
-        _decodedInput = new(
-            generator,
-            plan.FramesPerSecond,
-            architectureDisplayLabel,
-            preserveAttachedAudio);
         _stageScope = new(generator, plan);
     }
 
     internal DecodedClipArtifact Execute(
         ClipPlan clip,
-        Func<ClipPlan, StagePlan, int?> resolvePassthroughFrames,
-        Func<
-            ClipPlan,
-            StagePlan,
-            StagePlan,
-            HostVideoDecodedStageInput,
-            int,
-            bool> executeGeneratingStage)
+        Action<ClipPlan, StagePlan> executePassthroughStage,
+        Func<ClipPlan, StagePlan, StagePlan, int, bool> executeGeneratingStage)
     {
         ArgumentNullException.ThrowIfNull(clip);
-        ArgumentNullException.ThrowIfNull(resolvePassthroughFrames);
+        ArgumentNullException.ThrowIfNull(executePassthroughStage);
         ArgumentNullException.ThrowIfNull(executeGeneratingStage);
 
         RuntimeArtifact output = ExecuteStages(clip, (stage, continuation) =>
@@ -58,10 +38,7 @@ internal sealed class VideoStageRunner : IDisposable
             bool consumedContinuation = false;
             if (stage.IsPassthrough)
             {
-                _decodedInput.ConfigurePassthrough(
-                    clip,
-                    stage,
-                    resolvePassthroughFrames(clip, stage));
+                executePassthroughStage(clip, stage);
             }
             else
             {
@@ -75,7 +52,6 @@ internal sealed class VideoStageRunner : IDisposable
                     clip,
                     stage,
                     continuation,
-                    _decodedInput,
                     sectionId);
             }
             return consumedContinuation;

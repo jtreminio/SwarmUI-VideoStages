@@ -17,6 +17,7 @@ internal sealed class StockHostVideoGenerationSession(
     VideoExecutionPlan plan,
     HostVideoRootSources rootSources,
     VideoStageRunner stageRunner,
+    HostVideoDecodedStageInput stageInput,
     HostRootAdoption rootAdoption,
     ArchitectureId architectureId,
     string architectureLabel,
@@ -26,7 +27,6 @@ internal sealed class StockHostVideoGenerationSession(
     private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
     private readonly WanStockHostVideoBehavior _wanBehavior = wanBehavior;
 
-    /// <summary>The timeline resolution on the shared VideoStages pixel grid.</summary>
     private readonly (int Width, int Height) _dimensions =
         DimensionSnap.Snap(plan.Width, plan.Height);
 
@@ -43,14 +43,17 @@ internal sealed class StockHostVideoGenerationSession(
         HostVideoRootSources rootSources = new(
             generator.CurrentMedia?.Duplicate(),
             generator.CurrentVae?.Duplicate());
+        HostVideoDecodedStageInput stageInput = new(
+            generator,
+            context.Plan.FramesPerSecond,
+            architectureLabel,
+            preserveAttachedAudio: false);
         return new(
             generator,
             context.Plan,
             rootSources,
-            new VideoStageRunner(
-                generator,
-                context.Plan,
-                architectureLabel),
+            new VideoStageRunner(generator, context.Plan),
+            stageInput,
             context.RootAdoption,
             architectureId,
             architectureLabel,
@@ -117,19 +120,24 @@ internal sealed class StockHostVideoGenerationSession(
 
         return stageRunner.Execute(
             clip,
-            _wanBehavior is not null
-                ? _wanBehavior.ResolvePassthroughFrames
-                : ResolveGenericFrames,
+            ExecutePassthroughStage,
             ExecuteGeneratingStage);
     }
 
     public void Dispose() => stageRunner.Dispose();
 
+    private void ExecutePassthroughStage(ClipPlan clip, StagePlan stage) =>
+        stageInput.ConfigurePassthrough(
+            clip,
+            stage,
+            _wanBehavior is null
+                ? ResolveGenericFrames(clip, stage)
+                : _wanBehavior.ResolvePassthroughFrames(clip, stage));
+
     private bool ExecuteGeneratingStage(
         ClipPlan clip,
         StagePlan stage,
         StagePlan continuation,
-        HostVideoDecodedStageInput stageInput,
         int sectionId)
     {
         (string positive, string negative) = _prompts.Resolve(clip, stage);
@@ -182,7 +190,6 @@ internal sealed class StockHostVideoGenerationSession(
                     clip,
                     stage,
                     continuation,
-                    stageInput,
                     sectionId,
                     positive,
                     negative)
@@ -190,7 +197,6 @@ internal sealed class StockHostVideoGenerationSession(
                     clip,
                     stage,
                     continuation,
-                    stageInput,
                     sectionId,
                     positive,
                     negative);
@@ -201,7 +207,6 @@ internal sealed class StockHostVideoGenerationSession(
         ClipPlan clip,
         StagePlan stage,
         StagePlan continuation,
-        HostVideoDecodedStageInput stageInput,
         int sectionId,
         string positive,
         string negative)
@@ -242,7 +247,6 @@ internal sealed class StockHostVideoGenerationSession(
         ClipPlan clip,
         StagePlan stage,
         StagePlan continuation,
-        HostVideoDecodedStageInput stageInput,
         int sectionId,
         string positive,
         string negative)

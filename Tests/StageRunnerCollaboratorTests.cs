@@ -120,13 +120,13 @@ public class StageRunnerCollaboratorTests
         };
         VideoExecutionPlan plan = MakeExecutionPlan(models.VideoModel.Name);
         ClipPlan clip = Assert.Single(plan.Clips);
-        using VideoStageRunner stageRunner = new(generator, plan, "unit test");
+        using VideoStageRunner stageRunner = new(generator, plan);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(
             () => stageRunner.Execute(
                 clip,
-                (plannedClip, stage) => null,
-                (plannedClip, stage, continuation, input, sectionId) => false));
+                (plannedClip, stage) => { },
+                (plannedClip, stage, continuation, sectionId) => false));
 
         Assert.Contains($"stage {clip.Stages[0].StageId}", error.Message);
         Assert.Contains("produced no media artifact", error.Message);
@@ -164,12 +164,12 @@ public class StageRunnerCollaboratorTests
         }
         VideoExecutionPlan plan = MakeExecutionPlan(models.VideoModel.Name);
         ClipPlan clip = Assert.Single(plan.Clips);
-        using VideoStageRunner stageRunner = new(generator, plan, "unit test");
+        using VideoStageRunner stageRunner = new(generator, plan);
 
         DecodedClipArtifact output = stageRunner.Execute(
             clip,
-            (plannedClip, stage) => null,
-            (plannedClip, stage, continuation, input, sectionId) => false);
+            (plannedClip, stage) => { },
+            (plannedClip, stage, continuation, sectionId) => false);
 
         using WorkflowBridge outputBridge = WorkflowBridge.Create(generator.Workflow);
         Assert.DoesNotContain(
