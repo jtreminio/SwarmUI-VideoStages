@@ -35,8 +35,6 @@ export const CLIP_REFERENCE_KIND_INFO = {
 
 export const CLIP_REFERENCE_KINDS = ["image", "video", "audio"] as const;
 
-// `satisfies` is what makes a scale added backend-side a tsc error here rather
-// than a dropdown option labelled "0.125".
 const CLIP_REFERENCE_SCALE_LABELS = {
     1: "Full",
     0.5: "Half",
@@ -49,7 +47,7 @@ const CLIP_REFERENCE_SCALE_LABELS = {
  * costs fewer reference tokens — which are re-encoded on every sampling step.
  */
 export const CLIP_REFERENCE_SCALES: readonly {
-    value: number;
+    value: (typeof REFERENCE_SCALES)[number];
     label: string;
 }[] = REFERENCE_SCALES.map((value) => ({
     value,
