@@ -203,9 +203,8 @@ describe("diffDocuments", () => {
     });
 
     it("accepts deleting the last stage of a init-video clip", () => {
-        // A initVideoClip clip with no stages is the documented `none` architecture case, but the diff
-        // used to reject a null next authored architecture outright, so the delete threw
-        // architecture-invariant on save (and the undo across it silently did nothing).
+        // An init-video clip with no stages is the documented `none` architecture, not an
+        // unresolved identity the diff should refuse.
         const before = document();
         before.clips[0].initVideo = {
             data: "data:video/mp4;base64,AAAA",
@@ -807,12 +806,6 @@ describe("diffDocuments", () => {
 
         const command = applyDiff(before, after);
         expect(command.commands.map((entry) => entry.type)).toEqual([type]);
-        expect(
-            command.commands.some(
-                (entry) =>
-                    (entry as { type: string }).type === "document.replace",
-            ),
-        ).toBe(false);
     });
 
     it.each([
