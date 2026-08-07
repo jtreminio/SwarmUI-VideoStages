@@ -126,13 +126,15 @@ internal static class AuthoringTimeline
         IReadOnlyList<JObject> clips,
         Action<string> warn = null)
     {
-        Dictionary<string, int> clipIds = [];
+        // The only place the two clip vocabularies meet: the document's own string id, which the
+        // frontend writes into a span projection, and the authored clip number every spec carries.
+        Dictionary<string, int> clipIdsByDocumentId = [];
         for (int clipIndex = 0; clipIndex < clips.Count; clipIndex++)
         {
-            string clipId = DocumentJson.GetString(clips[clipIndex], "id")?.Trim();
-            if (!string.IsNullOrWhiteSpace(clipId))
+            string documentId = DocumentJson.GetString(clips[clipIndex], "id")?.Trim();
+            if (!string.IsNullOrWhiteSpace(documentId))
             {
-                clipIds.TryAdd(clipId, clipIndex);
+                clipIdsByDocumentId.TryAdd(documentId, clipIndex);
             }
         }
 
@@ -212,11 +214,11 @@ internal static class AuthoringTimeline
                 int? firstClipId = ResolveClipId(
                     projection,
                     "firstClipId",
-                    clipIds);
+                    clipIdsByDocumentId);
                 int? lastClipId = ResolveClipId(
                     projection,
                     "lastClipId",
-                    clipIds);
+                    clipIdsByDocumentId);
                 double? firstOffset = ReadOptionalNonNegative(
                     projection,
                     "clipStartOffsetSeconds",
@@ -252,12 +254,13 @@ internal static class AuthoringTimeline
     private static int? ResolveClipId(
         JObject projection,
         string key,
-        IReadOnlyDictionary<string, int> clipIds)
+        IReadOnlyDictionary<string, int> clipIdsByDocumentId)
     {
-        string id = projection is null
+        string documentId = projection is null
             ? null
             : DocumentJson.GetString(projection, key)?.Trim();
-        return !string.IsNullOrWhiteSpace(id) && clipIds.TryGetValue(id, out int clipId)
+        return !string.IsNullOrWhiteSpace(documentId)
+            && clipIdsByDocumentId.TryGetValue(documentId, out int clipId)
             ? clipId
             : null;
     }
