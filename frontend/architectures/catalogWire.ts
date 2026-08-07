@@ -9,6 +9,7 @@ import { MAX_FRAME_GRID } from "./temporalGrid";
 import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
+    ArchitectureEntryMode,
     CapabilityRuleDecision,
     CapabilitySupport,
     FrameReferencePosition,
@@ -26,7 +27,7 @@ const isUniqueStringArray = (value: unknown): value is string[] =>
     value.every((entry) => isTrimmedNonEmpty(entry)) &&
     new Set(value).size === value.length;
 
-const isEntryModeArray = (value: unknown): value is string[] =>
+const isEntryModeArray = (value: unknown): value is ArchitectureEntryMode[] =>
     isUniqueStringArray(value) &&
     value.every((entry) => (ENTRY_MODES as readonly string[]).includes(entry));
 

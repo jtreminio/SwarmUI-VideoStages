@@ -1,4 +1,5 @@
 import type {
+    ENTRY_MODES,
     FRAME_REFERENCE_POSITIONS,
     RULE_SUPPORTS,
 } from "./generatedFeatures";
@@ -7,6 +8,7 @@ export type VideoArchitectureId = string;
 export type ModelProfileId = string;
 
 export type CapabilitySupport = (typeof RULE_SUPPORTS)[number];
+export type ArchitectureEntryMode = (typeof ENTRY_MODES)[number];
 export type FrameReferencePosition = (typeof FRAME_REFERENCE_POSITIONS)[number];
 
 export interface CapabilityRuleDecision {
@@ -18,7 +20,7 @@ export interface CapabilityRuleDecision {
 
 export interface ArchitectureCapabilities {
     features: string[];
-    entryModes: string[];
+    entryModes: ArchitectureEntryMode[];
     audioSourceKinds: string[];
 }
 
@@ -35,7 +37,7 @@ export interface ArchitectureModelEntry {
     capabilities?: ArchitectureCapabilities;
     enhancements?: ModelEnhancements;
     /** Internal entry-mode projection derived from typed model capabilities. */
-    entryModes: string[];
+    entryModes: ArchitectureEntryMode[];
 }
 
 export interface ModelEnhancements {

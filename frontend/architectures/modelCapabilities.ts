@@ -6,10 +6,10 @@ import type {
     ArchitectureModelEntry,
 } from "./types";
 
-const intersect = (
-    left: readonly string[],
-    right: readonly string[],
-): string[] => left.filter((value) => right.includes(value));
+const intersect = <T extends string>(
+    left: readonly T[],
+    right: readonly T[],
+): T[] => left.filter((value) => right.includes(value));
 
 export const effectiveModelCapabilities = (
     model: ArchitectureModelEntry | undefined,

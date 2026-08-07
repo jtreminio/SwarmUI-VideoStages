@@ -22,7 +22,10 @@ import {
     subscribeArchitectureCatalog,
 } from "./catalog";
 import { createCapabilityViewResolver } from "./policy";
-import type { VideoArchitectureCatalogDto } from "./types";
+import type {
+    ArchitectureEntryMode,
+    VideoArchitectureCatalogDto,
+} from "./types";
 
 const dto: VideoArchitectureCatalogDto = {
     schemaVersion: 2,
@@ -210,8 +213,9 @@ describe("architecture catalog wire contract", () => {
 
     it("rejects unknown effective entry modes", () => {
         const unknownOverview = structuredClone(dto);
+        // Deliberately invalid wire data: the parser, not tsc, must reject it.
         unknownOverview.architectures[0].capabilities.entryModes[0] =
-            "future-video-mode";
+            "future-video-mode" as ArchitectureEntryMode;
         expect(parseVideoArchitectureCatalog(unknownOverview)).toBeNull();
     });
 
