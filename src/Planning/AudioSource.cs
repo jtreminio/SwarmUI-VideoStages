@@ -34,7 +34,7 @@ internal static class AudioSourceKindPolicy
     /// </summary>
     internal static bool WantsAudioDerivedLength(ClipSpec clip) =>
         clip.ClipLengthFromAudio
-        && CanDriveClipDuration(AudioSourceParser.Parse(clip.AudioSource).Kind);
+        && CanDriveClipDuration(AudioSource.Read(clip.AudioSource).Kind);
 }
 
 /// <summary>A parsed authored audio-source string.</summary>
@@ -43,9 +43,9 @@ internal sealed record AudioSourceSelection(
     string Raw,
     int? AceStepFunTrack);
 
-internal static class AudioSourceParser
+internal static class AudioSource
 {
-    internal static AudioSourceSelection Parse(string raw)
+    internal static AudioSourceSelection Read(string raw)
     {
         string trimmed = (raw ?? MediaSource.Native).Trim();
         if (trimmed.Length == 0 || StringUtils.Equals(trimmed, MediaSource.Native))

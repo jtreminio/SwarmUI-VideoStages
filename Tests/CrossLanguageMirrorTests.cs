@@ -86,7 +86,7 @@ public class CrossLanguageMirrorTests
             Assert.Equal(
                 c.Value<bool>("canDriveClipDuration"),
                 AudioSourceKindPolicy.CanDriveClipDuration(
-                    AudioSourceParser.Parse(c.Value<string>("source")).Kind));
+                    AudioSource.Read(c.Value<string>("source")).Kind));
         }
     }
 

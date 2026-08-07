@@ -153,7 +153,7 @@ internal static class EffectiveVideoRequestProjection
             || (AudioSourceKindPolicy.WantsAudioDerivedLength(clip)
                 && features.HasFlag(ArchitectureFeature.AudioDerivedDuration)
                 && assignment.Architecture.AudioSourceKinds.Contains(
-                    AudioSourceParser.Parse(clip.AudioSource).Kind))
+                    AudioSource.Read(clip.AudioSource).Kind))
             || (clip.ClipLengthFromControlNet
                 && features.HasFlag(ArchitectureFeature.IcLora)))
         {
