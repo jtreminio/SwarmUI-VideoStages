@@ -1,5 +1,7 @@
-import type { CONTINUE_MODES } from "./generatedFeatures";
+import { CONTINUE_MODES } from "./generatedFeatures";
 import type { CapabilityRuleDecision } from "./types";
+
+export type ContinueMode = (typeof CONTINUE_MODES)[number];
 
 export interface BoundaryWindowConstraints {
     frameStep: number;
@@ -7,7 +9,7 @@ export interface BoundaryWindowConstraints {
     maxFrames: number;
     defaultFrames: number;
     continuityExtraFrames: number;
-    continueMode: (typeof CONTINUE_MODES)[number];
+    continueMode: ContinueMode;
 }
 
 const GENERIC_BOUNDARY_CONSTRAINTS: BoundaryWindowConstraints = {
@@ -18,6 +20,10 @@ const GENERIC_BOUNDARY_CONSTRAINTS: BoundaryWindowConstraints = {
     continuityExtraFrames: 0,
     continueMode: "overlap",
 };
+
+const asContinueMode = (value: unknown): ContinueMode =>
+    CONTINUE_MODES.find((mode) => mode === value) ??
+    GENERIC_BOUNDARY_CONSTRAINTS.continueMode;
 
 const finitePositive = (
     value: unknown,
@@ -60,8 +66,7 @@ export const boundaryWindowConstraints = (
             GENERIC_BOUNDARY_CONSTRAINTS.continuityExtraFrames,
             true,
         ),
-        continueMode:
-            raw?.continueMode === "reference" ? "reference" : "overlap",
+        continueMode: asContinueMode(raw?.continueMode),
     };
 };
 

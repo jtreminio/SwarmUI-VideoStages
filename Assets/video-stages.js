@@ -1087,6 +1087,7 @@
     continuityExtraFrames: 0,
     continueMode: "overlap"
   };
+  var asContinueMode = (value) => CONTINUE_MODES.find((mode) => mode === value) ?? GENERIC_BOUNDARY_CONSTRAINTS.continueMode;
   var finitePositive = (value, fallback, allowZero = false) => {
     const numeric = Math.trunc(Number(value));
     return Number.isFinite(numeric) && (allowZero ? numeric >= 0 : numeric > 0) ? numeric : fallback;
@@ -1119,7 +1120,7 @@
         GENERIC_BOUNDARY_CONSTRAINTS.continuityExtraFrames,
         true
       ),
-      continueMode: raw?.continueMode === "reference" ? "reference" : "overlap"
+      continueMode: asContinueMode(raw?.continueMode)
     };
   };
   var normalizeBoundaryWindow = (value, constraints) => {
