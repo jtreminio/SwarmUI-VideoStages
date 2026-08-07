@@ -1,5 +1,13 @@
 import { MEDIA_SOURCE_BASE } from "../generatedMediaSource";
 import type {
+    CanonicalAudioTrack,
+    CanonicalAudioTrackSpan,
+    CanonicalAuthoringDocument,
+    CanonicalClip,
+    CanonicalFrameRefImage,
+    CanonicalPromptWindow,
+    CanonicalRetake,
+    CanonicalStage,
     Clip,
     ClipReference,
     FrameRefImage,
@@ -7,6 +15,7 @@ import type {
     InitVideo,
     Stage,
 } from "../types";
+import { CURRENT_AUTHORING_SCHEMA_VERSION } from "../types";
 
 export const initVideoFixture = (
     overrides: Partial<InitVideo> = {},
@@ -106,6 +115,98 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     references: [],
     frameRefs: [],
     stages: [minimalStage()],
+    ...overrides,
+});
+
+/**
+ * ID-bearing fixtures for the document command/diff tests, which address every entity by a
+ * stable ID.
+ */
+export const canonicalStage = (
+    id: string,
+    overrides: Partial<CanonicalStage> = {},
+): CanonicalStage => ({
+    ...minimalStage({
+        control: 0.5,
+        controlNetStrength: 1,
+        upscaleMethod: "pixel-lanczos",
+        model: "ltx",
+    }),
+    id,
+    ...overrides,
+});
+
+export const canonicalRef = (
+    id: string,
+    overrides: Partial<CanonicalFrameRefImage> = {},
+): CanonicalFrameRefImage => ({
+    ...minimalRef({ frame: 1 }),
+    id,
+    ...overrides,
+});
+
+export const canonicalPromptWindow = (
+    id: string,
+    overrides: Partial<CanonicalPromptWindow> = {},
+): CanonicalPromptWindow => ({
+    id,
+    prompt: id,
+    start: 0,
+    duration: 1,
+    ...overrides,
+});
+
+export const canonicalRetake = (
+    id: string,
+    overrides: Partial<CanonicalRetake> = {},
+): CanonicalRetake => ({
+    id,
+    startSeconds: 0,
+    lengthSeconds: 1,
+    strength: 0.5,
+    ...overrides,
+});
+
+export const canonicalClip = (
+    id: string,
+    overrides: Partial<CanonicalClip> = {},
+): CanonicalClip => ({
+    ...(minimalClip({ prompt: id, duration: 4, stages: [] }) as CanonicalClip),
+    id,
+    ...overrides,
+});
+
+export const canonicalAudioSpan = (
+    id: string,
+    overrides: Partial<CanonicalAudioTrackSpan> = {},
+): CanonicalAudioTrackSpan => ({
+    id,
+    timelineStartSeconds: null,
+    timelineLengthSeconds: null,
+    sourceStartSeconds: 0,
+    ...overrides,
+});
+
+export const canonicalAudioTrack = (
+    id: string,
+    overrides: Partial<CanonicalAudioTrack> = {},
+): CanonicalAudioTrack => ({
+    id,
+    source: { kind: "Unrecognized", reference: id, uploadedAudio: null },
+    spans: [],
+    ...overrides,
+});
+
+export const canonicalDocument = (
+    overrides: Partial<CanonicalAuthoringDocument> = {},
+): CanonicalAuthoringDocument => ({
+    schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
+    width: 1024,
+    height: 576,
+    fps: 24,
+    dimsExplicit: true,
+    clips: [],
+    audioTracks: [],
     ...overrides,
 });
 

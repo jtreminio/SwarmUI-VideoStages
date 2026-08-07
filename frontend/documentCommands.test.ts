@@ -4,127 +4,42 @@ import {
     testArchitectureCatalog,
 } from "./__test_helpers__/architectureFixtures";
 import {
+    canonicalAudioSpan,
+    canonicalAudioTrack,
+    canonicalClip,
+    canonicalDocument,
+    canonicalPromptWindow,
+    canonicalRef,
+    canonicalRetake,
+    canonicalStage,
+} from "./__test_helpers__/clipFixtures";
+import {
     type DocumentCommand,
     reduceDocumentCommand,
 } from "./documentCommands";
-import type {
-    CanonicalAudioTrack,
-    CanonicalAudioTrackSpan,
-    CanonicalAuthoringDocument,
-    CanonicalClip,
-    CanonicalFrameRefImage,
-    CanonicalPromptWindow,
-    CanonicalRetake,
-    CanonicalStage,
-} from "./types";
+import type { CanonicalAuthoringDocument } from "./types";
 
-const stage = (id: string): CanonicalStage => ({
-    id,
-    skipped: false,
-    control: 0.5,
-    controlNetStrength: 1,
-    icLoraStrengths: [],
-    loraWeights: [],
-    frameRefStrengths: [],
-    upscale: 1,
-    upscaleMethod: "pixel-lanczos",
-    model: "ltx",
-    modelProfileId: "ltx-2.3",
-    steps: 8,
-    cfgScale: 1,
-    sampler: "euler",
-    scheduler: "normal",
-});
-
-const ref = (id: string): CanonicalFrameRefImage => ({
-    id,
-    source: "Base",
-    uploadFileName: null,
-    uploadedImage: null,
-    frame: 1,
-    fromEnd: false,
-});
-
-const window = (id: string): CanonicalPromptWindow => ({
-    id,
-    prompt: id,
-    start: 0,
-    duration: 1,
-});
-
-const retake = (id: string): CanonicalRetake => ({
-    id,
-    startSeconds: 0,
-    lengthSeconds: 1,
-    strength: 0.5,
-});
-
-const clip = (id: string): CanonicalClip => ({
-    id,
-    architectureHint: "ltx2",
-    modelProfileId: "ltx-2.3",
-    skipped: false,
-    hue: 0,
-    boundaryOut: "cut",
-    boundaryOutCarryAudio: false,
-    boundaryOutReferenceScale: 1,
-    boundaryOutReferenceIncludeSoundtrack: true,
-    boundaryOutOverlap: 9,
-    duration: 4,
-    refFraming: "crop",
-    audioSource: "Native",
-    loras: [],
-    icLoras: [],
-    saveAudioTrack: true,
-    clipLengthFromAudio: false,
-    clipLengthFromControlNet: false,
-    reuseAudio: false,
-    uploadedAudio: null,
-    prompt: id,
-    promptWindows: [],
-    retake: null,
-    initVideo: null,
-    references: [],
-    frameRefs: [],
-    stages: [],
-});
-
-const span = (id: string): CanonicalAudioTrackSpan => ({
-    id,
-    timelineStartSeconds: 0,
-    timelineLengthSeconds: 1,
-    sourceStartSeconds: 0,
-});
-
-const track = (id: string): CanonicalAudioTrack => ({
-    id,
-    source: {
-        kind: "Unrecognized",
-        reference: id,
-        uploadedAudio: null,
-    },
-    spans: [],
-});
-
-const document = (): CanonicalAuthoringDocument => {
-    const first = clip("clip-a");
-    first.stages = [stage("stage-a"), stage("stage-b")];
-    first.frameRefs = [ref("ref-a")];
-    first.promptWindows = [window("window-a")];
-    first.retake = retake("retake-a");
-    const second = clip("clip-b");
-    const firstTrack = track("track-a");
-    firstTrack.spans = [span("span-a"), span("span-b")];
-    return {
-        schemaVersion: 3,
-        width: 1024,
-        height: 576,
-        fps: 24,
-        dimsExplicit: true,
-        clips: [first, second],
-        audioTracks: [firstTrack, track("track-b")],
-    };
-};
+const document = (): CanonicalAuthoringDocument =>
+    canonicalDocument({
+        clips: [
+            canonicalClip("clip-a", {
+                stages: [canonicalStage("stage-a"), canonicalStage("stage-b")],
+                frameRefs: [canonicalRef("ref-a")],
+                promptWindows: [canonicalPromptWindow("window-a")],
+                retake: canonicalRetake("retake-a"),
+            }),
+            canonicalClip("clip-b"),
+        ],
+        audioTracks: [
+            canonicalAudioTrack("track-a", {
+                spans: [
+                    canonicalAudioSpan("span-a"),
+                    canonicalAudioSpan("span-b"),
+                ],
+            }),
+            canonicalAudioTrack("track-b"),
+        ],
+    });
 
 const catalogWithFake = (
     fake = fakeArchitectureCatalog(),
@@ -180,7 +95,7 @@ describe("reduceDocumentCommand", () => {
         let state = document();
         state = apply(state, {
             type: "clip.add",
-            clip: clip("clip-c"),
+            clip: canonicalClip("clip-c"),
             beforeClipId: "clip-b",
         });
         expect(state.clips.map((item) => item.id)).toEqual([
@@ -218,7 +133,7 @@ describe("reduceDocumentCommand", () => {
 
     it("toggles clip skip suffixes atomically without mutating the source", () => {
         const source = document();
-        source.clips.push(clip("clip-c"));
+        source.clips.push(canonicalClip("clip-c"));
         const before = structuredClone(source);
         const skipped = reduceDocumentCommand(
             source,
@@ -254,7 +169,7 @@ describe("reduceDocumentCommand", () => {
             startSeconds: 0,
             lengthSeconds: 4,
         };
-        source.clips[0].stages.push(stage("stage-c"));
+        source.clips[0].stages.push(canonicalStage("stage-c"));
         const skipped = reduceDocumentCommand(
             source,
             {
@@ -360,7 +275,7 @@ describe("reduceDocumentCommand", () => {
 
     it("repairs graph-relative Incoming IC-LoRA drives in the same skip command", () => {
         const source = document();
-        source.clips[1].stages = [stage("stage-b0")];
+        source.clips[1].stages = [canonicalStage("stage-b0")];
         source.clips[1].icLoras = [
             {
                 id: "ic-guide",
@@ -398,7 +313,7 @@ describe("reduceDocumentCommand", () => {
             add: {
                 type: "stage.add",
                 clipId: "clip-a",
-                stage: stage("stage-c"),
+                stage: canonicalStage("stage-c"),
                 beforeStageId: "stage-b",
             },
             move: {
@@ -431,7 +346,7 @@ describe("reduceDocumentCommand", () => {
             add: {
                 type: "ref.add",
                 clipId: "clip-a",
-                ref: ref("ref-b"),
+                ref: canonicalRef("ref-b"),
                 beforeRefId: "ref-a",
             },
             move: {
@@ -464,7 +379,7 @@ describe("reduceDocumentCommand", () => {
             add: {
                 type: "prompt-window.add",
                 clipId: "clip-a",
-                window: window("window-b"),
+                window: canonicalPromptWindow("window-b"),
                 beforeWindowId: "window-a",
             },
             move: {
@@ -531,7 +446,7 @@ describe("reduceDocumentCommand", () => {
         state = apply(state, {
             type: "retake.add",
             clipId: "clip-a",
-            retake: retake("retake-b"),
+            retake: canonicalRetake("retake-b"),
         });
         state = apply(state, {
             type: "retake.patch",
@@ -540,7 +455,7 @@ describe("reduceDocumentCommand", () => {
             patch: { strength: 0.9 },
         });
         expect(state.clips[0].retake).toEqual({
-            ...retake("retake-b"),
+            ...canonicalRetake("retake-b"),
             strength: 0.9,
         });
     });
@@ -548,7 +463,7 @@ describe("reduceDocumentCommand", () => {
     it("supports stable-ID lifecycles for planned audio tracks and spans", () => {
         let state = apply(document(), {
             type: "audio-track.add",
-            track: track("track-c"),
+            track: canonicalAudioTrack("track-c"),
             beforeTrackId: "track-b",
         });
         state = apply(state, {
@@ -573,7 +488,7 @@ describe("reduceDocumentCommand", () => {
         state = apply(state, {
             type: "audio-span.add",
             trackId: "track-c",
-            span: span("span-c"),
+            span: canonicalAudioSpan("span-c"),
         });
         state = apply(state, {
             type: "audio-span.patch",
@@ -618,7 +533,7 @@ describe("reduceDocumentCommand", () => {
             {
                 type: "ref.add",
                 clipId: "clip-a",
-                ref: ref("ref-b"),
+                ref: canonicalRef("ref-b"),
                 beforeRefId: "missing",
             },
             {
@@ -641,8 +556,8 @@ describe("reduceDocumentCommand", () => {
 
     it("rejects blank and duplicate IDs, including nested clip and track IDs", () => {
         const source = document();
-        const duplicateClip = clip("clip-c");
-        duplicateClip.stages = [stage("stage-a")];
+        const duplicateClip = canonicalClip("clip-c");
+        duplicateClip.stages = [canonicalStage("stage-a")];
         const duplicate = reduceDocumentCommand(source, {
             type: "clip.add",
             clip: duplicateClip,
@@ -654,7 +569,7 @@ describe("reduceDocumentCommand", () => {
 
         const blank = reduceDocumentCommand(source, {
             type: "audio-track.add",
-            track: track(" "),
+            track: canonicalAudioTrack(" "),
         });
         expect(blank).toMatchObject({
             applied: false,
@@ -762,15 +677,15 @@ describe("reduceDocumentCommand", () => {
 
     it("converts a clip architecture atomically and forces only cross-architecture joins to cuts", () => {
         const source = document();
-        source.clips.push(clip("clip-c"));
+        source.clips.push(canonicalClip("clip-c"));
         source.clips[0].boundaryOut = "crossfade";
         const targetClip = source.clips[1];
         targetClip.boundaryOut = "continue";
         targetClip.duration = 7;
         targetClip.prompt = "preserve me";
-        targetClip.frameRefs = [ref("ref-convert")];
-        targetClip.promptWindows = [window("window-convert")];
-        targetClip.retake = retake("retake-convert");
+        targetClip.frameRefs = [canonicalRef("ref-convert")];
+        targetClip.promptWindows = [canonicalPromptWindow("window-convert")];
+        targetClip.retake = canonicalRetake("retake-convert");
         targetClip.audioSource = "Upload";
         targetClip.uploadedAudio = {
             data: "data:audio/wav;base64,AAAA",
@@ -805,12 +720,12 @@ describe("reduceDocumentCommand", () => {
         targetClip.loras = [{ name: "detail" }];
         targetClip.stages = [
             {
-                ...stage("stage-convert-a"),
+                ...canonicalStage("stage-convert-a"),
                 frameRefStrengths: [0.8],
                 upscale: 2,
                 loraWeights: [1],
             },
-            { ...stage("stage-convert-b"), skipped: true },
+            { ...canonicalStage("stage-convert-b"), skipped: true },
         ];
         const before = structuredClone(source);
         const fake = fakeArchitectureCatalog();
@@ -884,9 +799,9 @@ describe("reduceDocumentCommand", () => {
 
     it("uses resolved models rather than stale hints when conversion repairs boundaries", () => {
         const source = document();
-        source.clips.push(clip("clip-c"));
-        source.clips[1].stages = [stage("stage-b-root")];
-        source.clips[2].stages = [stage("stage-c-root")];
+        source.clips.push(canonicalClip("clip-c"));
+        source.clips[1].stages = [canonicalStage("stage-b-root")];
+        source.clips[2].stages = [canonicalStage("stage-c-root")];
         source.clips[0].boundaryOut = "continue";
         source.clips[1].boundaryOut = "continue";
         // Both first joins are authored LTX by model, despite this stale hint.
@@ -917,12 +832,12 @@ describe("reduceDocumentCommand", () => {
         const source = document();
         source.clips[0].boundaryOut = "continue";
         source.clips[1].skipped = true;
-        const foreign = clip("clip-foreign");
+        const foreign = canonicalClip("clip-foreign");
         foreign.architectureHint = "test-video";
         foreign.modelProfileId = "test-profile";
         foreign.stages = [
             {
-                ...stage("stage-foreign"),
+                ...canonicalStage("stage-foreign"),
                 model: "test-video.safetensors",
                 modelProfileId: "test-profile",
             },
@@ -983,7 +898,7 @@ describe("reduceDocumentCommand", () => {
                 type: "stage.add",
                 clipId: "clip-a",
                 stage: {
-                    ...stage("skipped-foreign"),
+                    ...canonicalStage("skipped-foreign"),
                     skipped: true,
                     model: "test-video.safetensors",
                     modelProfileId: "test-profile",
@@ -1195,7 +1110,7 @@ describe("reduceDocumentCommand", () => {
                 type: "stage.add",
                 clipId: "clip-a",
                 stage: {
-                    ...stage("skipped-ltx-alt"),
+                    ...canonicalStage("skipped-ltx-alt"),
                     skipped: true,
                     model: "ltx-alt",
                     modelProfileId: "ltx-alt",
@@ -1384,7 +1299,7 @@ describe("reduceDocumentCommand", () => {
             startSeconds: 0,
             lengthSeconds: 4,
         };
-        source.clips[0].stages = [stage("stage-a")];
+        source.clips[0].stages = [canonicalStage("stage-a")];
 
         const skipped = reduceDocumentCommand(
             source,
@@ -1543,13 +1458,13 @@ describe("reduceDocumentCommand", () => {
         source.clips[1].loras = [{ name: "detail" }];
         source.clips[1].stages = [
             {
-                ...stage("model-upscale"),
+                ...canonicalStage("model-upscale"),
                 upscale: 2,
                 upscaleMethod: "upscaler.safetensors",
                 loraWeights: [1],
             },
             {
-                ...stage("pixel-upscale"),
+                ...canonicalStage("pixel-upscale"),
                 upscale: 2,
                 upscaleMethod: "pixel-lanczos",
                 loraWeights: [1],
@@ -1634,7 +1549,7 @@ describe("reduceDocumentCommand", () => {
         const result = reduceDocumentCommand(source, {
             type: "stage.add",
             clipId: "clip-a",
-            stage: stage("stage-without-catalog"),
+            stage: canonicalStage("stage-without-catalog"),
         });
 
         expect(result).toMatchObject({

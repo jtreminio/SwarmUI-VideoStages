@@ -3,6 +3,16 @@ import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
 } from "./__test_helpers__/architectureFixtures";
+import {
+    canonicalAudioSpan,
+    canonicalAudioTrack,
+    canonicalClip,
+    canonicalDocument,
+    canonicalPromptWindow,
+    canonicalRef,
+    canonicalRetake,
+    canonicalStage,
+} from "./__test_helpers__/clipFixtures";
 import { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity";
 import { planArchitectureConversion } from "./architectures/conversion/plan";
 import type {
@@ -12,126 +22,48 @@ import type {
 import { reduceDocumentCommand } from "./documentCommands";
 import { DocumentDiffError, diffDocuments } from "./documentDiff";
 import type {
-    CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
     CanonicalAuthoringDocument,
     CanonicalClip,
-    CanonicalFrameRefImage,
-    CanonicalPromptWindow,
-    CanonicalRetake,
     CanonicalStage,
 } from "./types";
 
-const stage = (id: string): CanonicalStage => ({
-    id,
-    skipped: false,
-    control: 0.5,
-    controlNetStrength: 1,
-    icLoraStrengths: [],
-    loraWeights: [],
-    frameRefStrengths: [0.5],
-    upscale: 1,
-    upscaleMethod: "pixel-lanczos",
-    model: "ltx",
-    modelProfileId: "ltx-2.3",
-    steps: 8,
-    cfgScale: 1,
-    sampler: "euler",
-    scheduler: "normal",
-});
-
-const ref = (id: string): CanonicalFrameRefImage => ({
-    id,
-    source: "Base",
-    uploadFileName: null,
-    uploadedImage: null,
-    frame: 1,
-    fromEnd: false,
-});
-
-const window = (id: string): CanonicalPromptWindow => ({
-    id,
-    prompt: id,
-    start: 0,
-    duration: 1,
-});
-
-const retake = (id: string): CanonicalRetake => ({
-    id,
-    startSeconds: 0,
-    lengthSeconds: 1,
-    strength: 0.5,
-});
-
-const clip = (id: string): CanonicalClip => ({
-    id,
-    architectureHint: "ltx2",
-    modelProfileId: "ltx-2.3",
-    skipped: false,
-    hue: 20,
-    boundaryOut: "cut",
-    boundaryOutCarryAudio: false,
-    boundaryOutReferenceScale: 1,
-    boundaryOutReferenceIncludeSoundtrack: true,
-    boundaryOutOverlap: 8,
-    duration: 4,
-    refFraming: "crop",
-    audioSource: "Native",
-    loras: [],
-    icLoras: [],
-    saveAudioTrack: false,
-    clipLengthFromAudio: false,
-    clipLengthFromControlNet: false,
-    reuseAudio: false,
-    uploadedAudio: null,
-    prompt: id,
-    promptWindows: [],
-    retake: null,
-    initVideo: null,
-    references: [],
-    frameRefs: [],
-    stages: [],
-});
-
-const span = (id: string): CanonicalAudioTrackSpan => ({
-    id,
-    timelineStartSeconds: null,
-    timelineLengthSeconds: null,
-    sourceStartSeconds: 0,
-});
-
-const track = (id: string): CanonicalAudioTrack => ({
-    id,
-    source: {
-        kind: "Unrecognized",
-        reference: id,
-        uploadedAudio: null,
-    },
-    spans: [],
-});
-
-const document = (): CanonicalAuthoringDocument => {
-    const clipA = clip("clip-a");
-    clipA.stages = [stage("stage-a"), stage("stage-b"), stage("stage-c")];
-    clipA.frameRefs = [ref("ref-a"), ref("ref-b"), ref("ref-c")];
-    clipA.promptWindows = [
-        window("window-a"),
-        window("window-b"),
-        window("window-c"),
-    ];
-    clipA.retake = retake("retake-a");
-    const trackA = track("track-a");
-    trackA.spans = [span("span-a"), span("span-b"), span("span-c")];
-    return {
-        schemaVersion: 7,
-        width: 1024,
-        height: 576,
-        fps: 24,
-        dimsExplicit: true,
-        clips: [clipA, clip("clip-b"), clip("clip-c")],
-        audioTracks: [trackA, track("track-b"), track("track-c")],
-    };
-};
+const document = (): CanonicalAuthoringDocument =>
+    canonicalDocument({
+        clips: [
+            canonicalClip("clip-a", {
+                stages: [
+                    canonicalStage("stage-a"),
+                    canonicalStage("stage-b"),
+                    canonicalStage("stage-c"),
+                ],
+                frameRefs: [
+                    canonicalRef("ref-a"),
+                    canonicalRef("ref-b"),
+                    canonicalRef("ref-c"),
+                ],
+                promptWindows: [
+                    canonicalPromptWindow("window-a"),
+                    canonicalPromptWindow("window-b"),
+                    canonicalPromptWindow("window-c"),
+                ],
+                retake: canonicalRetake("retake-a"),
+            }),
+            canonicalClip("clip-b"),
+            canonicalClip("clip-c"),
+        ],
+        audioTracks: [
+            canonicalAudioTrack("track-a", {
+                spans: [
+                    canonicalAudioSpan("span-a"),
+                    canonicalAudioSpan("span-b"),
+                    canonicalAudioSpan("span-c"),
+                ],
+            }),
+            canonicalAudioTrack("track-b"),
+            canonicalAudioTrack("track-c"),
+        ],
+    });
 
 const crossArchitectureCatalog = (): {
     catalog: ArchitectureModelCatalog;
@@ -214,7 +146,7 @@ describe("diffDocuments", () => {
             startSeconds: 0,
             lengthSeconds: 4,
         };
-        before.clips[0].stages = [stage("stage-only")];
+        before.clips[0].stages = [canonicalStage("stage-only")];
         before.clips[0].frameRefs = [];
         before.clips[0].retake = null;
         const catalog = testArchitectureCatalog();
@@ -242,7 +174,7 @@ describe("diffDocuments", () => {
 
     it("still rejects emptying a clip that has no source video", () => {
         const before = document();
-        before.clips[0].stages = [stage("stage-only")];
+        before.clips[0].stages = [canonicalStage("stage-only")];
         before.clips[0].frameRefs = [];
         before.clips[0].retake = null;
         const after = structuredClone(before);
@@ -378,7 +310,7 @@ describe("diffDocuments", () => {
         before.clips[0].loras = [{ name: "detail.safetensors" }];
         before.clips[0].stages[0].loraWeights = [1];
         before.clips[0].stages[0].upscale = 2;
-        before.clips[0].frameRefs = [ref("conversion-ref")];
+        before.clips[0].frameRefs = [canonicalRef("conversion-ref")];
         const { catalog, target } = crossArchitectureCatalog();
         const planned = planArchitectureConversion(
             before.clips[0],
@@ -421,7 +353,7 @@ describe("diffDocuments", () => {
 
     it("repairs an unresolved Stage-0 owner through a conversion even when its cached hint already matches", () => {
         const before = document();
-        before.clips[0].stages = [stage("stage-a")];
+        before.clips[0].stages = [canonicalStage("stage-a")];
         before.clips[0].stages[0].model = "removed-ltx-model";
         const after = structuredClone(before);
         after.clips[0].stages[0].model = "ltx";
@@ -597,7 +529,7 @@ describe("diffDocuments", () => {
             new DocumentDiffError("architecture-invariant"),
         );
 
-        after.clips[0].frameRefs = [ref("unsupported-restored-ref")];
+        after.clips[0].frameRefs = [canonicalRef("unsupported-restored-ref")];
         expect(() =>
             diffDocuments(before, after, { architectureCatalog: catalog }),
         ).not.toThrow();
@@ -653,7 +585,7 @@ describe("diffDocuments", () => {
     it("rejects a cross-architecture conversion that does not persist the forced cut", () => {
         const before = document();
         before.clips[0].boundaryOut = "continue";
-        before.clips[1].stages = [stage("neighbor-stage")];
+        before.clips[1].stages = [canonicalStage("neighbor-stage")];
         const { catalog, target } = crossArchitectureCatalog();
         const planned = planArchitectureConversion(
             before.clips[0],
@@ -673,7 +605,7 @@ describe("diffDocuments", () => {
         const before = document();
         before.clips[0].boundaryOut = "continue";
         before.clips[1].boundaryOut = "continue";
-        before.clips[1].stages = [stage("second-conversion-stage")];
+        before.clips[1].stages = [canonicalStage("second-conversion-stage")];
         const { catalog, target } = crossArchitectureCatalog();
         const after = structuredClone(before);
         for (const index of [0, 1]) {
@@ -817,7 +749,7 @@ describe("diffDocuments", () => {
             mutate: (after: CanonicalAuthoringDocument) => {
                 after.clips = [
                     after.clips[2],
-                    clip("clip-new"),
+                    canonicalClip("clip-new"),
                     after.clips[1],
                 ];
             },
@@ -831,7 +763,7 @@ describe("diffDocuments", () => {
                 const items = after.clips[0].stages;
                 after.clips[0].stages = [
                     items[2],
-                    stage("stage-new"),
+                    canonicalStage("stage-new"),
                     items[1],
                 ];
             },
@@ -843,7 +775,11 @@ describe("diffDocuments", () => {
             moveType: "ref.move",
             mutate: (after: CanonicalAuthoringDocument) => {
                 const items = after.clips[0].frameRefs;
-                after.clips[0].frameRefs = [items[2], ref("ref-new"), items[1]];
+                after.clips[0].frameRefs = [
+                    items[2],
+                    canonicalRef("ref-new"),
+                    items[1],
+                ];
             },
         },
         {
@@ -855,7 +791,7 @@ describe("diffDocuments", () => {
                 const items = after.clips[0].promptWindows;
                 after.clips[0].promptWindows = [
                     items[2],
-                    window("window-new"),
+                    canonicalPromptWindow("window-new"),
                     items[1],
                 ];
             },
@@ -868,7 +804,7 @@ describe("diffDocuments", () => {
             mutate: (after: CanonicalAuthoringDocument) => {
                 after.audioTracks = [
                     after.audioTracks[2],
-                    track("track-new"),
+                    canonicalAudioTrack("track-new"),
                     after.audioTracks[1],
                 ];
             },
@@ -882,7 +818,7 @@ describe("diffDocuments", () => {
                 const items = after.audioTracks[0].spans;
                 after.audioTracks[0].spans = [
                     items[2],
-                    span("span-new"),
+                    canonicalAudioSpan("span-new"),
                     items[1],
                 ];
             },
@@ -909,7 +845,7 @@ describe("diffDocuments", () => {
     it("replaces a retake by remove/add and preserves atomic target state", () => {
         const before = document();
         const after = structuredClone(before);
-        after.clips[0].retake = retake("retake-new");
+        after.clips[0].retake = canonicalRetake("retake-new");
 
         const command = applyDiff(before, after);
         expect(command.commands.map((entry) => entry.type)).toEqual([
