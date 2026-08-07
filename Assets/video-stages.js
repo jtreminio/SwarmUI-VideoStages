@@ -485,6 +485,7 @@
   var MEDIA_SOURCE_UPLOAD = "Upload";
   var MEDIA_SOURCE_NATIVE = "Native";
   var MEDIA_SOURCE_INCOMING = "Incoming";
+  var MEDIA_SOURCE_INCOMING_LEGACY = "Stage Input";
   var MEDIA_SOURCE_CONTROLNET = "ControlNet";
   var MEDIA_SOURCE_ACE_STEP_FUN = "AceStepFun";
   var MEDIA_SOURCE_BASE = "Base";
@@ -3068,11 +3069,14 @@
   };
   var normalizeIcLoraDriveSource = (value) => {
     const authored = `${value ?? ""}`.trim();
-    const compact = authored.replace(/\s+/g, "").toLowerCase();
-    if (!compact || compact === "upload") {
+    const compact = compactMediaSource(authored);
+    if (!compact || equalsMediaSource(compact, MEDIA_SOURCE_UPLOAD)) {
       return MEDIA_SOURCE_UPLOAD;
     }
-    if (compact === "incoming" || compact === "stageinput") {
+    if (equalsMediaSource(compact, MEDIA_SOURCE_INCOMING) || equalsMediaSource(
+      compact,
+      compactMediaSource(MEDIA_SOURCE_INCOMING_LEGACY)
+    )) {
       return MEDIA_SOURCE_INCOMING;
     }
     return canonicalControlNetSource(authored) ?? authored;

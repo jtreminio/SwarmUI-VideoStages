@@ -1,6 +1,7 @@
 import {
     CONTROLNET_SOURCE_OPTIONS,
     MEDIA_SOURCE_INCOMING,
+    MEDIA_SOURCE_INCOMING_LEGACY,
     MEDIA_SOURCE_UPLOAD,
 } from "../../generatedMediaSource";
 import {
@@ -14,7 +15,11 @@ import {
     IC_LORA_STRENGTH_MIN,
     IC_LORA_STRENGTH_STEP,
 } from "../../icLoraAuthoring";
-import { canonicalControlNetSource } from "../../mediaSourceSyntax";
+import {
+    canonicalControlNetSource,
+    compactMediaSource,
+    equalsMediaSource,
+} from "../../mediaSourceSyntax";
 import { normalizeUploadedMedia } from "../../normalizationMedia";
 import {
     normalizeOptionalEntityId,
@@ -74,13 +79,20 @@ export const normalizeIcLoraControlType = (
         : "none";
 };
 
+/** Mirrors IcLoraPlanCompiler.NormalizeDriveSource. */
 const normalizeIcLoraDriveSource = (value: unknown): string => {
     const authored = `${value ?? ""}`.trim();
-    const compact = authored.replace(/\s+/g, "").toLowerCase();
-    if (!compact || compact === "upload") {
+    const compact = compactMediaSource(authored);
+    if (!compact || equalsMediaSource(compact, MEDIA_SOURCE_UPLOAD)) {
         return MEDIA_SOURCE_UPLOAD;
     }
-    if (compact === "incoming" || compact === "stageinput") {
+    if (
+        equalsMediaSource(compact, MEDIA_SOURCE_INCOMING) ||
+        equalsMediaSource(
+            compact,
+            compactMediaSource(MEDIA_SOURCE_INCOMING_LEGACY),
+        )
+    ) {
         return MEDIA_SOURCE_INCOMING;
     }
     return canonicalControlNetSource(authored) ?? authored;

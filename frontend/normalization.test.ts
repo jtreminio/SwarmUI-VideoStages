@@ -500,6 +500,17 @@ describe("normalization", () => {
         });
     });
 
+    it.each([
+        "Stage Input",
+        "stage input",
+        "STAGEINPUT",
+    ])("heals the pre-rename drive source %p to Incoming", (driveSource) => {
+        expect(
+            normalizeIcLora({ lora: "a.safetensors", driveSource })
+                ?.driveSource,
+        ).toBe("Incoming");
+    });
+
     it("preserves explicit LipDub audio data and Incoming source", () => {
         expect(
             normalizeIcLora(

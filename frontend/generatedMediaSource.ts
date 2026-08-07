@@ -3,6 +3,7 @@
 export const MEDIA_SOURCE_UPLOAD = "Upload";
 export const MEDIA_SOURCE_NATIVE = "Native";
 export const MEDIA_SOURCE_INCOMING = "Incoming";
+export const MEDIA_SOURCE_INCOMING_LEGACY = "Stage Input";
 export const MEDIA_SOURCE_CONTROLNET = "ControlNet";
 export const MEDIA_SOURCE_ACE_STEP_FUN = "AceStepFun";
 export const MEDIA_SOURCE_BASE = "Base";

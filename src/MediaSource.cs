@@ -10,6 +10,10 @@ public static class MediaSource
     public const string Upload = "Upload";
     public const string Native = "Native";
     public const string Incoming = "Incoming";
+
+    /// <summary>What documents written before the rename spell <see cref="Incoming"/>.</summary>
+    public const string IncomingLegacy = "Stage Input";
+
     public const string ControlNet = "ControlNet";
     public const string ControlNetOne = "ControlNet 1";
     public const string ControlNetTwo = "ControlNet 2";
@@ -34,6 +38,7 @@ public static class MediaSource
         Line($"export const MEDIA_SOURCE_UPLOAD = \"{Upload}\";");
         Line($"export const MEDIA_SOURCE_NATIVE = \"{Native}\";");
         Line($"export const MEDIA_SOURCE_INCOMING = \"{Incoming}\";");
+        Line($"export const MEDIA_SOURCE_INCOMING_LEGACY = \"{IncomingLegacy}\";");
         Line($"export const MEDIA_SOURCE_CONTROLNET = \"{ControlNet}\";");
         Line($"export const MEDIA_SOURCE_ACE_STEP_FUN = \"{AceStepFun}\";");
         Line($"export const MEDIA_SOURCE_BASE = \"{Base}\";");

@@ -458,7 +458,7 @@ internal static class IcLoraPlanCompiler
         if (StringUtils.Equals(compact, StringUtils.Compact(MediaSource.Incoming))
             || StringUtils.Equals(
                 compact,
-                StringUtils.Compact(Constants.IcLoraLegacySourceStageInput)))
+                StringUtils.Compact(MediaSource.IncomingLegacy)))
         {
             return MediaSource.Incoming;
         }

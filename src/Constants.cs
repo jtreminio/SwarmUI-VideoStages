@@ -30,7 +30,6 @@ public static class Constants
     public const double DefaultStageControlNetStrength = 0.8;
 
     internal const string ComfyUIFeatureFlag = "comfyui";
-    internal const string IcLoraLegacySourceStageInput = "Stage Input";
     public const string IcLoraControlNone = "none";
     public const string IcLoraControlCanny = "canny";
     public const string IcLoraControlDepth = "depth";
