@@ -125,7 +125,7 @@ public class BoundaryHandoffResolverTests
             context);
 
         Assert.Null(carry);
-        Assert.Null(context.ContinuityFrame);
+        Assert.Null(context.ContinuityTail);
         Assert.False(boundaries.TryGetAudioCarryWindow(0, out _));
         Assert.False(boundaries.TryGetContinueInput(0, out _, out _));
         string warning = Assert.Single(

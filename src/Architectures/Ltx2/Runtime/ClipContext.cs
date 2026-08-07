@@ -40,7 +40,7 @@ internal sealed class ClipContext
     // Set when the previous clip's outgoing boundary is "continue": the previous clip's tail frames at
     // their native resolution, used as this clip's opening latent context so generation picks up where
     // the prior clip ended. Each consuming stage conforms it to its own resolution.
-    public WGNodeData ContinuityFrame { get; set; }
+    public WGNodeData ContinuityTail { get; set; }
 
     public int IncomingContinueHandleFrames { get; set; }
 
@@ -63,7 +63,7 @@ internal sealed class ClipContext
     /// first-frame reference, which outranks an implicit boundary guide at every stage index.
     /// </summary>
     public bool ReanchorsContinuityTail(StagePlan stage) =>
-        ContinuityFrame is not null
+        ContinuityTail is not null
         && stage is not null
         && !stage.IsPassthrough
         && !stage.HasActiveRetakeMask()

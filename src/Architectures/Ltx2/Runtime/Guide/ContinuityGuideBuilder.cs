@@ -8,7 +8,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Ltx2;
 
 /// <summary>
-/// Builds the opening-frame guide for a planned continue boundary. The guide keeps the previous
+/// Builds the opening guide frames for a planned continue boundary. The guide keeps the previous
 /// clip's resolution; each consuming stage performs its own spatial conform.
 /// </summary>
 internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)

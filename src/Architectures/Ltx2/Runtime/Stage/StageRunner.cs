@@ -115,7 +115,7 @@ internal class StageRunner
         {
             // Guide preparation resizes its input, so preserve the stored continuity frame.
             primaryGuideClipRef = new ResolvedClipRef(
-                clipContext.ContinuityFrame.Duplicate(),
+                clipContext.ContinuityTail.Duplicate(),
                 new ImageReferencePlan(
                     ImageReferenceSourceKind.Unknown,
                     RawSource: "Continue",
@@ -132,7 +132,7 @@ internal class StageRunner
             // A latent handoff does not preserve the opening frames at the new resolution.
             stageFrame.ContinuityAnchor = GuideMediaPreparation.Prepare(
                 _generator,
-                clipContext.ContinuityFrame.Duplicate(),
+                clipContext.ContinuityTail.Duplicate(),
                 sourceMedia,
                 scaleToSourceSize: true,
                 referenceFraming: referenceFraming);

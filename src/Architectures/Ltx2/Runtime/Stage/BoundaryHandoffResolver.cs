@@ -65,7 +65,7 @@ internal sealed class BoundaryHandoffResolver(
                 return null;
             }
 
-            clipContext.ContinuityFrame = continuityGuideBuilder.TryBuild(
+            clipContext.ContinuityTail = continuityGuideBuilder.TryBuild(
                 previousClip,
                 previousOutput,
                 continuityWindow,
@@ -73,7 +73,7 @@ internal sealed class BoundaryHandoffResolver(
                     clipContext.Dimensions.Width,
                     clipContext.Dimensions.Height,
                     clipContext.Plan.FramesPerSecond));
-            if (clipContext.ContinuityFrame is null)
+            if (clipContext.ContinuityTail is null)
             {
                 boundaries.DegradeToCut(previousClip.ClipId);
                 return null;
@@ -94,7 +94,7 @@ internal sealed class BoundaryHandoffResolver(
         if (carry is null)
         {
             // Without carry conditioning, trimming the overlap would shorten audio.
-            clipContext.ContinuityFrame = null;
+            clipContext.ContinuityTail = null;
             clipContext.IncomingContinueHandleFrames = 0;
             boundaries.DegradeToCut(previousClip.ClipId);
         }

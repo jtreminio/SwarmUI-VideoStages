@@ -51,7 +51,7 @@ public partial class StageFlowTests
         IReadOnlyList<StagePlan> stages = plan.Clips[1].Stages;
         ClipContext context = new(plan, plan.Clips[1], null, null)
         {
-            ContinuityFrame = new WGNodeData(new JArray("1", 0), null, WGNodeData.DT_IMAGE, null),
+            ContinuityTail = new WGNodeData(new JArray("1", 0), null, WGNodeData.DT_IMAGE, null),
         };
 
         Assert.True(context.ReanchorsContinuityTail(stages[0]));
@@ -60,7 +60,7 @@ public partial class StageFlowTests
         Assert.False(context.ReanchorsContinuityTail(stages[3]));
         Assert.True(context.ReanchorsContinuityTail(stages[4]));
 
-        context.ContinuityFrame = null;
+        context.ContinuityTail = null;
         Assert.All(stages, stage => Assert.False(context.ReanchorsContinuityTail(stage)));
     }
 }
