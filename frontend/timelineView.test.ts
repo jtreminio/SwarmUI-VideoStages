@@ -193,6 +193,55 @@ describe("computeRegionLayout", () => {
         expect(computeRegionLayout([])).toEqual([]);
     });
 
+    it("splits a crossfade overlap between the two cards it joins", () => {
+        const clips = [
+            minimalClip({
+                duration: 3,
+                boundaryOut: "crossfade",
+                boundaryOutOverlap: 24,
+            }),
+            minimalClip({ duration: 3 }),
+        ];
+        const timing = resolveTimelineTiming(
+            clips,
+            24,
+            createCapabilityViewResolver(testArchitectureCatalog()),
+        );
+        const layouts = computeRegionLayout(clips, { timing });
+
+        expect(timing.outputGeometryAvailable).toBe(true);
+        expect(layouts[0].timelineDurationSeconds).toBeCloseTo(73 / 24 - 0.5);
+        expect(layouts[1].timelineDurationSeconds).toBeCloseTo(73 / 24 - 0.5);
+        expect(layouts[1].startSeconds).toBeCloseTo(73 / 24 - 0.5);
+        expect(
+            layouts[0].timelineDurationSeconds +
+                layouts[1].timelineDurationSeconds,
+        ).toBeCloseTo(timing.outputSeconds);
+    });
+
+    it("leaves a crossfade untrimmed while a dormant card holds the ruler", () => {
+        const clips = [
+            minimalClip({
+                duration: 3,
+                boundaryOut: "crossfade",
+                boundaryOutOverlap: 24,
+            }),
+            minimalClip({ duration: 3 }),
+            minimalClip({ duration: 3, skipped: true }),
+        ];
+        const timing = resolveTimelineTiming(
+            clips,
+            24,
+            createCapabilityViewResolver(testArchitectureCatalog()),
+        );
+        const layouts = computeRegionLayout(clips, { timing });
+
+        expect(timing.outputGeometryAvailable).toBe(false);
+        expect(timing.boundaries[0].effectiveMode).toBe("crossfade");
+        expect(layouts[0].timelineDurationSeconds).toBe(3);
+        expect(layouts[1].startSeconds).toBe(3);
+    });
+
     it("null-guards a clip missing stages/frameRefs instead of throwing", () => {
         const clip = { duration: 1 } as unknown as Clip;
         const layout = computeRegionLayout([clip]);

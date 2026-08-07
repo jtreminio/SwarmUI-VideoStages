@@ -1,4 +1,4 @@
-import type { TimelineTiming } from "../timelineTiming";
+import type { TimelineBoundaryImpact, TimelineTiming } from "../timelineTiming";
 import type { Clip } from "../types";
 
 export interface RegionLayout {
@@ -89,6 +89,29 @@ export const computeFitPxPerSecond = (
     return clampPxPerSecond((containerWidthPx - padPx) / totalSeconds);
 };
 
+/**
+ * Seconds the ruler takes off a clip at each end. A crossfade splits its
+ * overlap between the two cards it joins; every other join takes its whole
+ * reduction off the left card. Overlaps only exist on the compacted output
+ * ruler, so with `joinsDrawn` false a crossfade costs its cards nothing.
+ */
+export const clipTrimSeconds = (
+    incoming: TimelineBoundaryImpact | undefined,
+    outgoing: TimelineBoundaryImpact | undefined,
+    joinsDrawn: boolean,
+): { before: number; after: number } => ({
+    before:
+        joinsDrawn && incoming?.effectiveMode === "crossfade"
+            ? incoming.overlapSeconds / 2
+            : 0,
+    after:
+        outgoing?.effectiveMode !== "crossfade"
+            ? (outgoing?.timelineReductionSeconds ?? 0)
+            : joinsDrawn
+              ? outgoing.overlapSeconds / 2
+              : 0,
+});
+
 export const computeRegionLayout = (
     clips: Clip[],
     options?: RegionLayoutOptions,
@@ -131,15 +154,12 @@ export const computeRegionLayout = (
         const layoutDurationSeconds = useOutputGeometry
             ? frameCount / (timing?.fps ?? 1)
             : durationSeconds;
-        const trimBefore =
-            incomingBoundary?.effectiveMode === "crossfade"
-                ? incomingJoinSeconds / 2
-                : 0;
-        const trimAfter =
-            outgoingBoundary?.effectiveMode === "crossfade"
-                ? outgoingJoinSeconds / 2
-                : (outgoingBoundary?.timelineReductionSeconds ?? 0);
-        const timelineReductionSeconds = trimBefore + trimAfter;
+        const trim = clipTrimSeconds(
+            incomingBoundary,
+            outgoingBoundary,
+            useOutputGeometry,
+        );
+        const timelineReductionSeconds = trim.before + trim.after;
         const timelineDurationSeconds = Math.max(
             0,
             layoutDurationSeconds - timelineReductionSeconds,

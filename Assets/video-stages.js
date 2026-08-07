@@ -6788,6 +6788,106 @@
     };
   };
 
+  // frontend/timelineView/layout.ts
+  var DEFAULT_PX_PER_SECOND = 44;
+  var DEFAULT_MIN_WIDTH_PX = 8;
+  var MIN_PX_PER_SECOND = 6;
+  var MAX_PX_PER_SECOND = 400;
+  var ZOOM_FACTOR = 1.25;
+  var TRACK_HEADER_W_PX = 168;
+  var waveBarHeights = (clipIdx, count) => {
+    const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+    const heights = [];
+    for (let i = 0; i < n; i++) {
+      const raw = Math.sin((clipIdx * 131 + i) * 12.9898) * 43758.5453;
+      const fract = raw - Math.floor(raw);
+      heights.push(Math.round((20 + fract * 80) * 10) / 10);
+    }
+    return heights;
+  };
+  var audioSpanWaveBarHeights = (trackIdx, count) => waveBarHeights(trackIdx * 4099 + 1, count);
+  var clampPxPerSecond = (value) => Number.isFinite(value) ? Math.min(MAX_PX_PER_SECOND, Math.max(MIN_PX_PER_SECOND, value)) : DEFAULT_PX_PER_SECOND;
+  var zoomAnchorTime = (offsetX, scrollLeft, pxPerSecond, headerW = TRACK_HEADER_W_PX) => {
+    if (pxPerSecond <= 0) {
+      return 0;
+    }
+    const effectiveOffsetX = Math.max(offsetX, headerW);
+    return Math.max(0, (effectiveOffsetX + scrollLeft - headerW) / pxPerSecond);
+  };
+  var zoomAnchorScrollLeft = (time, pxPerSecond, offsetX, headerW = TRACK_HEADER_W_PX) => {
+    const effectiveOffsetX = Math.max(offsetX, headerW);
+    return Math.max(0, headerW + time * pxPerSecond - effectiveOffsetX);
+  };
+  var computeFitPxPerSecond = (totalSeconds, containerWidthPx, padPx = 24) => {
+    if (totalSeconds <= 0 || containerWidthPx <= padPx) {
+      return DEFAULT_PX_PER_SECOND;
+    }
+    return clampPxPerSecond((containerWidthPx - padPx) / totalSeconds);
+  };
+  var clipTrimSeconds = (incoming, outgoing, joinsDrawn) => ({
+    before: joinsDrawn && incoming?.effectiveMode === "crossfade" ? incoming.overlapSeconds / 2 : 0,
+    after: outgoing?.effectiveMode !== "crossfade" ? outgoing?.timelineReductionSeconds ?? 0 : joinsDrawn ? outgoing.overlapSeconds / 2 : 0
+  });
+  var computeRegionLayout = (clips, options) => {
+    const pxPerSecond = options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND;
+    const timing = options?.timing;
+    const useOutputGeometry = timing?.outputGeometryAvailable === true;
+    const boundaryAfter = new Map(
+      timing?.boundaries.map((boundary) => [boundary.leftIdx, boundary]) ?? []
+    );
+    const boundaryBefore = new Map(
+      timing?.boundaries.map((boundary) => [boundary.rightIdx, boundary]) ?? []
+    );
+    const layouts = [];
+    let cursorSeconds = 0;
+    let cursorPx = 0;
+    for (let index = 0; index < clips.length; index++) {
+      const clip = clips[index];
+      const durationSeconds = Math.max(0, clip.duration || 0);
+      const frameCount = timing?.clipFrames[index] ?? 0;
+      const incomingBoundary = boundaryBefore.get(index);
+      const generationFrameCount = frameCount + (incomingBoundary?.handleFrames ?? 0);
+      const generatedDurationSeconds = generationFrameCount > 0 ? generationFrameCount / (timing?.fps ?? 1) : durationSeconds;
+      const outgoingBoundary = boundaryAfter.get(index);
+      const incomingJoinSeconds = useOutputGeometry ? incomingBoundary?.overlapSeconds ?? 0 : 0;
+      const outgoingJoinSeconds = useOutputGeometry ? outgoingBoundary?.overlapSeconds ?? 0 : 0;
+      const incomingHandleSeconds = useOutputGeometry ? incomingBoundary?.handleSeconds ?? 0 : 0;
+      const layoutDurationSeconds = useOutputGeometry ? frameCount / (timing?.fps ?? 1) : durationSeconds;
+      const trim = clipTrimSeconds(
+        incomingBoundary,
+        outgoingBoundary,
+        useOutputGeometry
+      );
+      const timelineReductionSeconds = trim.before + trim.after;
+      const timelineDurationSeconds = Math.max(
+        0,
+        layoutDurationSeconds - timelineReductionSeconds
+      );
+      const rawWidthPx = timelineDurationSeconds * pxPerSecond;
+      const widthPx = incomingJoinSeconds > 0 || outgoingJoinSeconds > 0 ? Math.max(1, rawWidthPx) : Math.max(DEFAULT_MIN_WIDTH_PX, rawWidthPx);
+      layouts.push({
+        index,
+        startSeconds: cursorSeconds,
+        durationSeconds,
+        generatedDurationSeconds,
+        timelineDurationSeconds,
+        incomingJoinSeconds,
+        outgoingJoinSeconds,
+        incomingHandleSeconds,
+        timelineReductionSeconds,
+        frameCount,
+        startPx: cursorPx,
+        widthPx,
+        stageCount: (clip.stages ?? []).length,
+        keyframeCount: (clip.frameRefs ?? []).length,
+        skipped: clip.skipped === true
+      });
+      cursorSeconds += timelineDurationSeconds;
+      cursorPx += timelineDurationSeconds * pxPerSecond;
+    }
+    return layouts;
+  };
+
   // frontend/timelineSnap.ts
   var SNAP_THRESHOLD_PX = 8;
   var nearestTarget = (value, targets, threshold) => {
@@ -6846,9 +6946,8 @@
         const duration = (timing.clipFrames[clipIdx] ?? 0) / timing.fps;
         const incoming = boundaryBefore.get(clipIdx);
         const outgoing = boundaryAfter.get(clipIdx);
-        const trimBefore = incoming?.effectiveMode === "crossfade" ? incoming.overlapSeconds / 2 : 0;
-        const trimAfter = outgoing?.effectiveMode === "crossfade" ? outgoing.overlapSeconds / 2 : outgoing?.timelineReductionSeconds ?? 0;
-        const editEnd = cursor2 + Math.max(0, duration - trimBefore - trimAfter);
+        const trim = clipTrimSeconds(incoming, outgoing, true);
+        const editEnd = cursor2 + Math.max(0, duration - trim.before - trim.after);
         edges2.push(cursor2, editEnd);
         if (outgoing && outgoing.overlapSeconds > 0) {
           edges2.push(
@@ -7194,99 +7293,6 @@
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
     } catch {
     }
-  };
-
-  // frontend/timelineView/layout.ts
-  var DEFAULT_PX_PER_SECOND = 44;
-  var DEFAULT_MIN_WIDTH_PX = 8;
-  var MIN_PX_PER_SECOND = 6;
-  var MAX_PX_PER_SECOND = 400;
-  var ZOOM_FACTOR = 1.25;
-  var TRACK_HEADER_W_PX = 168;
-  var waveBarHeights = (clipIdx, count) => {
-    const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
-    const heights = [];
-    for (let i = 0; i < n; i++) {
-      const raw = Math.sin((clipIdx * 131 + i) * 12.9898) * 43758.5453;
-      const fract = raw - Math.floor(raw);
-      heights.push(Math.round((20 + fract * 80) * 10) / 10);
-    }
-    return heights;
-  };
-  var audioSpanWaveBarHeights = (trackIdx, count) => waveBarHeights(trackIdx * 4099 + 1, count);
-  var clampPxPerSecond = (value) => Number.isFinite(value) ? Math.min(MAX_PX_PER_SECOND, Math.max(MIN_PX_PER_SECOND, value)) : DEFAULT_PX_PER_SECOND;
-  var zoomAnchorTime = (offsetX, scrollLeft, pxPerSecond, headerW = TRACK_HEADER_W_PX) => {
-    if (pxPerSecond <= 0) {
-      return 0;
-    }
-    const effectiveOffsetX = Math.max(offsetX, headerW);
-    return Math.max(0, (effectiveOffsetX + scrollLeft - headerW) / pxPerSecond);
-  };
-  var zoomAnchorScrollLeft = (time, pxPerSecond, offsetX, headerW = TRACK_HEADER_W_PX) => {
-    const effectiveOffsetX = Math.max(offsetX, headerW);
-    return Math.max(0, headerW + time * pxPerSecond - effectiveOffsetX);
-  };
-  var computeFitPxPerSecond = (totalSeconds, containerWidthPx, padPx = 24) => {
-    if (totalSeconds <= 0 || containerWidthPx <= padPx) {
-      return DEFAULT_PX_PER_SECOND;
-    }
-    return clampPxPerSecond((containerWidthPx - padPx) / totalSeconds);
-  };
-  var computeRegionLayout = (clips, options) => {
-    const pxPerSecond = options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND;
-    const timing = options?.timing;
-    const useOutputGeometry = timing?.outputGeometryAvailable === true;
-    const boundaryAfter = new Map(
-      timing?.boundaries.map((boundary) => [boundary.leftIdx, boundary]) ?? []
-    );
-    const boundaryBefore = new Map(
-      timing?.boundaries.map((boundary) => [boundary.rightIdx, boundary]) ?? []
-    );
-    const layouts = [];
-    let cursorSeconds = 0;
-    let cursorPx = 0;
-    for (let index = 0; index < clips.length; index++) {
-      const clip = clips[index];
-      const durationSeconds = Math.max(0, clip.duration || 0);
-      const frameCount = timing?.clipFrames[index] ?? 0;
-      const incomingBoundary = boundaryBefore.get(index);
-      const generationFrameCount = frameCount + (incomingBoundary?.handleFrames ?? 0);
-      const generatedDurationSeconds = generationFrameCount > 0 ? generationFrameCount / (timing?.fps ?? 1) : durationSeconds;
-      const outgoingBoundary = boundaryAfter.get(index);
-      const incomingJoinSeconds = useOutputGeometry ? incomingBoundary?.overlapSeconds ?? 0 : 0;
-      const outgoingJoinSeconds = useOutputGeometry ? outgoingBoundary?.overlapSeconds ?? 0 : 0;
-      const incomingHandleSeconds = useOutputGeometry ? incomingBoundary?.handleSeconds ?? 0 : 0;
-      const layoutDurationSeconds = useOutputGeometry ? frameCount / (timing?.fps ?? 1) : durationSeconds;
-      const trimBefore = incomingBoundary?.effectiveMode === "crossfade" ? incomingJoinSeconds / 2 : 0;
-      const trimAfter = outgoingBoundary?.effectiveMode === "crossfade" ? outgoingJoinSeconds / 2 : outgoingBoundary?.timelineReductionSeconds ?? 0;
-      const timelineReductionSeconds = trimBefore + trimAfter;
-      const timelineDurationSeconds = Math.max(
-        0,
-        layoutDurationSeconds - timelineReductionSeconds
-      );
-      const rawWidthPx = timelineDurationSeconds * pxPerSecond;
-      const widthPx = incomingJoinSeconds > 0 || outgoingJoinSeconds > 0 ? Math.max(1, rawWidthPx) : Math.max(DEFAULT_MIN_WIDTH_PX, rawWidthPx);
-      layouts.push({
-        index,
-        startSeconds: cursorSeconds,
-        durationSeconds,
-        generatedDurationSeconds,
-        timelineDurationSeconds,
-        incomingJoinSeconds,
-        outgoingJoinSeconds,
-        incomingHandleSeconds,
-        timelineReductionSeconds,
-        frameCount,
-        startPx: cursorPx,
-        widthPx,
-        stageCount: (clip.stages ?? []).length,
-        keyframeCount: (clip.frameRefs ?? []).length,
-        skipped: clip.skipped === true
-      });
-      cursorSeconds += timelineDurationSeconds;
-      cursorPx += timelineDurationSeconds * pxPerSecond;
-    }
-    return layouts;
   };
 
   // frontend/trackDomUtils.ts

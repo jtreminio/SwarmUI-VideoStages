@@ -1,4 +1,5 @@
 import type { TimelineTiming } from "./timelineTiming";
+import { clipTrimSeconds } from "./timelineView/layout";
 import type { Clip } from "./types";
 
 export const SNAP_THRESHOLD_PX = 8;
@@ -90,16 +91,11 @@ export const timelineClipEdges = (
             const duration = (timing.clipFrames[clipIdx] ?? 0) / timing.fps;
             const incoming = boundaryBefore.get(clipIdx);
             const outgoing = boundaryAfter.get(clipIdx);
-            const trimBefore =
-                incoming?.effectiveMode === "crossfade"
-                    ? incoming.overlapSeconds / 2
-                    : 0;
-            const trimAfter =
-                outgoing?.effectiveMode === "crossfade"
-                    ? outgoing.overlapSeconds / 2
-                    : (outgoing?.timelineReductionSeconds ?? 0);
+            // Snap targets are always laid out on the compacted output ruler,
+            // even where the cards themselves are not.
+            const trim = clipTrimSeconds(incoming, outgoing, true);
             const editEnd =
-                cursor + Math.max(0, duration - trimBefore - trimAfter);
+                cursor + Math.max(0, duration - trim.before - trim.after);
             edges.push(cursor, editEnd);
             if (outgoing && outgoing.overlapSeconds > 0) {
                 edges.push(
