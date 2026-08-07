@@ -5,9 +5,13 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
+/// <summary>
+/// Resolves the decoded pixel media a stage runs against, upscaling it when the plan asks for a
+/// resize this architecture does not perform in the latent.
+/// </summary>
+internal sealed class StageSourceMediaResolver(WorkflowGenerator g)
 {
-    public WGNodeData Apply(
+    public WGNodeData Resolve(
         ClipContext clipContext,
         StagePlan stage,
         int sectionId,

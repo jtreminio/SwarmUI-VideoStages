@@ -34,8 +34,8 @@ public class StageRunnerCollaboratorTests
             typeof(bool),
             typeof(RootPlan));
         AssertTypedMethod(
-            typeof(StageUpscaleGraphBuilder),
-            nameof(StageUpscaleGraphBuilder.Apply),
+            typeof(StageSourceMediaResolver),
+            nameof(StageSourceMediaResolver.Resolve),
             typeof(ClipContext),
             typeof(StagePlan),
             typeof(int),
@@ -44,7 +44,7 @@ public class StageRunnerCollaboratorTests
         [
             typeof(PlannedStagePromptResolver),
             typeof(StageFramePreparer),
-            typeof(StageUpscaleGraphBuilder),
+            typeof(StageSourceMediaResolver),
         ];
         Assert.DoesNotContain(
             collaboratorTypes.SelectMany(type => type.GetMethods(

@@ -15,7 +15,7 @@ internal class StageRunner
     private readonly LtxStageExecutor _stageExecutor;
     private readonly LtxStageGuideMediaResolver _guideMediaResolver;
     private readonly FrameRefResolver _clipRefResolver;
-    private readonly StageUpscaleGraphBuilder _upscaleGraphBuilder;
+    private readonly StageSourceMediaResolver _sourceMediaResolver;
     private readonly StageFramePreparer _framePreparer;
 
     public StageRunner(
@@ -30,10 +30,10 @@ internal class StageRunner
             ?? throw new ArgumentNullException(nameof(guideMediaResolver));
         _clipRefResolver = clipRefResolver
             ?? throw new ArgumentNullException(nameof(clipRefResolver));
-        _upscaleGraphBuilder = new StageUpscaleGraphBuilder(generator);
+        _sourceMediaResolver = new StageSourceMediaResolver(generator);
         _framePreparer = new StageFramePreparer(
             generator,
-            _upscaleGraphBuilder,
+            _sourceMediaResolver,
             new PlannedStagePromptResolver(generator));
     }
 
@@ -303,7 +303,7 @@ internal class StageRunner
         LtxAudioReuseState.PrepareReusableAudio(_generator, clipContext, stage);
         LtxPostVideoChain postVideoChain =
             LtxPostVideoChain.TryCapture(_generator, clipContext, stage);
-        _ = _upscaleGraphBuilder.Apply(clipContext, stage, sectionId, postVideoChain);
+        _ = _sourceMediaResolver.Resolve(clipContext, stage, sectionId, postVideoChain);
     }
 
 }

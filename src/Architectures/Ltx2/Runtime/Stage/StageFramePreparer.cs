@@ -11,7 +11,7 @@ namespace VideoStages.Architectures.Ltx2;
 /// <summary>Prepares the source graph and generation frame consumed by the LTX stage executor.</summary>
 internal sealed class StageFramePreparer(
     WorkflowGenerator g,
-    StageUpscaleGraphBuilder upscaleGraphBuilder,
+    StageSourceMediaResolver sourceMediaResolver,
     PlannedStagePromptResolver promptResolver)
 {
     public StageFrame Prepare(
@@ -38,7 +38,7 @@ internal sealed class StageFramePreparer(
             : LtxPostVideoChain.TryCapture(g, clipContext, stage);
         WGNodeData sourceMedia = takesOverTextToVideoRoot
             ? CloneMedia(g.CurrentMedia)
-            : upscaleGraphBuilder.Apply(clipContext, stage, sectionId, postVideoChain);
+            : sourceMediaResolver.Resolve(clipContext, stage, sectionId, postVideoChain);
         if (sourceMedia is null)
         {
             throw Invariant.Failure(
