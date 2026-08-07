@@ -11,8 +11,6 @@ internal static class RequestReader
     private const double FirstStageControl = 1.0;
     private const double DefaultUpscale = 1.0;
     private const string DefaultUpscaleMethod = "pixel-lanczos";
-    private const string DefaultGeneratedReference = "Generated";
-    private const string DefaultPreviousStageReference = "PreviousStage";
 
     private sealed record StageDefaults(
         double Control,
@@ -539,28 +537,28 @@ internal static class RequestReader
         if (isTextToVideoRootWorkflow)
         {
             if (!string.IsNullOrWhiteSpace(rawValue)
-                && !StringUtils.Equals(StringUtils.Compact(rawValue), DefaultGeneratedReference))
+                && !StringUtils.Equals(StringUtils.Compact(rawValue), MediaSource.Generated))
             {
                 DocumentJson.Warn(
                     warn,
                     $"VideoStages: Clip {clipIndex} stage {rawStageIndex} uses ImageReference '{rawValue}' on a text-to-video workflow. "
-                    + $"Using '{DefaultGeneratedReference}' instead.");
+                    + $"Using '{MediaSource.Generated}' instead.");
             }
-            return DefaultGeneratedReference;
+            return MediaSource.Generated;
         }
 
         string defaultReference = stageIndex == 0
-            ? DefaultGeneratedReference
-            : DefaultPreviousStageReference;
+            ? MediaSource.Generated
+            : MediaSource.PreviousStage;
         if (string.IsNullOrWhiteSpace(rawValue))
         {
             return defaultReference;
         }
 
         string compact = StringUtils.Compact(rawValue);
-        if (StringUtils.Equals(compact, DefaultGeneratedReference))
+        if (StringUtils.Equals(compact, MediaSource.Generated))
         {
-            return DefaultGeneratedReference;
+            return MediaSource.Generated;
         }
         if (StringUtils.Equals(compact, MediaSource.Base))
         {
@@ -570,9 +568,9 @@ internal static class RequestReader
         {
             return MediaSource.Refiner;
         }
-        if (StringUtils.Equals(compact, DefaultPreviousStageReference))
+        if (StringUtils.Equals(compact, MediaSource.PreviousStage))
         {
-            return stageIndex == 0 ? defaultReference : DefaultPreviousStageReference;
+            return stageIndex == 0 ? defaultReference : MediaSource.PreviousStage;
         }
         if (ImageReferenceSyntax.TryParseExplicitStageIndex(compact, out int explicitStage))
         {

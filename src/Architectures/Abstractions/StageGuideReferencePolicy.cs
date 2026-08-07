@@ -52,7 +52,7 @@ internal readonly record struct StageGuideReferencePolicy
     internal static StageGuideReferenceSelection Classify(string rawValue)
     {
         string raw = rawValue?.Trim() ?? "";
-        if (StringUtils.Equals(raw, "Generated"))
+        if (StringUtils.Equals(raw, MediaSource.Generated))
         {
             return new(StageGuideReferenceKind.Generated, null);
         }
@@ -64,7 +64,7 @@ internal readonly record struct StageGuideReferencePolicy
         {
             return new(StageGuideReferenceKind.Refiner, null);
         }
-        if (StringUtils.Equals(raw, "PreviousStage"))
+        if (StringUtils.Equals(raw, MediaSource.PreviousStage))
         {
             return new(StageGuideReferenceKind.PreviousStage, null);
         }

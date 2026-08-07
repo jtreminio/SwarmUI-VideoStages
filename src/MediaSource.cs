@@ -14,6 +14,8 @@ public static class MediaSource
     public const string AceStepFun = "AceStepFun";
     public const string Base = "Base";
     public const string Refiner = "Refiner";
+    public const string Generated = "Generated";
+    public const string PreviousStage = "PreviousStage";
 
     /// <summary>
     /// Renders the checked-in TypeScript projection. A backend test compares this byte for byte

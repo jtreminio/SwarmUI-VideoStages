@@ -100,7 +100,7 @@ internal static class WanClipPlanCompiler
                     // Text-root parsing canonicalizes selectors to Generated. Other later stages
                     // execute from PreviousStage.
                     && context.EntryMode != ArchitectureEntryMode.TextToVideo
-                    && !StringUtils.Equals(stage.ImageReference, "PreviousStage"),
+                    && !StringUtils.Equals(stage.ImageReference, MediaSource.PreviousStage),
                 "a later-stage input other than 'PreviousStage'",
                 stage.Id);
             Refuse(
