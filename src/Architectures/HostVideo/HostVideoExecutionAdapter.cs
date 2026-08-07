@@ -63,8 +63,7 @@ internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
         StockHostVideoGenerationSession.Create(
             generator,
             context,
-            ArchitectureId,
-            "generic host");
+            HostVideoArchitectureModule.Instance.Descriptor);
 
     private static PlanDiagnostic Ignored(string code, string message) =>
         new(PlanDiagnosticSeverity.Warning, code, message);

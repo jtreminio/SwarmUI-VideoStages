@@ -60,8 +60,7 @@ internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
         StockHostVideoGenerationSession.Create(
             generator,
             context,
-            ArchitectureId,
-            "Wan",
+            WanArchitectureModule.Instance.Descriptor,
             new WanStockHostVideoBehavior(generator, context.Plan));
 
     private static PlanDiagnostic Warn(

@@ -2501,7 +2501,7 @@ public class WanGeneratedWorkflowContractTests
     [Fact]
     public async Task An_unusable_last_reference_leaves_the_global_end_image_in_place()
     {
-        const string expectedWarning = "WAN final-frame reference uses source 'Base'";
+        const string expectedWarning = "WAN Video final-frame reference uses source 'Base'";
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage(control: 1, steps: 10));
         clip["frameRefs"] = new JArray(MakeRef("Base", fromEnd: true));

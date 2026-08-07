@@ -33,9 +33,9 @@ internal static class NativeFrameReferences
         VideoArchitectureDescriptor architecture,
         ICollection<PlanDiagnostic> diagnostics,
         string codeToken,
-        string label,
         bool allowHostStageSources = false)
     {
+        string label = architecture.DisplayName;
         NativeFrameReferencePlan first = null;
         NativeFrameReferencePlan last = null;
         void Ignore(string code, string message) =>

@@ -19,10 +19,11 @@ internal sealed class StockHostVideoGenerationSession(
     VideoStageRunner stageRunner,
     HostVideoDecodedStageInput stageInput,
     HostRootAdoption rootAdoption,
-    ArchitectureId architectureId,
-    string architectureLabel,
+    VideoArchitectureDescriptor architecture,
     WanStockHostVideoBehavior wanBehavior = null) : IVideoGenerationSession
 {
+    private readonly string architectureLabel = architecture.DisplayName;
+
     private readonly PlannedStagePromptResolver _prompts = new(g);
     private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
     private readonly WanStockHostVideoBehavior _wanBehavior = wanBehavior;
@@ -30,13 +31,12 @@ internal sealed class StockHostVideoGenerationSession(
     private readonly (int Width, int Height) _dimensions =
         DimensionSnap.Snap(plan.Width, plan.Height);
 
-    public ArchitectureId ArchitectureId => architectureId;
+    public ArchitectureId ArchitectureId => architecture.Id;
 
     internal static StockHostVideoGenerationSession Create(
         WorkflowGenerator generator,
         ArchitectureTimelineSessionContext context,
-        ArchitectureId architectureId,
-        string architectureLabel,
+        VideoArchitectureDescriptor architecture,
         WanStockHostVideoBehavior wanBehavior = null)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -46,7 +46,7 @@ internal sealed class StockHostVideoGenerationSession(
         HostVideoDecodedStageInput stageInput = new(
             generator,
             context.Plan.FramesPerSecond,
-            architectureLabel,
+            architecture.DisplayName,
             preserveAttachedAudio: false);
         return new(
             generator,
@@ -55,8 +55,7 @@ internal sealed class StockHostVideoGenerationSession(
             new VideoStageRunner(generator, context.Plan),
             stageInput,
             context.RootAdoption,
-            architectureId,
-            architectureLabel,
+            architecture,
             wanBehavior);
     }
 

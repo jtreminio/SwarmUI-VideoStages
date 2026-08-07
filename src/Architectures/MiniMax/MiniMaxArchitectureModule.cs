@@ -149,7 +149,6 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 Descriptor,
                 diagnostics,
                 "minimax",
-                "MiniMax H3",
                 allowHostStageSources: true);
         foreach (StageSpec stage in activeStages)
         {

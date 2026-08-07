@@ -102,7 +102,7 @@ internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
         HostVideoDecodedStageInput stageInput = new(
             generator,
             context.Plan.FramesPerSecond,
-            MiniMaxGenerationSession.ArchitectureLabel,
+            MiniMaxArchitectureModule.Instance.Descriptor.DisplayName,
             preserveAttachedAudio: true);
         return new MiniMaxGenerationSession(
             generator,

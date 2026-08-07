@@ -146,8 +146,7 @@ internal static class WanClipPlanCompiler
                 stageModels,
                 WanArchitectureModule.Instance.Descriptor,
                 diagnostics,
-                "wan",
-                "WAN");
+                "wan");
         return new(
             new WanClipPayload(
                 firstReference,

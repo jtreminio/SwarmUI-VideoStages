@@ -29,7 +29,6 @@ internal sealed class MiniMaxGenerationSession(
     HostVideoDecodedStageInput stageInput,
     HostRootAdoption rootAdoption) : IVideoGenerationSession
 {
-    internal const string ArchitectureLabel = "MiniMax H3";
 
     private readonly PlannedStagePromptResolver _prompts = new(g);
     private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
@@ -154,7 +153,7 @@ internal sealed class MiniMaxGenerationSession(
         (string positive, string negative) = _prompts.Resolve(clip, stage);
         StockHostVideoStagePayload payload = stage.RequireStockHostVideoPayload(
             ArchitectureId,
-            ArchitectureLabel);
+            MiniMaxArchitectureModule.Instance.Descriptor.DisplayName);
         MiniMaxClipPayload clipPayload = clip.RequireMiniMaxPayload();
         PrepareReusableAudio(clipPayload, stage);
         StageCorePlan core = stage.Core;
