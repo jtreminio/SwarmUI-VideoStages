@@ -9,7 +9,7 @@ import {
     activeDocumentDimensionMultiple,
     snapExplicitDocumentDimensions,
 } from "../../documentDimensionSnap";
-import type { Clip, IcLora, VideoStagesConfig } from "../../types";
+import type { AuthoringDocument, Clip, IcLora } from "../../types";
 import {
     icLoraDimensionFactor,
     ltx2DimensionFactor,
@@ -138,7 +138,7 @@ describe("LTX dimension policy", () => {
             height: 688,
             dimsExplicit: true,
             clips: [clip(icLora({ preset: "union-control", lora: "[AUTO]" }))],
-        } as VideoStagesConfig;
+        } as AuthoringDocument;
 
         const catalog = testArchitectureCatalog();
         expect(activeDocumentDimensionMultiple(state.clips, catalog)).toBe(64);

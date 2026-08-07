@@ -10,12 +10,12 @@ import {
 import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
+    CanonicalAuthoringDocument,
     CanonicalClip,
     CanonicalFrameRefImage,
     CanonicalPromptWindow,
     CanonicalRetake,
     CanonicalStage,
-    CanonicalVideoStagesConfig,
 } from "./types";
 
 const stage = (id: string): CanonicalStage => ({
@@ -106,7 +106,7 @@ const track = (id: string): CanonicalAudioTrack => ({
     spans: [],
 });
 
-const document = (): CanonicalVideoStagesConfig => {
+const document = (): CanonicalAuthoringDocument => {
     const first = clip("clip-a");
     first.stages = [stage("stage-a"), stage("stage-b")];
     first.frameRefs = [ref("ref-a")];
@@ -151,9 +151,9 @@ const catalogWithSecondLtxProfile = (): ReturnType<
 };
 
 const apply = (
-    source: CanonicalVideoStagesConfig,
+    source: CanonicalAuthoringDocument,
     command: DocumentCommand,
-): CanonicalVideoStagesConfig => {
+): CanonicalAuthoringDocument => {
     const result = reduceDocumentCommand(source, command, {
         architectureCatalog: catalogWithFake(),
     });
@@ -418,9 +418,9 @@ describe("reduceDocumentCommand", () => {
                 clipId: "clip-a",
                 stageId: "stage-c",
             },
-            ids: (state: CanonicalVideoStagesConfig) =>
+            ids: (state: CanonicalAuthoringDocument) =>
                 state.clips[0].stages.map((item) => item.id),
-            value: (state: CanonicalVideoStagesConfig) =>
+            value: (state: CanonicalAuthoringDocument) =>
                 state.clips[0].stages.find((item) => item.id === "stage-c")
                     ?.steps,
             expectedValue: 12,
@@ -451,9 +451,9 @@ describe("reduceDocumentCommand", () => {
                 clipId: "clip-a",
                 refId: "ref-b",
             },
-            ids: (state: CanonicalVideoStagesConfig) =>
+            ids: (state: CanonicalAuthoringDocument) =>
                 state.clips[0].frameRefs.map((item) => item.id),
-            value: (state: CanonicalVideoStagesConfig) =>
+            value: (state: CanonicalAuthoringDocument) =>
                 state.clips[0].frameRefs.find((item) => item.id === "ref-b")
                     ?.frame,
             expectedValue: 3,
@@ -484,9 +484,9 @@ describe("reduceDocumentCommand", () => {
                 clipId: "clip-a",
                 windowId: "window-b",
             },
-            ids: (state: CanonicalVideoStagesConfig) =>
+            ids: (state: CanonicalAuthoringDocument) =>
                 state.clips[0].promptWindows.map((item) => item.id),
-            value: (state: CanonicalVideoStagesConfig) =>
+            value: (state: CanonicalAuthoringDocument) =>
                 state.clips[0].promptWindows.find(
                     (item) => item.id === "window-b",
                 )?.prompt,
@@ -499,8 +499,8 @@ describe("reduceDocumentCommand", () => {
         move: DocumentCommand;
         patch: DocumentCommand;
         remove: DocumentCommand;
-        ids: (state: CanonicalVideoStagesConfig) => string[];
-        value: (state: CanonicalVideoStagesConfig) => unknown;
+        ids: (state: CanonicalAuthoringDocument) => string[];
+        value: (state: CanonicalAuthoringDocument) => unknown;
         expectedValue: unknown;
     }>)("supports the full stable-ID lifecycle for $name", ({
         targetId,

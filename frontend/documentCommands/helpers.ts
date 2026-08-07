@@ -2,25 +2,25 @@ import { collectAuthoringEntityIds, ownedIds } from "../identity";
 import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
+    CanonicalAuthoringDocument,
     CanonicalClip,
     CanonicalFrameRefImage,
     CanonicalPromptWindow,
     CanonicalRetake,
     CanonicalStage,
-    CanonicalVideoStagesConfig,
 } from "../types";
 import type { CommandFailure, DocumentCommandResult } from "./types";
 
 export const clone = <T>(value: T): T => structuredClone(value);
 
 export const findClip = (
-    document: CanonicalVideoStagesConfig,
+    document: CanonicalAuthoringDocument,
     clipId: string,
 ): CanonicalClip | null =>
     document.clips.find((clip) => clip.id === clipId) ?? null;
 
 export const findTrack = (
-    document: CanonicalVideoStagesConfig,
+    document: CanonicalAuthoringDocument,
     trackId: string,
 ): CanonicalAudioTrack | null =>
     document.audioTracks.find((track) => track.id === trackId) ?? null;
@@ -35,7 +35,7 @@ type AuthoringEntity =
     | CanonicalAudioTrackSpan;
 
 export const invalidNewEntity = (
-    document: CanonicalVideoStagesConfig,
+    document: CanonicalAuthoringDocument,
     entity: AuthoringEntity,
 ): DocumentCommandResult | null => {
     const ids = ownedIds(entity);
@@ -117,11 +117,11 @@ export const patchById = <T extends { id: string }>(
 };
 
 export const success = (
-    document: CanonicalVideoStagesConfig,
+    document: CanonicalAuthoringDocument,
 ): DocumentCommandResult => ({ document, applied: true });
 
 export const failure = (
-    document: CanonicalVideoStagesConfig,
+    document: CanonicalAuthoringDocument,
     reason: CommandFailure,
 ): DocumentCommandResult => ({
     document,

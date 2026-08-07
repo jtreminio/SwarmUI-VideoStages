@@ -1,6 +1,6 @@
 import { videoStagesDebugLog } from "../debugLog";
 import type { ClipTextInput } from "../promptSegments";
-import type { VideoStagesConfig } from "../types";
+import type { AuthoringDocument } from "../types";
 import { isRecord } from "../utils";
 import { serializeStateForDurableStorage } from "./documentCodec";
 
@@ -77,7 +77,7 @@ export const loadDurableAuthoringState =
     };
 
 export const saveDurableAuthoringState = (
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
 ): DurableAuthoringSnapshot | null => {
     try {
         const snapshot: DurableAuthoringSnapshot = {

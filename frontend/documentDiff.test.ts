@@ -14,12 +14,12 @@ import { DocumentDiffError, diffDocuments } from "./documentDiff";
 import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
+    CanonicalAuthoringDocument,
     CanonicalClip,
     CanonicalFrameRefImage,
     CanonicalPromptWindow,
     CanonicalRetake,
     CanonicalStage,
-    CanonicalVideoStagesConfig,
 } from "./types";
 
 const stage = (id: string): CanonicalStage => ({
@@ -110,7 +110,7 @@ const track = (id: string): CanonicalAudioTrack => ({
     spans: [],
 });
 
-const document = (): CanonicalVideoStagesConfig => {
+const document = (): CanonicalAuthoringDocument => {
     const clipA = clip("clip-a");
     clipA.stages = [stage("stage-a"), stage("stage-b"), stage("stage-c")];
     clipA.frameRefs = [ref("ref-a"), ref("ref-b"), ref("ref-c")];
@@ -161,8 +161,8 @@ const crossArchitectureCatalog = (): {
 };
 
 const applyDiff = (
-    before: CanonicalVideoStagesConfig,
-    after: CanonicalVideoStagesConfig,
+    before: CanonicalAuthoringDocument,
+    after: CanonicalAuthoringDocument,
 ): ReturnType<typeof diffDocuments> => {
     const command = diffDocuments(before, after);
     const result = reduceDocumentCommand(before, command, {
@@ -720,7 +720,7 @@ describe("diffDocuments", () => {
         {
             name: "root",
             type: "root.patch",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 after.width = 768;
                 after.schemaVersion = 3;
             },
@@ -728,7 +728,7 @@ describe("diffDocuments", () => {
         {
             name: "clip with deep IC-LoRA values",
             type: "clip.patch",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 after.clips[0].icLoras = [
                     {
                         id: "ic-guide",
@@ -749,7 +749,7 @@ describe("diffDocuments", () => {
         {
             name: "stage with owned arrays",
             type: "stage.patch",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 after.clips[0].stages[0].loraWeights = [0.6];
                 after.clips[0].stages[0].frameRefStrengths = [0.9, 0.4];
             },
@@ -757,7 +757,7 @@ describe("diffDocuments", () => {
         {
             name: "reference",
             type: "ref.patch",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 after.clips[0].frameRefs[0].frame = 9;
                 after.clips[0].frameRefs[0].uploadedImage = {
                     data: "data:image/png;base64,AA==",
@@ -768,14 +768,14 @@ describe("diffDocuments", () => {
         {
             name: "prompt window",
             type: "prompt-window.patch",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 after.clips[0].promptWindows[0].prompt = "changed";
             },
         },
         {
             name: "retake",
             type: "retake.patch",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 if (after.clips[0].retake) {
                     after.clips[0].retake.strength = 0.9;
                 }
@@ -784,7 +784,7 @@ describe("diffDocuments", () => {
         {
             name: "audio track source",
             type: "audio-track.patch",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 after.audioTracks[0].source = {
                     kind: "AceStepFun",
                     reference: "audio2",
@@ -795,7 +795,7 @@ describe("diffDocuments", () => {
         {
             name: "audio span",
             type: "audio-span.patch",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 after.audioTracks[0].spans[0].timelineStartSeconds = 1;
                 after.audioTracks[0].spans[0].timelineLengthSeconds = 3;
             },
@@ -821,7 +821,7 @@ describe("diffDocuments", () => {
             removeType: "clip.remove",
             addType: "clip.add",
             moveType: "clip.move",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 after.clips = [
                     after.clips[2],
                     clip("clip-new"),
@@ -834,7 +834,7 @@ describe("diffDocuments", () => {
             removeType: "stage.remove",
             addType: "stage.add",
             moveType: "stage.move",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 const items = after.clips[0].stages;
                 after.clips[0].stages = [
                     items[2],
@@ -848,7 +848,7 @@ describe("diffDocuments", () => {
             removeType: "ref.remove",
             addType: "ref.add",
             moveType: "ref.move",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 const items = after.clips[0].frameRefs;
                 after.clips[0].frameRefs = [items[2], ref("ref-new"), items[1]];
             },
@@ -858,7 +858,7 @@ describe("diffDocuments", () => {
             removeType: "prompt-window.remove",
             addType: "prompt-window.add",
             moveType: "prompt-window.move",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 const items = after.clips[0].promptWindows;
                 after.clips[0].promptWindows = [
                     items[2],
@@ -872,7 +872,7 @@ describe("diffDocuments", () => {
             removeType: "audio-track.remove",
             addType: "audio-track.add",
             moveType: "audio-track.move",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 after.audioTracks = [
                     after.audioTracks[2],
                     track("track-new"),
@@ -885,7 +885,7 @@ describe("diffDocuments", () => {
             removeType: "audio-span.remove",
             addType: "audio-span.add",
             moveType: "audio-span.move",
-            mutate: (after: CanonicalVideoStagesConfig) => {
+            mutate: (after: CanonicalAuthoringDocument) => {
                 const items = after.audioTracks[0].spans;
                 after.audioTracks[0].spans = [
                     items[2],
@@ -952,19 +952,19 @@ describe("diffDocuments", () => {
     it.each([
         [
             "duplicate-id",
-            (after: CanonicalVideoStagesConfig) => {
+            (after: CanonicalAuthoringDocument) => {
                 after.clips[0].stages[0].id = "clip-a";
             },
         ],
         [
             "blank-id",
-            (after: CanonicalVideoStagesConfig) => {
+            (after: CanonicalAuthoringDocument) => {
                 after.audioTracks[0].spans[0].id = " ";
             },
         ],
         [
             "missing-id",
-            (after: CanonicalVideoStagesConfig) => {
+            (after: CanonicalAuthoringDocument) => {
                 (after.clips[0].frameRefs[0] as { id?: string }).id = undefined;
             },
         ],

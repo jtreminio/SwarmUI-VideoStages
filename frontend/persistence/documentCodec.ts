@@ -10,25 +10,25 @@ import { normalizeClip } from "../normalizationClip";
 import { optionalNonNegativeNumber } from "../normalizationShared";
 import type { StoredClip } from "../storageTypes";
 import {
+    type AuthoringDocument,
+    type CanonicalAuthoringDocument,
     type CanonicalClip,
-    type CanonicalVideoStagesConfig,
     type Clip,
     CURRENT_AUTHORING_SCHEMA_VERSION,
     type RootDefaults,
-    type VideoStagesConfig,
 } from "../types";
 import { isRecord } from "../utils";
 
-export type InheritedDims = Pick<VideoStagesConfig, "width" | "height" | "fps">;
+export type InheritedDims = Pick<AuthoringDocument, "width" | "height" | "fps">;
 export type RootDims = Pick<
-    VideoStagesConfig,
+    AuthoringDocument,
     "width" | "height" | "fps" | "dimsExplicit"
 >;
 
 export interface DecodedStoredDocument {
     dims: RootDims;
     clips: Clip[];
-    audioTracks: VideoStagesConfig["audioTracks"];
+    audioTracks: AuthoringDocument["audioTracks"];
 }
 
 const toIntOrNull = (value: unknown): number | null => {
@@ -60,9 +60,9 @@ export const resolveRootDims = (
 export const createRootConfig = (
     dims: RootDims,
     clips: Clip[],
-    audioTracks: VideoStagesConfig["audioTracks"] = [],
-): VideoStagesConfig => {
-    const config: VideoStagesConfig = {
+    audioTracks: AuthoringDocument["audioTracks"] = [],
+): AuthoringDocument => {
+    const config: AuthoringDocument = {
         schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
         ...dims,
         clips,
@@ -219,7 +219,7 @@ const timelinePointProjection = (
 const timelineSpanProjection = (
     clips: readonly ProjectionClip[],
     span: Pick<
-        CanonicalVideoStagesConfig["audioTracks"][number]["spans"][number],
+        CanonicalAuthoringDocument["audioTracks"][number]["spans"][number],
         "timelineStartSeconds" | "timelineLengthSeconds"
     >,
 ): SpanProjection | null => {
@@ -249,9 +249,9 @@ const timelineSpanProjection = (
         : null;
 };
 
-export const serializeStateForStorage = (state: VideoStagesConfig): string => {
+export const serializeStateForStorage = (state: AuthoringDocument): string => {
     ensureAuthoringDocumentIdentity(state);
-    const canonical = state as CanonicalVideoStagesConfig;
+    const canonical = state as CanonicalAuthoringDocument;
     const out: Record<string, unknown> = {
         schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
     };
@@ -292,7 +292,7 @@ const isTransientBrowserMedia = (
  * generation can use newly selected media until the page is reloaded.
  */
 export const serializeStateForDurableStorage = (
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
 ): string => {
     ensureAuthoringDocumentIdentity(state);
     const durable = structuredClone(state);

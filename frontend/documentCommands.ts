@@ -32,7 +32,7 @@ import type {
     DocumentCommandContext,
     DocumentCommandResult,
 } from "./documentCommands/types";
-import type { CanonicalClip, CanonicalVideoStagesConfig } from "./types";
+import type { CanonicalAuthoringDocument, CanonicalClip } from "./types";
 
 export type {
     CommandFailure,
@@ -42,7 +42,7 @@ export type {
 } from "./documentCommands/types";
 
 const list = (
-    document: CanonicalVideoStagesConfig,
+    document: CanonicalAuthoringDocument,
     entity: keyof typeof LIST_ENTITIES,
     operation: ListOperation,
     command: object,
@@ -67,7 +67,7 @@ const assertNever = (command: never): never => {
  * ID-relative insertion points fail closed and return an unchanged clone.
  */
 export const reduceDocumentCommand = (
-    source: CanonicalVideoStagesConfig,
+    source: CanonicalAuthoringDocument,
     command: DocumentCommand,
     context: DocumentCommandContext = { architectureCatalog: null },
 ): DocumentCommandResult => {

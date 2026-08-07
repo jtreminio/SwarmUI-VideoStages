@@ -12,8 +12,8 @@ import {
 } from "./persistence/documentCodec";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import {
+    type AuthoringDocument,
     CURRENT_AUTHORING_SCHEMA_VERSION,
-    type VideoStagesConfig,
 } from "./types";
 
 // Frontend half of the frontend/backend authoring-document contract. The fixture is the exact
@@ -34,7 +34,7 @@ const fixture = (): Record<string, unknown> =>
  * One complete authoring document: every field the codec persists is set to a
  * non-default value so the fixture exercises the whole contract surface.
  */
-const contractState = (): VideoStagesConfig => ({
+const contractState = (): AuthoringDocument => ({
     schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
     width: 768,
     height: 512,

@@ -1,5 +1,5 @@
 import { getVideoStagesHostBridge } from "../host";
-import type { TimelineSelection, VideoStagesConfig } from "../types";
+import type { AuthoringDocument, TimelineSelection } from "../types";
 import type { DetailStripContext } from "./context";
 import type { DetailFocusSession } from "./focusSession";
 import { buildDetailHeader, buildDetailPanelBody } from "./panelRouter";
@@ -34,7 +34,7 @@ export const renderDetailShell = (options: {
     detail: HTMLElement;
     context: DetailStripContext;
     focus: DetailFocusSession;
-    state: VideoStagesConfig;
+    state: AuthoringDocument;
     selection: TimelineSelection;
     revealSelection: boolean;
 }): void => {

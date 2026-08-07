@@ -19,7 +19,7 @@ import {
     audioTrackIndicesForClipWindow,
     clipTimelineWindow,
 } from "../documentQueries";
-import type { Clip, TimelineSelection, VideoStagesConfig } from "../types";
+import type { AuthoringDocument, Clip, TimelineSelection } from "../types";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import {
     applyPersistedCapabilityRepair,
@@ -32,7 +32,7 @@ import type { DetailStripContext } from "./context";
 export const buildAudioBody = (
     ctx: DetailStripContext,
     sel: Extract<TimelineSelection, { kind: "audio" }>,
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
 ): HTMLElement => {
     const clips = state.clips;
     const { clipIdx } = sel;

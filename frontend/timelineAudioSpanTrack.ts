@@ -10,7 +10,7 @@ import { getState, saveState } from "./persistence/repository";
 import { selectionAfterRemoval } from "./selection";
 import { timelineClipEdges } from "./timelineSnap";
 import { resolveTimelineTiming } from "./timelineTiming";
-import type { AudioTrack, AudioTrackSpan, VideoStagesConfig } from "./types";
+import type { AudioTrack, AudioTrackSpan, AuthoringDocument } from "./types";
 import { roundToTenth } from "./utils";
 import {
     createDefaultOrDraggedSpan,
@@ -28,12 +28,12 @@ export interface TimelineAudioSpanTrack {
 type CapabilitySource = () => CapabilityViewResolver | undefined;
 
 const timelineTiming = (
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
     capabilities?: CapabilitySource,
 ) => resolveTimelineTiming(state.clips, state.fps, capabilities?.());
 
 const timelineDuration = (
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
     capabilities?: CapabilitySource,
 ): number => timelineTiming(state, capabilities).outputSeconds;
 

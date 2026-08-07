@@ -5,7 +5,7 @@ import {
     type TimelineStore,
     type UpdateMeta,
 } from "./store";
-import type { VideoStagesConfig } from "./types";
+import type { AuthoringDocument } from "./types";
 
 /**
  * Fake carrier: `data` stands in for the data param, `prompt` for the prompt
@@ -19,7 +19,7 @@ interface FakeCarrier {
     dims: string;
 }
 
-const emptyConfig = (): VideoStagesConfig => ({
+const emptyConfig = (): AuthoringDocument => ({
     width: 1024,
     height: 1024,
     fps: 24,
@@ -32,8 +32,8 @@ interface Harness {
     carrier: FakeCarrier;
     deps: StoreDeps;
     parseCalls: string[];
-    writeQuietCalls: VideoStagesConfig[];
-    writeDurableCalls: VideoStagesConfig[];
+    writeQuietCalls: AuthoringDocument[];
+    writeDurableCalls: AuthoringDocument[];
     notifyHostCalls: number[];
     onNotifyHost: (() => void) | null;
 }
@@ -42,19 +42,19 @@ const makeHarness = (): Harness => {
     const carrier: FakeCarrier = { data: "", prompt: "", dims: "w|h|f" };
     const harness = {} as Harness;
     const parseCalls: string[] = [];
-    const writeQuietCalls: VideoStagesConfig[] = [];
-    const writeDurableCalls: VideoStagesConfig[] = [];
+    const writeQuietCalls: AuthoringDocument[] = [];
+    const writeDurableCalls: AuthoringDocument[] = [];
     const notifyHostCalls: number[] = [];
     const deps: StoreDeps = {
         readToken: () =>
             `${carrier.data}\x00${carrier.prompt}\x00${carrier.dims}`,
         readDataParam: () => carrier.data,
-        parse: (serialized: string): VideoStagesConfig | null => {
+        parse: (serialized: string): AuthoringDocument | null => {
             parseCalls.push(serialized);
             try {
                 const parsed = JSON.parse(
                     serialized,
-                ) as Partial<VideoStagesConfig>;
+                ) as Partial<AuthoringDocument>;
                 if (typeof parsed !== "object" || parsed === null) {
                     return null;
                 }
@@ -69,19 +69,19 @@ const makeHarness = (): Harness => {
             }
         },
         parseEmpty: emptyConfig,
-        serialize: (state: VideoStagesConfig): string =>
+        serialize: (state: AuthoringDocument): string =>
             JSON.stringify({
                 width: state.width,
                 clips: state.clips.map((clip) => ({
                     duration: clip.duration,
                 })),
             }),
-        writeQuiet: (state: VideoStagesConfig, serialized: string): void => {
+        writeQuiet: (state: AuthoringDocument, serialized: string): void => {
             writeQuietCalls.push(structuredClone(state));
             carrier.data = serialized;
             carrier.prompt = state.clips.map((clip) => clip.prompt).join("|");
         },
-        writeDurable: (state: VideoStagesConfig): void => {
+        writeDurable: (state: AuthoringDocument): void => {
             writeDurableCalls.push(structuredClone(state));
         },
         notifyHost: (): void => {

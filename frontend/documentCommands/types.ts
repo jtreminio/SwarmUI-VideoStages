@@ -6,13 +6,13 @@ import type {
 import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
+    CanonicalAuthoringDocument,
     CanonicalClip,
     CanonicalClipReference,
     CanonicalFrameRefImage,
     CanonicalPromptWindow,
     CanonicalRetake,
     CanonicalStage,
-    CanonicalVideoStagesConfig,
 } from "../types";
 import type {
     AudioSpanPatch,
@@ -36,7 +36,7 @@ export type CommandFailure =
     | "architecture-invariant";
 
 export interface DocumentCommandResult {
-    document: CanonicalVideoStagesConfig;
+    document: CanonicalAuthoringDocument;
     applied: boolean;
     failure?: CommandFailure;
 }

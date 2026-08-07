@@ -15,7 +15,7 @@ import {
 } from "../__test_helpers__/clipFixtures";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { __resetPersistenceForTests } from "../persistence/repository";
-import type { Clip, VideoStagesConfig } from "../types";
+import type { AuthoringDocument, Clip } from "../types";
 import { buildAudioBody } from "./audioPanel";
 import { buildClipBody } from "./clipPanel";
 import type { DetailStripContext } from "./context";
@@ -60,7 +60,7 @@ const context = (
         authoring: () => testAuthoringTransactionSnapshot(models),
     }) as unknown as DetailStripContext;
 
-const documentFor = (clips: Clip[]): VideoStagesConfig => ({
+const documentFor = (clips: Clip[]): AuthoringDocument => ({
     width: 1024,
     height: 576,
     fps: 24,

@@ -11,12 +11,12 @@ import {
     resetSelectionForTests,
     setSelection,
 } from "../selection";
-import type { TimelineSelection, VideoStagesConfig } from "../types";
+import type { AuthoringDocument, TimelineSelection } from "../types";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import type { DetailStripContext } from "./context";
 import { revealRepeaterKey } from "./renderShell";
 
-const config = (): VideoStagesConfig => ({
+const config = (): AuthoringDocument => ({
     schemaVersion: 4,
     width: 1280,
     height: 720,
@@ -49,7 +49,7 @@ const fieldControl = <T extends HTMLElement>(
 };
 
 describe("timeline-wide audio spans panel", () => {
-    let state: VideoStagesConfig;
+    let state: AuthoringDocument;
     let host: HTMLElement;
     let ctx: DetailStripContext;
 
@@ -348,7 +348,7 @@ describe("timeline-wide audio spans panel", () => {
             id: string,
             start: number,
             length: number,
-        ): NonNullable<VideoStagesConfig["audioTracks"]>[number] => ({
+        ): NonNullable<AuthoringDocument["audioTracks"]>[number] => ({
             id,
             volume: 1,
             source: {

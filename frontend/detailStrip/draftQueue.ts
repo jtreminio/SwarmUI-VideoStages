@@ -10,7 +10,7 @@ import {
 } from "../persistence/repository";
 import { setSelection } from "../selection";
 import { isVideoStagesEnabled } from "../swarmInputs";
-import type { Clip, TimelineSelection, VideoStagesConfig } from "../types";
+import type { AuthoringDocument, Clip, TimelineSelection } from "../types";
 import type { ClampedNumberOpts } from "./context";
 import type { DetailFocusSession } from "./focusSession";
 
@@ -37,7 +37,7 @@ const asCommand = (outcome: StructuralOutcome): StructuralCommand | null =>
 
 interface PendingEntry {
     kind: "clips" | "state";
-    mutate: ((clips: Clip[]) => void) | ((state: VideoStagesConfig) => void);
+    mutate: ((clips: Clip[]) => void) | ((state: AuthoringDocument) => void);
     readBack?: (clips: Clip[]) => number | null;
 }
 
@@ -46,11 +46,11 @@ export interface DetailDraftQueue {
     flush(): void;
     dispose(): void;
     commit(mutate: (clips: Clip[]) => void): void;
-    commitState(mutate: (state: VideoStagesConfig) => void): void;
+    commitState(mutate: (state: AuthoringDocument) => void): void;
     debouncedCommit(key: string, mutate: (clips: Clip[]) => void): void;
     debouncedCommitState(
         key: string,
-        mutate: (state: VideoStagesConfig) => void,
+        mutate: (state: AuthoringDocument) => void,
     ): void;
     buildClampedNumber(options: ClampedNumberOpts): HTMLInputElement;
     structuralCommit(
@@ -123,7 +123,7 @@ export const createDetailDraftQueue = (options: {
             .map((entry) => entry.mutate as (clips: Clip[]) => void);
         const stateMutations = entries
             .filter((entry) => entry.kind === "state")
-            .map((entry) => entry.mutate as (state: VideoStagesConfig) => void);
+            .map((entry) => entry.mutate as (state: AuthoringDocument) => void);
         flushing = true;
         let flushedClips: Clip[] | null = null;
         try {
@@ -192,7 +192,7 @@ export const createDetailDraftQueue = (options: {
         options.syncValueDerivedUi(options.getRenderedSelection());
     };
 
-    const commitState = (mutate: (state: VideoStagesConfig) => void): void => {
+    const commitState = (mutate: (state: AuthoringDocument) => void): void => {
         flush();
         options.focus.capture();
         if (isStale()) {

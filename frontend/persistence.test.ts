@@ -51,7 +51,7 @@ import {
 } from "./persistence/repository";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import type { StoredClip } from "./storageTypes";
-import type { VideoStagesConfig } from "./types";
+import type { AuthoringDocument } from "./types";
 import { clearUiStateForTests } from "./uiState";
 
 const dataInput = (): HTMLTextAreaElement =>
@@ -186,7 +186,7 @@ describe("persistence", () => {
                     ...decoded?.dims,
                     clips: decoded?.clips ?? [],
                     audioTracks: decoded?.audioTracks ?? [],
-                } as VideoStagesConfig),
+                } as AuthoringDocument),
             ) as { schemaVersion: number; clips: Record<string, unknown>[] };
             expect(reencoded.schemaVersion).toBe(7);
             expect(reencoded.clips[0].frameRefs).toHaveLength(1);
@@ -396,7 +396,7 @@ describe("persistence", () => {
         });
 
         it("keeps authored structure while removing embedded browser media from the durable document", () => {
-            const state: VideoStagesConfig = {
+            const state: AuthoringDocument = {
                 width: 1024,
                 height: 1024,
                 fps: 24,
@@ -598,7 +598,7 @@ describe("persistence", () => {
         });
 
         it("restores durable authoring data after a simulated browser reload but leaves uploads detached", () => {
-            const state: VideoStagesConfig = {
+            const state: AuthoringDocument = {
                 width: 1024,
                 height: 1024,
                 fps: 24,
@@ -1185,8 +1185,8 @@ describe("persistence", () => {
 
     describe("top-level width/height/fps round-trip", () => {
         const baseState = (
-            overrides: Partial<VideoStagesConfig> = {},
-        ): VideoStagesConfig => ({
+            overrides: Partial<AuthoringDocument> = {},
+        ): AuthoringDocument => ({
             width: 1024,
             height: 1024,
             fps: 24,

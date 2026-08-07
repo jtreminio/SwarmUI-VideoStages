@@ -1,5 +1,5 @@
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
-import type { CanonicalClip, CanonicalVideoStagesConfig } from "../types";
+import type { CanonicalAuthoringDocument, CanonicalClip } from "../types";
 import {
     addBefore,
     clone,
@@ -27,7 +27,7 @@ export type ListOperation = "add" | "remove" | "move" | "patch";
  * mutation. Entity-specific rules stay in the reducer's own cases.
  */
 export const applyListCommand = (
-    document: CanonicalVideoStagesConfig,
+    document: CanonicalAuthoringDocument,
     descriptor: ListDescriptor,
     operation: ListOperation,
     command: object,

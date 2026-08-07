@@ -6,7 +6,7 @@ import {
     reduceDocumentCommand,
 } from "./documentCommands";
 import { ensureAuthoringDocumentIdentity } from "./identity";
-import type { VideoStagesConfig } from "./types";
+import type { AuthoringDocument } from "./types";
 
 /** Which component committed a state change; "external" marks host-side edits. */
 export type UpdateOrigin =
@@ -31,12 +31,12 @@ export interface UpdateMeta {
 }
 
 export type StoreSubscriber = (
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
     meta: UpdateMeta,
 ) => void;
 
 export interface TimelineStoreSnapshot {
-    state: VideoStagesConfig;
+    state: AuthoringDocument;
     /** Monotonic document revision suitable for fail-closed async commands. */
     revision: number;
 }
@@ -66,22 +66,22 @@ export interface StoreDeps {
     /** Raw JSON currently in the data param ("" when the input is absent). */
     readDataParam(): string;
     /** Parse serialized data-param JSON + live prompt overlay; null if corrupt. */
-    parse(serialized: string): VideoStagesConfig | null;
+    parse(serialized: string): AuthoringDocument | null;
     /** Config for an empty/absent carrier: inherited dims, zero clips. */
-    parseEmpty(): VideoStagesConfig;
+    parseEmpty(): AuthoringDocument;
     /** Produce the exact data-param JSON without mutating either carrier. */
-    serialize(state: VideoStagesConfig): string;
+    serialize(state: AuthoringDocument): string;
     /** Write BOTH carriers without dispatching host change events. */
-    writeQuiet(state: VideoStagesConfig, serialized: string): void;
+    writeQuiet(state: AuthoringDocument, serialized: string): void;
     /** Mirror a valid external carrier edit into extension-owned storage. */
-    writeDurable?(state: VideoStagesConfig): void;
+    writeDurable?(state: AuthoringDocument): void;
     /** Dispatch the deferred host change events for both carriers. */
     notifyHost(): void;
 }
 
 export interface TimelineStore {
     /** Deep clone of the canonical model; callers may mutate freely. */
-    getState(): VideoStagesConfig;
+    getState(): AuthoringDocument;
     /** Atomically read an isolated document snapshot and its revision. */
     getSnapshot(): TimelineStoreSnapshot;
     /** Current document revision, revalidating the live carriers first. */
@@ -113,7 +113,7 @@ export interface TimelineStore {
 }
 
 export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
-    let canonical: VideoStagesConfig | null = null;
+    let canonical: AuthoringDocument | null = null;
     let cachedToken: string | null = null;
     // The last token subscribers were brought up to date with (via commit's
     // commit notification or syncFromCarrier's external notification). Kept
@@ -127,7 +127,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
     const subscribers = new Set<StoreSubscriber>();
 
     /** getState read path: live param, else last-good, else empty. */
-    const parseCurrent = (): VideoStagesConfig => {
+    const parseCurrent = (): AuthoringDocument => {
         const serialized = deps.readDataParam() || lastGoodSerialized;
         if (!serialized) {
             return deps.parseEmpty();
@@ -146,7 +146,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         return deps.parseEmpty();
     };
 
-    const revalidate = (): VideoStagesConfig => {
+    const revalidate = (): AuthoringDocument => {
         const token = deps.readToken();
         if (canonical && token === cachedToken) {
             return canonical;
@@ -181,7 +181,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
     };
 
     const commit = (
-        state: VideoStagesConfig,
+        state: AuthoringDocument,
         origin: UpdateOrigin,
         notifyDomChange: boolean,
         hint?: UpdateMeta["hint"],
@@ -297,7 +297,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
     };
 
     return {
-        getState: (): VideoStagesConfig => structuredClone(revalidate()),
+        getState: (): AuthoringDocument => structuredClone(revalidate()),
         getSnapshot: (): TimelineStoreSnapshot => ({
             state: structuredClone(revalidate()),
             revision: documentRevision,

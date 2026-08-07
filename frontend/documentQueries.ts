@@ -1,8 +1,8 @@
 import { safeFps } from "./timelineDetail";
-import type { Clip, VideoStagesConfig } from "./types";
+import type { AuthoringDocument, Clip } from "./types";
 
 /** Canonical document FPS for timeline math, including the shared fallback. */
-export const documentFps = (document: Pick<VideoStagesConfig, "fps">): number =>
+export const documentFps = (document: Pick<AuthoringDocument, "fps">): number =>
     safeFps(document.fps);
 
 export interface ClipTimelineWindow {
@@ -28,7 +28,7 @@ export const clipTimelineWindow = (
 
 /** Global audio lanes whose half-open windows intersect the selected clip. */
 export const audioTrackIndicesForClipWindow = (
-    state: Pick<VideoStagesConfig, "clips" | "audioTracks">,
+    state: Pick<AuthoringDocument, "clips" | "audioTracks">,
     clipIdx: number,
 ): number[] => {
     const clipWindow = clipTimelineWindow(state.clips, clipIdx);

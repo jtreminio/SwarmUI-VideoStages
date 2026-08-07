@@ -5,9 +5,9 @@ import {
     countActiveStagesInMetadataClip0,
     hasRefinementWorkToDo,
 } from "./refineVideoButton";
-import type { Clip, VideoStagesConfig } from "./types";
+import type { AuthoringDocument, Clip } from "./types";
 
-const makeConfig = (clips: Clip[]): VideoStagesConfig => ({
+const makeConfig = (clips: Clip[]): AuthoringDocument => ({
     width: 512,
     height: 512,
     fps: 24,

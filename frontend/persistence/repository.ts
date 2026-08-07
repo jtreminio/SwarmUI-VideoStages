@@ -20,7 +20,7 @@ import {
     type UpdateOrigin,
 } from "../store";
 import { isVideoStagesEnabled } from "../swarmInputs";
-import type { Clip, VideoStagesConfig } from "../types";
+import type { AuthoringDocument, Clip } from "../types";
 import {
     dataCarrierNeedsCanonicalIdRepair,
     resetTimelineCarrierAdapterForTests,
@@ -55,7 +55,7 @@ export const __resetPersistenceForTests = (): void => {
     resetTimelineCarrierAdapterForTests();
 };
 
-export const getState = (): VideoStagesConfig => store.getState();
+export const getState = (): AuthoringDocument => store.getState();
 
 const throwSaveFailure = (
     phase: "diff" | "dispatch",
@@ -75,7 +75,7 @@ const throwSaveFailure = (
 };
 
 const saveRequestedState = (
-    requestedInput: VideoStagesConfig,
+    requestedInput: AuthoringDocument,
     options: SaveStateOptions | undefined,
     snapshot = store.getSnapshot(),
 ): void => {
@@ -143,7 +143,7 @@ const saveRequestedState = (
 };
 
 export const saveState = (
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
     options?: SaveStateOptions,
 ): void => saveRequestedState(state, options);
 

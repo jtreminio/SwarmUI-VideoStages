@@ -6,9 +6,9 @@ import { stageChipLabel } from "../timelineDetail";
 import { incomingReferenceContinueForClip } from "../timelineTiming";
 import type {
     AudioTrack,
+    AuthoringDocument,
     Clip,
     TimelineSelection,
-    VideoStagesConfig,
 } from "../types";
 import { roundToTenth } from "../utils";
 import { buildAudioBody } from "./audioPanel";
@@ -190,7 +190,7 @@ export const detailBreadcrumb = (
 
 export const buildDetailHeader = (
     selection: TimelineSelection,
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
     capabilities: CapabilityViewResolver,
 ): HTMLElement => {
     const header = document.createElement("div");
@@ -218,7 +218,7 @@ export const buildDetailHeader = (
 export const buildDetailPanelBody = (
     context: DetailStripContext,
     selection: TimelineSelection,
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
 ): HTMLElement => {
     const clips = state.clips;
     switch (selection.kind) {

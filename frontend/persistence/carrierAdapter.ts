@@ -19,7 +19,7 @@ import {
     writeClipPrompts,
     writeDataParam,
 } from "../swarmInputs";
-import type { Clip, RootDefaults, VideoStagesConfig } from "../types";
+import type { AuthoringDocument, Clip, RootDefaults } from "../types";
 import { applyUiState, saveUiState } from "../uiState";
 import {
     createRootConfig,
@@ -71,7 +71,7 @@ const inheritedDims = (defaults: RootDefaults): InheritedDims => ({
     fps: defaults.fps,
 });
 
-const parse = (serialized: string): VideoStagesConfig | null => {
+const parse = (serialized: string): AuthoringDocument | null => {
     const defaults = getRootDefaults();
     const decoded = decodeStoredDocument(
         serialized,
@@ -84,7 +84,7 @@ const parse = (serialized: string): VideoStagesConfig | null => {
     return createRootConfig(decoded.dims, decoded.clips, decoded.audioTracks);
 };
 
-const parseEmpty = (): VideoStagesConfig => {
+const parseEmpty = (): AuthoringDocument => {
     const clips: Clip[] = [];
     overlayPromptAndUiState(clips);
     return createRootConfig(
@@ -122,7 +122,7 @@ const restoreDurableSnapshot = (
     return true;
 };
 
-const writeDurable = (state: VideoStagesConfig): void => {
+const writeDurable = (state: AuthoringDocument): void => {
     const saved = saveDurableAuthoringState(state);
     if (saved) {
         hydratedSnapshot = saved;
@@ -197,7 +197,7 @@ const readDataParam = (): string => {
     return readHostDataParam();
 };
 
-const writeQuiet = (state: VideoStagesConfig, serialized: string): void => {
+const writeQuiet = (state: AuthoringDocument, serialized: string): void => {
     releaseBootCarrierProtection();
     ensureAuthoringDocumentIdentity(state);
     assignMissingHues(state.clips);

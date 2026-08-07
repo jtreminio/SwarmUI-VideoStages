@@ -1,7 +1,7 @@
 import {
-    type CanonicalVideoStagesConfig,
+    type AuthoringDocument,
+    type CanonicalAuthoringDocument,
     CURRENT_AUTHORING_SCHEMA_VERSION,
-    type VideoStagesConfig,
 } from "./types";
 
 export type EntityKind =
@@ -69,7 +69,7 @@ const assignUniqueId = (
 };
 
 const clipIdentityEntries = (
-    clips: VideoStagesConfig["clips"],
+    clips: AuthoringDocument["clips"],
 ): IdentityEntry[] => {
     const entries: IdentityEntry[] = [];
     for (let clipIndex = 0; clipIndex < clips.length; clipIndex++) {
@@ -142,7 +142,7 @@ const clipIdentityEntries = (
 };
 
 const audioTrackIdentityEntries = (
-    tracks: NonNullable<VideoStagesConfig["audioTracks"]>,
+    tracks: NonNullable<AuthoringDocument["audioTracks"]>,
 ): IdentityEntry[] => {
     const entries: IdentityEntry[] = [];
     for (let trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
@@ -189,7 +189,7 @@ const assignEntryIdentities = (
  * before the next save.
  */
 export const ensureClipEntityIdentities = (
-    clips: VideoStagesConfig["clips"],
+    clips: AuthoringDocument["clips"],
     seen: Set<string> = new Set<string>(),
 ): Set<string> => {
     assignEntryIdentities(clipIdentityEntries(clips), seen);
@@ -202,8 +202,8 @@ export const ensureClipEntityIdentities = (
  * duplicate IDs are replaced once and then persist through normal carriers.
  */
 export function ensureAuthoringDocumentIdentity(
-    state: VideoStagesConfig,
-): asserts state is CanonicalVideoStagesConfig {
+    state: AuthoringDocument,
+): asserts state is CanonicalAuthoringDocument {
     state.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
     state.audioTracks ??= [];
     assignEntryIdentities(
@@ -256,7 +256,7 @@ export const ownedIds = (
     return [entity.id, ...nested.map((item) => item.id)];
 };
 
-export const collectAuthoringEntityIds = (state: VideoStagesConfig): string[] =>
+export const collectAuthoringEntityIds = (state: AuthoringDocument): string[] =>
     [
         ...state.clips.flatMap(ownedIds),
         ...(state.audioTracks ?? []).flatMap(ownedIds),

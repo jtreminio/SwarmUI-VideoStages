@@ -1,5 +1,5 @@
 import { getTimelineStore, saveClips } from "./persistence/repository";
-import type { Clip, VideoStagesConfig } from "./types";
+import type { AuthoringDocument, Clip } from "./types";
 
 /**
  * Fail-closed guard for an async clip media probe. An operation is bound to one
@@ -63,7 +63,7 @@ export interface ClipMediaProbeRun<T> {
     slot: string;
     probe: () => Promise<T>;
     /** Mutates the live clip; the caller's edit is saved for it. */
-    apply: (clip: Clip, result: T, state: VideoStagesConfig) => void;
+    apply: (clip: Clip, result: T, state: AuthoringDocument) => void;
     onApplied?: () => void;
 }
 

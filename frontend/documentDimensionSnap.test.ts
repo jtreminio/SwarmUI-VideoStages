@@ -4,7 +4,7 @@ import {
     activeDocumentDimensionMultiple,
     snapExplicitDocumentDimensions,
 } from "./documentDimensionSnap";
-import type { Clip, VideoStagesConfig } from "./types";
+import type { AuthoringDocument, Clip } from "./types";
 
 const clip = (architecture: string): Clip =>
     ({
@@ -25,7 +25,7 @@ describe("document dimension policy", () => {
             height: 359,
             dimsExplicit: true,
             clips: [clip("future-video")],
-        } as VideoStagesConfig;
+        } as AuthoringDocument;
         expect(snapExplicitDocumentDimensions(state, null)).toMatchObject({
             changed: true,
             multiple: 32,
@@ -40,7 +40,7 @@ describe("document dimension policy", () => {
             height: 688,
             dimsExplicit: false,
             clips: [clip("future-video")],
-        } as VideoStagesConfig;
+        } as AuthoringDocument;
         expect(snapExplicitDocumentDimensions(state, null).changed).toBe(false);
         expect(state).toMatchObject({ width: 1232, height: 688 });
     });

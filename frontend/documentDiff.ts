@@ -25,7 +25,7 @@ import {
     ROOT_PATCH_KEYS,
 } from "./documentCommands/listEntities";
 import { ownedIds } from "./identity";
-import type { CanonicalClip, CanonicalVideoStagesConfig } from "./types";
+import type { CanonicalAuthoringDocument, CanonicalClip } from "./types";
 
 export type DocumentBatchCommand = Extract<DocumentCommand, { type: "batch" }>;
 export type DocumentDiffFailure = Extract<
@@ -99,12 +99,12 @@ const changedPatch = <T extends object, K extends keyof T>(
 
 const hasPatch = (patch: object): boolean => Object.keys(patch).length > 0;
 
-const allEntityIds = (document: CanonicalVideoStagesConfig): unknown[] => [
+const allEntityIds = (document: CanonicalAuthoringDocument): unknown[] => [
     ...document.clips.flatMap(ownedIds),
     ...document.audioTracks.flatMap(ownedIds),
 ];
 
-const validateDocumentIds = (document: CanonicalVideoStagesConfig): void => {
+const validateDocumentIds = (document: CanonicalAuthoringDocument): void => {
     const ids = allEntityIds(document);
     if (
         ids.some(
@@ -510,8 +510,8 @@ const clipDiffBase = (
 };
 
 const diffClips = (
-    before: CanonicalVideoStagesConfig,
-    after: CanonicalVideoStagesConfig,
+    before: CanonicalAuthoringDocument,
+    after: CanonicalAuthoringDocument,
     phases: CommandPhases,
     context: DocumentCommandContext,
 ): void =>
@@ -529,8 +529,8 @@ const diffClips = (
     );
 
 const diffAudioTracks = (
-    before: CanonicalVideoStagesConfig,
-    after: CanonicalVideoStagesConfig,
+    before: CanonicalAuthoringDocument,
+    after: CanonicalAuthoringDocument,
     phases: CommandPhases,
 ): void =>
     diffList(
@@ -550,8 +550,8 @@ const diffAudioTracks = (
  * It never falls back to whole-document replacement.
  */
 export const diffDocuments = (
-    before: CanonicalVideoStagesConfig,
-    after: CanonicalVideoStagesConfig,
+    before: CanonicalAuthoringDocument,
+    after: CanonicalAuthoringDocument,
     context: DocumentCommandContext = { architectureCatalog: null },
 ): DocumentBatchCommand => {
     validateDocumentIds(before);

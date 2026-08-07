@@ -1,13 +1,13 @@
 import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
+    CanonicalAuthoringDocument,
     CanonicalClip,
     CanonicalClipReference,
     CanonicalFrameRefImage,
     CanonicalPromptWindow,
     CanonicalRetake,
     CanonicalStage,
-    CanonicalVideoStagesConfig,
 } from "../types";
 
 /** Which entity owns the collection a list command addresses. */
@@ -94,7 +94,7 @@ const definePatchKeys =
     ): readonly TPatch[number][] =>
         keys.patchKeys;
 
-export const ROOT_PATCH_KEYS = definePatchKeys<CanonicalVideoStagesConfig>()({
+export const ROOT_PATCH_KEYS = definePatchKeys<CanonicalAuthoringDocument>()({
     patchKeys: ["schemaVersion", "width", "height", "fps", "dimsExplicit"],
     reservedKeys: ["clips", "audioTracks"],
 });
@@ -104,7 +104,7 @@ export const RETAKE_PATCH_KEYS = definePatchKeys<CanonicalRetake>()({
     reservedKeys: ["id"],
 });
 
-const CLIP_ENTITY = defineList<CanonicalVideoStagesConfig, CanonicalClip>()({
+const CLIP_ENTITY = defineList<CanonicalAuthoringDocument, CanonicalClip>()({
     prefix: "clip",
     owner: "document",
     entityField: "clip",
@@ -222,7 +222,7 @@ const PROMPT_WINDOW_ENTITY = defineList<CanonicalClip, CanonicalPromptWindow>()(
 );
 
 const AUDIO_TRACK_ENTITY = defineList<
-    CanonicalVideoStagesConfig,
+    CanonicalAuthoringDocument,
     CanonicalAudioTrack
 >()({
     prefix: "audio-track",
@@ -277,7 +277,7 @@ export type PromptWindowPatch = PatchOf<typeof PROMPT_WINDOW_ENTITY>;
 export type AudioTrackPatch = PatchOf<typeof AUDIO_TRACK_ENTITY>;
 export type AudioSpanPatch = PatchOf<typeof AUDIO_SPAN_ENTITY>;
 export type RootSettingsPatch = Partial<
-    Pick<CanonicalVideoStagesConfig, (typeof ROOT_PATCH_KEYS)[number]>
+    Pick<CanonicalAuthoringDocument, (typeof ROOT_PATCH_KEYS)[number]>
 >;
 export type RetakePatch = Partial<
     Pick<CanonicalRetake, (typeof RETAKE_PATCH_KEYS)[number]>

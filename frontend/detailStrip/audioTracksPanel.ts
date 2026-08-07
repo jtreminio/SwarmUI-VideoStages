@@ -29,12 +29,12 @@ import { selectionAfterRemoval, setSelection } from "../selection";
 import type {
     AudioTrack,
     AudioTrackSpan,
+    AuthoringDocument,
     TimelineSelection,
-    VideoStagesConfig,
 } from "../types";
 import type { DetailStripContext } from "./context";
 
-const timelineDuration = (state: VideoStagesConfig): number =>
+const timelineDuration = (state: AuthoringDocument): number =>
     state.clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
 
 const primarySpan = (track: AudioTrack): AudioTrackSpan | null =>
@@ -46,7 +46,7 @@ const commitTrack = (
     mutate: (track: AudioTrack, span: AudioTrackSpan) => void,
     debounceKey?: string,
 ): void => {
-    const apply = (state: VideoStagesConfig): void => {
+    const apply = (state: AuthoringDocument): void => {
         const track = state.audioTracks?.find((entry) => entry.id === trackId);
         const span = track ? primarySpan(track) : null;
         if (track && span) {
@@ -62,7 +62,7 @@ const commitTrack = (
 
 const buildTrackEditor = (
     ctx: DetailStripContext,
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
     track: AudioTrack,
     trackIndex: number,
 ): HTMLElement => {
@@ -281,7 +281,7 @@ const buildTrackEditor = (
 
 const addAudioTrack = (
     ctx: DetailStripContext,
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
     clipWindow?: ClipTimelineWindow,
 ): number => {
     const total = Math.max(AUDIO_SPAN_MIN_LENGTH, timelineDuration(state));
@@ -332,7 +332,7 @@ export interface AudioTracksPanelOptions {
 
 export const buildAudioTracksPanel = (
     ctx: DetailStripContext,
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
     selection: Extract<TimelineSelection, { kind: "none" | "audio-track" }> = {
         kind: "none",
     },
@@ -418,7 +418,7 @@ export const buildAudioTracksPanel = (
 
 export const buildTimelineAudioTracksBody = (
     ctx: DetailStripContext,
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
     selection: Extract<TimelineSelection, { kind: "audio-track" }>,
 ): HTMLElement => {
     const body = document.createElement("div");

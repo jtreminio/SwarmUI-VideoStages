@@ -42,7 +42,7 @@ export interface RootDefaults {
     cfgScaleStep: number;
 }
 
-export interface VideoStagesConfig {
+export interface AuthoringDocument {
     /**
      * Version of the frontend authoring document. Only the current schema is
      * accepted; older and unversioned carriers are intentionally rejected.
@@ -311,8 +311,8 @@ export type CanonicalClip = Omit<
     frameRefs: CanonicalFrameRefImage[];
     stages: CanonicalStage[];
 };
-export type CanonicalVideoStagesConfig = Omit<
-    VideoStagesConfig,
+export type CanonicalAuthoringDocument = Omit<
+    AuthoringDocument,
     "schemaVersion" | "clips" | "audioTracks"
 > & {
     schemaVersion: number;

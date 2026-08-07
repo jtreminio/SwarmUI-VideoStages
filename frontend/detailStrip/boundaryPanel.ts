@@ -21,9 +21,9 @@ import {
 } from "../timelineTiming";
 import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "../timelineView/regionRenderer";
 import type {
+    AuthoringDocument,
     BoundaryOut,
     TimelineSelection,
-    VideoStagesConfig,
 } from "../types";
 import { buildCapabilityNotice } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
@@ -31,7 +31,7 @@ import type { DetailStripContext } from "./context";
 export const buildBoundaryBody = (
     ctx: DetailStripContext,
     sel: Extract<TimelineSelection, { kind: "boundary" }>,
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
 ): HTMLElement => {
     const clips = state.clips;
     const { leftClipIdx } = sel;

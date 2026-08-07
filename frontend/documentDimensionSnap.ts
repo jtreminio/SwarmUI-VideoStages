@@ -3,7 +3,7 @@ import { resolvedClipArchitectureId } from "./architectures/clipIdentity";
 import type { ArchitectureModelCatalog } from "./architectures/types";
 import { ROOT_DIMENSION_STEP } from "./constants";
 import { snapDimensions } from "./dimensionSnap";
-import type { Clip, VideoStagesConfig } from "./types";
+import type { AuthoringDocument, Clip } from "./types";
 
 export interface DocumentDimensionSnap {
     changed: boolean;
@@ -49,7 +49,7 @@ export const activeDocumentDimensionMultiple = (
  * dimensions remain live host values and are only previewed/snapped at runtime.
  */
 export const snapExplicitDocumentDimensions = (
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
     catalog: ArchitectureModelCatalog | null,
 ): DocumentDimensionSnap => {
     const before = {

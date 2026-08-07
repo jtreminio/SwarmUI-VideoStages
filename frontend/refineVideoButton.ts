@@ -8,7 +8,7 @@ import { readProp } from "./normalizationShared";
 import { serializeStateForStorage } from "./persistence/documentCodec";
 import { getState } from "./persistence/repository";
 import { isVideoStagesEnabled } from "./swarmInputs";
-import type { Clip, VideoStagesConfig } from "./types";
+import type { AuthoringDocument, Clip } from "./types";
 import { isRecord, safeJsonParse } from "./utils";
 
 const REFINE_SOURCE_FILE_NAME = "refine-source";
@@ -43,7 +43,7 @@ export const countActiveStagesInMetadataClip0 = (
 };
 
 export const hasRefinementWorkToDo = (
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
     enabled: boolean,
     skipCount: number,
 ): boolean => {

@@ -22,7 +22,7 @@ import {
     type TimelineAudioSpanTrack,
 } from "./timelineAudioSpanTrack";
 import { setTimelineAuthoringSetting } from "./timelineAuthoringSettings";
-import type { VideoStagesConfig } from "./types";
+import type { AuthoringDocument } from "./types";
 
 const clipRecord = (duration: number): Record<string, unknown> => ({
     duration,
@@ -140,7 +140,7 @@ describe("timeline-wide audio span gestures", () => {
             mouse("mouseup", 3.5 * TIMELINE_PPS, { clientY: 12 }),
         );
 
-        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks?.[0].spans[0]).toMatchObject({
             timelineStartSeconds: 3.5,
             timelineLengthSeconds: 3,
@@ -163,12 +163,12 @@ describe("timeline-wide audio span gestures", () => {
             mouse("mouseup", 5 * TIMELINE_PPS, { clientY: 12 }),
         );
 
-        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks?.[0].spans[0].timelineStartSeconds).toBe(3.1);
     });
 
     it("snaps to the span immediately above before clip edges", () => {
-        const state = rootState() as unknown as VideoStagesConfig;
+        const state = rootState() as unknown as AuthoringDocument;
         state.audioTracks?.push({
             id: "track-lower",
             volume: 1,
@@ -208,7 +208,7 @@ describe("timeline-wide audio span gestures", () => {
             mouse("mouseup", 2.1 * TIMELINE_PPS, { clientY: 12 }),
         );
 
-        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks?.[1].spans[0].timelineStartSeconds).toBe(2);
     });
 
@@ -220,13 +220,13 @@ describe("timeline-wide audio span gestures", () => {
             mouse("click", 2 * TIMELINE_PPS, { clientY: 12, shiftKey: true }),
         );
 
-        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks).toHaveLength(0);
         expect(getSelection()).toEqual({ kind: "none" });
     });
 
     it("deleting one of several tracks selects the surviving neighbour", () => {
-        const state = rootState() as unknown as VideoStagesConfig;
+        const state = rootState() as unknown as AuthoringDocument;
         state.audioTracks?.push({
             id: "track-lower",
             volume: 1,
@@ -255,7 +255,7 @@ describe("timeline-wide audio span gestures", () => {
             mouse("click", 10, { clientY: 12, shiftKey: true }),
         );
 
-        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks).toHaveLength(1);
         expect(saved.audioTracks?.[0].id).toBe("track-global");
         expect(getSelection()).toEqual({ kind: "audio-track", trackIdx: 0 });
@@ -272,7 +272,7 @@ describe("timeline-wide audio span gestures", () => {
         document.dispatchEvent(mouse("mousemove", 0, { clientY: 12 }));
         document.dispatchEvent(mouse("mouseup", 0, { clientY: 12 }));
 
-        const span = (saveSpy.mock.calls[0][0] as VideoStagesConfig)
+        const span = (saveSpy.mock.calls[0][0] as AuthoringDocument)
             .audioTracks?.[0].spans[0];
         expect(span).toMatchObject({
             timelineStartSeconds: 1,
@@ -294,7 +294,7 @@ describe("timeline-wide audio span gestures", () => {
             mouse("mouseup", 3.1 * TIMELINE_PPS, { clientY: 12 }),
         );
         expect(
-            (saveSpy.mock.calls[0][0] as VideoStagesConfig).audioTracks?.[0]
+            (saveSpy.mock.calls[0][0] as AuthoringDocument).audioTracks?.[0]
                 .spans[0].timelineStartSeconds,
         ).toBe(3);
 
@@ -317,7 +317,7 @@ describe("timeline-wide audio span gestures", () => {
             mouse("mouseup", 3.1 * TIMELINE_PPS, { clientY: 12 }),
         );
         expect(
-            (saveSpy.mock.calls[0][0] as VideoStagesConfig).audioTracks?.[0]
+            (saveSpy.mock.calls[0][0] as AuthoringDocument).audioTracks?.[0]
                 .spans[0].timelineStartSeconds,
         ).toBe(3.1);
     });
@@ -336,7 +336,7 @@ describe("timeline-wide audio span gestures", () => {
             mouse("mouseup", 3 * TIMELINE_PPS, { clientY: 12 }),
         );
 
-        const span = (saveSpy.mock.calls[0][0] as VideoStagesConfig)
+        const span = (saveSpy.mock.calls[0][0] as AuthoringDocument)
             .audioTracks?.[0].spans[0];
         expect(span).toMatchObject({
             timelineStartSeconds: 3,
@@ -356,7 +356,7 @@ describe("timeline-wide audio span gestures", () => {
             mouse("mouseup", 4 * TIMELINE_PPS, { clientY: 12 }),
         );
 
-        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks).toHaveLength(1);
         expect(saved.audioTracks?.[0].spans[0]).toMatchObject({
             timelineStartSeconds: 4,
@@ -383,7 +383,7 @@ describe("timeline-wide audio span gestures", () => {
             new MouseEvent("click", { bubbles: true }),
         );
 
-        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks).toHaveLength(1);
         // The button carries no time of its own, so the track starts the timeline.
         expect(saved.audioTracks?.[0].spans[0]).toMatchObject({
@@ -401,7 +401,7 @@ describe("timeline-wide audio span gestures", () => {
             new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
         );
 
-        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks).toHaveLength(2);
         expect(getSelection()).toEqual({ kind: "audio-track", trackIdx: 1 });
     });
@@ -420,7 +420,7 @@ describe("timeline-wide audio span gestures", () => {
             mouse("mouseup", 5 * TIMELINE_PPS, { clientY: 12 }),
         );
 
-        const saved = saveSpy.mock.calls[0][0] as VideoStagesConfig;
+        const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks?.[0].spans[0]).toMatchObject({
             timelineStartSeconds: 2,
             timelineLengthSeconds: 3,

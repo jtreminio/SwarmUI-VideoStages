@@ -1,7 +1,7 @@
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
 import { executableBoundaryForLeftClip } from "../clipSemantics";
 import { buildStaticSection } from "../detailWidgets";
-import type { TimelineSelection, VideoStagesConfig } from "../types";
+import type { AuthoringDocument, TimelineSelection } from "../types";
 import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import { buildClipColumn, buildClipSkipAction } from "./clipBasics";
 import { buildClipLorasSection } from "./clipLorasPanel";
@@ -31,7 +31,7 @@ export const buildClipBody = (
                 | "retake";
         }
     >,
-    state: VideoStagesConfig,
+    state: AuthoringDocument,
 ): HTMLElement => {
     const clips = state.clips;
     const body = document.createElement("div");

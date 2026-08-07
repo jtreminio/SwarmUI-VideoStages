@@ -19,7 +19,7 @@
 
 import { getState } from "./persistence/repository";
 import type { TimelineSelection } from "./selectionTypes";
-import type { Clip, VideoStagesConfig } from "./types";
+import type { AuthoringDocument, Clip } from "./types";
 
 /**
  * The delete-then-reselect convention for list-shaped removals: keep the
@@ -92,7 +92,7 @@ const clipItemList = (
 /** Captures the stable ids the given index-shaped selection currently addresses. */
 export const anchorSelection = (
     selection: TimelineSelection,
-    stateOverride?: VideoStagesConfig,
+    stateOverride?: AuthoringDocument,
 ): SelectionAnchor => {
     if (selection.kind === "none") {
         return { selection };
@@ -182,7 +182,7 @@ const itemFallback = (
 
 export const resolveSelection = (
     anchor: SelectionAnchor,
-    stateOverride?: VideoStagesConfig,
+    stateOverride?: AuthoringDocument,
 ): TimelineSelection => {
     const selection = anchor.selection;
     // Nothing was identified, so there is nothing to resolve — and no reason to
@@ -249,7 +249,7 @@ export const resolveSelection = (
 export const sameAnchor = (
     a: SelectionAnchor,
     b: SelectionAnchor,
-    state?: VideoStagesConfig,
+    state?: AuthoringDocument,
 ): boolean =>
     a.ownerId === b.ownerId &&
     a.itemId === b.itemId &&

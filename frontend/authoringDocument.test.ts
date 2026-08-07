@@ -26,15 +26,15 @@ import {
     saveState,
 } from "./persistence/repository";
 import {
+    type AuthoringDocument,
     CURRENT_AUTHORING_SCHEMA_VERSION,
-    type VideoStagesConfig,
 } from "./types";
 import { clearUiStateForTests } from "./uiState";
 
 const baseState = (
-    clips: VideoStagesConfig["clips"],
-    overrides: Partial<VideoStagesConfig> = {},
-): VideoStagesConfig => ({
+    clips: AuthoringDocument["clips"],
+    overrides: Partial<AuthoringDocument> = {},
+): AuthoringDocument => ({
     width: 1024,
     height: 1024,
     fps: 24,

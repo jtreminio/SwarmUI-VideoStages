@@ -1,5 +1,5 @@
 import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
-import type { Clip, VideoStagesConfig } from "../types";
+import type { AuthoringDocument, Clip } from "../types";
 import type { StructuralOutcome } from "./draftQueue";
 
 export interface ClampedNumberOpts {
@@ -20,11 +20,11 @@ export interface ClampedNumberOpts {
  */
 export interface DetailStripContext {
     commit(mutate: (clips: Clip[]) => void): void;
-    commitState(mutate: (state: VideoStagesConfig) => void): void;
+    commitState(mutate: (state: AuthoringDocument) => void): void;
     debouncedCommit(key: string, mutate: (clips: Clip[]) => void): void;
     debouncedCommitState(
         key: string,
-        mutate: (state: VideoStagesConfig) => void,
+        mutate: (state: AuthoringDocument) => void,
     ): void;
     buildClampedNumber(opts: ClampedNumberOpts): HTMLInputElement;
     structuralCommit(
