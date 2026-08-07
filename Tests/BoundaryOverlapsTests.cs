@@ -1,7 +1,6 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages.Execution;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
 using VideoStages.Timeline;
@@ -153,7 +152,7 @@ public class BoundaryOverlapsTests
             overlap: 8,
             continuityWindow: 9);
         BoundaryBudgetResolution resolution =
-            BoundaryOverlaps.ValidateRuntime([Clip(1, 5), Clip(2, 5)], [compiled]);
+            BoundaryOverlaps.ValidateRuntime([5, 5], [compiled]);
 
         Assert.True(resolution.Degraded);
         Assert.Equal(BoundaryJoinType.Cut, Assert.Single(resolution.Boundaries).EffectiveJoin);
@@ -171,7 +170,7 @@ public class BoundaryOverlapsTests
             minFrames: 5);
 
         BoundaryBudgetResolution resolution =
-            BoundaryOverlaps.ValidateRuntime([Clip(1, 10), Clip(2, 10)], [compiled]);
+            BoundaryOverlaps.ValidateRuntime([10, 10], [compiled]);
 
         Assert.True(resolution.Degraded);
         Assert.Equal(BoundaryJoinType.Cut, Assert.Single(resolution.Boundaries).EffectiveJoin);
@@ -181,7 +180,7 @@ public class BoundaryOverlapsTests
     public void ValidateRuntime_CutsOnlyTheFailingOverlapRun()
     {
         BoundaryBudgetResolution resolution = BoundaryOverlaps.ValidateRuntime(
-            [Clip(1, 20), Clip(2, 20), Clip(3, 5), Clip(4, 5)],
+            [20, 20, 5, 5],
             [
                 Boundary(0, BoundaryJoinType.Crossfade),
                 Boundary(1, BoundaryJoinType.Cut),
@@ -197,14 +196,4 @@ public class BoundaryOverlapsTests
         Assert.DoesNotContain("clips 0-1", resolution.Reason);
         Assert.Contains("clips 2-3", resolution.Reason);
     }
-
-    private static DecodedClipArtifact Clip(int id, int frames) => new(
-        new DecodedOutputHandle($"{id}", 0, DecodedMediaKind.Video),
-        Audio: null,
-        Width: 512,
-        Height: 512,
-        FramesPerSecond: 24,
-        Frames: frames,
-        new("test-arch"),
-        id);
 }

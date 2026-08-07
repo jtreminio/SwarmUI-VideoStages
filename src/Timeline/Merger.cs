@@ -43,7 +43,9 @@ internal sealed class Merger(WorkflowGenerator g)
         IReadOnlyList<BoundaryPlan> generatedBoundaries = conform.Boundaries;
 
         BoundaryBudgetResolution runtimeBoundaries =
-            BoundaryOverlaps.ValidateRuntime(generatedClips, generatedBoundaries);
+            BoundaryOverlaps.ValidateRuntime(
+                [.. generatedClips.Select(clip => clip?.Frames)],
+                generatedBoundaries);
         if (runtimeBoundaries.Degraded)
         {
             RequestWarnings.Track(
@@ -51,8 +53,7 @@ internal sealed class Merger(WorkflowGenerator g)
                 $"VideoStages: overlap boundaries degraded to cuts because "
                 + $"{runtimeBoundaries.Reason}.");
         }
-        TimelineOverlapTrims overlapPlan =
-            TimelineOverlapTrims.From(runtimeBoundaries.Boundaries);
+        TimelineOverlapTrims trims = TimelineOverlapTrims.From(runtimeBoundaries.Boundaries);
         int[] discardedHandles = new int[generatedClips.Count];
         for (int i = 0; i < generatedBoundaries.Count; i++)
         {
@@ -92,7 +93,7 @@ internal sealed class Merger(WorkflowGenerator g)
             bridge,
             clips,
             videoOutputs,
-            overlapPlan);
+            trims);
 
         IReadOnlyList<INodeOutput> audioOutputs =
             DecodedAudioJoiner.TrimDiscardedHandles(
@@ -105,7 +106,7 @@ internal sealed class Merger(WorkflowGenerator g)
                 bridge,
                 clips,
                 audioOutputs,
-                overlapPlan)
+                trims)
             : null;
 
         MediaRef mergedMedia = new()
@@ -114,7 +115,7 @@ internal sealed class Merger(WorkflowGenerator g)
             DataType = WGNodeData.DT_VIDEO,
             Width = conform.Target.Width,
             Height = conform.Target.Height,
-            Frames = clips.Sum(clip => clip.Frames) - (overlapPlan?.RemovedFrames ?? 0),
+            Frames = clips.Sum(clip => clip.Frames) - (trims?.RemovedFrames ?? 0),
             FPS = conform.Target.FramesPerSecond
         };
         if (mergedAudio is not null)

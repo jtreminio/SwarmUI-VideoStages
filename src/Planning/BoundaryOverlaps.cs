@@ -1,4 +1,3 @@
-using VideoStages.Execution;
 using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.Planning;
@@ -13,9 +12,9 @@ internal sealed record BoundaryBudgetResolution(
     string Reason);
 
 /// <summary>
-/// Owns frame-budget reconciliation for typed timeline boundaries, and the overlap shape the
-/// decoded joiners read back. Planning fits windows to known clip lengths; runtime revalidates the
-/// same result against decoded artifacts.
+/// Owns frame-budget reconciliation for typed timeline boundaries: planning fits authored windows
+/// to known clip lengths, and runtime revalidates that same result against decoded clips,
+/// degrading only what no longer fits.
 /// </summary>
 internal static class BoundaryOverlaps
 {
@@ -129,16 +128,16 @@ internal static class BoundaryOverlaps
 
     /// <summary>Accepts exact compiled windows or cuts only the overlap run that cannot fit.</summary>
     internal static BoundaryBudgetResolution ValidateRuntime(
-        IReadOnlyList<DecodedClipArtifact> clips,
+        IReadOnlyList<int?> clipFrames,
         IReadOnlyList<BoundaryPlan> boundaries)
     {
-        ArgumentNullException.ThrowIfNull(clips);
+        ArgumentNullException.ThrowIfNull(clipFrames);
         IReadOnlyList<BoundaryPlan> source = boundaries ?? [];
         if (!source.Any(IsOverlapped))
         {
             return new(source, Degraded: false, Reason: null);
         }
-        if (clips.Count != source.Count + 1)
+        if (clipFrames.Count != source.Count + 1)
         {
             return DegradeAllToCuts(
                 source,
@@ -151,12 +150,8 @@ internal static class BoundaryOverlaps
         {
             IReadOnlyList<BoundaryPlan> runBoundaries =
                 [.. source.Skip(start).Take(boundaryCount)];
-            IReadOnlyList<int?> runFrames = [
-                .. clips
-                    .Skip(start)
-                    .Take(boundaryCount + 1)
-                    .Select(clip => clip?.Frames is int frames && frames > 0 ? frames : (int?)null)
-            ];
+            IReadOnlyList<int?> runFrames =
+                [.. clipFrames.Skip(start).Take(boundaryCount + 1)];
             if (RuntimeFramesFit(runFrames, runBoundaries))
             {
                 continue;

@@ -81,9 +81,9 @@ internal static class DecodedAudioJoiner
         WorkflowBridge bridge,
         IReadOnlyList<DecodedClipArtifact> clips,
         IReadOnlyList<INodeOutput> audioOutputs,
-        TimelineOverlapTrims plan)
+        TimelineOverlapTrims trims)
     {
-        if (plan is null)
+        if (trims is null)
         {
             return CascadeConcat(bridge, audioOutputs);
         }
@@ -91,9 +91,9 @@ internal static class DecodedAudioJoiner
         List<INodeOutput> aligned = [];
         for (int i = 0; i < audioOutputs.Count; i++)
         {
-            int leftHandle = i > 0 ? plan.IncomingHandleFrames[i - 1] : 0;
+            int leftHandle = i > 0 ? trims.IncomingHandleFrames[i - 1] : 0;
             int rightReduction = i < audioOutputs.Count - 1
-                ? Math.Max(0, plan.TrimFrames[i] - plan.IncomingHandleFrames[i])
+                ? Math.Max(0, trims.TrimFrames[i] - trims.IncomingHandleFrames[i])
                 : 0;
             aligned.Add(leftHandle > 0 || rightReduction > 0
                 ? TrimToRange(

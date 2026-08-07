@@ -3,8 +3,9 @@ using VideoStages.Planning;
 namespace VideoStages.Timeline;
 
 /// <summary>
-/// Per-boundary trim frames for the decoded joiners, plus the total frames the trims remove from
-/// the generated clips.
+/// The overlap geometry the decoded joiners read back: per-boundary frames each side trims, how many
+/// of those are pre-roll the incoming clip generated, and the net frames the trims remove from the
+/// timeline.
 /// </summary>
 internal sealed record TimelineOverlapTrims(
     int[] TrimFrames,

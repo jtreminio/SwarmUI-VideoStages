@@ -17,9 +17,9 @@ internal static class DecodedVideoJoiner
         WorkflowBridge bridge,
         IReadOnlyList<DecodedClipArtifact> clips,
         IReadOnlyList<INodeOutput> videoOutputs,
-        TimelineOverlapTrims plan)
+        TimelineOverlapTrims trims)
     {
-        if (plan is null)
+        if (trims is null)
         {
             return Concat(bridge, videoOutputs);
         }
@@ -42,8 +42,8 @@ internal static class DecodedVideoJoiner
         List<INodeOutput> segments = [];
         for (int i = 0; i < videoOutputs.Count; i++)
         {
-            int startTrim = i > 0 ? plan.TrimFrames[i - 1] : 0;
-            int endTrim = i < videoOutputs.Count - 1 ? plan.TrimFrames[i] : 0;
+            int startTrim = i > 0 ? trims.TrimFrames[i - 1] : 0;
+            int endTrim = i < videoOutputs.Count - 1 ? trims.TrimFrames[i] : 0;
             int frames = clips[i].Frames;
             segments.Add(startTrim == 0 && endTrim == 0
                 ? videoOutputs[i]
