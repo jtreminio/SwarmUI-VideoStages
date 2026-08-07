@@ -179,8 +179,9 @@ public class RequestReaderTests
         Assert.Equal("clip wide", clipWindow.Prompt);
     }
 
+    /// <summary>The reader is what orders these; tiling them is PromptRelayTilingTests' job.</summary>
     [Fact]
-    public void ReadClips_ClipWindows_TileSortedByStart()
+    public void ReadClips_ClipWindows_AreSortedByStart()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 8.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
@@ -190,21 +191,9 @@ public class RequestReaderTests
 
         ClipSpec parsed = Assert.Single(RequestReader.Read(BuildGenerator(json, prompt)).Clips);
 
-        var tiled = PromptRelayPlanCompiler.Tile(
-            parsed.PromptWindows.Select(window => new PromptWindowPlan(
-                window.Prompt,
-                window.Start,
-                window.Duration,
-                window.Start + window.Duration)),
-            clipSeconds: 8.0);
-
-        Assert.Equal("clip early", tiled[0].Prompt);
-        Assert.Contains(tiled, span => span.Prompt == "clip late");
-        PromptRelaySegmentPlan[] tiledArray = tiled.ToArray();
-        Assert.True(
-            Array.FindIndex(tiledArray, s => s.Prompt == "clip early")
-                < Array.FindIndex(tiledArray, s => s.Prompt == "clip late"),
-            "Clip windows must tile sorted by start (early before late).");
+        Assert.Equal(
+            ["clip early", "clip late"],
+            parsed.PromptWindows.Select(window => window.Prompt).ToArray());
     }
 
     [Fact]
