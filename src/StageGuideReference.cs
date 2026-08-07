@@ -12,6 +12,8 @@ internal enum StageGuideReferenceKind
     Base2Edit = 1 << 5,
 }
 
+/// <summary>Only ExplicitStage and Base2Edit carry an index; the request reader pattern-matches
+/// on it rather than null-checking.</summary>
 internal readonly record struct StageGuideReferenceSelection(
     StageGuideReferenceKind Kind,
     int? ReferencedStageIndex);

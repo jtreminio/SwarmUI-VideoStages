@@ -84,7 +84,7 @@ internal static class Ltx2ClipPlanCompiler
     private static GuideReferencePlan CompileGuideReference(string rawValue)
     {
         StageGuideReferenceSelection selection = StageGuideReference.Classify(rawValue);
-        return new(selection.Kind, rawValue ?? "", selection.ReferencedStageIndex);
+        return new(selection.Kind, rawValue, selection.ReferencedStageIndex);
     }
 
     private static StageAudioAction CompileAudioAction(ClipSpec clip, StageSpec stage)

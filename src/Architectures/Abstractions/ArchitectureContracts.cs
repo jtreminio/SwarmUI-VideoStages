@@ -123,6 +123,8 @@ internal sealed record RuleDecision(
         new(RuleSupport.Conditional, code, reason, constraints);
 }
 
+/// <summary>Which members of the <see cref="StageGuideReference"/> grammar an architecture
+/// accepts.</summary>
 internal readonly record struct StageGuideReferencePolicy
 {
     private const StageGuideReferenceKind AllKnownKinds =

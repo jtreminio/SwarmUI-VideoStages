@@ -55,7 +55,7 @@ public class VideoExecutionPlanContextTests
     }
 
     [Fact]
-    public void Every_mutating_runner_entry_requires_completed_preflight()
+    public void Every_mutating_context_entry_requires_completed_preflight()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
