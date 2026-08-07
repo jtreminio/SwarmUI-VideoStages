@@ -552,45 +552,36 @@ internal static class RequestReader
             return defaultReference;
         }
 
-        string compact = StringUtils.Compact(rawValue);
-        if (StringUtils.Equals(compact, MediaSource.Generated))
+        StageGuideReferenceSelection selection = StageGuideReference.Classify(rawValue);
+        switch (selection.Kind)
         {
-            return MediaSource.Generated;
+            case StageGuideReferenceKind.Generated:
+                return MediaSource.Generated;
+            case StageGuideReferenceKind.Base:
+                return MediaSource.Base;
+            case StageGuideReferenceKind.Refiner:
+                return MediaSource.Refiner;
+            // Stage 0 has no previous stage, so defaultReference collapses it to Generated.
+            case StageGuideReferenceKind.PreviousStage:
+                return defaultReference;
+            case StageGuideReferenceKind.Base2Edit:
+                return MediaSource.FormatBase2Edit(selection.ReferencedStageIndex.Value);
+            case StageGuideReferenceKind.ExplicitStage
+                when selection.ReferencedStageIndex.Value < stageIndex:
+                return MediaSource.FormatExplicitStageIndex(selection.ReferencedStageIndex.Value);
+            case StageGuideReferenceKind.ExplicitStage:
+                DocumentJson.Warn(
+                    warn,
+                    $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has invalid ImageReference '{rawValue}' "
+                    + $"(must reference a strictly previous stage). Using '{defaultReference}' instead.");
+                return defaultReference;
+            default:
+                DocumentJson.Warn(
+                    warn,
+                    $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has invalid ImageReference '{rawValue}'. "
+                    + $"Using '{defaultReference}' instead.");
+                return defaultReference;
         }
-        if (StringUtils.Equals(compact, MediaSource.Base))
-        {
-            return MediaSource.Base;
-        }
-        if (StringUtils.Equals(compact, MediaSource.Refiner))
-        {
-            return MediaSource.Refiner;
-        }
-        if (StringUtils.Equals(compact, MediaSource.PreviousStage))
-        {
-            return defaultReference;
-        }
-        if (MediaSource.TryParseExplicitStageIndex(compact, out int explicitStage))
-        {
-            if (explicitStage < stageIndex)
-            {
-                return MediaSource.FormatExplicitStageIndex(explicitStage);
-            }
-            DocumentJson.Warn(
-                warn,
-                $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has invalid ImageReference '{rawValue}' "
-                + $"(must reference a strictly previous stage). Using '{defaultReference}' instead.");
-            return defaultReference;
-        }
-        if (MediaSource.TryParseBase2EditIndex(compact, out int editStage))
-        {
-            return MediaSource.FormatBase2Edit(editStage);
-        }
-
-        DocumentJson.Warn(
-            warn,
-            $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has invalid ImageReference '{rawValue}'. "
-            + $"Using '{defaultReference}' instead.");
-        return defaultReference;
     }
 
     private static int ResolveWidth(T2IParamInput input, int? authoredWidth) =>

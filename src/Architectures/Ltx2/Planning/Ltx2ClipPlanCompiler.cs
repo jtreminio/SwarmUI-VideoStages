@@ -84,7 +84,7 @@ internal static class Ltx2ClipPlanCompiler
     private static GuideReferencePlan CompileGuideReference(string rawValue)
     {
         string raw = rawValue?.Trim() ?? "";
-        StageGuideReferenceSelection selection = StageGuideReferencePolicy.Classify(raw);
+        StageGuideReferenceSelection selection = StageGuideReference.Classify(raw);
         return new(selection.Kind, raw, selection.ReferencedStageIndex);
     }
 

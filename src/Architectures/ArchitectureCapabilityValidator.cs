@@ -152,7 +152,7 @@ internal static class ArchitectureCapabilityValidator
         {
             StageSpec stage = stages[index];
             StageGuideReferenceSelection guide =
-                StageGuideReferencePolicy.Classify(stage.ImageReference);
+                StageGuideReference.Classify(stage.ImageReference);
             if (!descriptor.StageGuideReferences.Allows(guide))
             {
                 diagnostics.Add(new(

@@ -273,9 +273,9 @@ public class WanArchitectureTests
         Assert.Contains(ArchitectureEntryMode.InitVideo, descriptor.EntryModes);
         Assert.True(descriptor.Features.HasFlag(ArchitectureFeature.FrameReferences));
         Assert.True(descriptor.StageGuideReferences.Allows(
-            StageGuideReferencePolicy.Classify("Generated")));
+            StageGuideReference.Classify("Generated")));
         Assert.True(descriptor.StageGuideReferences.Allows(
-            StageGuideReferencePolicy.Classify("PreviousStage")));
+            StageGuideReference.Classify("PreviousStage")));
     }
 
     [Theory]

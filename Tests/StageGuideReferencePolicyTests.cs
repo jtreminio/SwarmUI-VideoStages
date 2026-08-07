@@ -20,7 +20,7 @@ public class StageGuideReferencePolicyTests
         int expectedIndex)
     {
         StageGuideReferenceSelection selection =
-            StageGuideReferencePolicy.Classify(rawValue);
+            StageGuideReference.Classify(rawValue);
         StageGuideReferenceKind expectedKind =
             (StageGuideReferenceKind)expectedKindValue;
 
