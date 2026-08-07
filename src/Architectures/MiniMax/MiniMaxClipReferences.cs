@@ -73,7 +73,7 @@ internal static class MiniMaxClipReferences
                 reference.Source?.Trim() ?? "",
                 reference.Media,
                 isVideo && reference.IncludeSoundtrack,
-                isVideo ? reference.MediaScale : 1));
+                isVideo ? reference.MediaScale : ReferenceScale.Full));
         }
         return compiled;
     }

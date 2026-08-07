@@ -2437,7 +2437,7 @@
     includeSoundtrack: false,
     mediaDurationSeconds: 0,
     drivesClipLength: false,
-    mediaScale: 1
+    mediaScale: REFERENCE_SCALE_FULL
   });
   var clipReferenceCanDriveLength = (reference) => reference.kind === "video" || reference.kind === "audio";
   var clipReferenceTags = (references, precedingReferences = []) => {
@@ -2568,7 +2568,7 @@
         // A claim with no length behind it cannot move the clip, so it is
         // dropped rather than left holding the one slot forever.
         drivesClipLength: !lengthClaimed && raw.drivesClipLength === true && clipReferenceCanDriveLength({ kind }) && mediaDurationSeconds > 0,
-        mediaScale: kind === "video" ? normalizeClipReferenceScale(raw.mediaScale) : 1
+        mediaScale: kind === "video" ? normalizeClipReferenceScale(raw.mediaScale) : REFERENCE_SCALE_FULL
       };
       lengthClaimed = lengthClaimed || reference.drivesClipLength;
       return reference;
@@ -3653,7 +3653,7 @@
       hue: UNASSIGNED_HUE,
       boundaryOut: "cut",
       boundaryOutCarryAudio: false,
-      boundaryOutReferenceScale: 1,
+      boundaryOutReferenceScale: REFERENCE_SCALE_FULL,
       boundaryOutReferenceIncludeSoundtrack: true,
       boundaryOutOverlap: boundaryWindowConstraints(continueRule).defaultFrames,
       duration: previousClip ? previousClip.duration : snapDurationToFps(

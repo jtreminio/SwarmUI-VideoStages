@@ -21,6 +21,7 @@ import {
     IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH,
     STAGE_REF_STRENGTH_DEFAULT,
 } from "./constants";
+import { REFERENCE_SCALE_FULL } from "./generatedReferenceScale";
 import { defaultLoraWeight } from "./loraAuthoring";
 import {
     clipReferenceDurationSeconds,
@@ -135,7 +136,7 @@ export const buildDefaultClip = (
         hue: UNASSIGNED_HUE,
         boundaryOut: "cut",
         boundaryOutCarryAudio: false,
-        boundaryOutReferenceScale: 1,
+        boundaryOutReferenceScale: REFERENCE_SCALE_FULL,
         boundaryOutReferenceIncludeSoundtrack: true,
         boundaryOutOverlap:
             boundaryWindowConstraints(continueRule).defaultFrames,

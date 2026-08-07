@@ -12,6 +12,7 @@ import {
     RETAKE_STRENGTH_MAX,
     RETAKE_STRENGTH_MIN,
 } from "./constants";
+import { REFERENCE_SCALE_FULL } from "./generatedReferenceScale";
 import {
     clampedNumber,
     clampWindowInDuration,
@@ -180,7 +181,7 @@ export const normalizeClipReferences = (
             mediaScale:
                 kind === "video"
                     ? normalizeClipReferenceScale(raw.mediaScale)
-                    : 1,
+                    : REFERENCE_SCALE_FULL,
         };
         lengthClaimed = lengthClaimed || reference.drivesClipLength;
         return reference;

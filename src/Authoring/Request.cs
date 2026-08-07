@@ -86,7 +86,7 @@ public sealed record ClipReferenceSpec(
     string Source,
     UploadedMediaSpec Media,
     bool IncludeSoundtrack = false,
-    double MediaScale = 1
+    double MediaScale = ReferenceScale.Full
 );
 
 /// <summary>
@@ -199,7 +199,7 @@ public sealed record ClipSpec(
     InitVideoSpec InitVideo = null,
     // Overlap-mode joins can preserve the outgoing audio tail as opening generation context.
     bool BoundaryOutCarryAudio = false,
-    double BoundaryOutReferenceScale = 1,
+    double BoundaryOutReferenceScale = ReferenceScale.Full,
     bool BoundaryOutReferenceIncludeSoundtrack = true,
     ReferenceFramingMode ReferenceFraming = ReferenceFramingMode.Crop,
     // Whole-clip references with no frame position; only architectures declaring

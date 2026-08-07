@@ -79,7 +79,7 @@ export const buildDefaultClipReference = (
     includeSoundtrack: false,
     mediaDurationSeconds: 0,
     drivesClipLength: false,
-    mediaScale: 1,
+    mediaScale: REFERENCE_SCALE_FULL,
 });
 
 export const clipReferenceCanDriveLength = (
