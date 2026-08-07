@@ -69,9 +69,10 @@ internal class StageRefStore(WorkflowGenerator g)
     }
 
     /// <summary>
-    /// Returns the decoded stage output before LTX post-video processing.
+    /// The stage output before LTX post-video decode: the joint AV latent when a post-video chain
+    /// exists, otherwise the current media.
     /// </summary>
-    public StageRef CaptureCurrentOutputReference()
+    public StageRef CurrentOutputReference()
     {
         WGNodeData referenceMedia = g.CurrentMedia;
         WGNodeData referenceVae = g.CurrentVae;

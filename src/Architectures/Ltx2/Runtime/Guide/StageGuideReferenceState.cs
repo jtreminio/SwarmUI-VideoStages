@@ -55,7 +55,7 @@ internal sealed class StageGuideReferenceState(
     public void CaptureStageOutput(StagePlan stage)
     {
         ArgumentNullException.ThrowIfNull(stage);
-        StageRefStore.StageRef captured = store.CaptureCurrentOutputReference();
+        StageRefStore.StageRef captured = store.CurrentOutputReference();
         _stageOutputs[stage.ClipStageIndex] = captured;
         _previousStageRef = captured;
     }

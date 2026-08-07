@@ -67,7 +67,7 @@ internal sealed class StageSequenceRootSetup(
         {
             return;
         }
-        StageRefStore.StageRef reference = store.CaptureCurrentOutputReference();
+        StageRefStore.StageRef reference = store.CurrentOutputReference();
         store.Capture(
             StageRefStore.StageKind.Generated,
             reference.Media,
