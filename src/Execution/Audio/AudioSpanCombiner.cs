@@ -14,7 +14,6 @@ internal sealed class AudioSpanCombiner(WorkflowGenerator g)
 {
     private const long SilenceSampleRate = 44100;
     private const long SilenceChannels = 2;
-    private const string SegmentUploadPlaceholder = "${vsaudioseg}";
     private const string MergeMethodAdd = "add";
     private const string ConcatDirectionAfter = "after";
 
@@ -68,7 +67,7 @@ internal sealed class AudioSpanCombiner(WorkflowGenerator g)
             {
                 continue;
             }
-            string loadNodeId = g.CreateAudioLoadNode(file, SegmentUploadPlaceholder);
+            string loadNodeId = g.CreateAudioLoadNode(file, "${vsaudiospan}");
             loaded.Add((span, new JArray(loadNodeId, 0)));
         }
         detectBridge?.Dispose();
@@ -94,7 +93,7 @@ internal sealed class AudioSpanCombiner(WorkflowGenerator g)
             {
                 continue;
             }
-            INodeOutput placed = PlaceSegment(bridge, source, span);
+            INodeOutput placed = PlaceSpan(bridge, source, span);
             accumulator = accumulator is null ? placed : Merge(bridge, accumulator, placed);
         }
 
@@ -143,7 +142,7 @@ internal sealed class AudioSpanCombiner(WorkflowGenerator g)
             baseAudio?.Compat ?? g.CurrentAudioVae?.Compat ?? overlayAudio.Compat);
     }
 
-    private static INodeOutput PlaceSegment(
+    private static INodeOutput PlaceSpan(
         WorkflowBridge bridge,
         INodeOutput source,
         AudioSpanPlan span)
