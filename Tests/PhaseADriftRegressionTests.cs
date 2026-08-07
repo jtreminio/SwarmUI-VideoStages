@@ -19,6 +19,8 @@ public class PhaseADriftRegressionTests
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
 
+        // Set equality, not a spot check: a node registered without the flag and a new
+        // registration missing from this list both have to fail.
         Assert.Equal(
             [
                 LTXAddVideoICLoRAGuideNode.ClassType,
