@@ -23,3 +23,7 @@ node_modules/
 coverage/
 
 __pycache__/
+
+# Syncthing scratch files. Never ours; a `git add -A` has committed these before.
+.syncthing.*
+sync-conflict-*
