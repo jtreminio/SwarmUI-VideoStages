@@ -13,6 +13,7 @@ import {
     testAuthoringTransactionSnapshot,
 } from "./__test_helpers__/architectureFixtures";
 import {
+    lastSavedClips,
     mountPromptBox,
     mountSelect,
     mountVideoFps,
@@ -84,10 +85,6 @@ const renderRefs = (body: HTMLElement, clips: Clip[]): void => {
     const layouts = computeRegionLayout(clips, { pxPerSecond: PPS });
     body.innerHTML = renderReferencesTrackRow(clips, layouts, 24, "seconds");
 };
-
-const savedClips = (
-    spy: jest.SpiedFunction<typeof persistence.saveClips>,
-): Clip[] => spy.mock.calls[spy.mock.calls.length - 1][0] as Clip[];
 
 describe("createTimelineReferencesTrack (selection + gestures)", () => {
     let track: TimelineReferencesTrack | null = null;
@@ -247,7 +244,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         );
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        const clips = savedClips(saveSpy);
+        const clips = lastSavedClips<Clip[]>(saveSpy);
         expect(clips[0].frameRefs).toHaveLength(1);
         expect(clips[0].frameRefs[0].source).toBe("Base");
         expect(clips[0].stages[0].frameRefStrengths).toHaveLength(1);
@@ -261,7 +258,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        const clips = savedClips(saveSpy);
+        const clips = lastSavedClips<Clip[]>(saveSpy);
         expect(clips[0].frameRefs).toHaveLength(1);
         expect(clips[0].stages[0].frameRefStrengths).toHaveLength(1);
         // The new ref opens in the dock immediately.
@@ -287,7 +284,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
             '.vst-refs-lane[data-clip-idx="0"]',
         )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-        expect(savedClips(saveSpy)[0].frameRefs).toHaveLength(2);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs).toHaveLength(2);
         expect(getSelection()).toEqual({ kind: "ref", clipIdx: 0, refIdx: 1 });
     });
 
@@ -301,7 +298,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         );
 
         // Inclusive frame geometry makes the stored 16fps clip 81 frames long.
-        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(41);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[0].frame).toBe(41);
     });
 
     it("retimes a ref by dragging its thumbnail, suppressing the trailing click", () => {
@@ -315,7 +312,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
         expect(getSelection().kind).toBe("none");
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(61);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[0].frame).toBe(61);
     });
 
     it("cancels a drag when a catalog refresh removes reference support", () => {
@@ -403,7 +400,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         stubLaneRect(body, 0, 0, 120);
         dragThumb(markEl(body, 0, 0), 0, 116);
 
-        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(121);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[0].frame).toBe(121);
     });
 
     it("uses the stored 16fps timeline when dragging a ref", () => {
@@ -413,7 +410,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
         dragThumb(thumb, 0, 60);
 
-        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(41);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[0].frame).toBe(41);
     });
 
     it("drags to the padded tail without aligning the effective frame count twice", async () => {
@@ -433,7 +430,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
         dragThumb(markEl(body, 0, 0), 0, 120);
 
-        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(33);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[0].frame).toBe(33);
     });
 
     it("drags a bounded reference between its advertised endpoints", async () => {
@@ -464,7 +461,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         stubLaneRect(body, 0, 0, 120);
 
         dragThumb(markEl(body, 0, 0), 0, 100);
-        expect(savedClips(saveSpy)[0].frameRefs[0]).toMatchObject({
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[0]).toMatchObject({
             frame: 1,
             fromEnd: true,
         });
@@ -523,7 +520,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("R 61");
         expect(thumb.style.left).toBe("50.41322314049586%");
         expect(thumb.style.left).not.toBe(originalLeft);
-        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(61);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[0].frame).toBe(61);
     });
 
     it("drags the on-clip arrow together with the thumbnail", () => {

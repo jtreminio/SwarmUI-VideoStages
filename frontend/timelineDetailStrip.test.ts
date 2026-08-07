@@ -16,6 +16,7 @@ import {
     testArchitectureCatalogDto,
 } from "./__test_helpers__/architectureFixtures";
 import {
+    lastSavedClips,
     mountPromptBox,
     mountSelect,
     mountVideoFps,
@@ -227,10 +228,6 @@ const fieldByLabel = (label: string, scope = ".vst-detail"): HTMLElement => {
     }
     return row;
 };
-
-const savedClips = (
-    spy: jest.SpiedFunction<typeof persistence.saveClips>,
-): Clip[] => spy.mock.calls[spy.mock.calls.length - 1][0] as Clip[];
 
 /** The committed document, for structural edits that dispatch a named command. */
 const committedClips = (): Clip[] => persistence.getClips();
@@ -730,9 +727,9 @@ describe("createTimelineDetailStrip", () => {
         second.value = "0.3";
         second.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
-        expect(savedClips(saveSpy)[0].stages[0].icLoraStrengths).toEqual([
-            1, 0.3,
-        ]);
+        expect(
+            lastSavedClips<Clip[]>(saveSpy)[0].stages[0].icLoraStrengths,
+        ).toEqual([1, 0.3]);
     });
 
     it("adds an IC-LoRA entry with defaults via the add button", () => {
@@ -745,7 +742,7 @@ describe("createTimelineDetailStrip", () => {
             throw new Error("add IC-LoRA button missing");
         }
         addBtn.click();
-        const clips = savedClips(saveSpy);
+        const clips = lastSavedClips<Clip[]>(saveSpy);
         expect(clips[0].icLoras).toHaveLength(1);
         expect(clips[0].icLoras[0]).toEqual({
             lora: IC_LORA_AUTO,
@@ -778,7 +775,7 @@ describe("createTimelineDetailStrip", () => {
             throw new Error("add IC-LoRA button missing");
         }
         addBtn.click();
-        const clips = savedClips(saveSpy);
+        const clips = lastSavedClips<Clip[]>(saveSpy);
         expect(clips[0].icLoras).toHaveLength(1);
         expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
         expect(clips[0].icLoras[0].preset).toBe("union-control");
@@ -803,7 +800,7 @@ describe("createTimelineDetailStrip", () => {
         }
         presetSelect.value = "union-control";
         presetSelect.dispatchEvent(new Event("change", { bubbles: true }));
-        const clips = savedClips(saveSpy);
+        const clips = lastSavedClips<Clip[]>(saveSpy);
         expect(clips[0].icLoras[0].preset).toBe("union-control");
         expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
         expect(clips[0].icLoras[0].controlType).toBe("depth");
@@ -917,7 +914,7 @@ describe("createTimelineDetailStrip", () => {
         select.value = "audio";
         select.dispatchEvent(new Event("change", { bubbles: true }));
 
-        const entry = savedClips(saveSpy)[0].icLoras[0];
+        const entry = lastSavedClips<Clip[]>(saveSpy)[0].icLoras[0];
         expect(entry.driveData).toBe("audio");
         expect(entry.driveMediaKinds).toEqual(["audio", "video"]);
         expect(entry.controlType).toBe("none");
@@ -959,7 +956,7 @@ describe("createTimelineDetailStrip", () => {
         select.value = "none";
         select.dispatchEvent(new Event("change", { bubbles: true }));
 
-        expect(savedClips(saveSpy)[0].icLoras[0]).toMatchObject({
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].icLoras[0]).toMatchObject({
             driveData: "none",
             driveSource: "Upload",
             driveMedia: null,
@@ -1064,10 +1061,10 @@ describe("createTimelineDetailStrip", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         changeIcLoraSelect("apply", "1");
-        expect(savedClips(saveSpy)[0].icLoras[0].stage).toBe(1);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].icLoras[0].stage).toBe(1);
 
         changeIcLoraSelect("source", "Incoming");
-        const entry = savedClips(saveSpy)[0].icLoras[0];
+        const entry = lastSavedClips<Clip[]>(saveSpy)[0].icLoras[0];
         expect(entry.driveSource).toBe("Incoming");
         expect(controlNetLabels()).not.toContain("Drive Media");
         expect(detail()?.textContent).toContain(
@@ -1092,7 +1089,7 @@ describe("createTimelineDetailStrip", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         changeIcLoraSelect("apply", "-1");
-        const entry = savedClips(saveSpy)[0].icLoras[0];
+        const entry = lastSavedClips<Clip[]>(saveSpy)[0].icLoras[0];
         expect(entry.stage).toBe(-1);
         expect(entry.driveSource).toBe("Upload");
         expect(controlNetLabels()).toContain("Drive Media");
@@ -1317,7 +1314,7 @@ describe("createTimelineDetailStrip", () => {
 
         expect(controlNetLabels()).toContain("LoRA");
         expect(icLoraSelect("lora").value).toBe("lora-x.safetensors");
-        expect(savedClips(saveSpy)[0].icLoras[0]).toMatchObject({
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].icLoras[0]).toMatchObject({
             preset: "custom",
             lora: "lora-x.safetensors",
         });
@@ -1337,7 +1334,9 @@ describe("createTimelineDetailStrip", () => {
         presetSelect.value = "deblur";
         presetSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
-        expect(savedClips(saveSpy)[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].icLoras[0].lora).toBe(
+            IC_LORA_AUTO,
+        );
         expect(controlNetLabels()).not.toContain("LoRA");
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledWith(
@@ -1495,7 +1494,7 @@ describe("createTimelineDetailStrip", () => {
             throw new Error("add IC-LoRA button missing");
         }
         addBtn.click();
-        const clips = savedClips(saveSpy);
+        const clips = lastSavedClips<Clip[]>(saveSpy);
         expect(clips[0].icLoras).toHaveLength(1);
         expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
     });
@@ -1516,7 +1515,7 @@ describe("createTimelineDetailStrip", () => {
             throw new Error("remove IC-LoRA button missing");
         }
         removeBtn.click();
-        expect(savedClips(saveSpy)[0].icLoras).toHaveLength(0);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].icLoras).toHaveLength(0);
     });
 
     it("live-applies a discrete model command through the document store", () => {
@@ -1544,7 +1543,7 @@ describe("createTimelineDetailStrip", () => {
         expect(saveSpy).not.toHaveBeenCalled();
         jest.advanceTimersByTime(200);
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].stages[0].steps).toBe(14);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].stages[0].steps).toBe(14);
     });
 
     it("drops a pending change when the carrier went stale", () => {
@@ -1591,7 +1590,7 @@ describe("createTimelineDetailStrip", () => {
         const body = setup([{ duration: 4, stages: [{}, {}] }]);
         clickRegionStageChip(body, 0, 1, true);
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].stages).toHaveLength(1);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].stages).toHaveLength(1);
     });
 
     it("remaps IC-LoRA stage targets when a stage is deleted", () => {
@@ -1613,7 +1612,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         clickRegionStageChip(body, 0, 1, true);
-        const clip = savedClips(saveSpy)[0];
+        const clip = lastSavedClips<Clip[]>(saveSpy)[0];
         expect(clip.stages).toHaveLength(2);
         // Above the deleted stage shifts down; on it falls back to all stages.
         // Removing the supplying stage also repairs stale Incoming state.
@@ -1635,7 +1634,7 @@ describe("createTimelineDetailStrip", () => {
         expect(add?.textContent).toBe("+ Add Video Stage");
         add?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].stages).toHaveLength(2);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].stages).toHaveLength(2);
         expect(activeRailLabel()).toBe("S1");
         expect(crumbText()).toBe("Clip 0 · S1");
         expect(
@@ -1742,9 +1741,9 @@ describe("createTimelineDetailStrip", () => {
 
         remove?.click();
 
-        expect(savedClips(saveSpy).map((clip) => clip.duration)).toEqual([
-            2, 4,
-        ]);
+        expect(
+            lastSavedClips<Clip[]>(saveSpy).map((clip) => clip.duration),
+        ).toEqual([2, 4]);
         expect(crumbText()).toBe("Clip 1 · S0");
         expect(getSelection()).toEqual({
             kind: "clip",
@@ -1898,7 +1897,7 @@ describe("createTimelineDetailStrip", () => {
         dur.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].duration).toBe(6);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].duration).toBe(6);
     });
 
     it("disables the Duration field when clip length is derived from audio", () => {
@@ -2003,7 +2002,7 @@ describe("createTimelineDetailStrip", () => {
         start.value = "4";
         start.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
-        expect(savedClips(saveSpy)[0].retake?.startSeconds).toBe(4);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].retake?.startSeconds).toBe(4);
     });
 
     it("a retake selection opens the CLIP panel with its Retake section", () => {
@@ -2099,10 +2098,12 @@ describe("createTimelineDetailStrip", () => {
             document.querySelectorAll(".vst-detail .vst-clip-lora-entry"),
         ).toHaveLength(1);
         expect(saveSpy).toHaveBeenCalled();
-        expect(savedClips(saveSpy)[0].loras).toEqual([
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].loras).toEqual([
             { name: "lora-x.safetensors" },
         ]);
-        expect(savedClips(saveSpy)[0].stages[0].loraWeights).toEqual([1]);
+        expect(
+            lastSavedClips<Clip[]>(saveSpy)[0].stages[0].loraWeights,
+        ).toEqual([1]);
         expect(
             document
                 .querySelector(".vst-detail .vst-detail-loras-section")
@@ -2124,7 +2125,9 @@ describe("createTimelineDetailStrip", () => {
             .querySelector<HTMLButtonElement>(".vst-detail-add-lora")
             ?.click();
 
-        expect(savedClips(saveSpy)[0].stages[0].loraWeights).toEqual([0.65]);
+        expect(
+            lastSavedClips<Clip[]>(saveSpy)[0].stages[0].loraWeights,
+        ).toEqual([0.65]);
     });
 
     it("falls back to SwarmUI's remembered per-LoRA weight", () => {
@@ -2144,7 +2147,9 @@ describe("createTimelineDetailStrip", () => {
             .querySelector<HTMLButtonElement>(".vst-detail-add-lora")
             ?.click();
 
-        expect(savedClips(saveSpy)[0].stages[0].loraWeights).toEqual([0.55]);
+        expect(
+            lastSavedClips<Clip[]>(saveSpy)[0].stages[0].loraWeights,
+        ).toEqual([0.55]);
     });
 
     it("resets per-stage IC-LoRA strengths from the selected model default", () => {
@@ -2177,7 +2182,9 @@ describe("createTimelineDetailStrip", () => {
         select.value = "weighted-ic.safetensors";
         select.dispatchEvent(new Event("change", { bubbles: true }));
 
-        expect(savedClips(saveSpy)[0].stages[0].icLoraStrengths).toEqual([0.4]);
+        expect(
+            lastSavedClips<Clip[]>(saveSpy)[0].stages[0].icLoraStrengths,
+        ).toEqual([0.4]);
     });
 
     it("uses zero-based LoRA labels and opens the newly added LoRA", () => {
@@ -2282,7 +2289,9 @@ describe("createTimelineDetailStrip", () => {
         expect(saveSpy).not.toHaveBeenCalled();
         jest.advanceTimersByTime(200);
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].stages[0].loraWeights[0]).toBe(0.4);
+        expect(
+            lastSavedClips<Clip[]>(saveSpy)[0].stages[0].loraWeights[0],
+        ).toBe(0.4);
     });
 
     it("allows a negative LoRA weight through the number input", () => {
@@ -2303,7 +2312,9 @@ describe("createTimelineDetailStrip", () => {
         weight.value = "-2.5";
         weight.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
-        expect(savedClips(saveSpy)[0].stages[0].loraWeights[0]).toBe(-2.5);
+        expect(
+            lastSavedClips<Clip[]>(saveSpy)[0].stages[0].loraWeights[0],
+        ).toBe(-2.5);
     });
 
     it("removes a LoRA row (flush-first) through saveClips", () => {
@@ -2329,10 +2340,12 @@ describe("createTimelineDetailStrip", () => {
                 ".vst-detail .vst-detail-delete-lora",
             )[0]
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        expect(savedClips(saveSpy)[0].loras).toEqual([
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].loras).toEqual([
             { name: "lora-y.safetensors" },
         ]);
-        expect(savedClips(saveSpy)[0].stages[0].loraWeights).toEqual([0.5]);
+        expect(
+            lastSavedClips<Clip[]>(saveSpy)[0].stages[0].loraWeights,
+        ).toEqual([0.5]);
         expect(
             document.querySelectorAll(".vst-detail .vst-clip-lora-entry"),
         ).toHaveLength(1);
@@ -2380,7 +2393,7 @@ describe("createTimelineDetailStrip", () => {
         document
             .querySelector<HTMLButtonElement>(".vst-detail-add-stage")
             ?.click();
-        const stages = savedClips(saveSpy)[0].stages;
+        const stages = lastSavedClips<Clip[]>(saveSpy)[0].stages;
         expect(stages).toHaveLength(2);
         expect(stages[1].loraWeights).toEqual([0.65]);
     });
@@ -2394,7 +2407,7 @@ describe("createTimelineDetailStrip", () => {
         expect(deleteBtn).not.toBeNull();
         deleteBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].stages).toHaveLength(1);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].stages).toHaveLength(1);
     });
 
     it("replaces Clear/collapse with a gear modal and persists its toggles", () => {
@@ -2522,8 +2535,12 @@ describe("createTimelineDetailStrip", () => {
         sourceSelect.value = "Upload";
         sourceSelect.dispatchEvent(new Event("change", { bubbles: true }));
         expect(saveSpy).toHaveBeenCalled();
-        expect(savedClips(saveSpy)[0].frameRefs[1].source).toBe("Upload");
-        expect(savedClips(saveSpy)[0].frameRefs[0].source).toBe("Refiner");
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[1].source).toBe(
+            "Upload",
+        );
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[0].source).toBe(
+            "Refiner",
+        );
 
         // Rail delete removes the active ref, selects its neighbour, and
         // preserves the dock's scroll position.
@@ -2659,7 +2676,7 @@ describe("createTimelineDetailStrip", () => {
         input.value = "7";
         input.dispatchEvent(new Event("change", { bubbles: true }));
         jest.advanceTimersByTime(200);
-        expect(savedClips(saveSpy)[0].frameRefs[0].frame).toBe(7);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[0].frame).toBe(7);
     });
 
     it("renders the audio editor and live-applies source + flags", () => {
@@ -2701,11 +2718,11 @@ describe("createTimelineDetailStrip", () => {
         }
         reuse.checked = true;
         reuse.dispatchEvent(new Event("change", { bubbles: true }));
-        expect(savedClips(saveSpy)[0].reuseAudio).toBe(true);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].reuseAudio).toBe(true);
 
         select.value = "Upload";
         select.dispatchEvent(new Event("change", { bubbles: true }));
-        expect(savedClips(saveSpy)[0].audioSource).toBe("Upload");
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].audioSource).toBe("Upload");
         expect(
             fieldByLabel("Clip Length from Audio").querySelector("input")
                 ?.disabled,
@@ -2837,7 +2854,9 @@ describe("createTimelineDetailStrip", () => {
         editor.value = "a wide landscape";
         editor.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
-        expect(savedClips(saveSpy)[0].prompt).toBe("a wide landscape");
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].prompt).toBe(
+            "a wide landscape",
+        );
     });
 
     it("auto-focuses the major prompt textarea (caret at end) on a timeline-origin selection", () => {
@@ -2997,7 +3016,9 @@ describe("createTimelineDetailStrip", () => {
         document
             .querySelectorAll<HTMLButtonElement>(".vst-relay-tab")[1]
             ?.click();
-        expect(savedClips(saveSpy)[0].promptWindows[0].prompt).toBe("red car");
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].promptWindows[0].prompt).toBe(
+            "red car",
+        );
         const e1 = minorEditor(1);
         e1.value = "blue sky";
         e1.dispatchEvent(new Event("input", { bubbles: true }));
@@ -3009,7 +3030,7 @@ describe("createTimelineDetailStrip", () => {
                 relatedTarget: document.body,
             }),
         );
-        const windows = savedClips(saveSpy)[0].promptWindows;
+        const windows = lastSavedClips<Clip[]>(saveSpy)[0].promptWindows;
         expect(windows[0].prompt).toBe("red car");
         expect(windows[1].prompt).toBe("blue sky");
         jest.useRealTimers();
@@ -3044,7 +3065,7 @@ describe("createTimelineDetailStrip", () => {
         // a structural save that would stale-drop the held edit. The
         // document-level pointerdown must flush FIRST.
         body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
-        expect(savedClips(saveSpy)[0].prompt).toBe("new prompt");
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].prompt).toBe("new prompt");
         jest.useRealTimers();
     });
 
@@ -3109,7 +3130,7 @@ describe("createTimelineDetailStrip", () => {
             throw new Error("end input missing");
         }
         commitNumber(end, "4");
-        let w0 = savedClips(saveSpy)[0].promptWindows[0];
+        let w0 = lastSavedClips<Clip[]>(saveSpy)[0].promptWindows[0];
         expect(w0.start).toBe(1);
         expect(w0.duration).toBe(3);
         // The window edit committed through the store — the notification that
@@ -3123,7 +3144,7 @@ describe("createTimelineDetailStrip", () => {
             throw new Error("begin input missing");
         }
         commitNumber(begin, "9");
-        w0 = savedClips(saveSpy)[0].promptWindows[0];
+        w0 = lastSavedClips<Clip[]>(saveSpy)[0].promptWindows[0];
         // begin can't reach 9: clamped to end - PROMPT_WINDOW_MIN_DURATION
         // (4 - 0.25 = 3.75, rounded to 0.1s like the timeline gesture → 3.8) and
         // never crosses the neighbouring window at start 6.
@@ -3265,7 +3286,9 @@ describe("createTimelineDetailStrip", () => {
             expect(document.activeElement).toBe(end);
             // The data was written and the commit notification fired (the
             // timeline repaint driver).
-            expect(savedClips(saveSpy)[0].promptWindows[0].duration).toBe(3);
+            expect(
+                lastSavedClips<Clip[]>(saveSpy)[0].promptWindows[0].duration,
+            ).toBe(3);
             expect(refreshSpy).toHaveBeenCalled();
             // The value-derived breadcrumb was synced WITHOUT a rebuild.
             expect(crumbText()).toBe("Relay 1–4s · Clip 0");
@@ -3287,7 +3310,7 @@ describe("createTimelineDetailStrip", () => {
                 dur,
             );
             expect(document.activeElement).toBe(dur);
-            expect(savedClips(saveSpy)[0].duration).toBe(6);
+            expect(lastSavedClips<Clip[]>(saveSpy)[0].duration).toBe(6);
         });
 
         it("keeps focus and the same node on a first Steps change", () => {
@@ -3298,7 +3321,7 @@ describe("createTimelineDetailStrip", () => {
             commitNumber(steps, "14");
             expect(sliderNumberByLabel("Steps")).toBe(steps);
             expect(document.activeElement).toBe(steps);
-            expect(savedClips(saveSpy)[0].stages[0].steps).toBe(14);
+            expect(lastSavedClips<Clip[]>(saveSpy)[0].stages[0].steps).toBe(14);
         });
 
         it("keeps incoming Continue numbering after a reference value edit", async () => {
@@ -3349,7 +3372,9 @@ describe("createTimelineDetailStrip", () => {
             scale.dispatchEvent(new Event("change", { bubbles: true }));
 
             expect(crumbText()).toBe("<Video 2> · Clip 1");
-            expect(savedClips(saveSpy)[1].references[0].mediaScale).toBe(0.5);
+            expect(
+                lastSavedClips<Clip[]>(saveSpy)[1].references[0].mediaScale,
+            ).toBe(0.5);
 
             document
                 .querySelector<HTMLElement>(".vst-clip-ref-join-tab")
@@ -3383,7 +3408,7 @@ describe("createTimelineDetailStrip", () => {
             expect(crumbText()).toBe(
                 "<Video 1> (from Join with Clip 0) · Clip 1",
             );
-            expect(savedClips(saveSpy)[0]).toMatchObject({
+            expect(lastSavedClips<Clip[]>(saveSpy)[0]).toMatchObject({
                 boundaryOutReferenceScale: 0.25,
                 boundaryOutReferenceIncludeSoundtrack: false,
             });
@@ -3512,7 +3537,9 @@ describe("createTimelineDetailStrip", () => {
             commitNumber(begin, "1");
             // Stored begin clamped to the neighbour bound (W0 ends at 3); the
             // input is corrected to the stored value, not the typed 1.
-            expect(savedClips(saveSpy)[0].promptWindows[1].start).toBe(3);
+            expect(
+                lastSavedClips<Clip[]>(saveSpy)[0].promptWindows[1].start,
+            ).toBe(3);
             const after = minorRows()[0].querySelector<HTMLInputElement>(
                 'input[data-vst-focus-key="minor-1-begin"]',
             );
@@ -3542,7 +3569,7 @@ describe("createTimelineDetailStrip", () => {
             // End can't come inside start + min-duration (5 + 0.25 = 5.25); the
             // gesture rounds seconds to 0.1 (roundSeconds: Math.round(2.5)=3), so
             // the stored end is 5.3 — either way, NOT the typed 0.3.
-            const w = savedClips(saveSpy)[0].promptWindows[0];
+            const w = lastSavedClips<Clip[]>(saveSpy)[0].promptWindows[0];
             expect(w.start).toBe(5);
             expect(w.duration).toBe(0.3);
             const after = minorRows()[0].querySelector<HTMLInputElement>(
@@ -3577,7 +3604,9 @@ describe("createTimelineDetailStrip", () => {
                 throw new Error("retake length input missing");
             }
             commitNumber(len, "5");
-            expect(savedClips(saveSpy)[0].retake?.lengthSeconds).toBe(2);
+            expect(
+                lastSavedClips<Clip[]>(saveSpy)[0].retake?.lengthSeconds,
+            ).toBe(2);
             const after = retakeFieldByLabel(
                 "Length (s)",
             ).querySelector<HTMLInputElement>(
@@ -3636,7 +3665,7 @@ describe("createTimelineDetailStrip", () => {
             // value the user committed (in range), same node, focus intact.
             expect(sliderNumberByLabel("Steps")).toBe(steps);
             expect(steps.value).toBe("14");
-            expect(savedClips(saveSpy)[0].stages[0].steps).toBe(14);
+            expect(lastSavedClips<Clip[]>(saveSpy)[0].stages[0].steps).toBe(14);
             expect(document.activeElement).toBe(steps);
         });
     });
@@ -3748,7 +3777,7 @@ describe("createTimelineDetailStrip", () => {
         expect(saveSpy).not.toHaveBeenCalled();
         jest.advanceTimersByTime(200);
         // A single coalesced write carries BOTH edits — no silent revert.
-        const stage = savedClips(saveSpy)[0].stages[0];
+        const stage = lastSavedClips<Clip[]>(saveSpy)[0].stages[0];
         expect(stage.steps).toBe(14);
         expect(stage.cfgScale).toBe(9);
     });
@@ -3767,7 +3796,7 @@ describe("createTimelineDetailStrip", () => {
         // Switching clips before the debounce elapses must flush the edit.
         setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy)[0].stages[0].steps).toBe(14);
+        expect(lastSavedClips<Clip[]>(saveSpy)[0].stages[0].steps).toBe(14);
 
         // The re-render's synthetic slider input must not schedule a spurious
         // write that fires later.
@@ -3850,9 +3879,10 @@ describe("createTimelineDetailStrip", () => {
             // Release flushes the held edit exactly once (one save, one repaint).
             pointer(range, "pointerup");
             expect(saveSpy).toHaveBeenCalledTimes(1);
-            expect(savedClips(saveSpy)[0].stages[0].frameRefStrengths[0]).toBe(
-                0.4,
-            );
+            expect(
+                lastSavedClips<Clip[]>(saveSpy)[0].stages[0]
+                    .frameRefStrengths[0],
+            ).toBe(0.4);
             jest.advanceTimersByTime(1000);
             expect(saveSpy).toHaveBeenCalledTimes(1);
             jest.useRealTimers();
@@ -4367,7 +4397,9 @@ describe("createTimelineDetailStrip", () => {
             select.value = "crossfade";
             select.dispatchEvent(new Event("change", { bubbles: true }));
             expect(saveSpy).toHaveBeenCalled();
-            expect(savedClips(saveSpy)[0].boundaryOut).toBe("crossfade");
+            expect(lastSavedClips<Clip[]>(saveSpy)[0].boundaryOut).toBe(
+                "crossfade",
+            );
         });
 
         it("shows an Overlap selector and plan-aware info for a continue boundary", () => {
@@ -4450,7 +4482,9 @@ describe("createTimelineDetailStrip", () => {
             }
             select.value = "24";
             select.dispatchEvent(new Event("change", { bubbles: true }));
-            expect(savedClips(saveSpy)[0].boundaryOutOverlap).toBe(24);
+            expect(lastSavedClips<Clip[]>(saveSpy)[0].boundaryOutOverlap).toBe(
+                24,
+            );
         });
 
         it("offers opt-in outgoing audio carry for an overlapped boundary", () => {
@@ -4469,7 +4503,9 @@ describe("createTimelineDetailStrip", () => {
             checkbox.checked = true;
             checkbox.dispatchEvent(new Event("change", { bubbles: true }));
 
-            expect(savedClips(saveSpy)[0].boundaryOutCarryAudio).toBe(true);
+            expect(
+                lastSavedClips<Clip[]>(saveSpy)[0].boundaryOutCarryAudio,
+            ).toBe(true);
             expect(infoText()).toContain(
                 "audio tail becomes preserved opening context",
             );
@@ -4610,7 +4646,9 @@ describe("createTimelineDetailStrip", () => {
             expect(saveSpy).not.toHaveBeenCalled();
             blurOutOfDock(editor);
             expect(saveSpy).toHaveBeenCalledTimes(1);
-            expect(savedClips(saveSpy)[0].prompt).toBe("typed while focused");
+            expect(lastSavedClips<Clip[]>(saveSpy)[0].prompt).toBe(
+                "typed while focused",
+            );
             jest.useRealTimers();
         });
 
@@ -4663,7 +4701,7 @@ describe("createTimelineDetailStrip", () => {
             // ...but a `change` while still focused (spinner/Enter) commits live.
             dur.dispatchEvent(new Event("change", { bubbles: true }));
             expect(saveSpy).toHaveBeenCalled();
-            expect(savedClips(saveSpy)[0].duration).toBe(7);
+            expect(lastSavedClips<Clip[]>(saveSpy)[0].duration).toBe(7);
             jest.useRealTimers();
         });
 
@@ -4715,9 +4753,9 @@ describe("createTimelineDetailStrip", () => {
             document
                 .querySelectorAll<HTMLButtonElement>(".vst-relay-tab")[1]
                 ?.click();
-            expect(savedClips(saveSpy)[0].promptWindows[0].prompt).toBe(
-                "typing in zero",
-            );
+            expect(
+                lastSavedClips<Clip[]>(saveSpy)[0].promptWindows[0].prompt,
+            ).toBe("typing in zero");
             const e1After = document.querySelector<HTMLTextAreaElement>(
                 'textarea[data-vst-focus-key="minor-1"]',
             );

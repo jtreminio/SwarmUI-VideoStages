@@ -7,6 +7,7 @@ import {
     jest,
 } from "@jest/globals";
 import {
+    firstSavedClips,
     mountPromptBox,
     mountVideoFps,
     mountVideoStagesData,
@@ -156,10 +157,6 @@ const mouse = (
         shiftKey: opts.shiftKey ?? false,
     });
 
-const savedClips = (
-    spy: jest.SpiedFunction<typeof persistence.saveClips>,
-): Clip[] => spy.mock.calls[0][0] as Clip[];
-
 describe("createTimelineLinking selection + write gestures (DOM)", () => {
     let linking: TimelineLinking | null = null;
     let router: GestureRouter | null = null;
@@ -298,9 +295,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         );
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy).map((clip) => clip.duration)).toEqual([
-            1, 3,
-        ]);
+        expect(
+            firstSavedClips<Clip[]>(saveSpy).map((clip) => clip.duration),
+        ).toEqual([1, 3]);
     });
 
     it("dragging region 0 past region 1 persists the reordered clips and keeps the moved clip selected", () => {
@@ -323,9 +320,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         document.dispatchEvent(mouse("mouseup", 220));
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        expect(savedClips(saveSpy).map((clip) => clip.duration)).toEqual([
-            2, 1, 3,
-        ]);
+        expect(
+            firstSavedClips<Clip[]>(saveSpy).map((clip) => clip.duration),
+        ).toEqual([2, 1, 3]);
         expect(body.querySelectorAll(".vst-drop-indicator")).toHaveLength(0);
         expect(linking?.getSelectedIndex()).toBe(1);
     });
@@ -375,7 +372,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         document.dispatchEvent(mouse("mouseup", 176));
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
-        const clips = savedClips(saveSpy);
+        const clips = firstSavedClips<Clip[]>(saveSpy);
         expect(clips[0].duration).toBe(4);
         expect(clips[1].duration).toBe(2);
     });
@@ -399,7 +396,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         document.dispatchEvent(mouse("mousemove", 176));
         document.dispatchEvent(mouse("mouseup", 176));
 
-        expect(savedClips(saveSpy)[0].duration).toBe(4.5);
+        expect(firstSavedClips<Clip[]>(saveSpy)[0].duration).toBe(4.5);
     });
 
     it("preserves a dormant reference when resizing an unresolved model", () => {
@@ -429,7 +426,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         document.dispatchEvent(mouse("mousemove", 56));
         document.dispatchEvent(mouse("mouseup", 56));
 
-        const clips = savedClips(saveSpy);
+        const clips = firstSavedClips<Clip[]>(saveSpy);
         expect(persistence.getState().fps).toBe(16);
         expect(clips[0].duration).toBe(1.3);
         expect(clips[0].frameRefs[0].frame).toBe(999);

@@ -100,3 +100,16 @@ export const mountPromptBox = (value = ""): HTMLTextAreaElement => {
     el.value = value;
     return el;
 };
+
+/**
+ * The clips passed to the FIRST `saveClips` call. Use when the test asserts that
+ * exactly one save happened, or cares about the first of several.
+ */
+export const firstSavedClips = <T>(spy: {
+    mock: { calls: [T, ...unknown[]][] };
+}): T => spy.mock.calls[0][0];
+
+/** The clips passed to the LAST `saveClips` call — the state the user ends on. */
+export const lastSavedClips = <T>(spy: {
+    mock: { calls: [T, ...unknown[]][] };
+}): T => spy.mock.calls[spy.mock.calls.length - 1][0];

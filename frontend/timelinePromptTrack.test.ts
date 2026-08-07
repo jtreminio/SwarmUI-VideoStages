@@ -6,7 +6,11 @@ import {
     it,
     jest,
 } from "@jest/globals";
-import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import {
+    firstSavedClips,
+    mountPromptBox,
+    mountVideoStagesData,
+} from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence/repository";
 import {
@@ -135,14 +139,10 @@ const mouse = (type: string, clientX: number, shiftKey = false): MouseEvent =>
         shiftKey,
     });
 
-const savedClips = (
-    spy: jest.SpiedFunction<typeof persistence.saveClips>,
-): Clip[] => spy.mock.calls[0][0] as Clip[];
-
 const savedWindows = (
     spy: jest.SpiedFunction<typeof persistence.saveClips>,
     clipIdx = 0,
-): PromptWindow[] => savedClips(spy)[clipIdx].promptWindows;
+): PromptWindow[] => firstSavedClips<Clip[]>(spy)[clipIdx].promptWindows;
 
 describe("createTimelinePromptTrack (DOM gestures)", () => {
     let track: TimelinePromptTrack | null = null;
