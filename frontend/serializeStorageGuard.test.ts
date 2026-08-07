@@ -5,6 +5,7 @@ import { normalizeClip } from "./normalizationClip";
 import { serializeClipsForStorage } from "./persistence/documentCodec";
 import {
     STORED_CLIP_KEYS,
+    STORED_CLIP_REFERENCE_KEYS,
     STORED_REF_KEYS,
     STORED_STAGE_KEYS,
     type StoredClip,
@@ -106,6 +107,22 @@ const maximalClip = (): Clip =>
             lengthSeconds: 4,
         },
         retake: { startSeconds: 1, lengthSeconds: 1, strength: 0.7 },
+        references: [
+            {
+                kind: "video",
+                source: "Upload",
+                uploadedMedia: {
+                    data: "data:video/mp4;base64,BBBB",
+                    fileName: "subject.mp4",
+                },
+                includeSoundtrack: true,
+                mediaDurationSeconds: 3,
+                // clipLengthFromAudio above already claims the clip's length,
+                // and normalization allows only one claimant.
+                drivesClipLength: false,
+                mediaScale: 0.5,
+            },
+        ],
         frameRefs: [
             {
                 source: "Upload",
@@ -139,21 +156,12 @@ const maximalClip = (): Clip =>
     });
 
 describe("serialize storage completeness guard", () => {
-    it("round-trips every persisted field of Clip/Stage/FrameRefImage losslessly", () => {
+    it("round-trips every persisted field of a fully populated clip losslessly", () => {
         // Canonicalize first: a dropped stored field then shows up as an a/b diff.
         const a = store(normalize(maximalClip()));
         const b = store(normalize(a));
 
         expect(b).toEqual(a);
-        for (const key of STORED_CLIP_KEYS) {
-            expect(b[key]).toEqual(a[key]);
-        }
-        for (const key of STORED_REF_KEYS) {
-            expect(b.frameRefs[0][key]).toEqual(a.frameRefs[0][key]);
-        }
-        for (const key of STORED_STAGE_KEYS) {
-            expect(b.stages[0][key]).toEqual(a.stages[0][key]);
-        }
     });
 
     it("the fixture actually populates every field the Stored* types declare", () => {
@@ -161,6 +169,9 @@ describe("serialize storage completeness guard", () => {
 
         for (const key of STORED_CLIP_KEYS) {
             expect(Object.hasOwn(stored, key)).toBe(true);
+        }
+        for (const key of STORED_CLIP_REFERENCE_KEYS) {
+            expect(Object.hasOwn(stored.references[0], key)).toBe(true);
         }
         for (const key of STORED_REF_KEYS) {
             expect(Object.hasOwn(stored.frameRefs[0], key)).toBe(true);
@@ -171,6 +182,7 @@ describe("serialize storage completeness guard", () => {
         // Every optional container is present, so the nested projections above
         // are genuinely exercised.
         expect(stored.icLoras.length).toBeGreaterThan(0);
+        expect(stored.references.length).toBeGreaterThan(0);
         expect(stored.frameRefs.length).toBeGreaterThan(0);
         expect(stored.stages.length).toBeGreaterThan(0);
         expect(stored.loras.length).toBeGreaterThan(0);
