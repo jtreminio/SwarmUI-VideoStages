@@ -8,9 +8,8 @@ import {
 } from "@jest/globals";
 import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectureCatalog";
 import {
-    testArchitectureCatalog,
     testArchitectureCatalogDto,
-    testRootDefaults,
+    testAuthoringTransactionSnapshot,
 } from "../__test_helpers__/architectureFixtures";
 import { icLoraFixture, minimalClip } from "../__test_helpers__/clipFixtures";
 import {
@@ -19,9 +18,6 @@ import {
     mountVideoStagesData,
 } from "../__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
-import { createCapabilityViewResolver } from "../architectures/policy";
-import type { ArchitectureModelCatalog } from "../architectures/types";
-import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
 import {
@@ -42,19 +38,6 @@ type StructuralOutcome =
     | "render"
     | null
     | StructuralCommand;
-
-const authoringTransaction = (
-    catalog: ArchitectureModelCatalog = testArchitectureCatalog(),
-): AuthoringTransactionSnapshot => ({
-    catalogStatus: {
-        status: "ready",
-        catalog: testArchitectureCatalogDto(),
-        error: null,
-    },
-    defaults: testRootDefaults(catalog),
-    capabilities: createCapabilityViewResolver(catalog),
-    generatedEntryMode: "text-to-video",
-});
 
 describe("detail structural stage operations", () => {
     beforeEach(async () => {
@@ -85,7 +68,9 @@ describe("detail structural stage operations", () => {
                 outcomes.push(apply([clip]));
             },
         );
-        const captureTransaction = jest.fn(() => authoringTransaction());
+        const captureTransaction = jest.fn(() =>
+            testAuthoringTransactionSnapshot(),
+        );
         const operations = createDetailSelectionOperations(
             structuralCommit,
             captureTransaction,
@@ -126,7 +111,9 @@ describe("detail structural stage operations", () => {
                 apply([clip]);
             },
         );
-        const captureTransaction = jest.fn(() => authoringTransaction());
+        const captureTransaction = jest.fn(() =>
+            testAuthoringTransactionSnapshot(),
+        );
         const operations = createDetailSelectionOperations(
             structuralCommit,
             captureTransaction,
@@ -160,7 +147,7 @@ describe("detail structural stage operations", () => {
         );
         const operations = createDetailSelectionOperations(
             structuralCommit,
-            () => authoringTransaction(),
+            () => testAuthoringTransactionSnapshot(),
         );
 
         operations.deleteStage(0, 0);
@@ -196,7 +183,7 @@ describe("detail structural stage operations", () => {
         );
         const operations = createDetailSelectionOperations(
             structuralCommit,
-            () => authoringTransaction(),
+            () => testAuthoringTransactionSnapshot(),
         );
 
         operations.addStage(0);
@@ -285,7 +272,7 @@ describe("detail structural stage operations", () => {
         };
         const operations = createDetailSelectionOperations(
             structuralCommit,
-            () => authoringTransaction(),
+            () => testAuthoringTransactionSnapshot(),
         );
 
         operations.addStage(0);
