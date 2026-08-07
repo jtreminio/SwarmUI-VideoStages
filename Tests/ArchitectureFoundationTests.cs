@@ -466,11 +466,11 @@ public class ArchitectureFoundationTests
             RootEnvironment.FromSpec(spec),
             ArchitecturePlanResolver.Resolve(spec, registry));
 
-        Assert.DoesNotContain(
-            plan.Diagnostics,
-            item => item.Message.Contains("LoRA"));
+        StagePlan plannedStage = Assert.Single(Assert.Single(plan.Clips).Stages);
+        Assert.Equal(
+            ["ltx-owned-option.safetensors"],
+            plannedStage.Core.Loras.Select(lora => lora.Name).ToArray());
         Assert.Equal(1, registry.CompileCounts[new ArchitectureId("fake")]);
-        Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
     [Fact]
@@ -1657,7 +1657,13 @@ public class ArchitectureFoundationTests
                     new FakeClipPayload(descriptor.Id),
                     (clip.Stages ?? []).ToDictionary(
                         stage => stage.ClipStageRawIndex,
-                        _ => (IArchitectureStagePayload)new FakeStagePayload(descriptor.Id)),
+                        stage => (IArchitectureStagePayload)new FakeStagePayload(
+                            descriptor.Id,
+                            TestPlanCompiler.DefaultStageCore with
+                            {
+                                Loras = LoraPlanCompiler.Compile(
+                                    clip, stage, LoraTarget.ModelAndTextEncoder),
+                            })),
                     []);
             }
         }
@@ -1740,9 +1746,10 @@ public class ArchitectureFoundationTests
         ArchitectureId ArchitectureId) : IArchitectureClipPayload;
 
     private sealed record FakeStagePayload(
-        ArchitectureId ArchitectureId) : IArchitectureStagePayload
+        ArchitectureId ArchitectureId,
+        StageCorePlan Core = null) : IArchitectureStagePayload
     {
-        public StageCorePlan Core => TestPlanCompiler.DefaultStageCore;
+        public StageCorePlan Core { get; } = Core ?? TestPlanCompiler.DefaultStageCore;
     }
 
     private sealed class RecordingSession(
