@@ -113,14 +113,22 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         {
             SwarmLoadImageB64Node loadImage =
                 bridge.AddNode(new SwarmLoadImageB64Node().With(
-                    ImageBase64: VideoGraphHelpers.StripDataUriPrefix(entry.Drive.Upload.Data)));
+                    ImageBase64: UploadedMedia.GetRefImage(
+                        g.UserInput,
+                        entry.Drive.Upload.Data,
+                        entry.Drive.Upload.FileName,
+                        "IC-LoRA drive image").AsBase64));
             path = WorkflowBridge.ToPath(loadImage.IMAGE);
         }
         else if (entry.Drive.MediaKind == IcLoraDriveMediaKind.Video)
         {
             SwarmLoadVideoB64Node load =
                 bridge.AddNode(new SwarmLoadVideoB64Node().With(
-                    VideoBase64: VideoGraphHelpers.StripDataUriPrefix(entry.Drive.Upload.Data)));
+                    VideoBase64: UploadedMedia.GetVideo(
+                        g.UserInput,
+                        entry.Drive.Upload.Data,
+                        entry.Drive.Upload.FileName,
+                        "IC-LoRA drive video").AsBase64));
             GetVideoComponentsNode components =
                 bridge.AddNode(new GetVideoComponentsNode());
             components.Video.ConnectToUntyped(load.VIDEO);

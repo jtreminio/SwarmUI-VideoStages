@@ -217,14 +217,6 @@ internal static class VideoGraphHelpers
         return encoded.Contains(',') ? null : encoded;
     }
 
-    public static string StripDataUriPrefix(string data)
-    {
-        int comma = data.IndexOf(',');
-        return data.StartsWith("data:", StringComparison.OrdinalIgnoreCase) && comma >= 0
-            ? data[(comma + 1)..]
-            : data;
-    }
-
     public static bool TryGetInputRef(JObject node, string inputName, out JArray inputRef)
     {
         inputRef = null;

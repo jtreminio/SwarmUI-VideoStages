@@ -146,7 +146,11 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         }
         SwarmLoadVideoB64Node load =
             bridge.AddNode(new SwarmLoadVideoB64Node().With(
-                VideoBase64: VideoGraphHelpers.StripDataUriPrefix(media.Data)));
+                VideoBase64: UploadedMedia.GetVideo(
+                    g.UserInput,
+                    media.Data,
+                    media.FileName,
+                    "IC-LoRA drive video").AsBase64));
         GetVideoComponentsNode components = bridge.AddNode(new GetVideoComponentsNode());
         components.Video.ConnectToUntyped(load.VIDEO);
         return components.Audio.ToWGNodeData(g, WGNodeData.DT_AUDIO);

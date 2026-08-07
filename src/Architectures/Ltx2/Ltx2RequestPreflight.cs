@@ -54,18 +54,26 @@ internal static class Ltx2RequestPreflight
                         clip.ClipId,
                         stage.StageId));
                 }
-                // Only an uploaded audio-kind drive reaches the media materializer; a video-kind
-                // upload is handed to the host's base64 video loader untouched.
+                // Runtime resolves every uploaded drive through UploadedMedia, whose Get* entry
+                // points treat an unreadable payload as a bug, so each kind is checked here first.
+                // A drive with no payload at all is left alone: runtime warns and skips the guide.
                 foreach (IcLoraPlan icLora in icLoras.Where(
-                    entry => entry.HasAudioReference
-                        && entry.Drive.Source == IcLoraMediaSourceKind.Upload
-                        && entry.Drive.MediaKind == IcLoraDriveMediaKind.Audio))
+                    entry => entry.Drive.Source == IcLoraMediaSourceKind.Upload
+                        && !string.IsNullOrWhiteSpace(entry.Drive.Upload?.Data)))
                 {
-                    if (media.AudioDiagnostic(
-                        icLora.Drive.Upload?.Data,
-                        icLora.Drive.Upload?.FileName,
-                        clip.ClipId,
-                        stage.StageId) is { } unreadable)
+                    string data = icLora.Drive.Upload.Data;
+                    string fileName = icLora.Drive.Upload.FileName;
+                    PlanDiagnostic unreadable = icLora.Drive.MediaKind switch
+                    {
+                        IcLoraDriveMediaKind.Audio => media.AudioDiagnostic(
+                            data, fileName, clip.ClipId, stage.StageId),
+                        IcLoraDriveMediaKind.Image => media.ImageDiagnostic(
+                            data, fileName, "IC-LoRA drive image", clip.ClipId, stage.StageId),
+                        IcLoraDriveMediaKind.Video => media.VideoDiagnostic(
+                            data, fileName, "IC-LoRA drive video", clip.ClipId, stage.StageId),
+                        _ => null,
+                    };
+                    if (unreadable is not null)
                     {
                         diagnostics.Add(unreadable);
                     }
