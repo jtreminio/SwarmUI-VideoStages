@@ -40,8 +40,6 @@ import {
 const BOOT_CARRIER_PROTECTION_MS = 2_000;
 
 let hydrationComplete = false;
-let hydratedDataInput: HTMLInputElement | HTMLTextAreaElement | null = null;
-let hydratedPromptInput: HTMLInputElement | HTMLTextAreaElement | null = null;
 let hydratedSnapshot: DurableAuthoringSnapshot | null = null;
 let hydratedPromptCarrierValue: string | null = null;
 let pendingHydratedPrompts: ClipTextInput[] | null = null;
@@ -153,12 +151,6 @@ const ensureHydratedCarrier = (): void => {
     }
     if (hydrationComplete) {
         const promptInput = getPromptInput();
-        if (dataInput !== hydratedDataInput) {
-            hydratedDataInput = dataInput;
-        }
-        if (promptInput !== hydratedPromptInput) {
-            hydratedPromptInput = promptInput;
-        }
         const protectingBootCarrier =
             protectOverriddenBootCarrier &&
             Date.now() <= bootCarrierProtectionDeadline;
@@ -190,8 +182,6 @@ const ensureHydratedCarrier = (): void => {
         return;
     }
     hydrationComplete = true;
-    hydratedDataInput = dataInput;
-    hydratedPromptInput = getPromptInput();
     const durable = loadDurableAuthoringState();
     if (durable && restoreDurableSnapshot(durable)) {
         protectOverriddenBootCarrier = true;
@@ -253,8 +243,6 @@ export const resetTimelineCarrierAdapterForTests = (
     clearDurable = true,
 ): void => {
     hydrationComplete = false;
-    hydratedDataInput = null;
-    hydratedPromptInput = null;
     hydratedSnapshot = null;
     hydratedPromptCarrierValue = null;
     pendingHydratedPrompts = null;

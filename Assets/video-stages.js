@@ -5684,8 +5684,6 @@
   // frontend/persistence/carrierAdapter.ts
   var BOOT_CARRIER_PROTECTION_MS = 2e3;
   var hydrationComplete = false;
-  var hydratedDataInput = null;
-  var hydratedPromptInput = null;
   var hydratedSnapshot = null;
   var hydratedPromptCarrierValue = null;
   var pendingHydratedPrompts = null;
@@ -5783,12 +5781,6 @@
     }
     if (hydrationComplete) {
       const promptInput = getPromptInput();
-      if (dataInput !== hydratedDataInput) {
-        hydratedDataInput = dataInput;
-      }
-      if (promptInput !== hydratedPromptInput) {
-        hydratedPromptInput = promptInput;
-      }
       const protectingBootCarrier = protectOverriddenBootCarrier && Date.now() <= bootCarrierProtectionDeadline;
       if (!protectingBootCarrier) {
         protectOverriddenBootCarrier = false;
@@ -5803,8 +5795,6 @@
       return;
     }
     hydrationComplete = true;
-    hydratedDataInput = dataInput;
-    hydratedPromptInput = getPromptInput();
     const durable = loadDurableAuthoringState();
     if (durable && restoreDurableSnapshot(durable)) {
       protectOverriddenBootCarrier = true;
