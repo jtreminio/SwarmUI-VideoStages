@@ -79,13 +79,13 @@ describe("pxToFrame", () => {
     });
 
     it("measures from the clip end when fromEnd", () => {
-        // Same x, but the frame is the distance from the end: 50% → 2.5s from end → 60f.
+        // Same x as the 30f case above, counted from the other end: 121 − 30 = 91f.
         expect(
-            pxToFrame(50, WIDTH, DUR, FPS, true, {
+            pxToFrame(25, WIDTH, DUR, FPS, true, {
                 frameGrid: 8,
                 frameGridOrigin: 1,
             }),
-        ).toBe(61);
+        ).toBe(91);
         // Region left edge with fromEnd = the full clip away from the end.
         expect(
             pxToFrame(0, WIDTH, DUR, FPS, true, {
