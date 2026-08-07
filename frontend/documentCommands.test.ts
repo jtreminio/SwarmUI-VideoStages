@@ -306,6 +306,34 @@ describe("reduceDocumentCommand", () => {
         expect(result.document.clips[1].icLoras[0].driveSource).toBe("Upload");
     });
 
+    it("takes a root the host has not named as text-to-video", () => {
+        const source = document();
+        source.clips[0].icLoras = [
+            {
+                id: "ic-guide",
+                lora: "guide.safetensors",
+                preset: "custom",
+                driveSource: "Incoming",
+                driveData: "visual",
+                driveMediaKinds: ["image"],
+                stage: 0,
+                strength: 1,
+                attentionStrength: 1,
+                controlType: "none",
+                driveMedia: null,
+            },
+        ];
+
+        const result = reduceDocumentCommand(
+            source,
+            { type: "clip.toggle-skip", clipId: "clip-b" },
+            { architectureCatalog: catalogWithFake() },
+        );
+
+        expect(result.applied).toBe(true);
+        expect(result.document.clips[0].icLoras[0].driveSource).toBe("Upload");
+    });
+
     it.each([
         {
             name: "stage",

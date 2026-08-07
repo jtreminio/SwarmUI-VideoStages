@@ -1,4 +1,15 @@
+import {
+    ENTRY_MODES,
+    type GeneratedEntryMode,
+} from "./architectures/generatedFeatures";
 import { getVideoStagesHostBridge } from "./host";
+
+/**
+ * What a generated clip's root is taken to be when the host has not said. C#
+ * declares it first, so it is ArchitectureEntryMode's zero value; reordering
+ * the enum there fails this annotation rather than silently moving the default.
+ */
+export const DEFAULT_GENERATED_ENTRY_MODE: GeneratedEntryMode = ENTRY_MODES[0];
 
 export const REF_FRAME_MIN = 1;
 export const DEFAULT_CLIP_DURATION_SECONDS = 5;

@@ -450,6 +450,45 @@ describe("diffDocuments", () => {
         expect(result.document).toEqual(after);
     });
 
+    it("refuses image-driven Incoming media when the host names no entry mode", () => {
+        const before = document();
+        const { catalog } = crossArchitectureCatalog();
+        const targetClip = before.clips[0];
+        targetClip.stages = [
+            {
+                ...targetClip.stages[0],
+                model: "test-video.safetensors",
+                modelProfileId: "test-profile",
+            },
+        ];
+        targetClip.architectureHint = "test-video";
+        targetClip.modelProfileId = "test-profile";
+        targetClip.icLoras = [
+            {
+                id: "ic-guide",
+                lora: "guide.safetensors",
+                preset: "custom",
+                driveSource: "Incoming",
+                driveData: "visual",
+                driveMediaKinds: ["image"],
+                stage: 0,
+                strength: 1,
+                attentionStrength: 1,
+                controlType: "none",
+                driveMedia: null,
+            },
+        ];
+        const after = structuredClone(before);
+        after.clips[0].architectureHint = "ltx2";
+        after.clips[0].modelProfileId = "ltx-2.3";
+        after.clips[0].stages[0].model = "ltx";
+        after.clips[0].stages[0].modelProfileId = "ltx-2.3";
+
+        expect(() =>
+            diffDocuments(before, after, { architectureCatalog: catalog }),
+        ).toThrow(DocumentDiffError);
+    });
+
     it("reasserts validated Incoming media after conversion-time graph reconciliation", () => {
         const before = document();
         const { catalog } = crossArchitectureCatalog();

@@ -1456,6 +1456,7 @@
   };
 
   // frontend/constants.ts
+  var DEFAULT_GENERATED_ENTRY_MODE = ENTRY_MODES[0];
   var REF_FRAME_MIN = 1;
   var DEFAULT_CLIP_DURATION_SECONDS = 5;
   var CLIP_DURATION_MIN = 1;
@@ -4863,7 +4864,7 @@
         reconcileClipArchitectureIncomingIcLoraDrives(
           reconciledAfter.clips,
           clipIdx,
-          context.generatedEntryMode ?? "text-to-video",
+          context.generatedEntryMode ?? DEFAULT_GENERATED_ENTRY_MODE,
           context.architectureCatalog
         );
       }
@@ -5142,7 +5143,7 @@
         applySkipSuffix(document2.clips, clipIndex, !clip.skipped);
         reconcileArchitectureIncomingIcLoraDrives(
           document2.clips,
-          context.generatedEntryMode ?? "text-to-video",
+          context.generatedEntryMode ?? DEFAULT_GENERATED_ENTRY_MODE,
           context.architectureCatalog
         );
         return success(document2);
@@ -5200,7 +5201,7 @@
         reconcileClipArchitectureIncomingIcLoraDrives(
           document2.clips,
           clipIndex,
-          context.generatedEntryMode ?? "text-to-video",
+          context.generatedEntryMode ?? DEFAULT_GENERATED_ENTRY_MODE,
           context.architectureCatalog
         );
         return success(document2);
@@ -5270,7 +5271,7 @@
         }
         reconcileArchitectureIncomingIcLoraDrives(
           document2.clips,
-          context.generatedEntryMode ?? "text-to-video",
+          context.generatedEntryMode ?? DEFAULT_GENERATED_ENTRY_MODE,
           context.architectureCatalog
         );
         return success(document2);

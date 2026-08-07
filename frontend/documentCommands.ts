@@ -12,6 +12,7 @@ import {
 } from "./architectures/conversion/plan";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
 import { applySkipSuffix } from "./clipSemantics";
+import { DEFAULT_GENERATED_ENTRY_MODE } from "./constants";
 import {
     addBefore,
     clone,
@@ -125,7 +126,7 @@ export const reduceDocumentCommand = (
             applySkipSuffix(document.clips, clipIndex, !clip.skipped);
             reconcileArchitectureIncomingIcLoraDrives(
                 document.clips,
-                context.generatedEntryMode ?? "text-to-video",
+                context.generatedEntryMode ?? DEFAULT_GENERATED_ENTRY_MODE,
                 context.architectureCatalog,
             );
             return success(document);
@@ -191,7 +192,7 @@ export const reduceDocumentCommand = (
             reconcileClipArchitectureIncomingIcLoraDrives(
                 document.clips,
                 clipIndex,
-                context.generatedEntryMode ?? "text-to-video",
+                context.generatedEntryMode ?? DEFAULT_GENERATED_ENTRY_MODE,
                 context.architectureCatalog,
             );
             return success(document);
@@ -266,7 +267,7 @@ export const reduceDocumentCommand = (
             }
             reconcileArchitectureIncomingIcLoraDrives(
                 document.clips,
-                context.generatedEntryMode ?? "text-to-video",
+                context.generatedEntryMode ?? DEFAULT_GENERATED_ENTRY_MODE,
                 context.architectureCatalog,
             );
             return success(document);

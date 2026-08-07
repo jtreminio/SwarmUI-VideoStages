@@ -12,6 +12,7 @@ import { planArchitectureConversion } from "./architectures/conversion/plan";
 import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
 import type { ArchitectureRetargetPlan } from "./architectures/types";
+import { DEFAULT_GENERATED_ENTRY_MODE } from "./constants";
 import type {
     CommandFailure,
     DocumentCommand,
@@ -577,7 +578,7 @@ export const diffDocuments = (
             reconcileClipArchitectureIncomingIcLoraDrives(
                 reconciledAfter.clips,
                 clipIdx,
-                context.generatedEntryMode ?? "text-to-video",
+                context.generatedEntryMode ?? DEFAULT_GENERATED_ENTRY_MODE,
                 context.architectureCatalog,
             );
         }
