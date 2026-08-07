@@ -6,6 +6,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Authoring;
+using VideoStages.Planning;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -51,6 +52,9 @@ public class WanGeneratedWorkflowContractTests
     /// A clip that refines uploaded footage instead of generating from noise. Stage 0's default
     /// <c>Generated</c> reference is stripped so the source, not a root donor, is its input.
     /// </summary>
+    private static IReadOnlyList<PlanDiagnostic> Diagnostics(WorkflowGenerator generator) =>
+        generator.RequireVideoExecutionPlanContext().Plan.Diagnostics;
+
     private static JObject SourceClip(params JObject[] stages) =>
         SourceClip(withFileName: true, stages);
 
@@ -310,9 +314,8 @@ public class WanGeneratedWorkflowContractTests
             loader.UnetName.LiteralAsString());
         Assert.False(generator.IsImageToVideoSwap);
         Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains(
-                "Create separate timeline stages", StringComparison.Ordinal));
+            Diagnostics(generator),
+            diagnostic => diagnostic.Code == "effective-request.video-swap-ignored");
 
         live.AssertAllLive(loader, StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
@@ -1615,9 +1618,10 @@ public class WanGeneratedWorkflowContractTests
             bridge.Graph.NodesOfType<ImageScaleNode>(),
             scale => scale.Width.LiteralAsInt() == 768);
         Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains(
-                $"uses latent upscale mode '{upscaleMethod}'", StringComparison.Ordinal));
+            Diagnostics(generator),
+            diagnostic =>
+                diagnostic.Code == "effective-request.unsupported-latent-upscale-ignored"
+                && diagnostic.Message.Contains(upscaleMethod, StringComparison.Ordinal));
         Assert.Equal(512, generator.CurrentMedia.Width);
 
         live.AssertAllLive(StageSampler(bridge, 0), second);
@@ -2501,7 +2505,6 @@ public class WanGeneratedWorkflowContractTests
     [Fact]
     public async Task An_unusable_last_reference_leaves_the_global_end_image_in_place()
     {
-        const string expectedWarning = "WAN Video final-frame reference uses source 'Base'";
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage(control: 1, steps: 10));
         clip["frameRefs"] = new JArray(MakeRef("Base", fromEnd: true));
@@ -2526,9 +2529,9 @@ public class WanGeneratedWorkflowContractTests
         // Planning drops the Base reference and says so once. A second reference warning would
         // mean the request's own end image was questioned too.
         Assert.Single(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains("reference", StringComparison.Ordinal)
-                && warning.Contains(expectedWarning, StringComparison.Ordinal));
+            Diagnostics(generator),
+            diagnostic =>
+                diagnostic.Code == "effective-request.wan-frame-reference-source-ignored");
 
         live.AssertAllLive(endImage, conditioning, StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
@@ -3048,6 +3051,7 @@ public class WanGeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
+        // Session-provider preflight warnings reach the request channel, not the plan.
         Assert.Contains(
             RequestWarnings(generator.UserInput),
             warning => warning.Contains("'Video End Frame' was ignored", StringComparison.Ordinal));
@@ -3100,11 +3104,16 @@ public class WanGeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        string families = wanFirst ? "wan22, ltx2" : "ltx2, wan22";
+        // Session-provider preflight warnings reach the request channel, not the plan, so their
+        // Code is not observable here.
         Assert.Contains(
             RequestWarnings(generator.UserInput),
-            warning => warning.Contains("'Video End Frame' was ignored", StringComparison.Ordinal)
-                && warning.Contains($"architecture(s): {families}", StringComparison.Ordinal));
+            warning => warning.Contains("'Video End Frame' was ignored", StringComparison.Ordinal));
+        Assert.Equal(
+            wanFirst ? ["wan22", "ltx2"] : (string[])["ltx2", "wan22"],
+            generator.RequireVideoExecutionPlanContext().Plan.Clips
+                .Select(clip => clip.Architecture.Id.Value)
+                .ToArray());
         Assert.Empty(bridge.Graph.NodesOfType<WanFirstLastFrameToVideoNode>());
         Assert.Empty(bridge.Graph.NodesOfType<LTXVAddGuideNode>());
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
@@ -3135,6 +3144,7 @@ public class WanGeneratedWorkflowContractTests
         SwarmKSamplerNode stage = StageSampler(bridge, 0);
         Assert.Equal(10, stage.Steps.LiteralAsInt());
         Assert.Equal(0, stage.StartAtStep.LiteralAsInt());
+        // Session-provider preflight warnings reach the request channel, not the plan.
         Assert.Contains(
             RequestWarnings(generator.UserInput),
             warning => warning.Contains(
