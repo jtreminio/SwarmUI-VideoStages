@@ -71,20 +71,13 @@ const inheritedDims = (defaults: RootDefaults): InheritedDims => ({
     fps: defaults.fps,
 });
 
-const defaultStageModelFor = (defaults: RootDefaults): string =>
-    getDefaultStageModel(
-        defaults.modelValues,
-        undefined,
-        defaults.modelCatalog,
-    );
-
 const parse = (serialized: string): VideoStagesConfig | null => {
     const defaults = getRootDefaults();
     const decoded = decodeStoredDocument(
         serialized,
         inheritedDims(defaults),
         defaults,
-        defaultStageModelFor(defaults),
+        getDefaultStageModel(defaults),
     );
     if (!decoded) return null;
     overlayPromptAndUiState(decoded.clips);
@@ -117,7 +110,7 @@ const restoreDurableSnapshot = (
         snapshot.document,
         inheritedDims(defaults),
         defaults,
-        defaultStageModelFor(defaults),
+        getDefaultStageModel(defaults),
     );
     if (!decoded || snapshot.prompts.length !== decoded.clips.length) {
         return false;

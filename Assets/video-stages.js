@@ -1938,7 +1938,8 @@
     }
     return null;
   };
-  var getDefaultStageModel = (modelValues, architectureId, modelCatalog = buildArchitectureModelCatalog(modelValues, modelValues)) => {
+  var getDefaultStageModel = (defaults, architectureId) => {
+    const { modelValues, modelCatalog } = defaults;
     const supports = (modelName) => {
       const resolved = architectureForModel(modelCatalog, modelName);
       return resolved !== null && (architectureId === void 0 || resolved === architectureId);
@@ -5710,18 +5711,13 @@
     height: defaults.height,
     fps: defaults.fps
   });
-  var defaultStageModelFor = (defaults) => getDefaultStageModel(
-    defaults.modelValues,
-    void 0,
-    defaults.modelCatalog
-  );
   var parse = (serialized) => {
     const defaults = getRootDefaults();
     const decoded = decodeStoredDocument(
       serialized,
       inheritedDims(defaults),
       defaults,
-      defaultStageModelFor(defaults)
+      getDefaultStageModel(defaults)
     );
     if (!decoded) return null;
     overlayPromptAndUiState(decoded.clips);
@@ -5749,7 +5745,7 @@
       snapshot.document,
       inheritedDims(defaults),
       defaults,
-      defaultStageModelFor(defaults)
+      getDefaultStageModel(defaults)
     );
     if (!decoded || snapshot.prompts.length !== decoded.clips.length) {
       return false;
@@ -14145,11 +14141,7 @@ ${slot}`;
           const lockedArchitecture = clipArchitectureId === NONE_ARCHITECTURE_ID || clipArchitectureId === "unsupported" ? void 0 : clipArchitectureId;
           const stage = buildDefaultStage(
             defaults,
-            getDefaultStageModel(
-              defaults.modelValues,
-              lockedArchitecture,
-              defaults.modelCatalog
-            ),
+            getDefaultStageModel(defaults, lockedArchitecture),
             last,
             clip.frameRefs.length,
             clip.loras.map(
@@ -16469,11 +16461,7 @@ ${slot}`;
       try {
         await loadAuthoritativeArchitectureCatalog();
         const { defaults } = captureAuthoringTransactionSnapshot();
-        const defaultModel = getDefaultStageModel(
-          defaults.modelValues,
-          void 0,
-          defaults.modelCatalog
-        );
+        const defaultModel = getDefaultStageModel(defaults);
         if (!defaultModel || architectureForModel(defaults.modelCatalog, defaultModel) === null) {
           getVideoStagesHostBridge().showError(
             "VideoStages cannot add a clip because no supported video model is available."

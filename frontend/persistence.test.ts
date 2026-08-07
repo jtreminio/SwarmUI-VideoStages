@@ -58,14 +58,7 @@ const dataInput = (): HTMLTextAreaElement =>
 const promptEl = (): HTMLTextAreaElement =>
     document.getElementById("input_prompt") as HTMLTextAreaElement;
 
-const testStageModel = (): string => {
-    const defaults = getRootDefaults();
-    return getDefaultStageModel(
-        defaults.modelValues,
-        undefined,
-        defaults.modelCatalog,
-    );
-};
+const testStageModel = (): string => getDefaultStageModel(getRootDefaults());
 
 describe("persistence", () => {
     beforeEach(async () => {

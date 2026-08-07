@@ -195,11 +195,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             // first clip's model and architecture identity.
             await loadAuthoritativeArchitectureCatalog();
             const { defaults } = captureAuthoringTransactionSnapshot();
-            const defaultModel = getDefaultStageModel(
-                defaults.modelValues,
-                undefined,
-                defaults.modelCatalog,
-            );
+            const defaultModel = getDefaultStageModel(defaults);
             if (
                 !defaultModel ||
                 architectureForModel(defaults.modelCatalog, defaultModel) ===

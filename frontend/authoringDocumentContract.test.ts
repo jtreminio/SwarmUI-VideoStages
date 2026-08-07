@@ -30,14 +30,7 @@ const fixturePath = path.resolve(
 const fixture = (): Record<string, unknown> =>
     JSON.parse(fs.readFileSync(fixturePath, "utf8"));
 
-const testStageModel = (): string => {
-    const defaults = getRootDefaults();
-    return getDefaultStageModel(
-        defaults.modelValues,
-        undefined,
-        defaults.modelCatalog,
-    );
-};
+const testStageModel = (): string => getDefaultStageModel(getRootDefaults());
 
 /**
  * One complete authoring document: every field the codec persists is set to a

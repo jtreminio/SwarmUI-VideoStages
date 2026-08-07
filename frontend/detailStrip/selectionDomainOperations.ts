@@ -464,11 +464,7 @@ export const createDetailSelectionDomainOperations = (
                         : clipArchitectureId;
                 const stage = buildDefaultStage(
                     defaults,
-                    getDefaultStageModel(
-                        defaults.modelValues,
-                        lockedArchitecture,
-                        defaults.modelCatalog,
-                    ),
+                    getDefaultStageModel(defaults, lockedArchitecture),
                     last,
                     clip.frameRefs.length,
                     clip.loras.map((entry) =>

@@ -41,10 +41,10 @@ const firstPresentInput = (...ids: string[]): HTMLInputElement | null => {
 };
 
 export const getDefaultStageModel = (
-    modelValues: string[],
+    defaults: Pick<RootDefaults, "modelValues" | "modelCatalog">,
     architectureId?: VideoArchitectureId,
-    modelCatalog = buildArchitectureModelCatalog(modelValues, modelValues),
 ): string => {
+    const { modelValues, modelCatalog } = defaults;
     const supports = (modelName: string): boolean => {
         const resolved = architectureForModel(modelCatalog, modelName);
         return (
