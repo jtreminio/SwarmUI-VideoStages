@@ -1,6 +1,6 @@
 import type {
-    AuthoringFeature,
     CapabilityViewResolver,
+    GeneratedArchitectureFeature,
 } from "../architectures/policy";
 import { escapeAttr as escapeHtml } from "../renderUtils";
 import { spanGeometry } from "../trackDomUtils";
@@ -9,7 +9,7 @@ import type { Clip } from "../types";
 /** A clip keeps a mini-lane while it has data to remove, or a precondition (the code) it could still meet. */
 export const laneVisible = (
     clip: Clip,
-    feature: AuthoringFeature,
+    feature: GeneratedArchitectureFeature,
     persisted: boolean,
     capabilities?: CapabilityViewResolver,
 ): boolean => {

@@ -1,6 +1,7 @@
 import { activeStageCount } from "../../clipSemantics";
 import { NEUTRAL_FRAME_GRID } from "../../renderUtils";
 import type { Clip, Stage } from "../../types";
+import type { GeneratedArchitectureFeature } from "../generatedFeatures";
 import { effectiveClipCapabilities } from "../modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "../none/identity";
 import {
@@ -19,7 +20,6 @@ import {
     supportsClipAudio,
 } from "./featureValues";
 import type {
-    AuthoringFeature,
     CapabilityDecision,
     ClipCapabilityView,
     StageCapabilityView,
@@ -77,7 +77,9 @@ export const createClipStageCapabilityViews = (
             (architectureId === NONE_ARCHITECTURE_ID
                 ? "source-only clips"
                 : `unknown architecture '${architectureId}'`);
-        const decision = (feature: AuthoringFeature): CapabilityDecision => {
+        const decision = (
+            feature: GeneratedArchitectureFeature,
+        ): CapabilityDecision => {
             if (!descriptor || !capabilities) {
                 return {
                     supported: false,

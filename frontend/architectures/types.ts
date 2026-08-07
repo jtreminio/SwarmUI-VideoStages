@@ -1,10 +1,6 @@
 export type VideoArchitectureId = string;
 export type ModelProfileId = string;
 
-import type { GeneratedAuthoringFeature } from "./generatedFeatures";
-
-export type CatalogAuthoringFeature = GeneratedAuthoringFeature;
-
 export type CapabilitySupport = "supported" | "unsupported" | "conditional";
 
 export interface CapabilityRuleDecision {

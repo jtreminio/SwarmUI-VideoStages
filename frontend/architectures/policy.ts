@@ -4,13 +4,13 @@ import { createClipStageCapabilityViews } from "./policy/clipStageViews";
 import type { CapabilityViewResolver } from "./policy/types";
 import type { ArchitectureModelCatalog } from "./types";
 
+export type { GeneratedArchitectureFeature } from "./generatedFeatures";
 export {
     architectureFeatureSupport,
     isAudioSourceSupported,
     upscaleModeForMethod,
 } from "./policy/featureValues";
 export type {
-    AuthoringFeature,
     AuthoringState,
     BoundaryCapabilityView,
     CapabilityDecision,

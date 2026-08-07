@@ -612,7 +612,7 @@
   };
 
   // frontend/architectures/generatedFeatures.ts
-  var AUTHORING_FEATURE_LABELS = {
+  var ARCHITECTURE_FEATURE_LABELS = {
     promptRelay: "Relay prompts",
     frameReferences: "Frame references",
     clipReferences: "Clip references",
@@ -634,8 +634,8 @@
   var supportsClipAudio = (audioSourceKinds) => audioSourceKinds.some(
     (kind) => kind !== AUDIO_SOURCE_DISABLED_KIND && kind !== AUDIO_SOURCE_NATIVE
   );
-  var architectureReason = (label, feature) => `${AUTHORING_FEATURE_LABELS[feature]} is not supported by ${label}.`;
-  var noArchitectureReason = (feature) => `${AUTHORING_FEATURE_LABELS[feature]} requires a generated clip with a known architecture.`;
+  var architectureReason = (label, feature) => `${ARCHITECTURE_FEATURE_LABELS[feature]} is not supported by ${label}.`;
+  var noArchitectureReason = (feature) => `${ARCHITECTURE_FEATURE_LABELS[feature]} requires a generated clip with a known architecture.`;
   var upscaleModeForMethod = (method) => {
     const normalized = method.trim().toLowerCase();
     const hasMethodName = (prefix) => normalized.startsWith(prefix) && normalized.slice(prefix.length).trim().length > 0;

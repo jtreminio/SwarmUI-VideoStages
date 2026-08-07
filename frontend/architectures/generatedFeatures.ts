@@ -1,6 +1,6 @@
 // Generated from ArchitectureFeatureVocabulary.cs. Do not edit by hand.
 
-export const AUTHORING_FEATURE_LABELS = {
+export const ARCHITECTURE_FEATURE_LABELS = {
     promptRelay: "Relay prompts",
     frameReferences: "Frame references",
     clipReferences: "Clip references",
@@ -14,4 +14,4 @@ export const AUTHORING_FEATURE_LABELS = {
     icLora: "IC-LoRA",
 } as const;
 
-export type GeneratedAuthoringFeature = keyof typeof AUTHORING_FEATURE_LABELS;
+export type GeneratedArchitectureFeature = keyof typeof ARCHITECTURE_FEATURE_LABELS;

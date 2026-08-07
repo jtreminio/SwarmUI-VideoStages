@@ -11,6 +11,7 @@ import {
 import type { Clip } from "../types";
 import { hasArchitectureSlotSourcedIcLora } from "./behaviorRegistry";
 import { resolvedClipArchitectureId } from "./clipIdentity";
+import type { GeneratedArchitectureFeature } from "./generatedFeatures";
 import { effectiveClipCapabilities } from "./modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
 import { createCapabilityViewResolver } from "./policy";
@@ -19,7 +20,7 @@ import {
     supportsClipAudio,
     upscaleModeForMethod,
 } from "./policy/featureValues";
-import type { AuthoringFeature, CapabilityViewResolver } from "./policy/types";
+import type { CapabilityViewResolver } from "./policy/types";
 import type {
     ArchitectureCapabilities,
     ArchitectureModelCatalog,
@@ -46,7 +47,7 @@ const persistedCapabilityIssues = (
     capabilities: ArchitectureCapabilities,
 ): ArchitectureDiagnostic[] => {
     const diagnostics: ArchitectureDiagnostic[] = [];
-    const supports = (feature: AuthoringFeature): boolean =>
+    const supports = (feature: GeneratedArchitectureFeature): boolean =>
         architectureFeatureSupport(feature, capabilities);
     const unsupported = (
         active: boolean,

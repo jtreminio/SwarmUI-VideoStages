@@ -65,14 +65,14 @@ internal static class ArchitectureFeatureVocabulary
 
         Line("// Generated from ArchitectureFeatureVocabulary.cs. Do not edit by hand.");
         Line();
-        Line("export const AUTHORING_FEATURE_LABELS = {");
+        Line("export const ARCHITECTURE_FEATURE_LABELS = {");
         foreach (ArchitectureFeatureVocabularyEntry feature in Features)
         {
             Line($"    {feature.WireName}: \"{feature.DisplayLabel}\",");
         }
         Line("} as const;");
         Line();
-        Line("export type GeneratedAuthoringFeature = keyof typeof AUTHORING_FEATURE_LABELS;");
+        Line("export type GeneratedArchitectureFeature = keyof typeof ARCHITECTURE_FEATURE_LABELS;");
 
         return result.ToString();
     }

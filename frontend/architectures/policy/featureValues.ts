@@ -3,9 +3,10 @@ import {
     AUDIO_SOURCE_NATIVE,
     isAllowedAudioSource,
 } from "../../audioSource";
-import { AUTHORING_FEATURE_LABELS } from "../generatedFeatures";
+import type { GeneratedArchitectureFeature } from "../generatedFeatures";
+import { ARCHITECTURE_FEATURE_LABELS } from "../generatedFeatures";
 import type { ArchitectureCapabilities } from "../types";
-import type { AuthoringFeature, ClipCapabilityView } from "./types";
+import type { ClipCapabilityView } from "./types";
 
 /**
  * Retake re-diffuses a window of existing footage, so a clip with no init video has nothing to
@@ -30,12 +31,14 @@ export const supportsClipAudio = (
 
 export const architectureReason = (
     label: string,
-    feature: AuthoringFeature,
+    feature: GeneratedArchitectureFeature,
 ): string =>
-    `${AUTHORING_FEATURE_LABELS[feature]} is not supported by ${label}.`;
+    `${ARCHITECTURE_FEATURE_LABELS[feature]} is not supported by ${label}.`;
 
-export const noArchitectureReason = (feature: AuthoringFeature): string =>
-    `${AUTHORING_FEATURE_LABELS[feature]} requires a generated clip with a known architecture.`;
+export const noArchitectureReason = (
+    feature: GeneratedArchitectureFeature,
+): string =>
+    `${ARCHITECTURE_FEATURE_LABELS[feature]} requires a generated clip with a known architecture.`;
 
 export const isAudioSourceSupported = (
     view: ClipCapabilityView,
@@ -66,6 +69,6 @@ export const upscaleModeForMethod = (method: string): UpscaleMethodMode => {
  * diagnostics, and temporal execution previews all answer through it.
  */
 export const architectureFeatureSupport = (
-    feature: AuthoringFeature,
+    feature: GeneratedArchitectureFeature,
     capabilities: ArchitectureCapabilities,
 ): boolean => capabilities.features.includes(feature);

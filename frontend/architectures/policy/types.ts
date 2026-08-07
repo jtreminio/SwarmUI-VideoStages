@@ -1,13 +1,9 @@
 import type { FrameGridSpec } from "../../renderUtils";
 import type { BoundaryOut, Clip, Stage } from "../../types";
 import type { BoundaryWindowConstraints } from "../boundaryConstraints";
+import type { GeneratedArchitectureFeature } from "../generatedFeatures";
 import type { FrameGridResolution } from "../temporalGrid";
-import type {
-    ArchitectureModelCatalog,
-    CatalogAuthoringFeature,
-} from "../types";
-
-export type AuthoringFeature = CatalogAuthoringFeature;
+import type { ArchitectureModelCatalog } from "../types";
 
 export interface CapabilityDecision {
     supported: boolean;
@@ -33,9 +29,9 @@ export interface ClipCapabilityView {
     audioSourceKinds: readonly string[];
     /** Audio sourcing is stated by `audioSourceKinds`, not by a feature flag. */
     clipAudio: CapabilityDecision;
-    decision(feature: AuthoringFeature): CapabilityDecision;
+    decision(feature: GeneratedArchitectureFeature): CapabilityDecision;
     authoringState(
-        feature: AuthoringFeature,
+        feature: GeneratedArchitectureFeature,
         persisted: boolean,
     ): AuthoringState;
 }
