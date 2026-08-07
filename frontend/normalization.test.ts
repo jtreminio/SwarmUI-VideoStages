@@ -511,6 +511,17 @@ describe("normalization", () => {
         ).toBe("Incoming");
     });
 
+    // The backend's Compact drops spaces and nothing else, so a tab-bearing spelling stays
+    // unrecognized there. This is the case that separates the two compacting rules.
+    it("leaves a tab inside the legacy drive source alone, as the backend does", () => {
+        expect(
+            normalizeIcLora({
+                lora: "a.safetensors",
+                driveSource: "Stage\tInput",
+            })?.driveSource,
+        ).toBe("Stage\tInput");
+    });
+
     it("preserves explicit LipDub audio data and Incoming source", () => {
         expect(
             normalizeIcLora(

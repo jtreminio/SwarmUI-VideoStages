@@ -3070,16 +3070,16 @@
     const raw = `${value ?? ""}`.trim().toLowerCase();
     return raw === "canny" || raw === "depth" || raw === "normal" ? raw : "none";
   };
+  var INCOMING_LEGACY_COMPACT = compactMediaSource(
+    MEDIA_SOURCE_INCOMING_LEGACY
+  );
   var normalizeIcLoraDriveSource = (value) => {
     const authored = `${value ?? ""}`.trim();
     const compact = compactMediaSource(authored);
     if (!compact || equalsMediaSource(compact, MEDIA_SOURCE_UPLOAD)) {
       return MEDIA_SOURCE_UPLOAD;
     }
-    if (equalsMediaSource(compact, MEDIA_SOURCE_INCOMING) || equalsMediaSource(
-      compact,
-      compactMediaSource(MEDIA_SOURCE_INCOMING_LEGACY)
-    )) {
+    if (equalsMediaSource(compact, MEDIA_SOURCE_INCOMING) || equalsMediaSource(compact, INCOMING_LEGACY_COMPACT)) {
       return MEDIA_SOURCE_INCOMING;
     }
     return canonicalControlNetSource(authored) ?? authored;

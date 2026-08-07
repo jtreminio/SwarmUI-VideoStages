@@ -79,6 +79,11 @@ export const normalizeIcLoraControlType = (
         : "none";
 };
 
+/** The authored value arrives compacted, so the spelling it is matched against must be too. */
+const INCOMING_LEGACY_COMPACT = compactMediaSource(
+    MEDIA_SOURCE_INCOMING_LEGACY,
+);
+
 /** Mirrors IcLoraPlanCompiler.NormalizeDriveSource. */
 const normalizeIcLoraDriveSource = (value: unknown): string => {
     const authored = `${value ?? ""}`.trim();
@@ -88,10 +93,7 @@ const normalizeIcLoraDriveSource = (value: unknown): string => {
     }
     if (
         equalsMediaSource(compact, MEDIA_SOURCE_INCOMING) ||
-        equalsMediaSource(
-            compact,
-            compactMediaSource(MEDIA_SOURCE_INCOMING_LEGACY),
-        )
+        equalsMediaSource(compact, INCOMING_LEGACY_COMPACT)
     ) {
         return MEDIA_SOURCE_INCOMING;
     }
