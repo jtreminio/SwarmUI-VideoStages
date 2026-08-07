@@ -928,6 +928,40 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
+    /// <summary>The control for the identity assertion above: scope the same entry to stage 0 and
+    /// the second sampler must stop naming the reference node.</summary>
+    [Fact]
+    public async Task Lipdub_scoped_to_stage_zero_leaves_the_later_stage_alone()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        fixture.InstallModel("LoRA", "UnitTest_IcLoraLipDub.safetensors");
+
+        JObject entry = MakeIcLora(
+            "UnitTest_IcLoraLipDub",
+            driveMediaData: DriveAudio,
+            driveMediaFileName: "voice.wav");
+        entry["preset"] = "lipdub";
+        entry["driveData"] = $"{IcLoraDriveData.Audio}";
+        entry["stage"] = 0;
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(IcLoraClip(
+            [fixture.Stage(), fixture.Stage()],
+            entry)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        LTXVSetAudioRefTokensNode refTokens = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
+        SwarmKSamplerNode scoped = StageSampler(bridge, 0);
+        SwarmKSamplerNode unscoped = StageSampler(bridge, 1);
+
+        Assert.Same(refTokens, scoped.Positive.Connection?.Node);
+        Assert.NotSame(refTokens, unscoped.Positive.Connection?.Node);
+
+        live.AssertAllLive(refTokens, scoped, unscoped);
+        AssertShippable(bridge, workflow, live);
+    }
+
     [Fact]
     public async Task Lipdub_drive_audio_stays_separate_from_the_clip_base_audio_upload()
     {
