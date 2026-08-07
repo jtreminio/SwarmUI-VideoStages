@@ -72,7 +72,8 @@ internal static class ArchitectureFeatureVocabulary
         }
         Line("} as const;");
         Line();
-        Line("export type GeneratedArchitectureFeature = keyof typeof ARCHITECTURE_FEATURE_LABELS;");
+        Line("export type GeneratedArchitectureFeature =");
+        Line("    keyof typeof ARCHITECTURE_FEATURE_LABELS;");
 
         return result.ToString();
     }

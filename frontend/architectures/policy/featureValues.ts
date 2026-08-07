@@ -3,8 +3,10 @@ import {
     AUDIO_SOURCE_NATIVE,
     isAllowedAudioSource,
 } from "../../audioSource";
-import type { GeneratedArchitectureFeature } from "../generatedFeatures";
-import { ARCHITECTURE_FEATURE_LABELS } from "../generatedFeatures";
+import {
+    ARCHITECTURE_FEATURE_LABELS,
+    type GeneratedArchitectureFeature,
+} from "../generatedFeatures";
 import type { ArchitectureCapabilities } from "../types";
 import type { ClipCapabilityView } from "./types";
 

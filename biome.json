@@ -13,8 +13,7 @@
             "*.json",
             "*.cjs",
             "*.mjs",
-            "!package-lock.json",
-            "!frontend/architectures/generatedFeatures.ts"
+            "!package-lock.json"
         ]
     },
     "formatter": {
