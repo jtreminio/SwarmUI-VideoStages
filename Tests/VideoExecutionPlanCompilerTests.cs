@@ -565,12 +565,15 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_ValidContinue_OnlyMarksItsTargetClipAsUsingContinuity()
+    public void Compile_ValidContinue_KeepsTheJoinAndItsContinuityWindow()
     {
         ClipSpec first = GeneratedClip(0, Stage(10)) with { BoundaryOut = Constants.BoundaryOutContinue };
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, first, GeneratedClip(1, Stage(11))));
 
         Assert.Equal(BoundaryJoinType.Continue, plan.Boundaries[0].EffectiveJoin);
+        Assert.Equal(BoundaryFallbackReason.None, plan.Boundaries[0].Fallback);
+        // The architecture's default 8-frame overlap plus the shared boundary frame.
+        Assert.Equal(9, plan.Boundaries[0].ContinuityWindowFrames);
     }
 
     [Fact]
