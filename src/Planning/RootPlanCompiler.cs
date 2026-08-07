@@ -2,6 +2,23 @@ using VideoStages.Authoring;
 
 namespace VideoStages.Planning;
 
+/// <summary>
+/// The narrow bit of host state required to plan root ownership. It holds only immutable facts;
+/// runtime media and graph nodes remain outside the plan compiler.
+/// </summary>
+internal sealed record RootEnvironment(
+    HostRootKind HostKind,
+    bool CanInterceptHostCore = false)
+{
+    internal static HostRootKind HostKindFor(TimelineSpec spec) =>
+        spec.IsTextToVideo ? HostRootKind.TextToVideo : HostRootKind.ImageToVideo;
+
+    internal static RootEnvironment FromSpec(
+        TimelineSpec spec,
+        bool canInterceptHostCore = false) =>
+        new(HostKindFor(spec), canInterceptHostCore);
+}
+
 /// <summary>Plans ownership of the host root independently from clip and graph execution.</summary>
 internal static class RootPlanCompiler
 {

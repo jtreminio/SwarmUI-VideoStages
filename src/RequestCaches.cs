@@ -76,9 +76,7 @@ internal static class RequestCaches
                 g.UserInput.SourceSession);
 
         bool canInterceptHostCore = RootHostWorkflowFacts.CanInterceptHostCore(g, spec);
-        RootEnvironment rootEnvironment = new(
-            spec.IsTextToVideo ? HostRootKind.TextToVideo : HostRootKind.ImageToVideo,
-            CanInterceptHostCore: canInterceptHostCore);
+        RootEnvironment rootEnvironment = RootEnvironment.FromSpec(spec, canInterceptHostCore);
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
             rootEnvironment,

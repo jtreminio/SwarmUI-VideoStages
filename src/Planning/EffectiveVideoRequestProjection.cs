@@ -17,15 +17,14 @@ internal static class EffectiveVideoRequestProjection
     internal static EffectiveVideoRequest Project(
         TimelineSpec authored,
         ArchitecturePlanningResult architecturePlanning) =>
-        Project(authored, RootEnvironment.FromSpec(authored), architecturePlanning);
+        Project(authored, RootEnvironment.HostKindFor(authored), architecturePlanning);
 
     internal static EffectiveVideoRequest Project(
         TimelineSpec authored,
-        RootEnvironment rootEnvironment,
+        HostRootKind hostKind,
         ArchitecturePlanningResult architecturePlanning)
     {
         ArgumentNullException.ThrowIfNull(authored);
-        ArgumentNullException.ThrowIfNull(rootEnvironment);
         ArgumentNullException.ThrowIfNull(architecturePlanning);
 
         ClipSpec[] clips = (authored.Clips ?? []).ToArray();
@@ -34,7 +33,7 @@ internal static class EffectiveVideoRequestProjection
             clip => clip.InitVideo is null
                 && clip.Stages is { Count: > 0 });
         bool rootCanForceTextToVideoGeneration =
-            rootEnvironment.HostKind == HostRootKind.TextToVideo;
+            hostKind == HostRootKind.TextToVideo;
         List<PlanDiagnostic> diagnostics = [];
         for (int timelineIndex = 0; timelineIndex < clips.Length; timelineIndex++)
         {

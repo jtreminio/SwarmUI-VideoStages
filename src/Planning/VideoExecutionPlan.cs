@@ -46,18 +46,6 @@ internal enum HostRootKind
     TextToVideo,
 }
 
-/// <summary>
-/// The narrow bit of host state required to plan root ownership. It holds only immutable facts;
-/// runtime media and graph nodes remain outside the plan compiler.
-/// </summary>
-internal sealed record RootEnvironment(
-    HostRootKind HostKind,
-    bool CanInterceptHostCore = false)
-{
-    public static RootEnvironment FromSpec(TimelineSpec spec) => new(
-        spec.IsTextToVideo ? HostRootKind.TextToVideo : HostRootKind.ImageToVideo);
-}
-
 internal sealed record ClipPlan(
     int ClipId,
     int? Frames,

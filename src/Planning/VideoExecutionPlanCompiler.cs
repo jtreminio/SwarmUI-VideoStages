@@ -24,7 +24,7 @@ internal static class VideoExecutionPlanCompiler
         EffectiveVideoRequest request =
             EffectiveVideoRequestProjection.Project(
                 spec,
-                rootEnvironment,
+                rootEnvironment.HostKind,
                 architecturePlanning);
         spec = request.Spec;
         List<PlanDiagnostic> diagnostics =
