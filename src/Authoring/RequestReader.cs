@@ -166,7 +166,7 @@ internal static class RequestReader
 
         IReadOnlyList<IcLoraSpec> icLoras = Loras.ReadIc(clipObject, context.Warn);
         List<JObject> rawStages = DocumentJson.GetObjectArray(clipObject, "stages");
-        IReadOnlyList<FrameRefSpec> references = FrameReferences.Read(
+        IReadOnlyList<FrameRefSpec> frameRefs = FrameReferences.Read(
             clipObject,
             clipIndex,
             context.Warn);
@@ -176,7 +176,7 @@ internal static class RequestReader
             rawStages,
             clipIndex,
             firstStageId,
-            references.Count,
+            frameRefs.Count,
             initVideo is not null,
             context);
         ApplyRetake(stages, clipObject, clipIndex, duration, initVideo is not null, context);
@@ -192,7 +192,7 @@ internal static class RequestReader
             ReuseAudio: reuseAudio,
             UploadedAudio: DocumentJson.GetEmbeddedUpload(
                 clipObject, UploadContainers.ClipAudio),
-            FrameRefs: references,
+            FrameRefs: frameRefs,
             Stages: stages,
             Loras: Loras.ReadNormal(clipObject, context.Warn),
             PromptWindows: SortWindows(context.Directives.ClipWindows.GetValueOrDefault(clipIndex)),
@@ -240,7 +240,7 @@ internal static class RequestReader
         IReadOnlyList<JObject> rawStages,
         int clipIndex,
         int firstStageId,
-        int referenceCount,
+        int frameRefCount,
         bool initVideoClip,
         ClipReadContext context)
     {
@@ -259,7 +259,7 @@ internal static class RequestReader
                 rawStageIndex: stageIndex,
                 clipStageIndex: stages.Count,
                 defaults: context.StageDefaults,
-                frameRefCount: referenceCount,
+                frameRefCount: frameRefCount,
                 isTextToVideoRootWorkflow: context.IsTextToVideoRootWorkflow,
                 initVideoClip: initVideoClip,
                 warn: context.Warn);
