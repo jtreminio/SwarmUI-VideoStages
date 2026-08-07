@@ -4,6 +4,7 @@ import {
     testArchitectureCatalog,
 } from "./__test_helpers__/architectureFixtures";
 import {
+    icLoraFixture,
     minimalClip,
     minimalRef,
     minimalStage,
@@ -44,18 +45,28 @@ describe("backend-aligned authoring diagnostics", () => {
         ).toEqual([]);
     });
 
-    it.each([
-        { clipLengthFromAudio: true, clipLengthFromControlNet: false },
-        { clipLengthFromAudio: false, clipLengthFromControlNet: true },
-    ])("accepts prompt relay with a dynamic duration owner", (lengthFlags) => {
+    it.each<Partial<Clip>>([
+        {
+            clipLengthFromAudio: true,
+            audioSource: "Upload",
+            uploadedAudio: {
+                data: "data:audio/wav;base64,AA==",
+                fileName: "voice.wav",
+            },
+        },
+        {
+            clipLengthFromControlNet: true,
+            icLoras: [icLoraFixture({ driveSource: "ControlNet 3" })],
+        },
+    ])("accepts prompt relay with a dynamic duration owner", (lengthOwner) => {
         expect(
             codes([
                 minimalClip({
-                    ...lengthFlags,
+                    ...lengthOwner,
                     promptWindows: [{ prompt: "move", start: 0, duration: 1 }],
                 }),
             ]),
-        ).not.toContain("prompt-relay-dynamic-length-unsupported");
+        ).toEqual([]);
     });
 
     it("evaluates the advertised retake source rule", () => {
