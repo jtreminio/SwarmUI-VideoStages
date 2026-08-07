@@ -53,7 +53,7 @@ If `./run-tests` fails with “No such file or directory”, you are in the wron
 
 ## Worktrees
 
-Provision one with `scripts/worktree add <name>`, tear it down with `scripts/worktree rm <name>`. Never `git worktree add` by hand: the worktree has to sit at `src/Extensions/<dir>` for the project imports to resolve, and it needs `node_modules` plus a `Directory.Build.rsp` that neither git nor `npm` will put there — without them `./run-tests` cannot run at all.
+Provision one with `scripts/worktree add <name>`, tear it down with `scripts/worktree rm <name>`. `<name>` is the suffix only — letters, digits and dashes — and always lands at `SwarmUI-VideoStages-<name>` next to the main checkout. Both subcommands only run from the main checkout — if you are working inside a worktree, ask whoever provisioned it to add or remove one for you. Never `git worktree add` by hand: the worktree has to sit at `src/Extensions/<dir>` for the project imports to resolve, and it needs `node_modules` plus a `Directory.Build.rsp` that neither git nor `npm` will put there — without them `./run-tests` cannot run at all.
 
 # SwarmUI core is king
 

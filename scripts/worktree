@@ -2,30 +2,76 @@
 # Provision or tear down an agent worktree that can run `./run-tests`.
 set -euo pipefail
 
-MAIN="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Hard-coded so the script can only ever touch this extension: every path it creates or
+# deletes is "<extensions>/SwarmUI-VideoStages-<name>", never a sibling extension and
+# never a worktree of another repo.
+REPO="SwarmUI-VideoStages"
 ARTIFACTS_ROOT="/tmp/swarmui-msbuild"
 
+die() { echo "$*" >&2; exit 1; }
+
+# The main checkout, not wherever this copy of the script lives — worktrees are always
+# siblings of it, never nested. `git worktree list` always prints the main worktree first.
+# (read whole, then slice: piping into `head` would SIGPIPE git and trip `pipefail`)
+MAIN="$(git -C "$(dirname "${BASH_SOURCE[0]}")" worktree list --porcelain)"
+MAIN="${MAIN%%$'\n'*}"
+MAIN="${MAIN#worktree }"
+[ "$(basename "$MAIN")" = "$REPO" ] || die "not a $REPO checkout: $MAIN"
+EXTENSIONS="$(dirname "$MAIN")"
+
 usage() {
-    cat <<'EOF'
+    cat <<EOF
 Usage:
-  scripts/worktree add <name> [start-point]   provision ../SwarmUI-VideoStages-<name>
+  scripts/worktree add <name> [start-point]   provision $EXTENSIONS/$REPO-<name>
   scripts/worktree rm  <name>                 remove it and its build output
   scripts/worktree ls                         list worktrees of this repo
 
-`add` checks out branch <name> if it exists, otherwise creates it from
+<name> is the suffix only: letters, digits and dashes, not starting with a dash.
+\`add\` and \`rm\` only run from $MAIN itself, never from inside a worktree.
+
+\`add\` checks out branch <name> if it exists, otherwise creates it from
 [start-point] (default HEAD).
 EOF
+}
+
+# Rejects path traversal, globs, whitespace and anything git would read as an option. Every
+# other use of \$name — path, branch, artifacts dir — trusts this check and nothing else.
+check_name() {
+    local name="${1-}"
+    [ -n "$name" ] || die "name required"
+    [ "${#name}" -le 40 ] || die "name too long (40 max): $name"
+    case "$name" in
+        -*) die "name may not start with a dash: $name" ;;
+        *[!A-Za-z0-9-]*) die "name may only contain A-Za-z0-9 and dashes: $name" ;;
+    esac
+}
+
+# Provisioning and teardown belong to whoever is orchestrating from the main checkout: an
+# agent standing in a worktree must not be able to spawn more or delete a sibling's work.
+# `--show-toplevel` names the worktree the caller is actually in, so this also refuses the
+# worktrees that live *under* $MAIN (.claude/worktrees/*), which a path prefix would miss.
+require_main_checkout() {
+    local top
+    top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+    [ "$top" = "$MAIN" ] || die "run '$1' from the main checkout $MAIN — cwd is ${top:-$PWD}"
 }
 
 # The worktree must land at src/Extensions/<dir>. The csproj imports
 # ../../SwarmUI.extension.props, and core's SwarmUI.csproj compiles src/**/*.cs with
 # only Extensions/** removed — anywhere else under src/ and the worktree's own
 # sources get swept into core's build.
-worktree_path() { echo "$MAIN-$1"; }
+worktree_path() { echo "$EXTENSIONS/$REPO-$1"; }
 artifacts_path() { echo "$ARTIFACTS_ROOT/wt-$1"; }
 
 cmd_add() {
-    local name="${1:?name required}" start="${2:-HEAD}"
+    require_main_checkout add
+    [ $# -le 2 ] || die "add takes only <name> [start-point]"
+    local name="${1-}" start="${2:-HEAD}"
+    check_name "$name"
+    case "$start" in -*) die "start-point may not start with a dash: $start" ;; esac
+    git -C "$MAIN" rev-parse --verify --quiet "$start^{commit}" >/dev/null \
+        || die "unknown start-point: $start"
+
     local path artifacts
     path="$(worktree_path "$name")"
     artifacts="$(artifacts_path "$name")"
@@ -74,12 +120,19 @@ EOF
 }
 
 cmd_rm() {
-    local name="${1:?name required}" path
-    shift
+    require_main_checkout rm
+    [ $# -le 1 ] || die "rm takes only <name>"
+    local name="${1-}" path
+    check_name "$name"
     path="$(worktree_path "$name")"
+    # Only ever tear down a worktree git already tracks for this repo, so a mistyped or
+    # stale name deletes nothing. Deliberately no --force passthrough: anything left dirty
+    # is the agent's own unharvested work.
+    grep -qxF "worktree $path" <<<"$(git -C "$MAIN" worktree list --porcelain)" \
+        || die "not a worktree of $MAIN: $path"
+
     rm -f "$path/node_modules" "$path/nonversioned" "$path/Directory.Build.rsp"
-    # Deliberately not --force: anything left dirty is the agent's own unharvested work.
-    git -C "$MAIN" worktree remove "$path" "$@"
+    git -C "$MAIN" worktree remove "$path"
     rm -rf "$(artifacts_path "$name")"
     echo "removed $path"
 }
