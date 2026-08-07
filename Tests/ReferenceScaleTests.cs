@@ -15,7 +15,9 @@ public class ReferenceScaleTests
     [InlineData(-1, 1)]
     [InlineData(0.75, 1)]
     [InlineData(2, 1)]
-    public void Unrecognized_scale_falls_back_to_full(double authored, double expected) =>
+    public void Normalize_keeps_the_offered_factors_and_falls_back_to_full(
+        double authored,
+        double expected) =>
         Assert.Equal(expected, ReferenceScale.Normalize(authored));
 
     [Fact]

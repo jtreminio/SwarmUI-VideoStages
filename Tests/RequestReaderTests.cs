@@ -1115,12 +1115,8 @@ public class RequestReaderTests
 
     [Theory]
     [InlineData(0.5, 0.5)]
-    [InlineData(0.25, 0.25)]
-    [InlineData(1.0, 1.0)]
-    // Anything outside the authored vocabulary would resample to a size nobody picked.
     [InlineData(0.7, 1.0)]
-    [InlineData(-1.0, 1.0)]
-    public void ReadClips_ClipReference_MediaScale_KeepsOnlyTheOfferedFactors(
+    public void ReadClips_ClipReference_MediaScale_IsNormalized(
         double authored,
         double expected)
     {
@@ -1444,7 +1440,6 @@ public class RequestReaderTests
     }
 
     [Theory]
-    [InlineData(0.25, 0.25)]
     [InlineData(0.5, 0.5)]
     [InlineData(0.75, 1)]
     public void ReadClips_BoundaryReferenceSettings_NormalizeAndPersist(
