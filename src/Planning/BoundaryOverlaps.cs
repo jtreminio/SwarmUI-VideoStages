@@ -214,7 +214,7 @@ internal static class BoundaryOverlaps
         }
     }
 
-    internal static BoundaryBudgetResolution DegradeAllToCuts(
+    private static BoundaryBudgetResolution DegradeAllToCuts(
         IReadOnlyList<BoundaryPlan> boundaries,
         string reason,
         BoundaryFallbackReason fallback = BoundaryFallbackReason.None)

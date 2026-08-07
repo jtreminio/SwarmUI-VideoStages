@@ -74,16 +74,12 @@ internal static class VideoExecutionPlanCompiler
         int firstStageOrdinal = 0;
         for (int i = 0; i < activeClips.Count; i++)
         {
-            bool architectureResolutionBlocked =
-                architecturePlanning.Diagnostics.Any(diagnostic =>
-                    diagnostic.Severity == PlanDiagnosticSeverity.Error
-                    && diagnostic.ClipId == activeClips[i].Id);
             ClipArchitectureAssignment assignment =
                 architecturePlanning.Clips.GetValueOrDefault(activeClips[i].Id);
             ArchitectureEntryMode entryMode = ResolveEntryMode(spec, activeClips[i]);
             ArchitectureClipCompilation acceptedArchitectureCompilation = null;
             if (assignment is not null
-                && !architectureResolutionBlocked)
+                && !architecturePlanning.IsBlocked(activeClips[i].Id))
             {
                 IReadOnlyList<PlanDiagnostic> capabilityDiagnostics =
                     ArchitectureCapabilityValidator.Validate(

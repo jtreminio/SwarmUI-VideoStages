@@ -46,10 +46,7 @@ internal static class EffectiveVideoRequestProjection
                 continue;
             }
             WarnAboutStaleIdentityHints(clip, assignment, diagnostics);
-            bool architectureResolutionBlocked = architecturePlanning.Diagnostics.Any(diagnostic =>
-                diagnostic.Severity == PlanDiagnosticSeverity.Error
-                && diagnostic.ClipId == clip.Id);
-            if (architectureResolutionBlocked)
+            if (architecturePlanning.IsBlocked(clip.Id))
             {
                 continue;
             }

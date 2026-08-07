@@ -17,6 +17,9 @@ internal sealed record ArchitecturePlanningResult(
 {
     internal bool HasErrors => Diagnostics.Any(
         diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+
+    internal bool IsBlocked(int clipId) => Diagnostics.Any(diagnostic =>
+        diagnostic.Severity == PlanDiagnosticSeverity.Error && diagnostic.ClipId == clipId);
 }
 
 internal static class ArchitecturePlanResolver
