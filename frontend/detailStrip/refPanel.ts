@@ -18,12 +18,7 @@ import {
 } from "../imageSource";
 import { getReferenceFrameMax } from "../normalizationStage";
 import { setSelection } from "../selection";
-import {
-    type Clip,
-    REF_SOURCE_UPLOAD,
-    type TimelineSelection,
-    type VideoStagesConfig,
-} from "../types";
+import { type Clip, REF_SOURCE_UPLOAD } from "../types";
 import type { DetailStripContext } from "./context";
 
 /**
@@ -247,18 +242,4 @@ export const buildRefSection = (
         return fields;
     };
     return buildSection(buildEditor);
-};
-
-/** Standalone wrapper retained for focused panel tests and integrations. */
-export const buildRefBody = (
-    ctx: DetailStripContext,
-    sel: Extract<TimelineSelection, { kind: "ref" }>,
-    state: VideoStagesConfig,
-): HTMLElement => {
-    const body = document.createElement("div");
-    body.className = "vst-detail-body";
-    body.appendChild(
-        buildRefSection(ctx, sel.clipIdx, sel.refIdx, state.clips, state.fps),
-    );
-    return body;
 };

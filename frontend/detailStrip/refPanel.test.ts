@@ -20,9 +20,9 @@ import {
     getState,
 } from "../persistence/repository";
 import type { DetailStripContext } from "./context";
-import { buildRefBody } from "./refPanel";
+import { buildRefSection } from "./refPanel";
 
-describe("buildRefBody", () => {
+describe("buildRefSection", () => {
     beforeEach(() => {
         __resetPersistenceForTests();
         document.body.innerHTML = "";
@@ -51,13 +51,20 @@ describe("buildRefBody", () => {
         catalog.entries[0].enhancements = {
             referencePositions: ["any"],
         };
-        const body = buildRefBody(
-            {
-                authoring: () => testAuthoringTransactionSnapshot(catalog),
-                buildClampedNumber: () => document.createElement("input"),
-            } as unknown as DetailStripContext,
-            { kind: "ref", clipIdx: 0, refIdx: 0 },
-            { ...getState(), clips: getClips() },
+        const body = document.createElement("div");
+        body.className = "vst-detail-body";
+        const state = { ...getState(), clips: getClips() };
+        body.appendChild(
+            buildRefSection(
+                {
+                    authoring: () => testAuthoringTransactionSnapshot(catalog),
+                    buildClampedNumber: () => document.createElement("input"),
+                } as unknown as DetailStripContext,
+                0,
+                0,
+                state.clips,
+                state.fps,
+            ),
         );
         const field = Array.from(
             body.querySelectorAll<HTMLElement>(".vst-detail-field"),
@@ -101,13 +108,20 @@ describe("buildRefBody", () => {
             ],
         });
 
-        const body = buildRefBody(
-            {
-                authoring: () => testAuthoringTransactionSnapshot(catalog),
-                buildClampedNumber: () => document.createElement("input"),
-            } as unknown as DetailStripContext,
-            { kind: "ref", clipIdx: 0, refIdx: 0 },
-            { ...getState(), clips: getClips() },
+        const body = document.createElement("div");
+        body.className = "vst-detail-body";
+        const state = { ...getState(), clips: getClips() };
+        body.appendChild(
+            buildRefSection(
+                {
+                    authoring: () => testAuthoringTransactionSnapshot(catalog),
+                    buildClampedNumber: () => document.createElement("input"),
+                } as unknown as DetailStripContext,
+                0,
+                0,
+                state.clips,
+                state.fps,
+            ),
         );
         const frame = body.querySelector<HTMLInputElement>(
             '[data-vst-focus-key="ref-0-frame"]',
@@ -153,13 +167,20 @@ describe("buildRefBody", () => {
             ],
         });
 
-        const body = buildRefBody(
-            {
-                authoring: () => testAuthoringTransactionSnapshot(catalog),
-                buildClampedNumber: () => document.createElement("input"),
-            } as unknown as DetailStripContext,
-            { kind: "ref", clipIdx: 0, refIdx: 0 },
-            { ...getState(), clips: getClips() },
+        const body = document.createElement("div");
+        body.className = "vst-detail-body";
+        const state = { ...getState(), clips: getClips() };
+        body.appendChild(
+            buildRefSection(
+                {
+                    authoring: () => testAuthoringTransactionSnapshot(catalog),
+                    buildClampedNumber: () => document.createElement("input"),
+                } as unknown as DetailStripContext,
+                0,
+                0,
+                state.clips,
+                state.fps,
+            ),
         );
         const fromEnd = Array.from(
             body.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
