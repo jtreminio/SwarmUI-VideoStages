@@ -24,7 +24,7 @@ public class LtxPostVideoChainComponentsTests
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
 
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
 
         Assert.NotNull(capture);
         Assert.Equal("5", capture.VideoDecodeNodeId);
@@ -40,7 +40,7 @@ public class LtxPostVideoChainComponentsTests
         generator.CurrentMedia = Video(generator, "5");
         JObject before = (JObject)workflow.DeepClone();
 
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
 
         Assert.Null(capture);
         Assert.True(JToken.DeepEquals(before, workflow));
@@ -52,7 +52,7 @@ public class LtxPostVideoChainComponentsTests
         JObject workflow = BuildLtxWorkflow();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
         Assert.NotNull(capture);
 
         WGNodeData result = capture.CreateStageInput();
@@ -66,7 +66,7 @@ public class LtxPostVideoChainComponentsTests
         Assert.NotNull(result.AttachedAudio);
         Assert.Equal(WGNodeData.DT_LATENT_AUDIO, result.AttachedAudio.DataType);
         Assert.Equal(new JArray("4", 1), result.AttachedAudio.Path);
-        Assert.Null(typeof(LtxPostVideoChainCapture).Assembly.GetType(
+        Assert.Null(typeof(LtxPostVideoChain).Assembly.GetType(
             "VideoStages.Architectures.Ltx2.LtxStageInputArtifactFactory"));
     }
 
@@ -129,7 +129,7 @@ public class LtxPostVideoChainComponentsTests
         JObject workflow = BuildLtxWorkflow();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
         generator.CurrentMedia = Latent(generator, "missing");
         JObject before = (JObject)workflow.DeepClone();
 
@@ -144,7 +144,7 @@ public class LtxPostVideoChainComponentsTests
         JObject workflow = BuildLtxWorkflow();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
         AddStageOutput(workflow);
         generator.CurrentMedia = Latent(generator, "50");
         JObject before = (JObject)workflow.DeepClone();
@@ -160,7 +160,7 @@ public class LtxPostVideoChainComponentsTests
         JObject workflow = BuildLtxWorkflow();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
         workflow.Remove("5");
         AddStageOutput(workflow);
         generator.CurrentMedia = Latent(generator, "50");
@@ -177,7 +177,7 @@ public class LtxPostVideoChainComponentsTests
         JObject workflow = BuildLtxWorkflow();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
         workflow.Remove("2");
         AddStageOutput(workflow);
         generator.CurrentMedia = Latent(generator, "50");
@@ -199,7 +199,7 @@ public class LtxPostVideoChainComponentsTests
         JObject workflow = BuildLtxWorkflow();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
         JToken originalVideoInput = workflow["5"]["inputs"]["samples"].DeepClone();
         JToken originalAudioInput = workflow["6"]["inputs"]["samples"].DeepClone();
         AddStageOutput(workflow);
@@ -233,7 +233,7 @@ public class LtxPostVideoChainComponentsTests
             generator,
             WGNodeData.DT_AUDIOVAE,
             null);
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
         AddStageOutput(workflow);
         generator.CurrentMedia = Latent(generator, "50");
 
@@ -269,7 +269,7 @@ public class LtxPostVideoChainComponentsTests
         };
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "8");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
         AddStageOutput(workflow);
         generator.CurrentMedia = Latent(generator, "50");
 
@@ -286,7 +286,7 @@ public class LtxPostVideoChainComponentsTests
         JObject workflow = BuildLtxWorkflow();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
         AddStageOutput(workflow);
         generator.CurrentMedia = Latent(generator, "50");
         WGNodeData vae = Vae(generator, "1");

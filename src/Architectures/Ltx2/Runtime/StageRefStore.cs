@@ -75,7 +75,7 @@ internal class StageRefStore(WorkflowGenerator g)
     {
         WGNodeData referenceMedia = g.CurrentMedia;
         WGNodeData referenceVae = g.CurrentVae;
-        LtxPostVideoChainCapture postVideoChain = LtxPostVideoChainCapture.TryCapture(g);
+        LtxPostVideoChain postVideoChain = LtxPostVideoChain.TryCapture(g);
         if (postVideoChain is not null)
         {
             referenceMedia = postVideoChain.CreateStageInput();

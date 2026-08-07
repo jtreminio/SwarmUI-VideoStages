@@ -28,7 +28,7 @@ internal sealed class LtxStageLatentBuilder
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageFrame stageFrame,
         WGNodeData sourceMedia,
-        LtxPostVideoChainCapture postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         StagePlan stage = stageFrame.Stage;
         Ltx2StagePayload payload = stage.RequireLtx2Payload();

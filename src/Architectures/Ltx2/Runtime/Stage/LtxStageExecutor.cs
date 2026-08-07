@@ -44,7 +44,7 @@ internal sealed class LtxStageExecutor
     {
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         WGNodeData sourceMedia = stageFrame.SourceMedia;
-        LtxPostVideoChainCapture postVideoChain = stageFrame.PostVideoChain;
+        LtxPostVideoChain postVideoChain = stageFrame.PostVideoChain;
         bool incomingIcLoraMediaIncludesContinueHandle =
             stageFrame.ClipContext.ContinueHandleMaterialized;
         postVideoChain?.AttachSourceAudio(sourceMedia);
@@ -161,7 +161,7 @@ internal sealed class LtxStageExecutor
         WGNodeData source = stageFrame.ClipContext.IsFirstStage(stageFrame.Stage)
             ? stageFrame.ClipContext.IcLoraEntryIncomingMedia
             : stageFrame.SourceMedia;
-        LtxPostVideoChainCapture postVideoChain = stageFrame.PostVideoChain;
+        LtxPostVideoChain postVideoChain = stageFrame.PostVideoChain;
         if (postVideoChain is null || !postVideoChain.ReferencesOutput(source))
         {
             return source;

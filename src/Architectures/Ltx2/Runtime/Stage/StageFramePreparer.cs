@@ -33,9 +33,9 @@ internal sealed class StageFramePreparer(
         bool takesOverTextToVideoRoot = root.StageTakesOverTextToVideoRoot(
             stage,
             clipContext.PlannedClip);
-        LtxPostVideoChainCapture postVideoChain = takesOverTextToVideoRoot
+        LtxPostVideoChain postVideoChain = takesOverTextToVideoRoot
             ? null
-            : LtxPostVideoChainCapture.TryCapture(g, clipContext, stage);
+            : LtxPostVideoChain.TryCapture(g, clipContext, stage);
         WGNodeData sourceMedia = takesOverTextToVideoRoot
             ? CloneMedia(g.CurrentMedia)
             : upscaleGraphBuilder.Apply(clipContext, stage, sectionId, postVideoChain);

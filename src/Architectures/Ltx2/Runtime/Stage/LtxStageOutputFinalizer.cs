@@ -11,7 +11,7 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
     internal void Complete(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageFrame stageFrame,
-        LtxPostVideoChainCapture postVideoChain,
+        LtxPostVideoChain postVideoChain,
         bool requiresDedicatedOutput)
     {
         // WGNodeData can retain pre-upscale metadata when a sampler replaces only its graph path.

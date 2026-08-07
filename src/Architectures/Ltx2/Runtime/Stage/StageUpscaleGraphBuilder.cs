@@ -11,7 +11,7 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
         ClipContext clipContext,
         StagePlan stage,
         int sectionId,
-        LtxPostVideoChainCapture postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         ArgumentNullException.ThrowIfNull(clipContext);
         ArgumentNullException.ThrowIfNull(stage);
@@ -109,7 +109,7 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
 
     private WGNodeData ResolveSourceMedia(
         WGNodeData source,
-        LtxPostVideoChainCapture postVideoChain,
+        LtxPostVideoChain postVideoChain,
         int width,
         int height)
     {

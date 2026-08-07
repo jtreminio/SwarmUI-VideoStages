@@ -85,7 +85,7 @@ internal class StageRunner
     {
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
         WGNodeData sourceMedia = stageFrame.SourceMedia;
-        LtxPostVideoChainCapture postVideoChain = stageFrame.PostVideoChain;
+        LtxPostVideoChain postVideoChain = stageFrame.PostVideoChain;
         if (!Ltx2ArchitectureModule.IsLtx23VideoModel(genInfo.VideoModel)
             || (sourceMedia?.DataType != WGNodeData.DT_VIDEO
                 && sourceMedia?.DataType != WGNodeData.DT_IMAGE))
@@ -256,7 +256,7 @@ internal class StageRunner
         JArray priorOutputPath,
         StageGuideReferenceKind guideKind,
         bool guideWasExplicit,
-        LtxPostVideoChainCapture postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         if (guideReference?.Media?.Path is not JArray guidePath)
         {
@@ -271,7 +271,7 @@ internal class StageRunner
 
     private WGNodeData ResolveDefaultLocalGuideMedia(
         WGNodeData sourceMedia,
-        LtxPostVideoChainCapture postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         if (postVideoChain is not null
             && _guideMediaResolver.IsLiveCurrentOutputReference(sourceMedia, postVideoChain))
@@ -288,7 +288,7 @@ internal class StageRunner
         WGNodeData sourceMedia,
         StageRefStore.StageRef guideReference,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        LtxPostVideoChainCapture postVideoChain) =>
+        LtxPostVideoChain postVideoChain) =>
         stage.RequireLtx2Payload().Guide.Kind == StageGuideReferenceKind.Generated
         && postVideoChain?.CanReuseCurrentOutputAsStageInput(sourceMedia) == true
         && _guideMediaResolver.IsLiveCurrentOutputReference(guideReference?.Media, postVideoChain)
@@ -301,8 +301,8 @@ internal class StageRunner
         ClipContext clipContext)
     {
         LtxAudioReuseState.PrepareReusableAudio(_generator, clipContext, stage);
-        LtxPostVideoChainCapture postVideoChain =
-            LtxPostVideoChainCapture.TryCapture(_generator, clipContext, stage);
+        LtxPostVideoChain postVideoChain =
+            LtxPostVideoChain.TryCapture(_generator, clipContext, stage);
         _ = _upscaleGraphBuilder.Apply(clipContext, stage, sectionId, postVideoChain);
     }
 

@@ -9,7 +9,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class LtxPostVideoChainCapture
+internal sealed class LtxPostVideoChain
 {
     private readonly WorkflowGenerator generator;
     private readonly LtxAudioReferenceResolver audioReferences;
@@ -27,7 +27,7 @@ internal sealed class LtxPostVideoChainCapture
     public string VideoDecodeNodeId => videoDecodeNodeId;
     public bool HasPostDecodeWrappers { get; }
 
-    private LtxPostVideoChainCapture(
+    private LtxPostVideoChain(
         WorkflowGenerator generator,
         Ltx2ClipAudioReuseState audioReuse,
         WGNodeData currentOutputMedia,
@@ -57,16 +57,16 @@ internal sealed class LtxPostVideoChainCapture
             useReusedAudioLatent);
     }
 
-    public static LtxPostVideoChainCapture TryCapture(WorkflowGenerator generator) =>
+    public static LtxPostVideoChain TryCapture(WorkflowGenerator generator) =>
         TryCaptureCore(generator, audioReuse: null, stage: null);
 
-    public static LtxPostVideoChainCapture TryCapture(
+    public static LtxPostVideoChain TryCapture(
         WorkflowGenerator generator,
         ClipContext clipContext,
         StagePlan stage) =>
         TryCaptureCore(generator, clipContext.AudioReuse, stage);
 
-    private static LtxPostVideoChainCapture TryCaptureCore(
+    private static LtxPostVideoChain TryCaptureCore(
         WorkflowGenerator generator,
         Ltx2ClipAudioReuseState audioReuse,
         StagePlan stage)
@@ -106,7 +106,7 @@ internal sealed class LtxPostVideoChainCapture
             return null;
         }
 
-        LtxPostVideoChainCapture capture = new(
+        LtxPostVideoChain chain = new(
             generator,
             audioReuse,
             CloneMedia(generator, generator.CurrentMedia),
@@ -121,9 +121,9 @@ internal sealed class LtxPostVideoChainCapture
         LtxAudioReuseState.CompletePostVideoChainCapture(
             audioReuse,
             stage,
-            capture.audioLatentPath);
+            chain.audioLatentPath);
 
-        return capture;
+        return chain;
     }
 
     public WGNodeData CreateStageInput()

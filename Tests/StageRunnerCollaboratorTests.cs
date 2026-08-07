@@ -39,7 +39,7 @@ public class StageRunnerCollaboratorTests
             typeof(ClipContext),
             typeof(StagePlan),
             typeof(int),
-            typeof(LtxPostVideoChainCapture));
+            typeof(LtxPostVideoChain));
         Type[] collaboratorTypes =
         [
             typeof(PlannedStagePromptResolver),

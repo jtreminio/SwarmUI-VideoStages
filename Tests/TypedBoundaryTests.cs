@@ -305,7 +305,7 @@ public class TypedBoundaryTests
             }
         };
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow, "1");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
 
         Assert.Null(capture);
     }
@@ -331,7 +331,7 @@ public class TypedBoundaryTests
             }
         };
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow, "2");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
 
         Assert.Null(capture);
     }
@@ -385,7 +385,7 @@ public class TypedBoundaryTests
         };
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(
             workflow, audioVaeNodeId: "2");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
 
         Assert.NotNull(capture);
     }
@@ -408,7 +408,7 @@ public class TypedBoundaryTests
         };
         ((JObject)workflow["7"]!)["inputs"]!["images"] = new JArray("8", 0);
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow, "8");
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
 
         Assert.NotNull(capture);
         Assert.True(capture.HasPostDecodeWrappers);
@@ -420,7 +420,7 @@ public class TypedBoundaryTests
     {
         JObject workflow = BuildLtxWorkflow();
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow, "7");
-        Assert.Null(LtxPostVideoChainCapture.TryCapture(generator));
+        Assert.Null(LtxPostVideoChain.TryCapture(generator));
     }
 
     [Fact]
@@ -430,7 +430,7 @@ public class TypedBoundaryTests
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
 
         var newKSampler = bridge.AddNode(new KSamplerNode());
         generator.CurrentMedia = new WGNodeData(
@@ -458,7 +458,7 @@ public class TypedBoundaryTests
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
 
         var newKSampler = bridge.AddNode(new KSamplerNode());
         generator.CurrentMedia = new WGNodeData(
@@ -483,7 +483,7 @@ public class TypedBoundaryTests
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
 
         var newKSampler = bridge.AddNode(new KSamplerNode());
         generator.CurrentMedia = new WGNodeData(
@@ -631,7 +631,7 @@ public class TypedBoundaryTests
     {
         JObject workflow = BuildLtxWorkflow();
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
-        LtxPostVideoChainCapture capture = LtxPostVideoChainCapture.TryCapture(generator);
+        LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
         Assert.NotNull(capture);
 
         workflow["50"] = new JObject

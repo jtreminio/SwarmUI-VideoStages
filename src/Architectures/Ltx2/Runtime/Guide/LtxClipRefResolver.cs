@@ -17,7 +17,7 @@ internal sealed class LtxClipRefResolver(
         StagePlan stage,
         bool isTextToVideo,
         StageRefStore refStore,
-        LtxPostVideoChainCapture postVideoChain,
+        LtxPostVideoChain postVideoChain,
         WGNodeData sourceMedia,
         int incomingHandleFrames = 0)
     {
@@ -124,7 +124,7 @@ internal sealed class LtxClipRefResolver(
     private WGNodeData ResolveClipRefSourceMedia(
         ImageReferencePlan reference,
         StageRefStore refStore,
-        LtxPostVideoChainCapture postVideoChain)
+        LtxPostVideoChain postVideoChain)
     {
         if (reference.SourceKind == ImageReferenceSourceKind.Upload)
         {
