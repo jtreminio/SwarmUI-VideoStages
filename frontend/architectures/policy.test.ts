@@ -3,6 +3,8 @@ import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
     testSourceOnlyArchitecture,
+    testWanArchitecture,
+    testWanModelEntry,
 } from "../__test_helpers__/architectureFixtures";
 import {
     icLoraFixture,
@@ -39,24 +41,8 @@ const catalog = (): ArchitectureModelCatalog => {
 
 const catalogWithWan = (): ArchitectureModelCatalog => {
     const models = catalog();
-    const ltx = models.architectures.find((entry) => entry.id === "ltx2");
-    if (!ltx) throw new Error("missing LTX architecture");
-    const wan = structuredClone(ltx);
-    wan.id = "wan22";
-    wan.label = "WAN 2.2";
-    wan.capabilities.features = wan.capabilities.features.filter(
-        (capability) => capability !== "icLora",
-    );
-    models.architectures.push(wan);
-    models.entries.push({
-        value: "wan-14b.safetensors",
-        label: "WAN 14B",
-        architectureId: "wan22",
-        modelProfileId: "wan22-i2v-14b",
-        modelClassId: "wan-i2v",
-        compatibilityClassId: "wan-video",
-        entryModes: ["image-to-video", "init-video"],
-    });
+    models.architectures.push(testWanArchitecture());
+    models.entries.push(testWanModelEntry());
     return models;
 };
 
@@ -528,7 +514,7 @@ describe("catalog-backed authoring policy", () => {
 
         expect(clipView).toMatchObject({
             architectureId: "wan22",
-            architectureLabel: "WAN 2.2",
+            architectureLabel: "WAN Video",
             known: true,
         });
         expect(clipView.decision("icLora").supported).toBe(false);

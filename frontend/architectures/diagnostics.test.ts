@@ -3,6 +3,8 @@ import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
     testSourceOnlyArchitecture,
+    testWanArchitecture,
+    testWanModelEntry,
 } from "../__test_helpers__/architectureFixtures";
 import {
     icLoraFixture,
@@ -39,30 +41,8 @@ const combinedCatalog = (): ArchitectureModelCatalog => {
 
 const wanCatalog = (): ArchitectureModelCatalog => {
     const models = combinedCatalog();
-    const template = models.architectures.find((entry) => entry.id === "ltx2");
-    if (!template) throw new Error("missing architecture template");
-    const wan = structuredClone(template);
-    wan.id = "wan22";
-    wan.label = "WAN 2.2";
-    wan.capabilities.features = wan.capabilities.features.filter(
-        (capability) =>
-            capability !== "icLora" &&
-            capability !== "promptRelay" &&
-            capability !== "referenceFraming" &&
-            capability !== "audioReuse" &&
-            capability !== "latentUpscale" &&
-            capability !== "latentModelUpscale",
-    );
-    models.architectures.push(wan);
-    models.entries.push({
-        value: "wan-14b.safetensors",
-        label: "WAN 14B",
-        architectureId: "wan22",
-        modelProfileId: "wan22-i2v-14b",
-        modelClassId: "wan-i2v-14b",
-        compatibilityClassId: "wan-video",
-        entryModes: ["image-to-video", "init-video"],
-    });
+    models.architectures.push(testWanArchitecture());
+    models.entries.push(testWanModelEntry());
     return models;
 };
 
@@ -170,7 +150,7 @@ describe("architecture diagnostics", () => {
     it("warns for safely ignored WAN IC-LoRA and advanced values", () => {
         const clip = minimalClip({
             architectureHint: "wan22",
-            modelProfileId: "wan22-i2v-14b",
+            modelProfileId: "wan-2.2-i2v-14b",
             icLoras: [icLoraFixture()],
             refFraming: "fit",
             promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
@@ -178,7 +158,7 @@ describe("architecture diagnostics", () => {
             stages: [
                 minimalStage({
                     model: "wan-14b.safetensors",
-                    modelProfileId: "wan22-i2v-14b",
+                    modelProfileId: "wan-2.2-i2v-14b",
                     upscale: 2,
                     upscaleMethod: "latentmodel-detail.safetensors",
                 }),
@@ -293,11 +273,11 @@ describe("architecture diagnostics", () => {
     it("keeps an unclassifiable WAN upscale blocking", () => {
         const clip = minimalClip({
             architectureHint: "wan22",
-            modelProfileId: "wan22-i2v-14b",
+            modelProfileId: "wan-2.2-i2v-14b",
             stages: [
                 minimalStage({
                     model: "wan-14b.safetensors",
-                    modelProfileId: "wan22-i2v-14b",
+                    modelProfileId: "wan-2.2-i2v-14b",
                     upscale: 2,
                     upscaleMethod: "future-upscale",
                 }),
@@ -595,14 +575,6 @@ describe("architecture diagnostics", () => {
 
     it("uses actual WAN models for a same-architecture unsupported continue despite stale LTX hints", () => {
         const models = wanCatalog();
-        const wan = models.architectures.find((entry) => entry.id === "wan22");
-        if (!wan) throw new Error("missing WAN architecture");
-        wan.boundaryRules.continue = {
-            support: "unsupported",
-            code: "wan22.boundary.continue.unsupported",
-            reason: "WAN 2.2 only supports cut boundaries.",
-            constraints: null,
-        };
         const staleWanClip = (boundaryOut: Clip["boundaryOut"]) =>
             minimalClip({
                 architectureHint: "ltx2",
@@ -858,6 +830,9 @@ describe("architecture diagnostics", () => {
     });
 
     it("keeps text entry exact when a WAN clip has a frame-1 reference", () => {
+        // Hand-built rather than testWanArchitecture(): the assertion only bites
+        // when the 14B entry withholds text-to-video, and the backend publishes
+        // architecture-level entry modes to every model, so it never does.
         const models = combinedCatalog();
         const template = models.architectures.find(
             (entry) => entry.id === "ltx2",

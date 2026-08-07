@@ -4,6 +4,7 @@ import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
     ArchitectureModelCatalog,
+    ArchitectureModelEntry,
     VideoArchitectureCatalogDto,
     VideoArchitectureId,
 } from "../architectures/types";
@@ -175,6 +176,51 @@ export const testSourceOnlyArchitecture = (): ArchitectureCatalogEntryDto => ({
             constraints: null,
         },
     },
+});
+
+/** Mirrors `WanArchitectureModule.Descriptor`. */
+export const testWanArchitecture = (): ArchitectureCatalogEntryDto => ({
+    id: "wan22",
+    label: "WAN Video",
+    capabilities: testArchitectureCapabilities({
+        features: ["frameReferences"],
+        entryModes: ["text-to-video", "image-to-video", "init-video"],
+        audioSourceKinds: ["Disabled"],
+    }),
+    boundaryRules: {
+        cut: {
+            support: "supported",
+            code: "wan22.boundary.cut",
+            reason: "Decoded WAN Video clips can be joined with a hard cut.",
+            constraints: null,
+        },
+        continue: {
+            support: "unsupported",
+            code: "wan22.boundary.continue.unsupported",
+            reason: "This architecture has no continuity path.",
+            constraints: null,
+        },
+        crossfade: {
+            support: "unsupported",
+            code: "wan22.boundary.crossfade.unsupported",
+            reason: "This architecture has no decoded transition path.",
+            constraints: null,
+        },
+    },
+});
+
+/** The WAN 2.2 I2V 14B model as `ArchitectureCatalogSerializer` publishes it. */
+export const testWanModelEntry = (): ArchitectureModelEntry => ({
+    value: "wan-14b.safetensors",
+    label: "WAN 14B",
+    architectureId: "wan22",
+    modelProfileId: "wan-2.2-i2v-14b",
+    modelClassId: "wan-2_2-image2video-14b",
+    compatibilityClassId: "wan-21-14b",
+    frameGrid: 4,
+    frameGridOrigin: 1,
+    enhancements: { referencePositions: ["first", "last"] },
+    entryModes: ["text-to-video", "image-to-video", "init-video"],
 });
 
 export const fakeArchitectureCatalog = (
