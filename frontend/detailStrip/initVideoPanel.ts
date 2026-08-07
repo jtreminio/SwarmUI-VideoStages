@@ -43,7 +43,7 @@ const applyPickedInitVideo = (
             applyClipDurationResize(
                 target,
                 Math.max(CLIP_DURATION_MIN, target.initVideo.lengthSeconds),
-                () => defaults,
+                defaults,
                 state.fps,
             );
         },
@@ -143,7 +143,7 @@ export const buildInitVideoSection = (
                 CLIP_DURATION_MIN,
                 target.initVideo?.lengthSeconds ?? target.duration,
             ),
-            () => defaults,
+            defaults,
             getTimelineStore().getState().fps,
         );
     };

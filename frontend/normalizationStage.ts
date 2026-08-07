@@ -144,17 +144,14 @@ export const normalizeStageLoras = (
 };
 
 export const buildDefaultStage = (
-    getRootDefaults: () => RootDefaults,
-    getDefaultStageModel: (modelValues: string[]) => string,
+    defaults: RootDefaults,
+    defaultStageModel: string,
     previousStage: Stage | null,
     refCount: number,
     initialLoraWeights: readonly number[] = [],
     initialIcLoraStrengths: readonly number[] = [],
 ): Stage => {
-    const defaults = getRootDefaults();
-    const model = previousStage
-        ? previousStage.model
-        : getDefaultStageModel(defaults.modelValues);
+    const model = previousStage ? previousStage.model : defaultStageModel;
     return {
         skipped: false,
         control: previousStage ? previousStage.control : defaults.control,
@@ -238,7 +235,7 @@ export const removeIcLoraStrengthAt = (clip: Clip, entryIdx: number): void => {
 };
 
 export const getReferenceFrameMax = (
-    getRootDefaults: () => RootDefaults,
+    defaults: RootDefaults,
     clip?: Pick<Clip, "duration"> &
         Partial<
             Pick<
@@ -253,7 +250,6 @@ export const getReferenceFrameMax = (
         >,
     effectiveFps?: number,
 ): number => {
-    const defaults = getRootDefaults();
     const fps =
         typeof effectiveFps === "number" &&
         Number.isFinite(effectiveFps) &&
@@ -280,7 +276,7 @@ export const getReferenceFrameMax = (
  * facts have no safe upper bound: preserve their authored reference positions for later repair.
  */
 export const getKnownReferenceFrameMax = (
-    getRootDefaults: () => RootDefaults,
+    defaults: RootDefaults,
     clip: Pick<Clip, "duration" | "stages"> &
         Partial<
             Pick<
@@ -294,7 +290,6 @@ export const getKnownReferenceFrameMax = (
         >,
     effectiveFps?: number,
 ): number | null => {
-    const defaults = getRootDefaults();
     const resolution = resolveClipFrameGrid(clip, defaults.modelCatalog);
     if (resolution.status !== "resolved") {
         return null;
@@ -315,8 +310,8 @@ export const getKnownReferenceFrameMax = (
 };
 
 export const normalizeStage = (
-    getRootDefaults: () => RootDefaults,
-    getDefaultStageModel: (modelValues: string[]) => string,
+    defaults: RootDefaults,
+    defaultStageModel: string,
     rawStage: Record<string, unknown>,
     previousStage: Stage | null,
     refCount: number,
@@ -325,10 +320,9 @@ export const normalizeStage = (
     clipLoras: readonly ClipLora[] = [],
     clipLoraDefaultWeights: readonly number[] = [],
 ): Stage => {
-    const defaults = getRootDefaults();
     const fallback = buildDefaultStage(
-        getRootDefaults,
-        getDefaultStageModel,
+        defaults,
+        defaultStageModel,
         previousStage,
         refCount,
         clipLoraDefaultWeights,

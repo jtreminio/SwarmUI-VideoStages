@@ -3388,9 +3388,8 @@
     }
     return out;
   };
-  var buildDefaultStage = (getRootDefaults2, getDefaultStageModel2, previousStage, refCount, initialLoraWeights = [], initialIcLoraStrengths = []) => {
-    const defaults = getRootDefaults2();
-    const model = previousStage ? previousStage.model : getDefaultStageModel2(defaults.modelValues);
+  var buildDefaultStage = (defaults, defaultStageModel, previousStage, refCount, initialLoraWeights = [], initialIcLoraStrengths = []) => {
+    const model = previousStage ? previousStage.model : defaultStageModel;
     return {
       skipped: false,
       control: previousStage ? previousStage.control : defaults.control,
@@ -3447,8 +3446,7 @@
       }
     }
   };
-  var getReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
-    const defaults = getRootDefaults2();
+  var getReferenceFrameMax = (defaults, clip, effectiveFps) => {
     const fps = typeof effectiveFps === "number" && Number.isFinite(effectiveFps) && effectiveFps > 0 ? effectiveFps : defaults.fps;
     if (clip) {
       const frameGrid = clip.stages ? resolvedClipFrameGrid(
@@ -3462,8 +3460,7 @@
     }
     return Math.max(REF_FRAME_MIN, defaults.frames);
   };
-  var getKnownReferenceFrameMax = (getRootDefaults2, clip, effectiveFps) => {
-    const defaults = getRootDefaults2();
+  var getKnownReferenceFrameMax = (defaults, clip, effectiveFps) => {
     const resolution = resolveClipFrameGrid(clip, defaults.modelCatalog);
     if (resolution.status !== "resolved") {
       return null;
@@ -3477,11 +3474,10 @@
       })
     );
   };
-  var normalizeStage = (getRootDefaults2, getDefaultStageModel2, rawStage, previousStage, refCount, stageIndexInClip, initVideoClip = false, clipLoras = [], clipLoraDefaultWeights = []) => {
-    const defaults = getRootDefaults2();
+  var normalizeStage = (defaults, defaultStageModel, rawStage, previousStage, refCount, stageIndexInClip, initVideoClip = false, clipLoras = [], clipLoraDefaultWeights = []) => {
     const fallback = buildDefaultStage(
-      getRootDefaults2,
-      getDefaultStageModel2,
+      defaults,
+      defaultStageModel,
       previousStage,
       refCount,
       clipLoraDefaultWeights
@@ -3620,8 +3616,7 @@
     return Number.isFinite(numeric) && numeric > 0 ? numeric : normalizeBoundaryWindow(value, constraints);
   };
   var normalizeReferenceFraming = (value) => value === "stretch" || value === "fit" || value === "fit-green" ? value : "crop";
-  var buildDefaultClip = (getRootDefaults2, getDefaultStageModel2, includeDefaultRef = false, previousClip = null) => {
-    const defaults = getRootDefaults2();
+  var buildDefaultClip = (defaults, defaultStageModel, includeDefaultRef = false, previousClip = null) => {
     const frameRefs = includeDefaultRef ? [buildDefaultRef()] : [];
     const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
     const initialLoraWeights = loras.map(
@@ -3629,8 +3624,8 @@
     );
     const firstStage = {
       ...buildDefaultStage(
-        getRootDefaults2,
-        getDefaultStageModel2,
+        defaults,
+        defaultStageModel,
         previousClip?.stages[0] ?? null,
         frameRefs.length,
         initialLoraWeights
@@ -3677,8 +3672,7 @@
       stages: [firstStage]
     };
   };
-  var normalizeClip = (rawClip, getRootDefaults2, getDefaultStageModel2, effectiveFps) => {
-    const defaults = getRootDefaults2();
+  var normalizeClip = (rawClip, defaults, defaultStageModel, effectiveFps) => {
     const rawAudioSource = text(rawClip.audioSource, AUDIO_SOURCE_NATIVE);
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
     const initVideo = normalizeInitVideo(rawClip.initVideo);
@@ -3728,8 +3722,8 @@
       const previousStage = i > 0 ? stages[i - 1] : null;
       stages.push(
         normalizeStage(
-          getRootDefaults2,
-          getDefaultStageModel2,
+          defaults,
+          defaultStageModel,
           isRecord2(stagesRaw[i]) ? stagesRaw[i] : {},
           previousStage,
           refsRaw.length,
@@ -3744,7 +3738,7 @@
     const retake = normalizeRetake(rawClip.retake, duration);
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const refFrameMax = getKnownReferenceFrameMax(
-      getRootDefaults2,
+      defaults,
       {
         duration,
         stages,
@@ -4226,13 +4220,11 @@
         width: current.width,
         height: current.height
       });
-      const capturedDefaults = () => environment.defaults;
-      const capturedDefaultStageModel = () => environment.defaultStageModel;
       const clips = current.clips.map(
         (entry) => normalizeClip(
           entry,
-          capturedDefaults,
-          capturedDefaultStageModel,
+          environment.defaults,
+          environment.defaultStageModel,
           dims.fps
         )
       );
@@ -11038,22 +11030,18 @@
     const rawFrame = fromEnd ? (effectiveDuration - time) * safeFps2 : time * safeFps2;
     return clamp(Math.round(rawFrame), REF_FRAME_MIN, frameMax);
   };
-  var clampClipRefsToDuration = (clip, getRootDefaults2, effectiveFps) => {
-    const frameMax = getKnownReferenceFrameMax(
-      getRootDefaults2,
-      clip,
-      effectiveFps
-    );
+  var clampClipRefsToDuration = (clip, defaults, effectiveFps) => {
+    const frameMax = getKnownReferenceFrameMax(defaults, clip, effectiveFps);
     for (const ref of clip.frameRefs) {
       ref.frame = frameMax === null ? Math.max(REF_FRAME_MIN, Math.round(ref.frame)) : clamp(ref.frame, REF_FRAME_MIN, frameMax);
     }
   };
-  var applyClipDurationResize = (clip, newDuration, getRootDefaults2, effectiveFps) => {
+  var applyClipDurationResize = (clip, newDuration, defaults, effectiveFps) => {
     if (clip.duration === newDuration) {
       return false;
     }
     clip.duration = newDuration;
-    clampClipRefsToDuration(clip, getRootDefaults2, effectiveFps);
+    clampClipRefsToDuration(clip, defaults, effectiveFps);
     return true;
   };
 
@@ -11075,7 +11063,7 @@
           const target = clips[clipIdx];
           if (target && !lengthDerived2) {
             const defaults = context.authoring().defaults;
-            applyClipDurationResize(target, value, () => defaults);
+            applyClipDurationResize(target, value, defaults);
           }
         });
       }
@@ -11377,7 +11365,7 @@ ${slot}`;
   };
 
   // frontend/detailStrip/clipReferencePanel.ts
-  var claimClipLength = (clip, referenceIdx, getDefaults, fps) => {
+  var claimClipLength = (clip, referenceIdx, defaults, fps) => {
     clip.references.forEach((reference, index) => {
       reference.drivesClipLength = index === referenceIdx;
     });
@@ -11391,7 +11379,7 @@ ${slot}`;
       applyClipDurationResize(
         clip,
         Math.max(CLIP_DURATION_MIN, seconds),
-        getDefaults,
+        defaults,
         fps
       );
     }
@@ -11414,7 +11402,7 @@ ${slot}`;
         claimClipLength(
           clip,
           index,
-          () => ctx.authoring().defaults,
+          ctx.authoring().defaults,
           state.fps
         );
       }
@@ -11680,7 +11668,7 @@ ${slot}`;
                   claimClipLength(
                     target,
                     value ? editorIdx : -1,
-                    () => defaults,
+                    defaults,
                     fps
                   );
                 }
@@ -11755,7 +11743,7 @@ ${slot}`;
       applyClipDurationResize(
         target,
         Math.max(CLIP_DURATION_MIN, target.initVideo.lengthSeconds),
-        () => defaults,
+        defaults,
         state.fps
       );
     },
@@ -11834,7 +11822,7 @@ ${slot}`;
           CLIP_DURATION_MIN,
           target.initVideo?.lengthSeconds ?? target.duration
         ),
-        () => defaults,
+        defaults,
         getTimelineStore().getState().fps
       );
     };
@@ -12053,7 +12041,7 @@ ${slot}`;
         }
         fields.appendChild(preview);
       }
-      const frameMax = getReferenceFrameMax(() => defaults, clip, fps);
+      const frameMax = getReferenceFrameMax(defaults, clip, fps);
       const boundedPositions = endpointPolicy.bounded;
       const supportsFirst = endpointPolicy.supportsFirst;
       const supportsLast = endpointPolicy.supportsLast;
@@ -13881,7 +13869,7 @@ ${slot}`;
         }
         const position = nextAllowedReferencePosition(
           clip.frameRefs,
-          getReferenceFrameMax(() => defaults, clip),
+          getReferenceFrameMax(defaults, clip),
           referenceEndpointPolicy(clip, defaults.modelCatalog).positions
         );
         if (position === null) {
@@ -14146,9 +14134,9 @@ ${slot}`;
           const clipArchitectureId = capabilities.forClip(clip).architectureId;
           const lockedArchitecture = clipArchitectureId === NONE_ARCHITECTURE_ID || clipArchitectureId === "unsupported" ? void 0 : clipArchitectureId;
           const stage = buildDefaultStage(
-            () => defaults,
-            (values) => getDefaultStageModel(
-              values,
+            defaults,
+            getDefaultStageModel(
+              defaults.modelValues,
               lockedArchitecture,
               defaults.modelCatalog
             ),
@@ -14993,7 +14981,7 @@ ${slot}`;
               if (!applyClipDurationResize(
                 clip,
                 newDuration,
-                getRootDefaults,
+                getRootDefaults(),
                 fps
               )) {
                 return null;
@@ -15305,7 +15293,7 @@ ${slot}`;
       supported: canEditReferences(clip, authoring),
       endpoints: referenceEndpoints(clip, authoring),
       frameGrid: resolvedClipFrameGrid(clip, authoring.defaults.modelCatalog),
-      frameMax: getReferenceFrameMax(() => authoring.defaults, clip, fps)
+      frameMax: getReferenceFrameMax(authoring.defaults, clip, fps)
     });
     const sameDragPolicy = (left, right) => left.supported === right.supported && left.frameGrid.frameGrid === right.frameGrid.frameGrid && left.frameGrid.frameGridOrigin === right.frameGrid.frameGridOrigin && left.frameMax === right.frameMax && left.endpoints.positions.length === right.endpoints.positions.length && left.endpoints.positions.every(
       (position, index) => position === right.endpoints.positions[index]
@@ -15337,7 +15325,7 @@ ${slot}`;
             return null;
           }
           const frameMax = getReferenceFrameMax(
-            () => authoring.defaults,
+            authoring.defaults,
             clip,
             fps
           );
@@ -16494,9 +16482,9 @@ ${slot}`;
         }
         clips.push(
           buildDefaultClip(
-            () => defaults,
-            (values) => getDefaultStageModel(
-              values,
+            defaults,
+            getDefaultStageModel(
+              defaults.modelValues,
               void 0,
               defaults.modelCatalog
             ),

@@ -136,7 +136,7 @@ export const buildRefSection = (
             fields.appendChild(preview);
         }
 
-        const frameMax = getReferenceFrameMax(() => defaults, clip, fps);
+        const frameMax = getReferenceFrameMax(defaults, clip, fps);
         const boundedPositions = endpointPolicy.bounded;
         const supportsFirst = endpointPolicy.supportsFirst;
         const supportsLast = endpointPolicy.supportsLast;

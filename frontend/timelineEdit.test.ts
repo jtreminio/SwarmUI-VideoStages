@@ -164,7 +164,7 @@ describe("pxToFrame", () => {
 describe("clampClipRefsToDuration", () => {
     it("clamps ref frames past the new duration's max down to the max", () => {
         const c = clip(1.8, [ref(1000), ref(10), ref(-5)]);
-        clampClipRefsToDuration(c, () => rootDefaults(24));
+        clampClipRefsToDuration(c, rootDefaults(24));
         expect(c.frameRefs[0].frame).toBe(49);
         expect(c.frameRefs[1].frame).toBe(10);
         expect(c.frameRefs[2].frame).toBe(1); // floored to REF_FRAME_MIN
@@ -174,7 +174,7 @@ describe("clampClipRefsToDuration", () => {
 describe("applyClipDurationResize", () => {
     it("sets the duration, clamps frameRefs, and reports a change", () => {
         const c = clip(5, [ref(1000)]);
-        const changed = applyClipDurationResize(c, 1.8, () => rootDefaults(24));
+        const changed = applyClipDurationResize(c, 1.8, rootDefaults(24));
         expect(changed).toBe(true);
         expect(c.duration).toBe(1.8);
         expect(c.frameRefs[0].frame).toBe(49);
@@ -182,7 +182,7 @@ describe("applyClipDurationResize", () => {
 
     it("is a no-op when the duration is unchanged (no write signalled)", () => {
         const c = clip(2, [ref(1000)]);
-        const changed = applyClipDurationResize(c, 2, () => rootDefaults(24));
+        const changed = applyClipDurationResize(c, 2, rootDefaults(24));
         expect(changed).toBe(false);
         // Refs are left untouched on a no-op — the caller skips the write entirely.
         expect(c.frameRefs[0].frame).toBe(1000);

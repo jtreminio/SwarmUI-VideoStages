@@ -40,7 +40,7 @@ import {
     type RootDefaults,
 } from "./types";
 
-const getRootDefaults = (): RootDefaults => ({
+const moduleRootDefaults = (): RootDefaults => ({
     modelCatalog: testArchitectureCatalog(),
     modelValues: ["ltx"],
     modelLabels: ["LTX"],
@@ -81,8 +81,8 @@ const getRootDefaults = (): RootDefaults => ({
     cfgScaleStep: 0.5,
 });
 
-const getDefaultStageModel = (modelValues: string[]): string =>
-    modelValues[0] ?? "";
+const defaultStageModel = (defaults: RootDefaults): string =>
+    defaults.modelValues[0] ?? "";
 
 const minimalStageRaw = {
     model: "ltx",
@@ -116,8 +116,8 @@ describe("normalization", () => {
                 stages: [{ ...minimalStageRaw, model: "removed-model" }],
                 frameRefs: [{ source: REF_SOURCE_BASE, frame: 33 }],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
 
         expect(clip.stages[0].model).toBe("removed-model");
@@ -133,8 +133,8 @@ describe("normalization", () => {
     it("normalizeClip defaults boundaryOut to cut when absent", () => {
         const clip = normalizeClip(
             { stages: [{ model: "ltx" }] },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.boundaryOut).toBe("cut");
         expect(clip.boundaryOutCarryAudio).toBe(false);
@@ -151,8 +151,8 @@ describe("normalization", () => {
         };
         const fresh = normalizeClip(
             { initVideo, stages: [] },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         const invalid = normalizeClip(
             {
@@ -161,8 +161,8 @@ describe("normalization", () => {
                 initVideo,
                 stages: [],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
 
         expect(fresh).toMatchObject({
@@ -184,8 +184,8 @@ describe("normalization", () => {
                 modelProfileId: "host-video",
                 stages: [{ model: "ltx", modelProfileId: "host-video" }],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
 
         expect(clip).toMatchObject({
@@ -204,8 +204,8 @@ describe("normalization", () => {
     ])("normalizeClip normalizes boundaryOut %s -> %s", (raw, expected) => {
         const clip = normalizeClip(
             { stages: [{ model: "ltx" }], boundaryOut: raw },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.boundaryOut).toBe(expected);
     });
@@ -220,8 +220,8 @@ describe("normalization", () => {
     ])("normalizeClip normalizes refFraming %s -> %s", (raw, expected) => {
         const clip = normalizeClip(
             { stages: [{ model: "ltx" }], refFraming: raw },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.refFraming).toBe(expected);
     });
@@ -229,8 +229,8 @@ describe("normalization", () => {
     it("normalizeClip ignores a noncanonical PascalCase boundary key", () => {
         const clip = normalizeClip(
             { stages: [{ model: "ltx" }], BoundaryOut: "continue" },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.boundaryOut).toBe("cut");
     });
@@ -248,8 +248,8 @@ describe("normalization", () => {
         };
         const clip = normalizeClip(
             rawClip,
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.frameRefs).toHaveLength(1);
         expect(clip.stages[0].frameRefStrengths).toEqual([0.3]);
@@ -260,15 +260,15 @@ describe("normalization", () => {
             {
                 stages: [{ model: "ltx", controlNetStrength: 1.5 }, {}],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.stages[0].controlNetStrength).toBe(1);
         expect(clip.stages[1].controlNetStrength).toBe(1);
 
         const defaultClip = buildDefaultClip(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(defaultClip.stages[0].controlNetStrength).toBe(0.8);
 
@@ -276,14 +276,17 @@ describe("normalization", () => {
             {
                 stages: [{}],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(rawDefaultClip.stages[0].controlNetStrength).toBe(0.8);
     });
 
     it("buildDefaultClip copies base settings from a previous clip", () => {
-        const prev = buildDefaultClip(getRootDefaults, getDefaultStageModel);
+        const prev = buildDefaultClip(
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
+        );
         prev.duration = 3;
         prev.skipped = true;
         prev.boundaryOut = "continue";
@@ -297,8 +300,8 @@ describe("normalization", () => {
         prev.stages[0].loraWeights = [0.6];
 
         const clip = buildDefaultClip(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             false,
             prev,
         );
@@ -322,8 +325,8 @@ describe("normalization", () => {
     it("normalizeClip ignores removed single-ControlNet IC-LoRA fields", () => {
         const defaultClip = normalizeClip(
             {},
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(defaultClip.icLoras).toEqual([]);
 
@@ -333,8 +336,8 @@ describe("normalization", () => {
         };
         const controlNetClip = normalizeClip(
             controlNetRaw,
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(controlNetClip.icLoras).toEqual([]);
     });
@@ -342,8 +345,8 @@ describe("normalization", () => {
     it("normalizeClip maps Swarm (None) legacy ControlNet LoRA token to no entries", () => {
         const clip = normalizeClip(
             { controlNetLora: " ( None ) " },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.icLoras).toEqual([]);
     });
@@ -366,8 +369,8 @@ describe("normalization", () => {
                     { lora: "" },
                 ],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.icLoras).toHaveLength(1);
         const entry = clip.icLoras[0];
@@ -388,14 +391,13 @@ describe("normalization", () => {
         const ltx = testArchitectureCatalog();
         const foreign = fakeArchitectureCatalog();
         const defaults = {
-            ...getRootDefaults(),
+            ...moduleRootDefaults(),
             modelCatalog: {
                 source: "backend" as const,
                 architectures: [...ltx.architectures, ...foreign.architectures],
                 entries: [...ltx.entries, ...foreign.entries],
             },
         };
-        const rootDefaults = (): RootDefaults => defaults;
         const raw = {
             architectureHint: "test-video",
             modelProfileId: "test-profile",
@@ -420,11 +422,11 @@ describe("normalization", () => {
             ],
         };
 
-        const converted = normalizeClip(raw, rootDefaults, () => "");
+        const converted = normalizeClip(raw, defaults, "");
         const reloaded = normalizeClip(
             structuredClone(converted) as unknown as Record<string, unknown>,
-            rootDefaults,
-            () => "",
+            defaults,
+            "",
         );
         const restoredRaw = structuredClone(reloaded);
         restoredRaw.architectureHint = "ltx2";
@@ -433,8 +435,8 @@ describe("normalization", () => {
         restoredRaw.stages[0].modelProfileId = "ltx-2.3";
         const restored = normalizeClip(
             restoredRaw as unknown as Record<string, unknown>,
-            rootDefaults,
-            () => "",
+            defaults,
+            "",
         );
 
         expect(converted.architectureHint).toBe("test-video");
@@ -582,8 +584,8 @@ describe("normalization", () => {
                     { lora: "d", stage: null },
                 ],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.icLoras.map((e) => e.stage)).toEqual([1, 2, -1, -1]);
         expect(clip.icLoras[0].driveSource).toBe("Incoming");
@@ -595,8 +597,8 @@ describe("normalization", () => {
     it("normalizeClip preserves Incoming for availability diagnostics", () => {
         const clip = normalizeClip(
             { icLoras: [{ lora: "a", driveSource: "Incoming" }] },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.icLoras[0].driveSource).toBe("Incoming");
         expect(clip.icLoras[0].stage).toBe(-1);
@@ -612,8 +614,8 @@ describe("normalization", () => {
                     lengthSeconds: 3,
                 },
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.stages[0].control).toBe(0);
         expect(clip.stages[1].control).toBe(0);
@@ -629,8 +631,8 @@ describe("normalization", () => {
                 },
                 icLoras: [{ lora: "a", stage: 0, driveSource: "Incoming" }],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         // Stage 0 receives the init-video footage as its incoming frames.
         expect(clip.initVideo).not.toBeNull();
@@ -644,8 +646,8 @@ describe("normalization", () => {
                 stages: [{ model: "ltx" }],
                 icLoras: [{ lora: "a", stage: 0, driveSource: "Incoming" }],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.icLoras[0].driveSource).toBe("Incoming");
     });
@@ -660,8 +662,8 @@ describe("normalization", () => {
                     },
                 ],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
 
         expect(clip.icLoras[0].driveSource).toBe("future-slot");
@@ -698,8 +700,8 @@ describe("normalization", () => {
                 ],
                 stages: [{}],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.icLoras.map((e) => e.stage)).toEqual([-1, -1, 0]);
         expect(clip.icLoras[1].driveSource).toBe("Incoming");
@@ -712,8 +714,8 @@ describe("normalization", () => {
                 controlNetLora: "old-lora",
                 controlNetSource: "ControlNet 2",
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.icLoras).toHaveLength(1);
         expect(clip.icLoras[0].lora).toBe("new-lora");
@@ -728,8 +730,8 @@ describe("normalization", () => {
                 clipLengthFromAudio: true,
                 clipLengthFromControlNet: true,
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.clipLengthFromAudio).toBe(false);
         expect(clip.clipLengthFromControlNet).toBe(true);
@@ -741,8 +743,8 @@ describe("normalization", () => {
                 audioSource: "Native",
                 clipLengthFromAudio: true,
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.clipLengthFromAudio).toBe(true);
     });
@@ -756,8 +758,8 @@ describe("normalization", () => {
                 frameRefs: [{ source: "Base", frame: 100 }],
                 stages: [{ model: "ltx-2.3.safetensors" }],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             24,
         );
 
@@ -774,8 +776,8 @@ describe("normalization", () => {
                 frameRefs: [{ source: "Base", frame: 100 }],
                 stages: [{ model: "ltx-2.3.safetensors" }],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             24,
         );
 
@@ -796,8 +798,8 @@ describe("normalization", () => {
                 audioSource: "Native",
                 clipLengthFromControlNet: true,
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.icLoras).toEqual([]);
         expect(clip.clipLengthFromControlNet).toBe(true);
@@ -811,8 +813,8 @@ describe("normalization", () => {
                 clipLengthFromAudio: true,
                 clipLengthFromControlNet: true,
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.icLoras).toEqual([]);
         expect(clip.clipLengthFromAudio).toBe(false);
@@ -825,8 +827,8 @@ describe("normalization", () => {
                 audioSource: "ControlNet",
                 controlNetLora: "ltx-ic-lora.safetensors",
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.audioSource).toBe("ControlNet");
     });
@@ -837,8 +839,8 @@ describe("normalization", () => {
                 audioSource: "ControlNet",
                 controlNetLora: "",
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.audioSource).toBe("ControlNet");
     });
@@ -850,8 +852,8 @@ describe("normalization", () => {
                 controlNetLora: "ltx-ic-lora.safetensors",
                 clipLengthFromAudio: true,
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.clipLengthFromAudio).toBe(true);
     });
@@ -862,24 +864,24 @@ describe("normalization", () => {
                 controlNetSource: "ControlNet 2",
                 controlNetLora: " detail-lora.safetensors ",
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.icLoras).toEqual([]);
     });
 
     it("normalizeStage reads canonical upscale fields for non-first stage", () => {
         const stage0 = normalizeStage(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             { ...minimalStageRaw },
             null,
             0,
             0,
         );
         const stage1 = normalizeStage(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             {
                 ...minimalStageRaw,
                 upscale: 2,
@@ -895,8 +897,8 @@ describe("normalization", () => {
 
     it("normalizeStage snaps upscale to the 0.25 step", () => {
         const stage0 = normalizeStage(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             { ...minimalStageRaw },
             null,
             0,
@@ -904,8 +906,8 @@ describe("normalization", () => {
         );
         const snap = (upscale: number): number =>
             normalizeStage(
-                getRootDefaults,
-                getDefaultStageModel,
+                moduleRootDefaults(),
+                defaultStageModel(moduleRootDefaults()),
                 { ...minimalStageRaw, upscale },
                 stage0,
                 0,
@@ -918,8 +920,8 @@ describe("normalization", () => {
 
     it("normalizeStage forces first-stage control to the root default", () => {
         const stage0 = normalizeStage(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             {
                 ...minimalStageRaw,
                 control: 0.4,
@@ -934,8 +936,8 @@ describe("normalization", () => {
 
     it("normalizeStage keeps authored control/upscale on a init-video clip stage 0", () => {
         const stage0 = normalizeStage(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             {
                 ...minimalStageRaw,
                 control: 0.4,
@@ -970,8 +972,8 @@ describe("normalization", () => {
                     lengthSeconds: 3,
                 },
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.initVideo).not.toBeNull();
         expect(clip.stages[0].control).toBe(0.3);
@@ -981,16 +983,16 @@ describe("normalization", () => {
 
     it("normalizeStage reads canonical control for non-first stage", () => {
         const stage0 = normalizeStage(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             { ...minimalStageRaw },
             null,
             0,
             0,
         );
         const stage1 = normalizeStage(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             {
                 ...minimalStageRaw,
                 control: 0.4,
@@ -1039,8 +1041,8 @@ describe("appendRefToClip / removeRefAt", () => {
                     { frameRefStrengths: [0.7] },
                 ],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
 
     it("appendRefToClip adds the ref and pads every stage's frameRefStrengths", () => {
@@ -1096,8 +1098,8 @@ describe("clip LoRAs with per-stage weights", () => {
 
     it("normalizeStage aligns legacy LoRAs to clip definitions", () => {
         const stage = normalizeStage(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             { ...minimalStageRaw, loras: [{ name: "l.safetensors" }] },
             null,
             0,
@@ -1111,8 +1113,8 @@ describe("clip LoRAs with per-stage weights", () => {
 
     it("buildDefaultStage inherits a copy of the previous stage's weights", () => {
         const first = normalizeStage(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             {
                 ...minimalStageRaw,
                 loras: [{ name: "x.safetensors", weight: 0.7 }],
@@ -1125,8 +1127,8 @@ describe("clip LoRAs with per-stage weights", () => {
             [0],
         );
         const next = buildDefaultStage(
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             first,
             0,
         );
@@ -1151,8 +1153,8 @@ describe("clip LoRAs with per-stage weights", () => {
                     },
                 ],
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.loras).toEqual([
             { name: "base.safetensors" },
@@ -1219,8 +1221,8 @@ describe("clip LoRAs with per-stage weights", () => {
                 stages: [minimalStageRaw],
                 retake: { startSeconds: 1, lengthSeconds: 2, strength: 0.5 },
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(withRetake.retake).toEqual({
             startSeconds: 1,
@@ -1230,8 +1232,8 @@ describe("clip LoRAs with per-stage weights", () => {
 
         const withoutRetake = normalizeClip(
             { duration: 5, stages: [minimalStageRaw] },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(withoutRetake.retake).toBeNull();
     });
@@ -1321,8 +1323,8 @@ describe("normalizeInitVideo", () => {
                     lengthSeconds: 3.5,
                 },
             },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
         );
         expect(clip.initVideo?.startSeconds).toBe(1);
         expect(clip.duration).toBe(3.5);
@@ -1401,8 +1403,11 @@ describe("normalizeClipReferences", () => {
     it("returns an empty list for a document that has no references", () => {
         expect(normalizeClipReferences(undefined)).toEqual([]);
         expect(
-            normalizeClip({ stages: [] }, getRootDefaults, getDefaultStageModel)
-                .references,
+            normalizeClip(
+                { stages: [] },
+                moduleRootDefaults(),
+                defaultStageModel(moduleRootDefaults()),
+            ).references,
         ).toEqual([]);
     });
 });
@@ -1486,8 +1491,8 @@ describe("clip length from a reference", () => {
     ) =>
         normalizeClip(
             { duration: 2, stages: [], references, ...rest },
-            getRootDefaults,
-            getDefaultStageModel,
+            moduleRootDefaults(),
+            defaultStageModel(moduleRootDefaults()),
             24,
         );
 

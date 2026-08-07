@@ -91,7 +91,7 @@ export const createTimelineReferencesTrack = (
         supported: canEditReferences(clip, authoring),
         endpoints: referenceEndpoints(clip, authoring),
         frameGrid: resolvedClipFrameGrid(clip, authoring.defaults.modelCatalog),
-        frameMax: getReferenceFrameMax(() => authoring.defaults, clip, fps),
+        frameMax: getReferenceFrameMax(authoring.defaults, clip, fps),
     });
     const sameDragPolicy = (
         left: ReferenceDragPolicy,
@@ -148,7 +148,7 @@ export const createTimelineReferencesTrack = (
                     return null;
                 }
                 const frameMax = getReferenceFrameMax(
-                    () => authoring.defaults,
+                    authoring.defaults,
                     clip,
                     fps,
                 );

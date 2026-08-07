@@ -42,7 +42,7 @@ export const buildClipColumn = (
                 const target = clips[clipIdx];
                 if (target && !lengthDerived) {
                     const defaults = context.authoring().defaults;
-                    applyClipDurationResize(target, value, () => defaults);
+                    applyClipDurationResize(target, value, defaults);
                 }
             });
         },

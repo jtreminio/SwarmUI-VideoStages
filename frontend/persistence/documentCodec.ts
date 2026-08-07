@@ -604,14 +604,11 @@ export const decodeStoredDocument = (
             width: current.width,
             height: current.height,
         });
-        const capturedDefaults = (): RootDefaults => environment.defaults;
-        const capturedDefaultStageModel = (): string =>
-            environment.defaultStageModel;
         const clips = current.clips.map((entry) =>
             normalizeClip(
                 entry,
-                capturedDefaults,
-                capturedDefaultStageModel,
+                environment.defaults,
+                environment.defaultStageModel,
                 dims.fps,
             ),
         );

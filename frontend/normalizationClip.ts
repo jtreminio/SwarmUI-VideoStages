@@ -83,12 +83,11 @@ const normalizeReferenceFraming = (value: unknown): ReferenceFraming =>
         : "crop";
 
 export const buildDefaultClip = (
-    getRootDefaults: () => RootDefaults,
-    getDefaultStageModel: (modelValues: string[]) => string,
+    defaults: RootDefaults,
+    defaultStageModel: string,
     includeDefaultRef = false,
     previousClip: Clip | null = null,
 ): Clip => {
-    const defaults = getRootDefaults();
     const frameRefs = includeDefaultRef ? [buildDefaultRef()] : [];
     const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
     const initialLoraWeights = loras.map(
@@ -101,8 +100,8 @@ export const buildDefaultClip = (
     );
     const firstStage = {
         ...buildDefaultStage(
-            getRootDefaults,
-            getDefaultStageModel,
+            defaults,
+            defaultStageModel,
             previousClip?.stages[0] ?? null,
             frameRefs.length,
             initialLoraWeights,
@@ -167,11 +166,10 @@ export const buildDefaultClip = (
 
 export const normalizeClip = (
     rawClip: Record<string, unknown>,
-    getRootDefaults: () => RootDefaults,
-    getDefaultStageModel: (modelValues: string[]) => string,
+    defaults: RootDefaults,
+    defaultStageModel: string,
     effectiveFps?: number,
 ): Clip => {
-    const defaults = getRootDefaults();
     const rawAudioSource = text(rawClip.audioSource, AUDIO_SOURCE_NATIVE);
     const stagesRaw = Array.isArray(rawClip.stages) ? rawClip.stages : [];
     const initVideo = normalizeInitVideo(rawClip.initVideo);
@@ -236,8 +234,8 @@ export const normalizeClip = (
         const previousStage = i > 0 ? stages[i - 1] : null;
         stages.push(
             normalizeStage(
-                getRootDefaults,
-                getDefaultStageModel,
+                defaults,
+                defaultStageModel,
                 isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
                 previousStage,
                 refsRaw.length,
@@ -252,7 +250,7 @@ export const normalizeClip = (
     const retake = normalizeRetake(rawClip.retake, duration);
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const refFrameMax = getKnownReferenceFrameMax(
-        getRootDefaults,
+        defaults,
         {
             duration,
             stages,

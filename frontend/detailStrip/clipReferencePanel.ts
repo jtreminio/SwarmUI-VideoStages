@@ -37,7 +37,7 @@ import type { DetailStripContext } from "./context";
 const claimClipLength = (
     clip: Clip,
     referenceIdx: number,
-    getDefaults: () => RootDefaults,
+    defaults: RootDefaults,
     fps: number,
 ): void => {
     clip.references.forEach((reference, index) => {
@@ -55,7 +55,7 @@ const claimClipLength = (
         applyClipDurationResize(
             clip,
             Math.max(CLIP_DURATION_MIN, seconds),
-            getDefaults,
+            defaults,
             fps,
         );
     }
@@ -87,7 +87,7 @@ const applyPickedReferenceMedia = (
                 claimClipLength(
                     clip,
                     index,
-                    () => ctx.authoring().defaults,
+                    ctx.authoring().defaults,
                     state.fps,
                 );
             }
@@ -407,7 +407,7 @@ export const buildClipReferenceSection = (
                                 claimClipLength(
                                     target,
                                     value ? editorIdx : -1,
-                                    () => defaults,
+                                    defaults,
                                     fps,
                                 );
                             }

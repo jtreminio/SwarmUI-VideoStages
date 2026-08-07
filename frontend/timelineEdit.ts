@@ -58,14 +58,10 @@ export const pxToFrame = (
 
 export const clampClipRefsToDuration = (
     clip: Clip,
-    getRootDefaults: () => RootDefaults,
+    defaults: RootDefaults,
     effectiveFps?: number,
 ): void => {
-    const frameMax = getKnownReferenceFrameMax(
-        getRootDefaults,
-        clip,
-        effectiveFps,
-    );
+    const frameMax = getKnownReferenceFrameMax(defaults, clip, effectiveFps);
     for (const ref of clip.frameRefs) {
         ref.frame =
             frameMax === null
@@ -77,13 +73,13 @@ export const clampClipRefsToDuration = (
 export const applyClipDurationResize = (
     clip: Clip,
     newDuration: number,
-    getRootDefaults: () => RootDefaults,
+    defaults: RootDefaults,
     effectiveFps?: number,
 ): boolean => {
     if (clip.duration === newDuration) {
         return false;
     }
     clip.duration = newDuration;
-    clampClipRefsToDuration(clip, getRootDefaults, effectiveFps);
+    clampClipRefsToDuration(clip, defaults, effectiveFps);
     return true;
 };

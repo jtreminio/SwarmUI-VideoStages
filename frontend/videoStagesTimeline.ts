@@ -227,13 +227,12 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             }
             clips.push(
                 buildDefaultClip(
-                    () => defaults,
-                    (values) =>
-                        getDefaultStageModel(
-                            values,
-                            undefined,
-                            defaults.modelCatalog,
-                        ),
+                    defaults,
+                    getDefaultStageModel(
+                        defaults.modelValues,
+                        undefined,
+                        defaults.modelCatalog,
+                    ),
                     false,
                     prev,
                 ),

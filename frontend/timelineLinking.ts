@@ -271,7 +271,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                             !applyClipDurationResize(
                                 clip,
                                 newDuration,
-                                getRootDefaults,
+                                getRootDefaults(),
                                 fps,
                             )
                         ) {

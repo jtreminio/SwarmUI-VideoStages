@@ -53,8 +53,8 @@ const getDefaultStageModel = (modelValues: string[]): string =>
 const normalize = (raw: unknown): Clip =>
     normalizeClip(
         JSON.parse(JSON.stringify(raw)) as Record<string, unknown>,
-        getRootDefaults,
-        getDefaultStageModel,
+        getRootDefaults(),
+        getDefaultStageModel(getRootDefaults().modelValues),
     );
 
 const store = (clip: Clip): StoredClip => serializeClipsForStorage([clip])[0];

@@ -161,7 +161,7 @@ export const createDetailSelectionDomainOperations = (
             }
             const position = nextAllowedReferencePosition(
                 clip.frameRefs,
-                getReferenceFrameMax(() => defaults, clip),
+                getReferenceFrameMax(defaults, clip),
                 referenceEndpointPolicy(clip, defaults.modelCatalog).positions,
             );
             if (position === null) {
@@ -463,13 +463,12 @@ export const createDetailSelectionDomainOperations = (
                         ? undefined
                         : clipArchitectureId;
                 const stage = buildDefaultStage(
-                    () => defaults,
-                    (values) =>
-                        getDefaultStageModel(
-                            values,
-                            lockedArchitecture,
-                            defaults.modelCatalog,
-                        ),
+                    defaults,
+                    getDefaultStageModel(
+                        defaults.modelValues,
+                        lockedArchitecture,
+                        defaults.modelCatalog,
+                    ),
                     last,
                     clip.frameRefs.length,
                     clip.loras.map((entry) =>
