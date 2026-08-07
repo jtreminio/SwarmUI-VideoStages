@@ -111,7 +111,7 @@ const persistedCapabilityIssues = (
         diagnostics.push(
             issue(
                 "architecture.unsupported.upscale",
-                `Clip ${clipIdx} has stage upscaling saved, but its upscale method is not a known method. Remove it or choose a known method.`,
+                `Clip ${clipIdx} has stage upscaling persisted, but its upscale method is not a known method. Remove it or choose a known method.`,
                 clipIdx,
             ),
         );
