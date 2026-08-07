@@ -6,9 +6,9 @@ using VideoStages.Execution.Graph;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed record ResolvedClipRef(
+internal sealed record ResolvedFrameRef(
     WGNodeData Image,
-    ImageReferencePlan Reference,
+    FrameRefPlan Reference,
     double Strength);
 
 internal sealed class LtxStageExecutor
@@ -39,7 +39,7 @@ internal sealed class LtxStageExecutor
         StageFrame stageFrame,
         WGNodeData guideMedia,
         Func<WGNodeData> resolveFallbackGuide,
-        IReadOnlyList<ResolvedClipRef> clipRefs,
+        IReadOnlyList<ResolvedFrameRef> frameRefs,
         double guideMergeStrength)
     {
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
@@ -96,13 +96,13 @@ internal sealed class LtxStageExecutor
                                 .ReferenceFraming))
                     .WithLatent(stageLatent, effectiveSourceMedia)
                     .WithUpscaleIfNeeded(effectiveSourceMedia)
-                    .WithInplaceMerges(clipRefs)
+                    .WithInplaceMerges(frameRefs)
                     .BindToCurrentMedia(
                         guideMedia,
                         guideMergeStrength)
                     .WithContinuityAnchor()
                     .WithLtxvConditioning()
-                    .WithGuideAdditions(clipRefs);
+                    .WithGuideAdditions(frameRefs);
             }
             genInfo.VideoCFG ??= genInfo.DefaultCFG;
             WGNodeData incomingMedia = ResolveIcLoraStageInput(stageFrame);

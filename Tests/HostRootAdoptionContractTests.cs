@@ -381,12 +381,12 @@ public sealed class HostRootAdoptionContractTests
     /// <summary>
     /// An authored reference to the host's base pass costs the timeline nothing on a text-to-video
     /// request, because there is no host pass to reference: the spec parser rewrites every stage's
-    /// ImageReference to <c>Generated</c>, and <c>LtxClipRefResolver</c> drops every non-upload
-    /// clip ref. Refusing the claim for it would trade a whole extra root pass for a reference that
+    /// ImageReference to <c>Generated</c>, and <c>FrameRefResolver</c> drops every non-upload
+    /// frame ref. Refusing the claim for it would trade a whole extra root pass for a reference that
     /// is discarded either way.
     /// </summary>
     [Fact]
-    public async Task An_ltx_base_clip_ref_costs_the_timeline_nothing_on_text_to_video()
+    public async Task An_ltx_base_frame_ref_costs_the_timeline_nothing_on_text_to_video()
     {
         using LtxAndWanFixture fixture = new();
 

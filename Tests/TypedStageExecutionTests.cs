@@ -30,16 +30,16 @@ public class TypedStageExecutionTests
     [Fact]
     public void Ltx_reference_resolution_and_conditioning_keep_the_typed_reference_plan()
     {
-        Type resolver = typeof(LtxClipRefResolver);
-        Type resolvedReference = typeof(ResolvedClipRef);
+        Type resolver = typeof(FrameRefResolver);
+        Type resolvedReference = typeof(ResolvedFrameRef);
 
         Assert.Contains(
             resolver.GetMethods(AnyMember),
-            method => method.Name == "ResolveStageClipRefs"
+            method => method.Name == "ResolveStageFrameRefs"
                 && method.GetParameters()[0].ParameterType == typeof(ClipPlan));
         Assert.Equal(
-            typeof(ImageReferencePlan),
-            resolvedReference.GetProperty(nameof(ResolvedClipRef.Reference), AnyMember)
+            typeof(FrameRefPlan),
+            resolvedReference.GetProperty(nameof(ResolvedFrameRef.Reference), AnyMember)
                 ?.PropertyType);
         Assert.Null(resolvedReference.GetProperty("Spec", AnyMember));
     }

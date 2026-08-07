@@ -40,12 +40,12 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
         {
             return;
         }
-        (StageGuideReferenceKind guide, ImageReferenceSourceKind reference) = kind switch
+        (StageGuideReferenceKind guide, FrameRefSourceKind reference) = kind switch
         {
             StageRefStore.StageKind.Base =>
-                (StageGuideReferenceKind.Base, ImageReferenceSourceKind.Base),
+                (StageGuideReferenceKind.Base, FrameRefSourceKind.Base),
             StageRefStore.StageKind.Refiner =>
-                (StageGuideReferenceKind.Refiner, ImageReferenceSourceKind.Refiner),
+                (StageGuideReferenceKind.Refiner, FrameRefSourceKind.Refiner),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
         bool referenced = plan.Clips
@@ -76,7 +76,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
             generator,
             new LtxStageExecutor(generator, resizer, context.RootAdoption),
             guideMediaResolver,
-            new LtxClipRefResolver(generator, guideMediaResolver));
+            new FrameRefResolver(generator, guideMediaResolver));
         StageSequenceRootSetup rootSetup = new(
             generator,
             stageRefStore,

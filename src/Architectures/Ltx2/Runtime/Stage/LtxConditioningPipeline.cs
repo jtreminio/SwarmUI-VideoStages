@@ -56,21 +56,21 @@ internal sealed class LtxConditioningPipeline(
     }
 
     // In-place references affect only their own latent frames, preserving the rest of a retake mask.
-    public LtxConditioningPipeline WithInplaceMerges(IReadOnlyList<ResolvedClipRef> clipRefs)
+    public LtxConditioningPipeline WithInplaceMerges(IReadOnlyList<ResolvedFrameRef> frameRefs)
     {
-        foreach (ResolvedClipRef clipRef in clipRefs)
+        foreach (ResolvedFrameRef frameRef in frameRefs)
         {
-            if (!UseLtxvInplaceForRef(clipRef.Reference) || clipRef.Strength <= 0)
+            if (!UseLtxvInplaceForRef(frameRef.Reference) || frameRef.Strength <= 0)
             {
                 continue;
             }
 
-            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path, stageLatent);
+            JArray preprocessed = ResolvePreprocessedGuidePath(frameRef.Image.Path, stageLatent);
             string imgToVideoNode = CreateLtxvImgToVideoInplaceNode(
                 genInfo.Vae.Path,
                 preprocessed,
                 stageLatent.Path,
-                clipRef.Strength,
+                frameRef.Strength,
                 bypass: false);
             stageLatent = stageLatent.WithPath(
                 [imgToVideoNode, 0],
@@ -143,22 +143,22 @@ internal sealed class LtxConditioningPipeline(
         return this;
     }
 
-    public LtxConditioningPipeline WithGuideAdditions(IReadOnlyList<ResolvedClipRef> clipRefs)
+    public LtxConditioningPipeline WithGuideAdditions(IReadOnlyList<ResolvedFrameRef> frameRefs)
     {
-        foreach (ResolvedClipRef clipRef in clipRefs)
+        foreach (ResolvedFrameRef frameRef in frameRefs)
         {
-            if (UseLtxvInplaceForRef(clipRef.Reference) || clipRef.Strength <= 0)
+            if (UseLtxvInplaceForRef(frameRef.Reference) || frameRef.Strength <= 0)
             {
                 continue;
             }
 
-            JArray preprocessed = ResolvePreprocessedGuidePath(clipRef.Image.Path, g.CurrentMedia);
-            int frameIdx = ComputeLtxvAddGuideFrameIndex(clipRef.Reference);
+            JArray preprocessed = ResolvePreprocessedGuidePath(frameRef.Image.Path, g.CurrentMedia);
+            int frameIdx = ComputeLtxvAddGuideFrameIndex(frameRef.Reference);
 
             using WorkflowBridge bridge = BridgeSync.For(g);
             LTXVAddGuideNode addGuide = bridge.AddNode(new LTXVAddGuideNode()).With(
                 FrameIdx: frameIdx,
-                Strength: clipRef.Strength);
+                Strength: frameRef.Strength);
             addGuide.ConnectConditioning(bridge, genInfo);
             addGuide.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
             addGuide.LatentInput.ConnectFromPath(bridge, g.CurrentMedia.Path);
@@ -231,12 +231,12 @@ internal sealed class LtxConditioningPipeline(
         WGNodeData targetMedia) =>
         guidePreprocessReuse.ResolvePreprocessedGuidePath(guideImagePath, targetMedia);
 
-    private static bool UseLtxvInplaceForRef(ImageReferencePlan reference) =>
-        reference.FrameOrigin == ImageReferenceFrameEdge.Start
+    private static bool UseLtxvInplaceForRef(FrameRefPlan reference) =>
+        reference.FrameOrigin == FrameRefEdge.Start
         && reference.Frame == 1;
 
-    private static int ComputeLtxvAddGuideFrameIndex(ImageReferencePlan reference) =>
-        reference.FrameOrigin == ImageReferenceFrameEdge.End
+    private static int ComputeLtxvAddGuideFrameIndex(FrameRefPlan reference) =>
+        reference.FrameOrigin == FrameRefEdge.End
             ? -Math.Max(1, reference.Frame)
             : Math.Max(1, reference.Frame);
 }

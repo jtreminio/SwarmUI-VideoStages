@@ -239,7 +239,7 @@ public class PlanningCompilerComponentTests
         var icLoras = IcLoraPlanCompiler
             .CompileClip(clip, new(640, 360, 24, ArchitectureEntryMode.ImageToVideo))
             .Stages[stage.ClipStageRawIndex];
-        var references = ImageReferencePlanCompiler.Compile(clip, stage);
+        var references = FrameRefPlanCompiler.Compile(clip, stage);
 
         Assert.Equal(PromptRelayMode.Relay, prompt.Mode);
         Assert.Equal(
@@ -251,7 +251,7 @@ public class PlanningCompilerComponentTests
             lora => Assert.Equal("stage", lora.Name));
         Assert.Equal(IcLoraMediaSourceKind.ControlNet, Assert.Single(icLoras).Drive.Source);
         Assert.Equal(1, icLoras[0].Drive.ControlNetIndex);
-        Assert.Equal(ImageReferenceSourceKind.Upload, Assert.Single(references).SourceKind);
+        Assert.Equal(FrameRefSourceKind.Upload, Assert.Single(references).SourceKind);
     }
 
     [Fact]

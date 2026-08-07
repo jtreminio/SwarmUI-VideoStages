@@ -326,17 +326,17 @@ public class VideoExecutionPlanCompilerTests
             ltx.FrameReferences,
             reference =>
             {
-                Assert.Equal(ImageReferenceSourceKind.Upload, reference.SourceKind);
+                Assert.Equal(FrameRefSourceKind.Upload, reference.SourceKind);
                 Assert.Equal(5, reference.Frame);
-                Assert.Equal(ImageReferenceFrameEdge.Start, reference.FrameOrigin);
+                Assert.Equal(FrameRefEdge.Start, reference.FrameOrigin);
                 Assert.Equal(0.25, reference.Strength);
                 Assert.Equal("opening.png", reference.UploadFileName);
             },
             reference =>
             {
-                Assert.Equal(ImageReferenceSourceKind.Base2Edit, reference.SourceKind);
+                Assert.Equal(FrameRefSourceKind.Base2Edit, reference.SourceKind);
                 Assert.Equal(2, reference.Base2EditStageIndex);
-                Assert.Equal(ImageReferenceFrameEdge.End, reference.FrameOrigin);
+                Assert.Equal(FrameRefEdge.End, reference.FrameOrigin);
                 Assert.Equal(0.9, reference.Strength);
             });
         Assert.Equal(StageAudioAction.CaptureForReuse, ltx.AudioAction);

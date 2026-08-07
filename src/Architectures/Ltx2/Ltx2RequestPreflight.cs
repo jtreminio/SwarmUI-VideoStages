@@ -23,9 +23,9 @@ internal static class Ltx2RequestPreflight
         {
             foreach (StagePlan stage in clip.Stages)
             {
-                foreach (ImageReferencePlan reference in
+                foreach (FrameRefPlan reference in
                     stage.RequireLtx2Payload().FrameReferences.Where(
-                        entry => entry.SourceKind == ImageReferenceSourceKind.Upload))
+                        entry => entry.SourceKind == FrameRefSourceKind.Upload))
                 {
                     if (media.ImageDiagnostic(
                         reference.InlineData,

@@ -50,7 +50,7 @@ internal static class Ltx2ClipPlanCompiler
                 icLoras.Stages[stage.ClipStageRawIndex],
                 retake,
                 relay,
-                ImageReferencePlanCompiler.Compile(clip, stage),
+                FrameRefPlanCompiler.Compile(clip, stage),
                 CompileAudioAction(clip, stage));
             stages.Add(stage.ClipStageRawIndex, payload);
             PlanDiagnostic dimensionDiagnostic = StageDimensionRules.SnapDiagnostic(

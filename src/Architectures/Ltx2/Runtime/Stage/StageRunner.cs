@@ -14,7 +14,7 @@ internal class StageRunner
     private readonly WorkflowGenerator _generator;
     private readonly LtxStageExecutor _stageExecutor;
     private readonly LtxStageGuideMediaResolver _guideMediaResolver;
-    private readonly LtxClipRefResolver _clipRefResolver;
+    private readonly FrameRefResolver _clipRefResolver;
     private readonly StageUpscaleGraphBuilder _upscaleGraphBuilder;
     private readonly StageFramePreparer _framePreparer;
 
@@ -22,7 +22,7 @@ internal class StageRunner
         WorkflowGenerator generator,
         LtxStageExecutor stageExecutor,
         LtxStageGuideMediaResolver guideMediaResolver,
-        LtxClipRefResolver clipRefResolver)
+        FrameRefResolver clipRefResolver)
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _stageExecutor = stageExecutor ?? throw new ArgumentNullException(nameof(stageExecutor));
@@ -99,7 +99,7 @@ internal class StageRunner
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
         ReferenceFramingMode referenceFraming =
             clipContext.PlannedClip.RequireLtx2Payload().ReferenceFraming;
-        List<ResolvedClipRef> clipRefs = _clipRefResolver.ResolveStageClipRefs(
+        List<ResolvedFrameRef> frameRefs = _clipRefResolver.ResolveStageFrameRefs(
             clipContext.PlannedClip,
             stage,
             clipContext.Plan.Root.HostKind == HostRootKind.TextToVideo,
@@ -107,21 +107,21 @@ internal class StageRunner
             postVideoChain,
             sourceMedia,
             clipContext.IncomingContinueHandleFrames);
-        ResolvedClipRef primaryGuideClipRef = LtxClipRefResolver.ExtractPrimaryGuideClipRef(clipRefs);
-        clipRefs = LtxClipRefResolver.RemovePrimaryGuideClipRef(clipRefs, primaryGuideClipRef);
+        ResolvedFrameRef primaryGuideFrameRef = FrameRefResolver.ExtractPrimaryGuideFrameRef(frameRefs);
+        frameRefs = FrameRefResolver.RemovePrimaryGuideFrameRef(frameRefs, primaryGuideFrameRef);
         bool reanchorsContinuityTail = clipContext.ReanchorsContinuityTail(stage);
         bool isContinuationTail = reanchorsContinuityTail && clipContext.IsFirstStage(stage);
         if (isContinuationTail)
         {
             // Guide preparation resizes its input, so preserve the stored continuity frame.
-            primaryGuideClipRef = new ResolvedClipRef(
+            primaryGuideFrameRef = new ResolvedFrameRef(
                 clipContext.ContinuityTail.Duplicate(),
-                new ImageReferencePlan(
-                    ImageReferenceSourceKind.Unknown,
+                new FrameRefPlan(
+                    FrameRefSourceKind.Unknown,
                     RawSource: "Continue",
                     Base2EditStageIndex: null,
                     Frame: 1,
-                    ImageReferenceFrameEdge.Start,
+                    FrameRefEdge.Start,
                     Strength: 1.0,
                     UploadFileName: null,
                     InlineData: null),
@@ -140,16 +140,16 @@ internal class StageRunner
 
         WGNodeData guideMedia = null;
         Func<WGNodeData> resolveFallbackGuide = null;
-        if (primaryGuideClipRef is not null)
+        if (primaryGuideFrameRef is not null)
         {
             guideMedia = PrimaryGuideIsStageInput(
-                    primaryGuideClipRef,
+                    primaryGuideFrameRef,
                     stageFrame.PriorOutputPath,
                     sourceMedia)
                 ? ResolveDefaultLocalGuideMedia(sourceMedia, postVideoChain)
                 : GuideMediaPreparation.Prepare(
                     _generator,
-                    primaryGuideClipRef.Image,
+                    primaryGuideFrameRef.Image,
                     sourceMedia,
                     scaleToSourceSize: true,
                     referenceFraming: referenceFraming);
@@ -167,7 +167,7 @@ internal class StageRunner
                 && !payload.ImageReferenceWasExplicit
                 && (clipContext.PlannedClip.ClipId != 0 || stage.ClipStageIndex != 0);
             if (!stageFrame.TakesOverTextToVideoRoot
-                && clipRefs.Count == 0
+                && frameRefs.Count == 0
                 && !initVideoFootageIsStageInput
                 && !refinesIncomingLatent)
             {
@@ -196,25 +196,25 @@ internal class StageRunner
             stageFrame,
             guideMedia,
             resolveFallbackGuide,
-            clipRefs,
-            primaryGuideClipRef?.Strength ?? 1.0);
+            frameRefs,
+            primaryGuideFrameRef?.Strength ?? 1.0);
     }
 
     private bool PrimaryGuideIsStageInput(
-        ResolvedClipRef primaryGuideClipRef,
+        ResolvedFrameRef primaryGuideFrameRef,
         JArray priorOutputPath,
         WGNodeData sourceMedia)
     {
-        if (primaryGuideClipRef is null)
+        if (primaryGuideFrameRef is null)
         {
             return false;
         }
-        return (primaryGuideClipRef.Image?.Path is JArray guidePath
+        return (primaryGuideFrameRef.Image?.Path is JArray guidePath
                 && priorOutputPath is not null
                 && JToken.DeepEquals(guidePath, priorOutputPath))
-            || LtxClipRefResolver.PrimaryGuideMatchesScaledSource(
+            || FrameRefResolver.PrimaryGuideMatchesScaledSource(
                 _generator,
-                primaryGuideClipRef.Image,
+                primaryGuideFrameRef.Image,
                 sourceMedia);
     }
 

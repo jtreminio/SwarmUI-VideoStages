@@ -4,24 +4,24 @@ using VideoStages.Authoring;
 namespace VideoStages.Architectures.Ltx2.Planning;
 
 /// <summary>Compiles authored frame-reference positions, strengths, and source intent.</summary>
-internal static class ImageReferencePlanCompiler
+internal static class FrameRefPlanCompiler
 {
-    internal static ImmutableArray<ImageReferencePlan> Compile(ClipSpec clip, StageSpec stage)
+    internal static ImmutableArray<FrameRefPlan> Compile(ClipSpec clip, StageSpec stage)
     {
-        ImmutableArray<ImageReferencePlan>.Builder plans =
-            ImmutableArray.CreateBuilder<ImageReferencePlan>();
+        ImmutableArray<FrameRefPlan>.Builder plans =
+            ImmutableArray.CreateBuilder<FrameRefPlan>();
         IReadOnlyList<FrameRefSpec> references = clip.FrameRefs ?? [];
         IReadOnlyList<double> strengths = stage.FrameRefStrengths ?? [];
         for (int i = 0; i < references.Count; i++)
         {
             FrameRefSpec reference = references[i];
-            (ImageReferenceSourceKind sourceKind, int? editStage) = CompileSource(reference.Source);
-            plans.Add(new ImageReferencePlan(
+            (FrameRefSourceKind sourceKind, int? editStage) = CompileSource(reference.Source);
+            plans.Add(new FrameRefPlan(
                 sourceKind,
                 reference.Source?.Trim() ?? "",
                 editStage,
                 reference.Frame,
-                reference.FromEnd ? ImageReferenceFrameEdge.End : ImageReferenceFrameEdge.Start,
+                reference.FromEnd ? FrameRefEdge.End : FrameRefEdge.Start,
                 i < strengths.Count ? strengths[i] : Constants.DefaultStageRefStrength,
                 reference.UploadFileName,
                 reference.Data));
@@ -29,24 +29,24 @@ internal static class ImageReferencePlanCompiler
         return plans.ToImmutable();
     }
 
-    private static (ImageReferenceSourceKind Kind, int? EditStage) CompileSource(string rawSource)
+    private static (FrameRefSourceKind Kind, int? EditStage) CompileSource(string rawSource)
     {
         if (StringUtils.Equals(rawSource, MediaSource.Upload))
         {
-            return (ImageReferenceSourceKind.Upload, null);
+            return (FrameRefSourceKind.Upload, null);
         }
         if (StringUtils.Equals(rawSource, MediaSource.Base))
         {
-            return (ImageReferenceSourceKind.Base, null);
+            return (FrameRefSourceKind.Base, null);
         }
         if (StringUtils.Equals(rawSource, MediaSource.Refiner))
         {
-            return (ImageReferenceSourceKind.Refiner, null);
+            return (FrameRefSourceKind.Refiner, null);
         }
         if (MediaSource.TryParseBase2EditIndex(rawSource, out int editStage))
         {
-            return (ImageReferenceSourceKind.Base2Edit, editStage);
+            return (FrameRefSourceKind.Base2Edit, editStage);
         }
-        return (ImageReferenceSourceKind.Unknown, null);
+        return (FrameRefSourceKind.Unknown, null);
     }
 }

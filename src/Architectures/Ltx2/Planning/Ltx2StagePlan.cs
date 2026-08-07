@@ -15,7 +15,7 @@ internal sealed record Ltx2StagePayload(
     ImmutableArray<IcLoraPlan> IcLoras,
     RetakePlan Retake,
     PromptRelayPlan PromptRelay,
-    ImmutableArray<ImageReferencePlan> FrameReferences,
+    ImmutableArray<FrameRefPlan> FrameReferences,
     StageAudioAction AudioAction) :
     IArchitectureStagePayload
 {
@@ -48,7 +48,7 @@ internal static class Ltx2StagePlanExtensions
     /// <summary>The stage authors its own opening frame, which outranks any implicit frame-1 guide.</summary>
     internal static bool HasExplicitFirstFrameReference(this StagePlan stage) =>
         stage.RequireLtx2Payload().FrameReferences.Any(reference =>
-            reference.FrameOrigin == ImageReferenceFrameEdge.Start && reference.Frame == 1);
+            reference.FrameOrigin == FrameRefEdge.Start && reference.Frame == 1);
 
     internal static Ltx2ClipPayload RequireLtx2Payload(this ClipPlan clip)
     {
@@ -145,7 +145,7 @@ internal sealed record PromptRelayPlan(
     ImmutableArray<PromptWindowPlan> AuthoredWindows,
     ImmutableArray<PromptRelaySegmentPlan> Segments);
 
-internal enum ImageReferenceSourceKind
+internal enum FrameRefSourceKind
 {
     Upload,
     Base,
@@ -154,18 +154,18 @@ internal enum ImageReferenceSourceKind
     Unknown,
 }
 
-internal enum ImageReferenceFrameEdge
+internal enum FrameRefEdge
 {
     Start,
     End,
 }
 
-internal sealed record ImageReferencePlan(
-    ImageReferenceSourceKind SourceKind,
+internal sealed record FrameRefPlan(
+    FrameRefSourceKind SourceKind,
     string RawSource,
     int? Base2EditStageIndex,
     int Frame,
-    ImageReferenceFrameEdge FrameOrigin,
+    FrameRefEdge FrameOrigin,
     double Strength,
     string UploadFileName,
     string InlineData);

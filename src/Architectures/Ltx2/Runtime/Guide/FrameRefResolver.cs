@@ -8,11 +8,11 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class LtxClipRefResolver(
+internal sealed class FrameRefResolver(
     WorkflowGenerator g,
     LtxStageGuideMediaResolver guideMediaResolver)
 {
-    internal List<ResolvedClipRef> ResolveStageClipRefs(
+    internal List<ResolvedFrameRef> ResolveStageFrameRefs(
         ClipPlan clip,
         StagePlan stage,
         bool isTextToVideo,
@@ -22,14 +22,14 @@ internal sealed class LtxClipRefResolver(
         int incomingHandleFrames = 0)
     {
         ArgumentNullException.ThrowIfNull(clip);
-        IReadOnlyList<ImageReferencePlan> refs =
+        IReadOnlyList<FrameRefPlan> refs =
             stage.RequireLtx2Payload().FrameReferences;
-        List<ResolvedClipRef> resolved = [];
+        List<ResolvedFrameRef> resolved = [];
         for (int i = 0; i < refs.Count; i++)
         {
-            ImageReferencePlan reference = refs[i];
+            FrameRefPlan reference = refs[i];
             if (incomingHandleFrames > 0
-                && reference.FrameOrigin == ImageReferenceFrameEdge.Start)
+                && reference.FrameOrigin == FrameRefEdge.Start)
             {
                 reference = reference with
                 {
@@ -37,16 +37,16 @@ internal sealed class LtxClipRefResolver(
                 };
             }
             if (isTextToVideo
-                && reference.SourceKind != ImageReferenceSourceKind.Upload)
+                && reference.SourceKind != FrameRefSourceKind.Upload)
             {
                 continue;
             }
-            WGNodeData raw = ResolveClipRefSourceMedia(reference, refStore, postVideoChain);
+            WGNodeData raw = ResolveFrameRefSourceMedia(reference, refStore, postVideoChain);
             if (raw is null)
             {
                 RequestWarnings.Track(
                     g.UserInput,
-                    $"VideoStages: Stage {stage.StageId} clip reference {i} ({reference.RawSource}) could not be resolved; "
+                    $"VideoStages: Stage {stage.StageId} frame reference {i} ({reference.RawSource}) could not be resolved; "
                     + "skipping.");
                 continue;
             }
@@ -54,46 +54,46 @@ internal sealed class LtxClipRefResolver(
             WGNodeData prepared = PrimaryGuideMatchesScaledSource(g, raw, sourceMedia)
                 ? sourceMedia
                 : raw;
-            resolved.Add(new ResolvedClipRef(prepared, reference, reference.Strength));
+            resolved.Add(new ResolvedFrameRef(prepared, reference, reference.Strength));
         }
 
         return resolved;
     }
 
-    internal static ResolvedClipRef ExtractPrimaryGuideClipRef(IReadOnlyList<ResolvedClipRef> clipRefs)
+    internal static ResolvedFrameRef ExtractPrimaryGuideFrameRef(IReadOnlyList<ResolvedFrameRef> frameRefs)
     {
-        foreach (ResolvedClipRef clipRef in clipRefs)
+        foreach (ResolvedFrameRef frameRef in frameRefs)
         {
-            if (clipRef.Reference.FrameOrigin == ImageReferenceFrameEdge.Start
-                && clipRef.Reference.Frame == 1)
+            if (frameRef.Reference.FrameOrigin == FrameRefEdge.Start
+                && frameRef.Reference.Frame == 1)
             {
-                return clipRef;
+                return frameRef;
             }
         }
 
         return null;
     }
 
-    internal static List<ResolvedClipRef> RemovePrimaryGuideClipRef(
-        IReadOnlyList<ResolvedClipRef> clipRefs,
-        ResolvedClipRef primaryGuideClipRef)
+    internal static List<ResolvedFrameRef> RemovePrimaryGuideFrameRef(
+        IReadOnlyList<ResolvedFrameRef> frameRefs,
+        ResolvedFrameRef primaryGuideFrameRef)
     {
-        if (primaryGuideClipRef is null)
+        if (primaryGuideFrameRef is null)
         {
-            return [.. clipRefs];
+            return [.. frameRefs];
         }
 
-        List<ResolvedClipRef> remaining = [];
+        List<ResolvedFrameRef> remaining = [];
         bool removedPrimary = false;
-        foreach (ResolvedClipRef clipRef in clipRefs)
+        foreach (ResolvedFrameRef frameRef in frameRefs)
         {
-            if (!removedPrimary && ReferenceEquals(clipRef, primaryGuideClipRef))
+            if (!removedPrimary && ReferenceEquals(frameRef, primaryGuideFrameRef))
             {
                 removedPrimary = true;
                 continue;
             }
 
-            remaining.Add(clipRef);
+            remaining.Add(frameRef);
         }
 
         return remaining;
@@ -121,21 +121,21 @@ internal sealed class LtxClipRefResolver(
             && scaleSource.SlotIndex == (int)primaryGuidePath[1];
     }
 
-    private WGNodeData ResolveClipRefSourceMedia(
-        ImageReferencePlan reference,
+    private WGNodeData ResolveFrameRefSourceMedia(
+        FrameRefPlan reference,
         StageRefStore refStore,
         LtxPostVideoChain postVideoChain)
     {
-        if (reference.SourceKind == ImageReferenceSourceKind.Upload)
+        if (reference.SourceKind == FrameRefSourceKind.Upload)
         {
             return GetRefImage(reference);
         }
 
         StageRefStore.StageRef stageRef = reference.SourceKind switch
         {
-            ImageReferenceSourceKind.Base => refStore.Base,
-            ImageReferenceSourceKind.Refiner => refStore.Refiner,
-            ImageReferenceSourceKind.Base2Edit
+            FrameRefSourceKind.Base => refStore.Base,
+            FrameRefSourceKind.Refiner => refStore.Refiner,
+            FrameRefSourceKind.Base2Edit
                 when reference.Base2EditStageIndex is int editStage
                     && refStore.TryGetBase2EditStageRef(editStage, out StageRefStore.StageRef editRef)
                 => editRef,
@@ -148,7 +148,7 @@ internal sealed class LtxClipRefResolver(
             {
                 RequestWarnings.Track(
                     g.UserInput,
-                    $"VideoStages: Unsupported or unresolved clip reference source '{reference.RawSource}'.");
+                    $"VideoStages: Unsupported or unresolved frame reference source '{reference.RawSource}'.");
             }
             return null;
         }
@@ -156,13 +156,13 @@ internal sealed class LtxClipRefResolver(
         return guideMediaResolver.ResolveGuideMedia(stageRef, postVideoChain);
     }
 
-    private WGNodeData GetRefImage(ImageReferencePlan reference)
+    private WGNodeData GetRefImage(FrameRefPlan reference)
     {
         ImageFile img = UploadedMedia.GetRefImage(
             g.UserInput,
             reference.InlineData,
             reference.UploadFileName,
-            "clip reference image");
+            "frame reference image");
         return g.LoadImage(img, "${videostagesrefimage}", false);
     }
 }

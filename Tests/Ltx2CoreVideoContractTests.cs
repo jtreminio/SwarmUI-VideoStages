@@ -644,11 +644,11 @@ public class Ltx2CoreVideoContractTests
     }
 
     /// <summary>
-    /// Without an authored clip reference the implicit guide runs at core's own full strength, off
+    /// Without an authored frame reference the implicit guide runs at core's own full strength, off
     /// the root-framed host base image.
     /// </summary>
     [Fact]
-    public async Task A_stage_without_clip_refs_guides_from_the_framed_base_image_at_full_strength()
+    public async Task A_stage_without_frame_refs_guides_from_the_framed_base_image_at_full_strength()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
 
