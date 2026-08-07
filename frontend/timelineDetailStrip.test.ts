@@ -4880,6 +4880,25 @@ describe("createTimelineDetailStrip", () => {
 
         const computed = (el: Element): CSSStyleDeclaration =>
             window.getComputedStyle(el);
+        // jsdom's getComputedStyle is document-order only — it honours neither
+        // specificity nor `!important`, so a declaration that only matters
+        // because it outranks the theme has to be read off the rule itself.
+        const dockRule = (selector: string): CSSStyleRule | null => {
+            const sheet = (
+                document.getElementById(
+                    "vst-probe-css",
+                ) as HTMLStyleElement | null
+            )?.sheet;
+            for (const rule of Array.from(sheet?.cssRules ?? [])) {
+                if (
+                    rule instanceof CSSStyleRule &&
+                    rule.selectorText === selector
+                ) {
+                    return rule;
+                }
+            }
+            return null;
+        };
 
         beforeEach(() => {
             setup([
@@ -5064,6 +5083,17 @@ describe("createTimelineDetailStrip", () => {
                 );
             }
             expect(computed(outsideDock).minWidth).toBe(hostMinWidth);
+
+            const openGroup = dockRule(
+                ".vst-detail .input-group.input-group-open",
+            );
+            expect(openGroup).not.toBeNull();
+            if (openGroup) {
+                expect(openGroup.style.getPropertyValue("min-width")).toBe("0");
+                expect(openGroup.style.getPropertyPriority("min-width")).toBe(
+                    "important",
+                );
+            }
         });
 
         it("(d) wraps prompt textareas in the host's wide text-field row", () => {
