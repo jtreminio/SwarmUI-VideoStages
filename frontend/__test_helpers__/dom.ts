@@ -128,23 +128,26 @@ export const mountTimelineBody = (pxPerSecond = TIMELINE_PPS): HTMLElement => {
 
 /**
  * jsdom does no layout, so a track that measures a lane or region sees all zeros.
- * Track code reads only `left` and `width`; the rest is filler to satisfy DOMRect.
+ * Track code reads only `left` and `width`, but pass the row's `top` where it is
+ * not 0: a rect whose vertical fields are all zero lets a reader that grabs
+ * `rect.top` instead of `rect.left` keep on measuring correctly.
  */
 export const stubRect = (
     el: HTMLElement,
     left: number,
     width: number,
+    top = 0,
 ): void => {
     el.getBoundingClientRect = (() =>
         ({
             left,
             width,
             right: left + width,
-            top: 0,
-            bottom: 0,
+            top,
+            bottom: top,
             height: 0,
             x: left,
-            y: 0,
+            y: top,
             toJSON: () => ({}),
         }) as DOMRect) as HTMLElement["getBoundingClientRect"];
 };

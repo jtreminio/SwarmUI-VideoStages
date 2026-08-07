@@ -43,6 +43,9 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> =>
         ...(clip.retake ? { retake: clip.retake } : {}),
     });
 
+/** The retake lane sits below the region, so its rect's top is never its left. */
+const RETAKE_LANE_TOP = 100;
+
 // Minimal region + retake lane (the real markup's shape: the retake window
 // lives in a per-clip lane BELOW the region) with the data-* hooks the module
 // reads.
@@ -79,7 +82,12 @@ const renderRetake = (body: HTMLElement, clips: ClipFixture[]): void => {
             `.vst-retake-lane[data-clip-idx="${i}"]`,
         );
         if (lane) {
-            stubRect(lane, cursor * TIMELINE_PPS, clip.duration * TIMELINE_PPS);
+            stubRect(
+                lane,
+                cursor * TIMELINE_PPS,
+                clip.duration * TIMELINE_PPS,
+                RETAKE_LANE_TOP,
+            );
         }
         cursor += clip.duration;
     });

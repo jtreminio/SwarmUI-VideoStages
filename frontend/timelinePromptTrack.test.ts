@@ -63,6 +63,9 @@ const mountPrompt = (clips: ClipFixture[]): HTMLTextAreaElement => {
     return mountPromptBox(promptText(clips));
 };
 
+/** The minor lane sits under the major band, so its rect's top is never its left. */
+const MINOR_LANE_TOP = 40;
+
 // Render a minimal prompt-track DOM (no full renderTimeline) with the data-* hooks the module reads.
 const renderPromptTrack = (body: HTMLElement, clips: ClipFixture[]): void => {
     let cursor = 0;
@@ -98,7 +101,12 @@ const renderPromptTrack = (body: HTMLElement, clips: ClipFixture[]): void => {
             `.vst-minor-lane[data-clip-idx="${i}"]`,
         );
         if (lane) {
-            stubRect(lane, cursor * TIMELINE_PPS, clip.duration * TIMELINE_PPS);
+            stubRect(
+                lane,
+                cursor * TIMELINE_PPS,
+                clip.duration * TIMELINE_PPS,
+                MINOR_LANE_TOP,
+            );
         }
         cursor += clip.duration;
     });
