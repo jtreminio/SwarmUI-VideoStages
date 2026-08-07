@@ -200,10 +200,7 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
     }
 
     internal static bool ShouldMatchStageLengthToAudio(AudioPlan audio) =>
-        audio.LengthOwner == AudioLengthOwner.Audio
-        && audio.Base.Kind is AudioSourceKind.Upload
-            or AudioSourceKind.AceStepFun
-            or AudioSourceKind.ControlNet;
+        audio.LengthOwner == AudioLengthOwner.Audio;
 
     // Prefer planned dimensions because root media can retain its source size.
     private (int Width, int Height) ResolveStageLatentDims(

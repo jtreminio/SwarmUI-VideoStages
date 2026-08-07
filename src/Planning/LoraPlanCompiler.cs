@@ -9,7 +9,7 @@ internal static class LoraPlanCompiler
     internal static ImmutableArray<LoraPlan> Compile(
         ClipSpec clip,
         StageSpec stage,
-        LoraTarget target = LoraTarget.ModelAndTextEncoder)
+        LoraTarget target)
     {
         ImmutableArray<LoraPlan>.Builder plans =
             ImmutableArray.CreateBuilder<LoraPlan>();

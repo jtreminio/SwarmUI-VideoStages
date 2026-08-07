@@ -235,7 +235,7 @@ public class PlanningCompilerComponentTests
             new(640, 360, 24, ArchitectureEntryMode.ImageToVideo));
         GuideReferencePlan guide = Assert.IsType<Ltx2StagePayload>(
             compilation.StagePayloads[stage.ClipStageRawIndex]).Guide;
-        var loras = LoraPlanCompiler.Compile(clip, stage);
+        var loras = LoraPlanCompiler.Compile(clip, stage, LoraTarget.ModelAndTextEncoder);
         var icLoras = IcLoraPlanCompiler
             .CompileClip(clip, new(640, 360, 24, ArchitectureEntryMode.ImageToVideo))
             .Stages[stage.ClipStageRawIndex];
@@ -270,7 +270,7 @@ public class PlanningCompilerComponentTests
             ],
         };
 
-        var plans = LoraPlanCompiler.Compile(clip, stage);
+        var plans = LoraPlanCompiler.Compile(clip, stage, LoraTarget.ModelAndTextEncoder);
 
         Assert.Collection(
             plans,
@@ -297,7 +297,7 @@ public class PlanningCompilerComponentTests
             Loras = [new LoraRef("disabled-for-this-stage", 1)],
         };
 
-        Assert.Empty(LoraPlanCompiler.Compile(clip, stage));
+        Assert.Empty(LoraPlanCompiler.Compile(clip, stage, LoraTarget.ModelAndTextEncoder));
     }
 
     [Fact]
@@ -321,7 +321,7 @@ public class PlanningCompilerComponentTests
         };
 
         Assert.Collection(
-            LoraPlanCompiler.Compile(clip, stage),
+            LoraPlanCompiler.Compile(clip, stage, LoraTarget.ModelAndTextEncoder),
             plan =>
             {
                 Assert.Equal("clip-text-only", plan.Name);

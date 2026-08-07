@@ -40,7 +40,7 @@ internal static class AudioPlanCompiler
             selection.Raw,
             selection.AceStepFunTrack,
             hasConfiguredTrack,
-            selection.Kind == AudioSourceKind.Upload
+            sourceKind == AudioSourceKind.Upload
                 ? clip.UploadedAudio
                 : null);
 
@@ -57,7 +57,7 @@ internal static class AudioPlanCompiler
             }
         }
         else if (clip.ClipLengthFromAudio
-            && AudioSourceKindPolicy.CanDriveClipDuration(selection.Kind))
+            && AudioSourceKindPolicy.CanDriveClipDuration(sourceKind))
         {
             lengthOwner = AudioLengthOwner.Audio;
             if (!baseSource.HasConfiguredTrack)
