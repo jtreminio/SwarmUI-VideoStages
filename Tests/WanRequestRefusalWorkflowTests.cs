@@ -120,10 +120,10 @@ public class WanRequestRefusalWorkflowTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        // Session-provider preflight warnings reach the request channel, not the plan.
+        // Session-provider preflight diagnostics land on the context, not on the plan.
         Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains("'Video End Frame' was ignored", StringComparison.Ordinal));
+            generator.RequireVideoExecutionPlanContext().PreflightDiagnostics,
+            diagnostic => diagnostic.Code == "wan.end-frame.ignored");
         Assert.Empty(bridge.Graph.NodesOfType<WanFirstLastFrameToVideoNode>());
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
         // The arm really ran on the checkpoint it names, and the profile still builds its own
@@ -173,11 +173,10 @@ public class WanRequestRefusalWorkflowTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        // Session-provider preflight warnings reach the request channel, not the plan, so their
-        // Code is not observable here.
+        // Session-provider preflight diagnostics land on the context, not on the plan.
         Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains("'Video End Frame' was ignored", StringComparison.Ordinal));
+            generator.RequireVideoExecutionPlanContext().PreflightDiagnostics,
+            diagnostic => diagnostic.Code == "wan.end-frame.ignored");
         Assert.Equal(
             wanFirst ? ["wan22", "ltx2"] : (string[])["ltx2", "wan22"],
             generator.RequireVideoExecutionPlanContext().Plan.Clips
@@ -213,11 +212,10 @@ public class WanRequestRefusalWorkflowTests
         SwarmKSamplerNode stage = StageSampler(bridge, 0);
         Assert.Equal(10, stage.Steps.LiteralAsInt());
         Assert.Equal(0, stage.StartAtStep.LiteralAsInt());
-        // Session-provider preflight warnings reach the request channel, not the plan.
+        // Session-provider preflight diagnostics land on the context, not on the plan.
         Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains(
-                "refinement strength is clip-local", StringComparison.Ordinal));
+            generator.RequireVideoExecutionPlanContext().PreflightDiagnostics,
+            diagnostic => diagnostic.Code == "wan22.host-param.unsupported");
 
         live.AssertAllLive(stage);
         AssertShippable(bridge, workflow, live);
