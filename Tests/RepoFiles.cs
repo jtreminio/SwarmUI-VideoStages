@@ -6,8 +6,10 @@ namespace VideoStages.Tests;
 /// located from this file's own compile-time path rather than from the working directory.</summary>
 internal static class RepoFiles
 {
-    internal static string SourceRoot { get; } =
-        Path.GetFullPath(Path.Combine(TestsDirectory(), "..", "src"));
+    internal static string RepoRoot { get; } =
+        Path.GetFullPath(Path.Combine(TestsDirectory(), ".."));
+
+    internal static string SourceRoot { get; } = Path.Combine(RepoRoot, "src");
 
     internal static string ReadFrontend(string relativePath) =>
         File.ReadAllText(Path.Combine(TestsDirectory(), "..", "frontend", relativePath));
