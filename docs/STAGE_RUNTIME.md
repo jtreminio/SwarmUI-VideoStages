@@ -36,6 +36,8 @@ and the source-only `none` path do not receive separate top-level runners.
 planning. Two `ConditionalWeakTable` caches are keyed by the current
 `WorkflowGenerator`: one for `TimelineSpec`, one for the compiled plan.
 Repeated SwarmUI workflow callbacks therefore observe the same immutable plan.
+A third caches `TimelineSpec` by `T2IParamInput`, because prompt-tag section
+resolution runs with no live `WorkflowGenerator` to key on.
 
 The stages before runtime are:
 
