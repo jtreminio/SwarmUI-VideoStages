@@ -1,5 +1,9 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Text2Image;
+using VideoStages.Generated;
+using Xunit;
 
 namespace VideoStages.Tests;
 
@@ -73,4 +77,71 @@ internal sealed class WanWorkflowFixture : VideoStagesWorkflowFixture
     public override double DefaultCfgScale => CfgScale;
 
     public override int ExpectedGeneratedFrames => GeneratedFrames;
+
+    /// <summary>Frames a 0.6s source clip conforms to on WAN's 4k+1 grid at 24 fps.</summary>
+    public const int SourceClipFrames = 17;
+
+    /// <summary>The source window opens one second in.</summary>
+    public const int SourceClipStartFrame = 24;
+
+    /// <summary>A 1x1 PNG: <c>ValidateParam</c> rejects IMAGE payloads under 10 base64 characters,
+    /// and an undecodable one is rejected later still.</summary>
+    public const string EndImageBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42m"
+        + "NkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+    public const string EndImagePayload = $"data:image/png;base64,{EndImageBase64}";
+
+    public static JObject SourceClip(params JObject[] stages) =>
+        SourceClip(withFileName: true, stages);
+
+    /// <summary>The file name is optional metadata; the inline payload is what materializes.</summary>
+    public static JObject SourceClip(bool withFileName, params JObject[] stages)
+    {
+        JObject clip = Fixtures.SourceClip(0.6, 1.0, stages);
+        if (!withFileName)
+        {
+            ((JObject)clip["initVideo"]).Remove("fileName");
+        }
+        return clip;
+    }
+
+    public static SwarmFrameWindowNode AssertSourceConformChain(
+        WorkflowBridge bridge,
+        int expectedFrames = SourceClipFrames) =>
+        TypedWorkflowAssertions.AssertSourceConformChain(
+            bridge,
+            SourceClipStartFrame,
+            expectedFrames,
+            VideoStagesWorkflowFixture.Width,
+            VideoStagesWorkflowFixture.Height);
+
+    /// <summary>The single-frame donor WAN conditions from, and the framing scale behind it.</summary>
+    public static ImageScaleNode FirstFrameFraming(ComfyNode startImage)
+    {
+        ImageFromBatchNode donor = Assert.IsType<ImageFromBatchNode>(startImage);
+        Assert.Equal(0, donor.BatchIndex.LiteralAsInt());
+        Assert.Equal(1, donor.Length.LiteralAsInt());
+        return Assert.IsType<ImageScaleNode>(donor.Image.Connection?.Node);
+    }
+
+    public static JObject StageWithLoras(JObject stage, params JObject[] loras)
+    {
+        stage["loras"] = new JArray(loras);
+        return stage;
+    }
+
+    public static JObject Lora(string name, double weight, double? textEncoderWeight = null)
+    {
+        JObject lora = new()
+        {
+            ["name"] = name,
+            ["weight"] = weight,
+        };
+        if (textEncoderWeight is not null)
+        {
+            lora["textEncoderWeight"] = textEncoderWeight.Value;
+        }
+        return lora;
+    }
 }

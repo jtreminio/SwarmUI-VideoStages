@@ -2,7 +2,9 @@ using ComfyTyped.Core;
 using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
+using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
+using VideoStages.Planning;
 using VideoStages.Generated;
 using Xunit;
 
@@ -309,4 +311,85 @@ internal static class TypedWorkflowAssertions
     public static bool ReachesUpstream(WorkflowBridge bridge, ComfyNode start, string targetNodeId) =>
         start is not null
         && (start.Id == targetNodeId || bridge.Graph.IsReachableUpstream(start, targetNodeId));
+
+    /// <summary>
+    /// A sampler's model branch, unwound: every LoRA applied to it (sorted, since load order is a
+    /// separate claim) and the checkpoint loader they all sit on. WAN checkpoints live under
+    /// <c>diffusion_models</c>, so that loader is a <c>UNETLoader</c> — reachability from the
+    /// sampler proves nothing here, because a refining stage also reaches its predecessor's whole
+    /// model branch through the latent it re-encodes.
+    /// </summary>
+    public static (UNETLoaderNode Loader, string[] Loras) ModelBranchOf(SwarmKSamplerNode sampler)
+    {
+        List<string> loras = [];
+        ComfyNode node = sampler.Model.Connection?.Node;
+        while (node is LoraLoaderModelOnlyNode lora)
+        {
+            loras.Add(lora.LoraName.LiteralAsString());
+            node = lora.Model.Connection?.Node;
+        }
+        return (Assert.IsType<UNETLoaderNode>(node), [.. loras.Order()]);
+    }
+
+    /// <summary>
+    /// A clip that refines uploaded footage instead of generating from noise. Stage 0's default
+    /// <c>Generated</c> reference is stripped so the source, not a root donor, is its input.
+    /// </summary>
+    public static IReadOnlyList<PlanDiagnostic> Diagnostics(WorkflowGenerator generator) =>
+        generator.RequireVideoExecutionPlanContext().Plan.Diagnostics;
+
+    /// <summary>
+    /// Exactly one decode reads each of the given samplers, and no other decode reads any of them.
+    /// This is the upper bound a chain's spot checks do not give: following one sampler's decode
+    /// says nothing about a second decode of the same latent. Core's own base-image decode is not
+    /// counted — it reads no stage sampler.
+    /// </summary>
+    public static void AssertOneDecodePerStage(
+        WorkflowBridge bridge,
+        params SwarmKSamplerNode[] samplers)
+    {
+        IVaeDecode[] decodes = [.. bridge.Graph.NodesOfType<IVaeDecode>()
+            .Where(decode => samplers.Contains(decode.Samples.Connection?.Node))];
+        Assert.Equal(samplers.Length, decodes.Length);
+        Assert.All(
+            samplers,
+            sampler => Assert.Single(
+                decodes,
+                decode => decode.Samples.Connection?.Node == sampler));
+    }
+
+    /// <summary>
+    /// Every node id named in SwarmUI's six-part model-loader cache tuple is still in the shipped
+    /// workflow, and the tuple's model half is <paramref name="model"/>.
+    /// <para>
+    /// This repo has shipped a dead id in that tuple twice — "Node 103 stale dedup" and "Node 101
+    /// autogrow" — both times because cleanup pruned a node a cached tuple still named.
+    /// <c>VideoGraphHelpers.ReferencesRemovedNode</c> carries a parse branch for this format for
+    /// exactly that reason, and only a real graph can test it.
+    /// </para>
+    /// </summary>
+    public static void AssertLoaderTupleIsLive(JObject workflow, string tuple, ComfyNode model)
+    {
+        string[] parts = tuple.Split(':');
+        Assert.Equal(6, parts.Length);
+        // Slots 1/3/5 are output indices; the VAE pair is optional and then blank.
+        foreach (string nodeId in new[] { parts[0], parts[2], parts[4] }
+            .Where(id => !string.IsNullOrWhiteSpace(id)))
+        {
+            Assert.True(
+                workflow[nodeId] is JObject,
+                $"Cached loader tuple '{tuple}' names node {nodeId}, which the shipped workflow "
+                    + "does not contain.");
+        }
+        Assert.Equal(model.Id, parts[0]);
+    }
+
+    /// <summary>The prompt text a conditioning node was encoded from.</summary>
+    public static string ConditioningText(ComfyNode conditioning, bool negative)
+    {
+        ComfyNode encode = conditioning
+            .FindInput(negative ? "negative" : "positive")
+            .Connection?.Node;
+        return encode?.FindInput("text").LiteralAsString();
+    }
 }
