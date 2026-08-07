@@ -721,7 +721,6 @@ export interface RepeatingGroupItem {
     groupClassName?: string;
     editor?: HTMLElement;
     onSelect?: () => void;
-    onShiftDelete?: () => void;
     onDelete?: () => void;
     deleteTitle?: string;
     deleteDisabled?: boolean;
@@ -851,7 +850,7 @@ export const buildRepeatingEditor = (
         if (item.headerAction) {
             appendSectionHeaderAction(actions, item.headerAction);
         }
-        const onDelete = item.onDelete ?? item.onShiftDelete;
+        const onDelete = item.onDelete;
         if (onDelete) {
             const remove = document.createElement("button");
             remove.type = "button";

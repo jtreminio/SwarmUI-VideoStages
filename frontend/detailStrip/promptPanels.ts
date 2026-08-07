@@ -91,7 +91,7 @@ const buildRelayPromptSection = (
                         clipIdx,
                         windowIdx: index,
                     }),
-                onShiftDelete: () => ctx.deleteWindowEntry(clipIdx, index),
+                onDelete: () => ctx.deleteWindowEntry(clipIdx, index),
             })),
             add: {
                 title: decision.supported

@@ -62,7 +62,7 @@ export const buildRefSection = (
                 active: refIdx === activeRefIdx,
                 className: "vst-ref-tab",
                 onSelect: () => setSelection({ kind: "ref", clipIdx, refIdx }),
-                onShiftDelete: () => ctx.deleteRefEntry(clipIdx, refIdx),
+                onDelete: () => ctx.deleteRefEntry(clipIdx, refIdx),
             })),
             add: {
                 title: !decision.supported

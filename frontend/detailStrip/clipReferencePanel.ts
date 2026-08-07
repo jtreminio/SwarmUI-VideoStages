@@ -220,8 +220,7 @@ export const buildClipReferenceSection = (
                             clipIdx,
                             referenceIdx: index,
                         }),
-                    onShiftDelete: () =>
-                        ctx.deleteClipReference(clipIdx, index),
+                    onDelete: () => ctx.deleteClipReference(clipIdx, index),
                 })),
             ],
             add: {

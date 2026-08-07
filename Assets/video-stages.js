@@ -8628,7 +8628,7 @@
       if (item.headerAction) {
         appendSectionHeaderAction(actions, item.headerAction);
       }
-      const onDelete = item.onDelete ?? item.onShiftDelete;
+      const onDelete = item.onDelete;
       if (onDelete) {
         const remove = document.createElement("button");
         remove.type = "button";
@@ -11588,7 +11588,7 @@ ${slot}`;
             clipIdx,
             referenceIdx: index
           }),
-          onShiftDelete: () => ctx.deleteClipReference(clipIdx, index)
+          onDelete: () => ctx.deleteClipReference(clipIdx, index)
         }))
       ],
       add: {
@@ -12058,7 +12058,7 @@ ${slot}`;
         active: refIdx === activeRefIdx,
         className: "vst-ref-tab",
         onSelect: () => setSelection({ kind: "ref", clipIdx, refIdx }),
-        onShiftDelete: () => ctx.deleteRefEntry(clipIdx, refIdx)
+        onDelete: () => ctx.deleteRefEntry(clipIdx, refIdx)
       })),
       add: {
         title: !decision.supported ? decision.reason : hasSupportedEndpoint ? "Add a frame reference" : "The selected models do not publish a supported frame-reference endpoint.",
@@ -13144,7 +13144,7 @@ ${slot}`;
           clipIdx,
           windowIdx: index
         }),
-        onShiftDelete: () => ctx.deleteWindowEntry(clipIdx, index)
+        onDelete: () => ctx.deleteWindowEntry(clipIdx, index)
       })),
       add: {
         title: decision.supported ? "Add a relay prompt in the first available time window" : decision.reason,
