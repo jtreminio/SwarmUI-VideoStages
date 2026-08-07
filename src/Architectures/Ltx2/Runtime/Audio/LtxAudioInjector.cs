@@ -51,7 +51,6 @@ internal sealed class LtxAudioInjector(
                 bridge,
                 lengthFramesAudioSource,
                 ResolveFramesPerSecond());
-            ApplyFramesConnectionToRemovableAudioSources(bridge, removableSourceIds, lengthToFrames.Frames);
             BridgeSync.SyncLastId(g);
             LtxFrameCountConnector.ApplyToExistingSources(g, WorkflowBridge.ToPath(lengthToFrames.Frames));
             adjustedAudio = new(
@@ -135,22 +134,6 @@ internal sealed class LtxAudioInjector(
                 SwarmUI.Text2Image.T2IParamTypes.VideoFPS,
                 LtxStageRuntimeSettings.DefaultFps);
         return fps > 0 ? fps : LtxStageRuntimeSettings.DefaultFps;
-    }
-
-    private static void ApplyFramesConnectionToRemovableAudioSources(
-        WorkflowBridge bridge,
-        HashSet<string> sourceIds,
-        NodeOutput<IntType> framesOutput)
-    {
-        foreach (string sourceId in sourceIds)
-        {
-            LTXVEmptyLatentAudioNode emptyAudio = bridge.Graph.GetNode<LTXVEmptyLatentAudioNode>(sourceId);
-            if (emptyAudio is null)
-            {
-                continue;
-            }
-            emptyAudio.FramesNumber.ConnectTo(framesOutput);
-        }
     }
 
     private SetLatentNoiseMaskNode CreateAudioMaskNode(WorkflowBridge bridge, JArray encodedAudioPath)

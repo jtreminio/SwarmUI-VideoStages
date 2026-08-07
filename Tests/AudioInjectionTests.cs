@@ -85,6 +85,62 @@ public class AudioInjectionTests
         };
     }
 
+    /// <summary>
+    /// <c>matchVideoLengthToAudio</c> makes the uploaded track decide the video length: the empty
+    /// video latent's frame count stops being a literal and becomes a wire off
+    /// <c>SwarmAudioLengthToFrames</c>, and the audio the model conditions on is that same node's
+    /// output, so the two cannot drift. Disabling the whole branch used to leave the suite green.
+    /// </summary>
+    [Fact]
+    public void Length_matching_wires_the_video_frame_count_to_the_audio_length()
+    {
+        JObject workflow = BuildAudioInjectionWorkflow();
+        workflow["4"] = new JObject
+        {
+            ["class_type"] = EmptyLTXVLatentVideoNode.ClassType,
+            ["inputs"] = new JObject
+            {
+                ["width"] = 512,
+                ["height"] = 512,
+                ["length"] = 97,
+                ["batch_size"] = 1
+            }
+        };
+        // A second consumer keeps the empty audio latent connected, so it survives the prune and
+        // its retargeted frame count stays observable. Without it every empty audio node is
+        // removed and the audio half of the retargeting cannot be seen at all.
+        workflow["5"] = new JObject
+        {
+            ["class_type"] = "UnitTest_AudioLatentConsumer",
+            ["inputs"] = new JObject { ["samples"] = new JArray("2", 0) }
+        };
+        WorkflowGenerator generator = CreateInjectorGenerator(workflow);
+        WGNodeData audio = new(
+            new JArray("901", 0),
+            generator,
+            WGNodeData.DT_AUDIO,
+            T2IModelClassSorter.CompatLtxv2);
+
+        bool injected = new LtxAudioInjector(generator, new RootVideoStageResizer(generator))
+            .TryInject(audio, matchVideoLengthToAudio: true);
+
+        Assert.True(injected);
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
+        // The timeline rate, not the node's codegen default.
+        Assert.Equal(24, lengthToFrames.FrameRate.LiteralAsInt());
+        EmptyLTXVLatentVideoNode video = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>());
+        Assert.Same(lengthToFrames.Frames, video.Length.Connection);
+        LTXVAudioVAEEncodeNode encode = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+        Assert.Same(lengthToFrames.Audio, encode.Audio.Connection);
+        LTXVEmptyLatentAudioNode survivor = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
+        Assert.Same(lengthToFrames.Frames, survivor.FramesNumber.Connection);
+    }
+
     /// <summary>No generated-graph test reaches <c>TryInject</c> past its empty-concat guard, so
     /// this stub harness is the only thing that exercises the injector at all.</summary>
     [Fact]
