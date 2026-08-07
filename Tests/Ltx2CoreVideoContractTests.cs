@@ -22,7 +22,7 @@ namespace VideoStages.Tests;
 /// <para>
 /// The POST shape decides the topology. Image-to-video keeps core's base pass (sampler seed
 /// <c>Seed</c>) and a decoded base image the timeline guides from, while the extension's own
-/// <c>DropCoreOutput</c> step (<c>11.05</c>) prunes core's LTX video root
+/// <see cref="VideoExecutionPlanContext.DropCoreOutput"/> step (<c>11.05</c>) prunes core's LTX video root
 /// so the stage sampler is the only video sampler left. Text-to-video has no base image at all, and
 /// the extension's displaced-root cleanup sweeps anything core built that the timeline does not
 /// consume — including core's whole ControlNet apply chain.

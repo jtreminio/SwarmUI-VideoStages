@@ -64,7 +64,7 @@ public class VideoStagesExtension : Extension
         // Phase 1 is the only place a request may be rejected for a missing dependency: every later
         // phase mutates the host graph, so a failure past it leaves the user with a broken workflow.
         WorkflowGenerator.AddStep(
-            Runner.PreflightRequest,
+            Runner.Phase(context => context.PrepareRequest()),
             Constants.WorkflowStepPriority.PreflightRequest);
         WorkflowGenerator.AddStep(
             Runner.Phase(context => context.CaptureControlNetPreprocessors()),

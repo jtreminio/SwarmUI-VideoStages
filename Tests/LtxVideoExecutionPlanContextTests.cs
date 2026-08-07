@@ -66,26 +66,26 @@ public class VideoExecutionPlanContextTests
         WorkflowGenerator generator = CreateGenerator(input);
         VideoExecutionPlanContext context = generator.RequireVideoExecutionPlanContext();
 
-        Action<WorkflowGenerator>[] phases =
+        Action[] phases =
         [
-            Runner.Phase(context => context.CaptureControlNetPreprocessors()),
-            Runner.Phase(context => context.CaptureBaseReference()),
-            Runner.Phase(context => context.CaptureRefinerReference()),
-            Runner.Phase(context => context.CapturePreCoreMedia()),
-            Runner.Phase(context => context.DropCoreOutput()),
-            Runner.Phase(context => context.ApplyRootAudioMaskDimensions()),
-            Runner.Phase(context => context.RunConfiguredStages()),
-            current => RootVideoStageResizer.ApplyRootResolutionBeforeImageToVideo(new()
+            context.CaptureControlNetPreprocessors,
+            context.CaptureBaseReference,
+            context.CaptureRefinerReference,
+            context.CapturePreCoreMedia,
+            context.DropCoreOutput,
+            context.ApplyRootAudioMaskDimensions,
+            context.RunConfiguredStages,
+            () => RootVideoStageResizer.ApplyRootResolutionBeforeImageToVideo(new()
             {
-                Generator = current,
+                Generator = generator,
                 ContextID = T2IParamInput.SectionID_Video,
             }),
         ];
 
-        foreach (Action<WorkflowGenerator> phase in phases)
+        foreach (Action phase in phases)
         {
             InvalidOperationException error = Assert.Throws<InvalidOperationException>(
-                () => phase(generator));
+                () => phase());
             Assert.Contains("preflight must complete first", error.Message);
         }
         Assert.Equal(VideoExecutionState.Compiled, context.State);

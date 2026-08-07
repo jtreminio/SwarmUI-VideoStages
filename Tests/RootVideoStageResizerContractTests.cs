@@ -64,8 +64,8 @@ public class RootVideoStageResizerContractTests
         VideoExecutionPlanContext request = Assert.IsType<VideoExecutionPlanContext>(
             generator.GetVideoExecutionPlanContext());
         Assert.Equal(Ltx2ArchitectureModule.ArchitectureId, request.RootOwnerArchitectureId);
-        SwarmUserErrorException preflightError = Assert.Throws<SwarmUserErrorException>(() =>
-            Runner.PreflightRequest(generator));
+        SwarmUserErrorException preflightError = Assert.Throws<SwarmUserErrorException>(
+            request.PrepareRequest);
         // Applicable handlers must replay the memoized preflight failure, not silently no-op.
         SwarmUserErrorException beforeError = Assert.Throws<SwarmUserErrorException>(() =>
             RootVideoStageResizer.ApplyRootResolutionBeforeImageToVideo(genInfo));
