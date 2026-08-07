@@ -129,10 +129,8 @@ Common code knows:
 - capability and rule decisions;
 - architecture-owned clip and stage payloads; common code reads the required
   stage execution core while graph-specific additions remain opaque;
-- runtime-session, boundary-assembler, host-phase, and timeline-lifecycle
-  contracts;
-- resolved audio runtime sources, root execution policy, and the timeline
-  assembly session; and
+- runtime-session, host-phase, and timeline-lifecycle contracts;
+- resolved audio runtime sources and root execution policy; and
 - decoded clip artifacts.
 
 Common code knows the *shape* of those authored options and nothing about their
@@ -293,10 +291,11 @@ regenerate the head are skipped: passthrough stages, retake stages (their
 per-frame noise mask owns what regenerates), and any stage authoring its own
 first-frame reference.
 
-Timeline assembly partitions clips into maximal runs connected by effective
-non-cut boundaries. Each run is assembled by its architecture; the decoded run
-outputs are then concatenated with architecture-neutral cuts. Final output
-metadata never inherits the first clip's model compatibility.
+Assembly is entirely common. `Timeline.Boundaries` re-resolves the planned
+joins against what the architectures actually produced, and `Timeline.Merger`
+builds every join through the two shared joiners — an architecture contributes
+a decoded clip, never a join. Final output metadata never inherits the first
+clip's model compatibility.
 
 ## Audio ownership
 
@@ -399,13 +398,13 @@ Adding another family should require:
    exposes the required common execution core;
 5. a runtime provider that answers request preflight for its dependencies and
    creates one timeline session;
-6. same-architecture boundary assembly as soon as any non-cut join is declared
-   supported or conditional;
+6. a boundary rule declaring which joins it supports; the common merger builds
+   them;
 7. an explicit frontend owner guard only when the family has concrete custom UI
    behavior; architectures with no custom frontend behavior need no frontend
    registration; and
 8. contract tests using the common dispatcher, strict catalog parser, and
-   timeline assembler.
+   `Timeline.Merger`.
 
 It must not require changes to generic document parsing, clip ordering,
 history, cut assembly, output publication, or the frontend's generic panel

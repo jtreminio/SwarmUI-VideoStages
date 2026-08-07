@@ -472,8 +472,8 @@ the returned architecture matches both the selected session and planned clip
 before validating clip identity and decoded-media shape. It does not repeat
 model-name checks.
 
-Timeline state such as the plan, prepared audio, assembly session, and root
-policy is captured when each architecture session is created. LTX captures its
+Timeline state such as the plan, prepared audio, and root policy is captured
+when each architecture session is created. LTX captures its
 private root, audio, guide, and boundary state in `Ltx2GenerationSession`;
 MiniMax captures its root, audio sources, and base/refiner references in
 `MiniMaxGenerationSession`; the init-video-only session captures only frame rate
@@ -631,7 +631,7 @@ after the final stage; for a multi-clip timeline, common assembly applies that
 trim once over the joined timeline. It returns the final decoded video-only
 artifact. A new generated hard-cut clip resets to the captured root rather than
 consuming the previous clip. LTX, MiniMax, and WAN boundaries are neutral hard
-cuts; no family assembler crosses the architecture boundary.
+cuts, built by the common merger; no architecture builds a join itself.
 
 ### B6d. Generic host-video runtime execution
 
