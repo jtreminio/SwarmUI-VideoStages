@@ -4,8 +4,7 @@ using VideoStages.Authoring;
 namespace VideoStages.Planning;
 
 /// <summary>
-/// Selects the only source allowed to determine clip duration. ControlNet wins when both authored
-/// duration flags are set.
+/// Which source determines clip duration. ControlNet wins when both duration flags are authored.
 /// </summary>
 internal enum AudioLengthOwner
 {

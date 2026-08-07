@@ -1,8 +1,9 @@
 namespace VideoStages.Planning;
 
 /// <summary>
-/// Pixel-frame grid arithmetic for a known, static generated-video request. This must not be used
-/// for initVideoClip media lengths, runtime-derived counts, boundary windows, or timeline conformance.
+/// Pixel-frame grid arithmetic for a known, static generated-video request; expressible counts are
+/// <c>k * frameGrid + gridOrigin</c>. This must not be used for initVideoClip media lengths,
+/// runtime-derived counts, boundary windows, or timeline conformance.
 /// </summary>
 internal static class StaticGeneratedFrameGrid
 {
@@ -18,8 +19,8 @@ internal static class StaticGeneratedFrameGrid
     }
 
     /// <summary>
-    /// Snaps a known static generated request up so the effective duration never becomes shorter
-    /// than the authored duration.
+    /// Snaps a static generated pixel-frame request up, so the effective duration never becomes
+    /// shorter than the authored duration.
     /// </summary>
     internal static int SnapUp(int requestedPixelFrames, int frameGrid, int gridOrigin = 1)
     {

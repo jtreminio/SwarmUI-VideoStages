@@ -5,9 +5,9 @@ using VideoStages.Planning;
 namespace VideoStages;
 
 /// <summary>
-/// Proves every uploaded media payload in a compiled plan is loadable before graph mutation begins,
-/// so an unreadable upload blocks the request instead of being dropped at runtime. Runtime loads the
-/// same payloads a second time; for a server-side path that is a second disk read.
+/// Turns unreadable uploaded media into blocking diagnostics before graph mutation begins, so the
+/// throwing Get* entry points can treat a load failure as a bug. Runtime loads the same payloads a
+/// second time; for a server-side path that is a second disk read.
 /// </summary>
 internal sealed class UploadedMediaPreflight(T2IParamInput input)
 {
