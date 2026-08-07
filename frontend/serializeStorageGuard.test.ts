@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
 import { minimalClip } from "./__test_helpers__/clipFixtures";
-import { normalizeClip } from "./normalization";
+import { normalizeClip } from "./normalizationClip";
 import { serializeClipsForStorage } from "./persistence/documentCodec";
 import {
     STORED_CLIP_KEYS,

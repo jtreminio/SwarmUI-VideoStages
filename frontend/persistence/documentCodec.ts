@@ -5,7 +5,8 @@ import {
     ensureAuthoringDocumentIdentity,
     ensureClipEntityIdentities,
 } from "../identity";
-import { normalizeAudioTracks, normalizeClip } from "../normalization";
+import { normalizeAudioTracks } from "../normalizationAudio";
+import { normalizeClip } from "../normalizationClip";
 import { optionalNonNegativeNumber } from "../normalizationShared";
 import type { StoredClip } from "../storageTypes";
 import {

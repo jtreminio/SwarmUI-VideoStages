@@ -12,23 +12,27 @@ import {
 } from "./architectures/ltx2/icLoraNormalization";
 import { clipReferenceTags } from "./clipReferenceAuthoring";
 import {
-    appendRefToClip,
     buildDefaultClip,
+    normalizeClip,
+    normalizeContinueOverlap,
+} from "./normalizationClip";
+import {
+    normalizeClipReferences,
+    normalizeInitVideo,
+    normalizeRetake,
+} from "./normalizationMedia";
+import {
+    appendRefToClip,
     buildDefaultRef,
     buildDefaultStage,
-    normalizeClip,
-    normalizeClipReferences,
-    normalizeContinueOverlap,
-    normalizeInitVideo,
     normalizeRef,
-    normalizeRetake,
     normalizeStage,
     normalizeStageLoras,
     normalizeStageRefStrengthValue,
     readRawStageProp,
     readRawStageString,
     removeRefAt,
-} from "./normalization";
+} from "./normalizationStage";
 import { framesForClip } from "./renderUtils";
 import {
     REF_SOURCE_BASE,

@@ -39,9 +39,7 @@ const normalizeAudioTrackSourceKind = (
     }
 };
 
-export const normalizeAudioTrackSpan = (
-    value: unknown,
-): AudioTrackSpan | null => {
+const normalizeAudioTrackSpan = (value: unknown): AudioTrackSpan | null => {
     if (!isRecord(value)) {
         return null;
     }

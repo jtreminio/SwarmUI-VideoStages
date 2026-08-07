@@ -18,7 +18,7 @@ import {
 } from "./bottomTimelineTab";
 import { createGestureRouter } from "./gestureRouter";
 import { getVideoStagesHostBridge } from "./host";
-import { buildDefaultClip } from "./normalization";
+import { buildDefaultClip } from "./normalizationClip";
 import {
     getClips,
     getState,

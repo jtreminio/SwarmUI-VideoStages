@@ -87,7 +87,7 @@ export const buildDefaultStageRefStrengths = (
     defaultStrength = STAGE_REF_STRENGTH_DEFAULT,
 ): number[] => Array.from({ length: refCount }, () => defaultStrength);
 
-export const normalizeStageRefStrengths = (
+const normalizeStageRefStrengths = (
     rawStrengths: unknown,
     refCount: number,
 ): number[] => {

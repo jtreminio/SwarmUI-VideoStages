@@ -13,7 +13,7 @@ import {
     buildDefaultRef,
     getReferenceFrameMax,
     removeRefAt,
-} from "./normalization";
+} from "./normalizationStage";
 import { getClips, getState, getTimelineStore } from "./persistence/repository";
 import { nextAllowedReferencePosition } from "./referenceAuthoring";
 import type { FrameGridSpec } from "./renderUtils";

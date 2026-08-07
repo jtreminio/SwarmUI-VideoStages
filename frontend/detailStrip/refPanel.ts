@@ -16,7 +16,7 @@ import {
     buildImageSourceOptions,
     resolveImageSourceValue,
 } from "../imageSource";
-import { getReferenceFrameMax } from "../normalization";
+import { getReferenceFrameMax } from "../normalizationStage";
 import { setSelection } from "../selection";
 import {
     type Clip,

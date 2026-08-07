@@ -25,7 +25,7 @@ import {
     buildDefaultRef,
     buildDefaultStage,
     getReferenceFrameMax,
-} from "../normalization";
+} from "../normalizationStage";
 import { nextAllowedReferencePosition } from "../referenceAuthoring";
 import { getDefaultStageModel } from "../rootDefaults";
 import { selectionAfterRemoval, setSelection } from "../selection";

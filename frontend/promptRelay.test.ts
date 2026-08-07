@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "@jest/globals";
 import { minimalClip } from "./__test_helpers__/clipFixtures";
-import { normalizePromptWindows } from "./normalization";
+import { normalizePromptWindows } from "./normalizationMedia";
 import { readGlobalPrompt } from "./swarmInputs";
 import { computeRegionLayout } from "./timelineView/layout";
 import { renderPromptTrackRow } from "./timelineView/trackRows";

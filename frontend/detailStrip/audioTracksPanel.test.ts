@@ -4,7 +4,7 @@ import {
     audioTrackIndicesForClipWindow,
     clipTimelineWindow,
 } from "../documentQueries";
-import { normalizeAudioTracks } from "../normalization";
+import { normalizeAudioTracks } from "../normalizationAudio";
 import { serializeStateForStorage } from "../persistence/documentCodec";
 import {
     getSelection,
