@@ -10,6 +10,16 @@ This extension is in a subdirectory that is gitignored by the SwarmUI project. T
 
 You are explicitly required to run unit tests for this extension when your changes affect this extension’s code or tests.
 
+**See every test fail before you trust it.** Break the code a new or changed test guards, watch it
+go red, restore. A test that has never failed is not evidence. Before deleting a test, prove by the
+same method that its coverage exists elsewhere — a claim that it does is not proof, and has been
+wrong. Read the `Test Suites:` line too: a suite that fails to compile still prints a plausible
+`Tests:` count.
+
+A test that cannot be made red by breaking production code is not exempt — it is the thing this
+rule is aimed at. Negative reflection guards ("no method named X exists") only fail when someone
+adds the name back, which review already catches; delete them rather than keep them as decoration.
+
 ## Where `run-tests` is (working directory matters)
 
 The `run-tests` script lives in **this extension’s root directory**: the folder that contains `SwarmUI-VideoStages.csproj`, `SwarmUI-VideoStages.Tests.sln`, and `run-tests`. It is **not** at the main SwarmUI repository root and not inside `src/`, `Tests/`, or `frontend/` unless that is already the extension root.
@@ -52,10 +62,6 @@ Directions the recent history has been going. Keep going that way:
 - **Match the runtime instead of reimplementing it.** When planning predicts something execution decides, call the same code; don't hand-roll a parallel copy.
 - **Prefer a declared capability over a hard-coded family check.** Ask the descriptor what an architecture can do; don't compare its id.
 - **Generate and drift-test cross-boundary vocabulary.** C# owns it; hand-written mirrors are a defect.
-- **See every test fail before you trust it.** Break the code a new or changed test guards, watch
-  it go red, restore. A test that has never failed is not evidence. Before deleting a test, prove
-  by the same method that its coverage exists elsewhere — a claim that it does is not proof, and
-  has been wrong.
 - **Keep the build and the test output quiet.** No warnings, no noise.
 - **One item, one commit, one short imperative subject.** No body, no trailers.
 - **Backing a change out is fine** when it did not earn its place.

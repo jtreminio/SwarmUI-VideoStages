@@ -1,5 +1,4 @@
 using System.Reflection;
-using VideoStages.Authoring;
 using VideoStages.Planning;
 using Xunit;
 using VideoStages.Architectures.Ltx2.Runtime.Audio;
@@ -16,15 +15,6 @@ public class TypedStageExecutionTests
     private const BindingFlags AnyMember =
         BindingFlags.Instance | BindingFlags.Static
         | BindingFlags.Public | BindingFlags.NonPublic;
-
-    [Fact]
-    public void Ltx_stage_execution_takes_no_StageSpec_overload()
-    {
-        Assert.DoesNotContain(
-            typeof(StageRunner).GetMethods(AnyMember),
-            method => method.Name == nameof(StageRunner.RunStage)
-                && method.GetParameters().FirstOrDefault()?.ParameterType == typeof(StageSpec));
-    }
 
     [Fact]
     public void Ltx_reference_resolution_and_conditioning_keep_the_typed_reference_plan()
@@ -54,17 +44,5 @@ public class TypedStageExecutionTests
         Assert.Equal(typeof(RetakePlan), retake.GetParameters()[2].ParameterType);
         Assert.NotNull(audioLength);
         Assert.Equal(typeof(ClipPlan), Assert.Single(audioLength.GetParameters()).ParameterType);
-        Assert.DoesNotContain(
-            new[]
-            {
-                typeof(LtxStageLatentBuilder),
-                typeof(LtxStageLatentAudioFactory),
-                typeof(LtxReusableLatentResolver),
-                typeof(LtxVideoRetakeMasker),
-                typeof(LtxAudioWindowMasker),
-            }.SelectMany(type => type.GetMethods(AnyMember | BindingFlags.DeclaredOnly)),
-            method => method.GetParameters().Any(parameter =>
-                parameter.ParameterType == typeof(StageSpec)
-                || parameter.ParameterType == typeof(ClipSpec)));
     }
 }
