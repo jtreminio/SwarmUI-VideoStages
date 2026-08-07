@@ -16490,7 +16490,7 @@ ${slot}`;
     const hostLifecycle = createTimelineHostLifecycle({
       refresh: () => refresh(),
       refreshCatalog: () => {
-        void adoptArchitectureCatalog(true);
+        requestArchitectureCatalog(true);
       },
       syncFromCarrier: () => {
         if (!hasAuthoritativeCatalog()) {
@@ -16612,7 +16612,7 @@ ${slot}`;
       if (renderBlockingArchitectureCatalogStatus(
         body,
         catalogSnapshot,
-        () => void adoptArchitectureCatalog(true)
+        () => requestArchitectureCatalog(true)
       )) {
         return;
       }
@@ -16656,7 +16656,7 @@ ${slot}`;
         renderRetainedArchitectureCatalogStatus(
           body,
           catalogSnapshot,
-          () => void adoptArchitectureCatalog(true)
+          () => requestArchitectureCatalog(true)
         );
         viewport.restoreScroll(previousScroll);
         linking.reapplySelection(body, clips.length);
@@ -16667,15 +16667,17 @@ ${slot}`;
       }
     };
     const refresh = () => renderAll();
-    const adoptArchitectureCatalog = (forceRefresh = false) => {
+    const requestArchitectureCatalog = (forceRefresh = false) => {
       const currentCatalog = getArchitectureCatalogSnapshot();
       if (!forceRefresh && currentCatalog.catalog && currentCatalog.status !== "refreshing") {
         renderAll();
-        return Promise.resolve();
+        return;
       }
-      const request = forceRefresh ? refreshAuthoritativeArchitectureCatalog() : loadAuthoritativeArchitectureCatalog();
-      return request.then(() => {
-      });
+      if (forceRefresh) {
+        refreshAuthoritativeArchitectureCatalog();
+      } else {
+        loadAuthoritativeArchitectureCatalog();
+      }
     };
     const init = () => {
       historyNeedsRebase = true;
@@ -16719,7 +16721,7 @@ ${slot}`;
         }
         renderAll();
       });
-      void adoptArchitectureCatalog();
+      requestArchitectureCatalog();
     };
     const dispose = () => {
       catalogUnsub?.();

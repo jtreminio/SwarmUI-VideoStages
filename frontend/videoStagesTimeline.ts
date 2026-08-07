@@ -132,7 +132,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const hostLifecycle = createTimelineHostLifecycle({
         refresh: () => refresh(),
         refreshCatalog: () => {
-            void adoptArchitectureCatalog(true);
+            requestArchitectureCatalog(true);
         },
         syncFromCarrier: () => {
             if (!hasAuthoritativeCatalog()) {
@@ -278,10 +278,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         const transaction = captureAuthoringTransactionSnapshot();
         const catalogSnapshot = transaction.catalogStatus;
         if (
-            renderBlockingArchitectureCatalogStatus(
-                body,
-                catalogSnapshot,
-                () => void adoptArchitectureCatalog(true),
+            renderBlockingArchitectureCatalogStatus(body, catalogSnapshot, () =>
+                requestArchitectureCatalog(true),
             )
         ) {
             return;
@@ -331,10 +329,8 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 }),
                 capabilities: transaction.capabilities,
             });
-            renderRetainedArchitectureCatalogStatus(
-                body,
-                catalogSnapshot,
-                () => void adoptArchitectureCatalog(true),
+            renderRetainedArchitectureCatalogStatus(body, catalogSnapshot, () =>
+                requestArchitectureCatalog(true),
             );
             viewport.restoreScroll(previousScroll);
             linking.reapplySelection(body, clips.length);
@@ -347,8 +343,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
 
     const refresh = (): void => renderAll();
 
-    /** Adopts a freshly loaded backend catalog without dropping retained data. */
-    const adoptArchitectureCatalog = (forceRefresh = false): Promise<void> => {
+    const requestArchitectureCatalog = (forceRefresh = false): void => {
         const currentCatalog = getArchitectureCatalogSnapshot();
         if (
             !forceRefresh &&
@@ -356,14 +351,14 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             currentCatalog.status !== "refreshing"
         ) {
             renderAll();
-            return Promise.resolve();
+            return;
         }
-        const request = forceRefresh
-            ? refreshAuthoritativeArchitectureCatalog()
-            : loadAuthoritativeArchitectureCatalog();
         // Repository subscribers own both request-start and settled paints.
-        // The returned promise only lets lifecycle callers await completion.
-        return request.then(() => {});
+        if (forceRefresh) {
+            refreshAuthoritativeArchitectureCatalog();
+        } else {
+            loadAuthoritativeArchitectureCatalog();
+        }
     };
 
     const init = (): void => {
@@ -423,7 +418,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             }
             renderAll();
         });
-        void adoptArchitectureCatalog();
+        requestArchitectureCatalog();
     };
 
     const dispose = (): void => {
