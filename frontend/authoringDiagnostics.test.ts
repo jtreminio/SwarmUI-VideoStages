@@ -35,25 +35,11 @@ describe("backend-aligned authoring diagnostics", () => {
     });
 
     it("accepts audio reuse an architecture supports", () => {
-        expect(
-            codes([
-                minimalClip({
-                    reuseAudio: true,
-                    stages: [minimalStage(), minimalStage({ skipped: true })],
-                }),
-            ]),
-        ).toEqual([]);
+        expect(codes([minimalClip({ reuseAudio: true })])).toEqual([]);
     });
 
     it.each<Partial<Clip>>([
-        {
-            clipLengthFromAudio: true,
-            audioSource: "Upload",
-            uploadedAudio: {
-                data: "data:audio/wav;base64,AA==",
-                fileName: "voice.wav",
-            },
-        },
+        { clipLengthFromAudio: true, audioSource: "Upload" },
         {
             clipLengthFromControlNet: true,
             icLoras: [icLoraFixture({ driveSource: "ControlNet 3" })],
