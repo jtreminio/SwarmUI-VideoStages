@@ -38,7 +38,7 @@ internal sealed class StageGuideReferenceState(
             // and every stage's ImageReference is rewritten to Generated on such a request — so a
             // miss here is the intended state for the whole timeline, not something to report.
             StageGuideReferenceKind.Generated => _previousStageRef
-                ?? (root.DiscardsTextToVideoRoot
+                ?? (root.TakesOverTextToVideoRoot
                     ? null
                     : WarnIfMissing(
                         store.Generated,

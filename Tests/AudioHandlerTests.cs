@@ -67,7 +67,7 @@ public class AudioHandlerTests
         FramesPerSecond: 24,
         new RootPlan(
             HostRootKind.ImageToVideo,
-            DiscardsRoot: false,
+            IgnoresHostRootOutput: false,
             UsesGeneratedClipDonor: false,
             InterceptsHostCore: true,
             UsesStageHandoff: true,

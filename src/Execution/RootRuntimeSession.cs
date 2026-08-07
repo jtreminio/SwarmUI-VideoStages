@@ -55,7 +55,7 @@ internal sealed class RootRuntimeSession
             plan.Root,
             hostAnimationSaveIds,
             rootComponentIds,
-            plan.Root.DiscardsRoot || plan.Clips.Count > 1);
+            plan.Root.IgnoresHostRootOutput || plan.Clips.Count > 1);
     }
 
     /// <summary>
@@ -83,14 +83,13 @@ internal sealed class RootRuntimeSession
                 "the completed timeline did not produce a publishable video artifact.");
         }
 
-        bool rootIsDisplaced = _rootPlan.DiscardsRoot;
         if (!Publish(timeline))
         {
             throw Invariant.Failure(
                 "the completed timeline could not be connected to the final output.");
         }
 
-        if (rootIsDisplaced)
+        if (_rootPlan.IgnoresHostRootOutput)
         {
             CleanupDisplacedRoot(timeline);
         }

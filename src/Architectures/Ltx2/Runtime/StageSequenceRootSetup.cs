@@ -51,7 +51,7 @@ internal sealed class StageSequenceRootSetup(
     {
         ArgumentNullException.ThrowIfNull(preparedAudioSources);
         ArgumentNullException.ThrowIfNull(root);
-        if (!root.DiscardsTextToVideoRoot)
+        if (!root.TakesOverTextToVideoRoot)
         {
             store.Capture(StageRefStore.StageKind.Generated, g.CurrentMedia, g.CurrentVae);
         }
@@ -63,7 +63,7 @@ internal sealed class StageSequenceRootSetup(
 
     private void CaptureGeneratedReference(RootPlan root)
     {
-        if (root.DiscardsTextToVideoRoot)
+        if (root.TakesOverTextToVideoRoot)
         {
             return;
         }

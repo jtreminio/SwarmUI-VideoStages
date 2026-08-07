@@ -32,7 +32,7 @@ namespace VideoStages.Tests;
 /// <c>AutoCleanupNodeTypes</c> does not cover <c>ControlNetLoader</c>,
 /// <c>ControlNetApplyAdvanced</c>, <c>ModelPatchLoader</c>, <c>QwenImageDiffsynthControlnet</c>,
 /// <c>SwarmLoadVideoB64</c> or <c>GetVideoComponents</c>, and under
-/// image-to-video <c>DiscardsRoot</c> is false, so nothing sweeps a dead host root. Every
+/// image-to-video <c>IgnoresHostRootOutput</c> is false, so nothing sweeps a dead host root. Every
 /// image-to-video ControlNet clip here guides stage 0 from core's decoded base image, which keeps
 /// the base pass — and its apply chain — live. A ControlNet test whose timeline never consumes the
 /// base image would need targeted <c>AssertLive</c> calls instead.

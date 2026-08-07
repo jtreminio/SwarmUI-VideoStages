@@ -91,7 +91,7 @@ internal sealed class AudioTimelineExecutor
         RootPlan root = clipContext.Plan.Root;
         int framesPerSecond = clipContext.Plan.FramesPerSecond;
         bool suppressNative = root.UsesStageHandoff
-            && root.ReplacesTextToVideoRootStage(firstStage, clip);
+            && root.StageTakesOverTextToVideoRoot(firstStage, clip);
         WGNodeData selectedBaseAudio = PlannedAudioSourceSelector.Select(
             clip.ClipId,
             clip.Audio.Base,
@@ -239,11 +239,11 @@ internal sealed class AudioTimelineExecutor
             && baseAudio is null
             && duration > 0;
         // Do not inject conditioning into a host root this clip replaces.
-        bool replacesHostChain = root.DiscardsTextToVideoRoot;
+        bool takesOverHostChain = root.TakesOverTextToVideoRoot;
         bool overlaysConditionRootGeneration = hasGenerationStage
             && runtimeContext.ClipIndex == 0
             && overlaysOverNoBase
-            && !replacesHostChain
+            && !takesOverHostChain
             && _audioInjector.TryInject(
                 combinedAudio,
                 matchVideoLengthToAudio: false,
@@ -271,7 +271,7 @@ internal sealed class AudioTimelineExecutor
         }
         _generator.CurrentMedia = currentMedia;
 
-        if (!hasGenerationStage || replacesHostChain)
+        if (!hasGenerationStage || takesOverHostChain)
         {
             return;
         }

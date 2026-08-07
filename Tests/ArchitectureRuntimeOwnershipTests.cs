@@ -253,7 +253,7 @@ public class ArchitectureRuntimeOwnershipTests
             24,
             new(
                 HostRootKind.ImageToVideo,
-                DiscardsRoot: false,
+                IgnoresHostRootOutput: false,
                 UsesGeneratedClipDonor: true,
                 InterceptsHostCore: true,
                 UsesStageHandoff: false,

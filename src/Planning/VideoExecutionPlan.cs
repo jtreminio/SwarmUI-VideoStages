@@ -24,17 +24,22 @@ internal sealed record VideoExecutionPlan(
 /// <summary>Compiled host-root ownership decisions.</summary>
 internal sealed record RootPlan(
     HostRootKind HostKind,
-    bool DiscardsRoot,
+    bool IgnoresHostRootOutput,
     bool UsesGeneratedClipDonor,
     bool InterceptsHostCore,
     bool UsesStageHandoff,
     bool DropsTextToVideoRootDonor)
 {
-    public bool DiscardsTextToVideoRoot =>
-        HostKind == HostRootKind.TextToVideo && DiscardsRoot;
+    /// <summary>
+    /// Stage 0 builds on core's text-to-video root chain instead of beside it, claiming the node
+    /// ids core reserved. Cleanup then sweeps only what no stage ended up sampling.
+    /// <see cref="StageTakesOverTextToVideoRoot"/> answers which stage does the claiming.
+    /// </summary>
+    public bool TakesOverTextToVideoRoot =>
+        HostKind == HostRootKind.TextToVideo && IgnoresHostRootOutput;
 
-    public bool ReplacesTextToVideoRootStage(StagePlan stage, ClipPlan clip) =>
-        DiscardsTextToVideoRoot
+    public bool StageTakesOverTextToVideoRoot(StagePlan stage, ClipPlan clip) =>
+        TakesOverTextToVideoRoot
         && clip.EntryMode == ArchitectureEntryMode.TextToVideo
         && stage.Input == StageInputKind.EmptyLatent
         && stage.ClipStageIndex == 0;

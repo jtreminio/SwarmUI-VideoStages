@@ -18,7 +18,7 @@ public class VideoExecutionPlanCompilerTests
             isTextToVideo: true,
             GeneratedClip(0, Stage(10))));
 
-        Assert.True(plan.Root.DiscardsRoot);
+        Assert.True(plan.Root.IgnoresHostRootOutput);
         Assert.True(plan.Root.InterceptsHostCore);
         Assert.False(plan.Root.UsesGeneratedClipDonor);
         StagePlan stage = Assert.Single(Assert.Single(plan.Clips).Stages);
@@ -83,7 +83,7 @@ public class VideoExecutionPlanCompilerTests
             Spec(false, initVideoLead, GeneratedClip(1, Stage(11))),
             new RootEnvironment(HostRootKind.ImageToVideo, CanInterceptHostCore: true));
 
-        Assert.False(plan.Root.DiscardsRoot);
+        Assert.False(plan.Root.IgnoresHostRootOutput);
         Assert.True(plan.Root.InterceptsHostCore);
         Assert.True(plan.Root.UsesGeneratedClipDonor);
     }
@@ -510,12 +510,12 @@ public class VideoExecutionPlanCompilerTests
 
         ClipPlan surviving = Assert.Single(plan.Clips);
         Assert.Equal(ArchitectureEntryMode.InitVideo, surviving.EntryMode);
-        Assert.True(plan.Root.DiscardsRoot);
+        Assert.True(plan.Root.IgnoresHostRootOutput);
         Assert.True(plan.Root.InterceptsHostCore);
         Assert.False(plan.Root.UsesGeneratedClipDonor);
         Assert.False(plan.Root.UsesStageHandoff);
         Assert.False(plan.Root.DropsTextToVideoRootDonor);
-        Assert.False(plan.Root.DiscardsTextToVideoRoot);
+        Assert.False(plan.Root.TakesOverTextToVideoRoot);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "duplicate-clip-id"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);

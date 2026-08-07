@@ -86,7 +86,7 @@ internal sealed class HostRootAdoption(
     private bool TryClaim(ClipPlan clip, StagePlan stage, IReadOnlyCollection<string> ids)
     {
         if (_claimed
-            || !root.ReplacesTextToVideoRootStage(stage, clip)
+            || !root.StageTakesOverTextToVideoRoot(stage, clip)
             || !ids.All(id => generator.HasNode(id) && ownedRootNodeIds.Contains(id))
             // A capture resolves to a node id rather than to a graph edge, so it survives the
             // ownership test above and has to be excluded on its own.

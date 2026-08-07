@@ -30,13 +30,13 @@ internal sealed class StageFramePreparer(
                 $"stage {stage.StageId} has no input media.");
         JArray priorOutputPath = CopyPath(currentMedia.Path);
         LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
-        bool replacesTextToVideoRoot = root.ReplacesTextToVideoRootStage(
+        bool takesOverTextToVideoRoot = root.StageTakesOverTextToVideoRoot(
             stage,
             clipContext.PlannedClip);
-        LtxPostVideoChainCapture postVideoChain = replacesTextToVideoRoot
+        LtxPostVideoChainCapture postVideoChain = takesOverTextToVideoRoot
             ? null
             : LtxPostVideoChainCapture.TryCapture(g, clipContext, stage);
-        WGNodeData sourceMedia = replacesTextToVideoRoot
+        WGNodeData sourceMedia = takesOverTextToVideoRoot
             ? CloneMedia(g.CurrentMedia)
             : upscaleGraphBuilder.Apply(clipContext, stage, sectionId, postVideoChain);
         if (sourceMedia is null)
@@ -50,12 +50,12 @@ internal sealed class StageFramePreparer(
             stage,
             sectionId,
             sourceMedia,
-            replacesTextToVideoRoot);
+            takesOverTextToVideoRoot);
         return new StageFrame(
             stage,
             clipContext,
             priorOutputPath,
-            replacesTextToVideoRoot,
+            takesOverTextToVideoRoot,
             postVideoChain,
             sourceMedia,
             genInfo,
@@ -67,7 +67,7 @@ internal sealed class StageFramePreparer(
         StagePlan stage,
         int sectionId,
         WGNodeData sourceMedia,
-        bool replacesTextToVideoRoot)
+        bool takesOverTextToVideoRoot)
     {
         ClipPlan clip = clipContext.PlannedClip;
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
@@ -100,7 +100,7 @@ internal sealed class StageFramePreparer(
                 clipContext,
                 sourceMedia,
                 sectionId,
-                replacesTextToVideoRoot),
+                takesOverTextToVideoRoot),
             VideoCFG = payload.Core.CfgScale,
             VideoFPS = clipContext.Plan.FramesPerSecond,
             Width = stageWidth,
@@ -120,13 +120,13 @@ internal sealed class StageFramePreparer(
         ClipContext clipContext,
         WGNodeData sourceMedia,
         int sectionId,
-        bool replacesTextToVideoRoot)
+        bool takesOverTextToVideoRoot)
     {
         if (clipContext.IncomingContinueHandleFrames > 0)
         {
             return clipContext.GenerationFrames;
         }
-        if (!replacesTextToVideoRoot && sourceMedia.Frames.HasValue)
+        if (!takesOverTextToVideoRoot && sourceMedia.Frames.HasValue)
         {
             return sourceMedia.Frames;
         }

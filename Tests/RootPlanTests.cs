@@ -16,12 +16,12 @@ public class RootPlanTests
                 CanInterceptHostCore: true),
             []);
 
-        Assert.False(root.DiscardsRoot);
+        Assert.False(root.IgnoresHostRootOutput);
         Assert.False(root.UsesGeneratedClipDonor);
         Assert.False(root.InterceptsHostCore);
         Assert.False(root.UsesStageHandoff);
         Assert.False(root.DropsTextToVideoRootDonor);
-        Assert.False(root.DiscardsTextToVideoRoot);
+        Assert.False(root.TakesOverTextToVideoRoot);
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public class RootPlanTests
 
         Assert.True(root.InterceptsHostCore);
         Assert.True(root.UsesStageHandoff);
-        Assert.True(root.ReplacesTextToVideoRootStage(stage, clip));
+        Assert.True(root.StageTakesOverTextToVideoRoot(stage, clip));
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class RootPlanTests
         StagePlan stage = Assert.Single(clip.Stages);
 
         Assert.True(root.UsesStageHandoff);
-        Assert.False(root.ReplacesTextToVideoRootStage(stage, clip));
+        Assert.False(root.StageTakesOverTextToVideoRoot(stage, clip));
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class RootPlanTests
 
         Assert.True(root.DropsTextToVideoRootDonor);
         Assert.False(root.UsesStageHandoff);
-        Assert.True(root.ReplacesTextToVideoRootStage(stage, generated));
+        Assert.True(root.StageTakesOverTextToVideoRoot(stage, generated));
     }
 
     [Fact]

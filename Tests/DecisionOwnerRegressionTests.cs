@@ -427,7 +427,7 @@ public class DecisionOwnerRegressionTests
             24,
             new(
                 HostRootKind.TextToVideo,
-                DiscardsRoot: true,
+                IgnoresHostRootOutput: true,
                 UsesGeneratedClipDonor: false,
                 InterceptsHostCore: true,
                 UsesStageHandoff: false,
@@ -508,7 +508,7 @@ public class DecisionOwnerRegressionTests
             24,
             new(
                 HostRootKind.TextToVideo,
-                DiscardsRoot: true,
+                IgnoresHostRootOutput: true,
                 UsesGeneratedClipDonor: false,
                 InterceptsHostCore: true,
                 UsesStageHandoff: !firstClipHasInitVideo,

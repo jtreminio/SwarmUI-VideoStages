@@ -17,7 +17,7 @@ internal sealed class AudioRuntimeSourceResolver(
         Dictionary<int, WGNodeData> clipAudios = ResolveIndexedSources(plan);
         Dictionary<int, WGNodeData> uploadedAudios = ResolveUploadedSources(plan);
         audioHandler.PruneAceStepFunUnsavedTracks(plan.Clips);
-        WGNodeData nativeAudio = plan.Root.DiscardsRoot
+        WGNodeData nativeAudio = plan.Root.IgnoresHostRootOutput
             ? null
             : g.CurrentMedia?.AttachedAudio;
         return new(nativeAudio, clipAudios, uploadedAudios);
