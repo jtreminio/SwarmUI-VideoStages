@@ -52,13 +52,6 @@ public static class MediaSource
     private const string Base2EditPrefix = "edit";
     private const string ExplicitStagePrefix = "Stage";
 
-    /// <summary>True when the source names one of the host workflow's own images rather than a
-    /// timeline stage.</summary>
-    public static bool IsHostStageSource(string source) =>
-        StringUtils.Equals(source, Base)
-        || StringUtils.Equals(source, Refiner)
-        || TryParseBase2EditIndex(source, out _);
-
     public static bool TryParseControlNetIndex(string source, out int index)
     {
         if (TryParseNonNegativeIndex(source, ControlNet, out int oneBased)
@@ -96,6 +89,12 @@ public static class MediaSource
 
     public static string FormatExplicitStageIndex(int index) =>
         FormatNonNegativeIndex(ExplicitStagePrefix, index);
+
+    /// <summary>The "stage" here is a pass of the host workflow, not a timeline stage.</summary>
+    public static bool IsHostStageSource(string source) =>
+        StringUtils.Equals(source, Base)
+        || StringUtils.Equals(source, Refiner)
+        || TryParseBase2EditIndex(source, out _);
 
     private static bool TryParseNonNegativeIndex(
         string source,
