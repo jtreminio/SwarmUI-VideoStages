@@ -22,11 +22,6 @@ namespace VideoStages.Tests;
 public class WanRequestRefusalWorkflowTests
 {
     /// <summary>
-    /// A checkpoint list <see cref="WanWorkflowFixture"/> has no factory for. Both architectures'
-    /// support models are installed so the same fixture serves the cross-architecture timelines;
-    /// each installer replaces the shared VAE handler, so WAN's VAEs are re-added last.
-    /// </summary>
-    /// <summary>
     /// A later stage's Control is a fraction of its own step count, and 0.9 over 8 steps floors to
     /// start step 0 — a refining pass that would silently regenerate everything. The request is
     /// refused readably, before any VideoStages phase touches the graph.

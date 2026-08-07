@@ -22,11 +22,6 @@ namespace VideoStages.Tests;
 public class WanTimelineMergeWorkflowTests
 {
     /// <summary>
-    /// A checkpoint list <see cref="WanWorkflowFixture"/> has no factory for. Both architectures'
-    /// support models are installed so the same fixture serves the cross-architecture timelines;
-    /// each installer replaces the shared VAE handler, so WAN's VAEs are re-added last.
-    /// </summary>
-    /// <summary>
     /// Two identical hard-cut clips share one conditioning node — same host image, same prompt, same
     /// length — and differ only in sampler seed. The timeline merge is what makes them two clips,
     /// and with intermediates on the first clip is also saved on its own.

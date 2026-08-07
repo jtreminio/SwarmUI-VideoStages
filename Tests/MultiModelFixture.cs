@@ -5,8 +5,10 @@ using SwarmUI.Text2Image;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// A workflow fixture over several checkpoints at once, for the Wan timelines that mix profiles or
-/// families. Wan's own defaults apply, plus LTX-2 support models so a mixed timeline can build.
+/// A checkpoint list <see cref="WanWorkflowFixture"/> has no factory for: the Wan timelines that
+/// mix profiles or families. Wan's own defaults apply, and both architectures' support models are
+/// installed so one fixture serves a cross-architecture timeline — each installer replaces the
+/// shared VAE handler, so WAN's VAEs are re-added last.
 /// </summary>
 internal sealed class MultiModelFixture : VideoStagesWorkflowFixture
 {

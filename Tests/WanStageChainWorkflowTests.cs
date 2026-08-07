@@ -21,11 +21,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class WanStageChainWorkflowTests
 {
-    /// <summary>
-    /// A checkpoint list <see cref="WanWorkflowFixture"/> has no factory for. Both architectures'
-    /// support models are installed so the same fixture serves the cross-architecture timelines;
-    /// each installer replaces the shared VAE handler, so WAN's VAEs are re-added last.
-    /// </summary>
     // ---- stage handoffs -----------------------------------------------------------------
 
     /// <summary>
