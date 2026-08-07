@@ -13,6 +13,12 @@ internal static class NoneArchitecture
             "none",
             "Decoded init-video clips can be joined with a hard cut.");
 
+    /// <summary>There is no module to compile through, so every `none` clip plans to nothing.</summary>
+    internal static ArchitectureClipCompilation EmptyCompilation { get; } = new(
+        new NoneClipPayload(),
+        new Dictionary<int, IArchitectureStagePayload>(),
+        []);
+
     internal static VideoArchitectureDescriptor Descriptor { get; } = new(
         Id,
         "Decoded source only",
@@ -30,6 +36,7 @@ internal static class NoneArchitecture
     };
 }
 
+/// <summary>The `none` architecture has no module, so it compiles to an empty clip payload.</summary>
 internal sealed record NoneClipPayload : IArchitectureClipPayload
 {
     public ArchitectureId ArchitectureId => NoneArchitecture.Id;

@@ -180,10 +180,7 @@ internal static class VideoExecutionPlanCompiler
         }
         if (assignment.Architecture.Id == NoneArchitecture.Id)
         {
-            return new(
-                new NoneClipPayload(),
-                new Dictionary<int, IArchitectureStagePayload>(),
-                []);
+            return NoneArchitecture.EmptyCompilation;
         }
         throw Invariant.Failure(
             $"architecture '{assignment.Architecture.Id}' has no clip compiler");

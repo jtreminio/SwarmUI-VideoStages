@@ -16,7 +16,6 @@ internal enum AudioLengthOwner
 
 internal sealed record AudioBaseSourcePlan(
     AudioSourceKind Kind,
-    string RawSource,
     int? AceStepFunTrack,
     bool HasConfiguredTrack,
     UploadedMediaSpec UploadedMedia);

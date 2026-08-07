@@ -70,7 +70,6 @@ public class AudioSpanCombinerTests
             spans,
             new AudioBaseSourcePlan(
                 AudioSourceKind.Native,
-                MediaSource.Native,
                 AceStepFunTrack: null,
                 HasConfiguredTrack: true,
                 UploadedMedia: null)).Spans;

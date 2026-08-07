@@ -37,7 +37,6 @@ internal static class AudioPlanCompiler
         }
         AudioBaseSourcePlan baseSource = new(
             sourceKind,
-            selection.Raw,
             selection.AceStepFunTrack,
             hasConfiguredTrack,
             sourceKind == AudioSourceKind.Upload

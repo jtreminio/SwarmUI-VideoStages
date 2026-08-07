@@ -360,7 +360,7 @@ public class AudioHandlerTests
             InitVideo: null,
             Stages: [],
             Audio: new(
-                new(AudioSourceKind.AceStepFun, "audio0", 0, true, null),
+                new(AudioSourceKind.AceStepFun, 0, true, null),
                 AudioLengthOwner.Timeline,
                 [],
                 []),

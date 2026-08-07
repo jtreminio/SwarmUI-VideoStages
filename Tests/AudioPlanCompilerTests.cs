@@ -41,7 +41,6 @@ public class AudioPlanCompilerTests
 
     private static AudioBaseSourcePlan Base(bool hasConfiguredTrack) => new(
         AudioSourceKind.Upload,
-        MediaSource.Upload,
         AceStepFunTrack: null,
         hasConfiguredTrack,
         UploadedMedia: null);
@@ -79,7 +78,6 @@ public class AudioPlanCompilerTests
             uploadedAudio: source == MediaSource.Upload ? Upload() : null));
 
         Assert.Equal(expected, plan.Base.Kind);
-        Assert.Equal(source, plan.Base.RawSource);
         Assert.True(plan.Base.HasConfiguredTrack);
         if (expected == AudioSourceKind.Upload)
         {
