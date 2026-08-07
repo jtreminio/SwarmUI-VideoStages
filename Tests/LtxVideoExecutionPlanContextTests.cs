@@ -68,13 +68,13 @@ public class VideoExecutionPlanContextTests
 
         Action<WorkflowGenerator>[] phases =
         [
-            Runner.CaptureCoreVideoControlNetPreprocessors,
-            Runner.CaptureBase,
-            Runner.CaptureRefiner,
-            Runner.CapturePreCoreVideoMedia,
-            Runner.DropCoreImageToVideoOutput,
-            Runner.ApplyRootAudioMaskDimensionsAfterNativeVideo,
-            Runner.RunConfiguredStages,
+            Runner.Phase(context => context.CaptureControlNetPreprocessors()),
+            Runner.Phase(context => context.CaptureBaseReference()),
+            Runner.Phase(context => context.CaptureRefinerReference()),
+            Runner.Phase(context => context.CapturePreCoreMedia()),
+            Runner.Phase(context => context.DropCoreOutput()),
+            Runner.Phase(context => context.ApplyRootAudioMaskDimensions()),
+            Runner.Phase(context => context.RunConfiguredStages()),
             current => RootVideoStageResizer.ApplyRootResolutionBeforeImageToVideo(new()
             {
                 Generator = current,

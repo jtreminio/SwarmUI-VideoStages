@@ -112,10 +112,6 @@ internal sealed class VideoArchitectureExecutionHost
         }
     }
 
-    internal void CapturePreCoreMedia() => CapturePreCoreMediaCore();
-
-    internal void DropCoreOutput() => DropCoreOutputCore();
-
     internal void ApplyRootAudioMaskDimensions() =>
         RootOwnerProvider()?.ApplyRootAudioMaskDimensions();
 
@@ -350,7 +346,7 @@ internal sealed class VideoArchitectureExecutionHost
         }
     }
 
-    private void CapturePreCoreMediaCore()
+    internal void CapturePreCoreMedia()
     {
         _rootSnapshot = null;
         if (!ShouldHandoffRoot())
@@ -382,7 +378,7 @@ internal sealed class VideoArchitectureExecutionHost
         }
     }
 
-    private void DropCoreOutputCore()
+    internal void DropCoreOutput()
     {
         if (!ShouldHandoffRoot())
         {

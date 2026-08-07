@@ -47,29 +47,45 @@ public class VideoStagesExtension : Extension
         RootHostWorkflowFacts.CaptureCoreImageToVideoStep(WorkflowGenerator.Steps);
         VideoArchitectureManifest.RegisterProductionHostHandlers();
 
+        // Orchestration map — phases run in priority order during WorkflowGenerator.Generate.
+        //
+        // #  Pri    Phase                          Reads                                     Writes / clears
+        // -  -----  -----------------------------  ----------------------------------------  ----------------------------------------------------
+        // 1  -6.0   PreflightRequest               compiled plan, backend features           — (must stay non-mutating)
+        // 2  -5.9   CaptureControlNetPreprocessors core ControlNet graph                     captures raw image/audio/apply facts,
+        //                                                                                    then fans out architecture interpretation
+        // 3  -4.2   CaptureBaseReference           —                                         architecture reference capture
+        // 4   5.89  CaptureRefinerReference        —                                         architecture reference capture
+        // 5  10.95  CapturePreCoreMedia            eligible generated-root media/VAE, graph   in-memory root snapshot
+        // 6  11.05  DropCoreOutput                 captured root state                       restores root and prunes core video pass
+        // 7  11.4   ApplyRootAudioMaskDimensions   root stage resolution, graph              resizes audio SolidMask nodes to root dims
+        // 8  11.5   RunConfiguredStages            architecture references, phase 2 captures  executes planned architecture sessions
+        //
+        // Phase 1 is the only place a request may be rejected for a missing dependency: every later
+        // phase mutates the host graph, so a failure past it leaves the user with a broken workflow.
         WorkflowGenerator.AddStep(
             Runner.PreflightRequest,
             Constants.WorkflowStepPriority.PreflightRequest);
         WorkflowGenerator.AddStep(
-            Runner.CaptureCoreVideoControlNetPreprocessors,
+            Runner.Phase(context => context.CaptureControlNetPreprocessors()),
             Constants.WorkflowStepPriority.ControlNetPreprocessors);
         WorkflowGenerator.AddStep(
-            Runner.CaptureBase,
+            Runner.Phase(context => context.CaptureBaseReference()),
             Constants.WorkflowStepPriority.CaptureBase);
         WorkflowGenerator.AddStep(
-            Runner.CaptureRefiner,
+            Runner.Phase(context => context.CaptureRefinerReference()),
             Constants.WorkflowStepPriority.CaptureRefiner);
         WorkflowGenerator.AddStep(
-            Runner.CapturePreCoreVideoMedia,
+            Runner.Phase(context => context.CapturePreCoreMedia()),
             Constants.WorkflowStepPriority.CapturePreCoreVideoMedia);
         WorkflowGenerator.AddStep(
-            Runner.DropCoreImageToVideoOutput,
+            Runner.Phase(context => context.DropCoreOutput()),
             Constants.WorkflowStepPriority.DropCoreImageToVideoOutput);
         WorkflowGenerator.AddStep(
-            Runner.ApplyRootAudioMaskDimensionsAfterNativeVideo,
+            Runner.Phase(context => context.ApplyRootAudioMaskDimensions()),
             Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);
         WorkflowGenerator.AddStep(
-            Runner.RunConfiguredStages,
+            Runner.Phase(context => context.RunConfiguredStages()),
             Constants.WorkflowStepPriority.RunConfiguredStages);
     }
 
