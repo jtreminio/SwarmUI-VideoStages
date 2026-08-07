@@ -278,55 +278,65 @@ public class WanArchitectureTests
             StageGuideReferencePolicy.Classify("PreviousStage")));
     }
 
+    [Theory]
+    [InlineData("pixel-lanczos", nameof(StageUpscaleMode.Pixel), "lanczos")]
+    [InlineData(
+        "model-fake-upscaler.safetensors",
+        nameof(StageUpscaleMode.Model),
+        "fake-upscaler.safetensors")]
+    public void Effective_request_keeps_every_upscaler_wan_supports(
+        string method,
+        string expectedMode,
+        string expectedMethodName)
+    {
+        VideoExecutionPlan plan = Compile(GeneratedClip(
+            0,
+            Stage(10, "wan-model") with { Upscale = 2, UpscaleMethod = method }));
+
+        StageUpscalePlan upscale = Assert.Single(Assert.Single(plan.Clips).Stages).Core.Upscale;
+        Assert.Equal(expectedMode, upscale.Mode.ToString());
+        Assert.Equal(2, upscale.Factor);
+        // The mode prefix is consumed by the classifier; the name is what the graph uses.
+        Assert.Equal(expectedMethodName, upscale.MethodName);
+        Assert.DoesNotContain(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code.Contains("upscale"));
+    }
+
     [Fact]
-    public void Effective_request_accepts_every_upscaler_and_ignores_ic_lora()
+    public void Effective_request_ignores_every_capability_wan_does_not_declare()
     {
         StageSpec stage = Stage(10, "wan-model");
+        (string Code, ClipSpec Clip)[] cases =
+        [
+            ("effective-request.unsupported-retake-ignored",
+                GeneratedClip(0, stage with { RetakeWindow = new(0, 8, 1) })),
+            ("effective-request.wan-frame-reference-source-ignored",
+                GeneratedClip(0, stage) with { FrameRefs = [new("Generated", 1, false, null)] }),
+            ("effective-request.unsupported-prompt-relay-ignored",
+                GeneratedClip(0, stage) with { PromptWindows = [new("late", 1, 1)] }),
+            ("effective-request.unsupported-audio-reuse-ignored",
+                GeneratedClip(0, stage) with { ReuseAudio = true }),
+            ("effective-request.unsupported-audio-derived-duration-ignored",
+                GeneratedClip(0, stage) with { ClipLengthFromAudio = true }),
+            ("effective-request.unsupported-ic-lora-ignored",
+                GeneratedClip(0, stage) with { ClipLengthFromControlNet = true }),
+            ("effective-request.unsupported-stage-reference-ignored",
+                GeneratedClip(0, stage with { ImageReference = "Base" })),
+            ("effective-request.unsupported-ic-lora-ignored",
+                GeneratedClip(0, stage) with
+                {
+                    IcLoras = [new("wan-ic.safetensors", "Upload", 1, 1, "canny", null)],
+                }),
+            ("effective-request.unsupported-audio-source-ignored",
+                GeneratedClip(0, stage) with
+                {
+                    AudioSource = MediaSource.Upload,
+                    UploadedAudio = new("data:audio/wav;base64,AA==", "voice.wav"),
+                }),
+        ];
 
-        foreach (string method in
-            (string[])["pixel-lanczos", "model-fake-upscaler.safetensors"])
-        {
-            VideoExecutionPlan plan = Compile(GeneratedClip(
-                0,
-                stage with { Upscale = 2, UpscaleMethod = method }));
-            Assert.DoesNotContain(
-                plan.Diagnostics,
-                diagnostic => diagnostic.Message.Contains("upscale"));
-        }
-        AssertIgnored(
-            GeneratedClip(0, stage with { RetakeWindow = new(0, 8, 1) }),
-            "effective-request.unsupported-retake-ignored");
-        AssertIgnored(
-            GeneratedClip(0, stage) with { FrameRefs = [new("Generated", 1, false, null)] },
-            "effective-request.wan-frame-reference-source-ignored");
-        AssertIgnored(
-            GeneratedClip(0, stage) with { PromptWindows = [new("late", 1, 1)] },
-            "effective-request.unsupported-prompt-relay-ignored");
-        AssertIgnored(
-            GeneratedClip(0, stage) with { ReuseAudio = true },
-            "effective-request.unsupported-audio-reuse-ignored");
-        AssertIgnored(
-            GeneratedClip(0, stage) with { ClipLengthFromAudio = true },
-            "effective-request.unsupported-audio-derived-duration-ignored");
-        AssertIgnored(
-            GeneratedClip(0, stage) with { ClipLengthFromControlNet = true },
-            "effective-request.unsupported-ic-lora-ignored");
-        AssertIgnored(
-            GeneratedClip(0, stage with { ImageReference = "Base" }),
-            "effective-request.unsupported-stage-reference-ignored");
-        AssertIgnored(
-            GeneratedClip(0, stage) with
-            {
-                IcLoras = [new("wan-ic.safetensors", "Upload", 1, 1, "canny", null)],
-            },
-            "effective-request.unsupported-ic-lora-ignored");
-        AssertIgnored(
-            GeneratedClip(0, stage) with
-            {
-                AudioSource = MediaSource.Upload,
-                UploadedAudio = new("data:audio/wav;base64,AA==", "voice.wav"),
-            },
-            "effective-request.unsupported-audio-source-ignored");
+        Assert.All(cases, entry => AssertIgnored(entry.Clip, entry.Code));
     }
 
     [Fact]
