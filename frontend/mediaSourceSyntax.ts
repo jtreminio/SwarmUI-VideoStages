@@ -7,31 +7,30 @@ import {
 
 /**
  * Mirrors StringUtils.Compact: trim, then drop the spaces the backend drops.
- * Only literal spaces — matching Compact's `Replace(" ", "")` rather than a
- * `\s` class, so the two sides agree on a tab-bearing value too.
+ * Only literal spaces, matching Compact's `Replace(" ", "")` — a `\s` class
+ * would accept tabs the backend leaves in place.
  */
-const compact = (value: unknown): string =>
+export const compactMediaSource = (value: unknown): string =>
     `${value ?? ""}`.trim().replaceAll(" ", "");
 
-/**
- * Mirrors MediaSource.TryParseNonNegativeIndex. The leading "+" is accepted
- * because the backend parses with int.TryParse, which takes a sign; negatives
- * are rejected there by the `parsed >= 0` guard rather than by the grammar.
- */
+/** Beyond this the backend's int.TryParse overflows and rejects the value. */
+const INT_MAX = 2147483647;
+
+/** Mirrors MediaSource.TryParseNonNegativeIndex. */
 export const parseIndexedMediaSource = (
     value: unknown,
     prefix: string,
 ): number | null => {
-    const text = compact(value);
+    const text = compactMediaSource(value);
     if (!text.toLowerCase().startsWith(prefix.toLowerCase())) {
         return null;
     }
     const rest = text.slice(prefix.length);
-    if (!/^\+?\d+$/.test(rest)) {
+    if (!/^\d+$/.test(rest)) {
         return null;
     }
     const index = Number(rest);
-    return Number.isSafeInteger(index) ? index : null;
+    return index <= INT_MAX ? index : null;
 };
 
 export const parseAceStepFunIndex = (value: unknown): number | null =>

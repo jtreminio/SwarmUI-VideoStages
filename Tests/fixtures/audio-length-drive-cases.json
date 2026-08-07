@@ -6,7 +6,10 @@
   { "source": "audio0", "canDriveClipDuration": true },
   { "source": "audio3", "canDriveClipDuration": true },
   { "source": "audio 3", "canDriveClipDuration": true },
-  { "source": "audio+3", "canDriveClipDuration": true },
+  { "source": "audio+3", "canDriveClipDuration": false },
+  { "source": "audio\t3", "canDriveClipDuration": false },
+  { "source": "audio-0", "canDriveClipDuration": false },
+  { "source": "audio3000000000", "canDriveClipDuration": false },
   { "source": "audio", "canDriveClipDuration": false },
   { "source": "audio-3", "canDriveClipDuration": false },
   { "source": "future-audio-source", "canDriveClipDuration": false }

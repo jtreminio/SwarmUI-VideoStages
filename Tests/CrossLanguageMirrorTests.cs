@@ -71,8 +71,8 @@ public class CrossLanguageMirrorTests
     }
 
     /// <summary>The frontend re-derives this grammar rather than calling the backend, so both
-    /// halves read the same cases — including the compacting and the leading "+" that
-    /// int.TryParse accepts.</summary>
+    /// halves read the same cases — including the space compacting, and the sign and tab that
+    /// int.TryParse would accept if it were not held to NumberStyles.None.</summary>
     [Fact]
     public void ControlNetSourceParsing_MatchesSharedFixture()
     {

@@ -498,18 +498,19 @@
   var MEDIA_SOURCE_BASE_2_EDIT_PREFIX = "edit";
 
   // frontend/mediaSourceSyntax.ts
-  var compact = (value) => `${value ?? ""}`.trim().replaceAll(" ", "");
+  var compactMediaSource = (value) => `${value ?? ""}`.trim().replaceAll(" ", "");
+  var INT_MAX = 2147483647;
   var parseIndexedMediaSource = (value, prefix) => {
-    const text2 = compact(value);
+    const text2 = compactMediaSource(value);
     if (!text2.toLowerCase().startsWith(prefix.toLowerCase())) {
       return null;
     }
     const rest = text2.slice(prefix.length);
-    if (!/^\+?\d+$/.test(rest)) {
+    if (!/^\d+$/.test(rest)) {
       return null;
     }
     const index = Number(rest);
-    return Number.isSafeInteger(index) ? index : null;
+    return index <= INT_MAX ? index : null;
   };
   var parseAceStepFunIndex = (value) => parseIndexedMediaSource(value, MEDIA_SOURCE_ACE_STEP_FUN_PREFIX);
   var parseBase2EditStageIndex = (value) => parseIndexedMediaSource(value, MEDIA_SOURCE_BASE_2_EDIT_PREFIX);
@@ -2627,8 +2628,8 @@
 
   // frontend/normalizationAudio.ts
   var normalizeAudioTrackSourceKind = (value) => {
-    const compact2 = trimmedText(value).toLowerCase();
-    switch (compact2) {
+    const compact = trimmedText(value).toLowerCase();
+    switch (compact) {
       case MEDIA_SOURCE_UPLOAD.toLowerCase():
         return MEDIA_SOURCE_UPLOAD;
       case MEDIA_SOURCE_ACE_STEP_FUN.toLowerCase():
@@ -3057,18 +3058,18 @@
   };
   var normalizeIcLoraDriveSource = (value) => {
     const authored = `${value ?? ""}`.trim();
-    const compact2 = authored.replace(/\s+/g, "").toLowerCase();
-    if (!compact2 || compact2 === "upload") {
+    const compact = authored.replace(/\s+/g, "").toLowerCase();
+    if (!compact || compact === "upload") {
       return MEDIA_SOURCE_UPLOAD;
     }
-    if (compact2 === "incoming" || compact2 === "stageinput") {
+    if (compact === "incoming" || compact === "stageinput") {
       return MEDIA_SOURCE_INCOMING;
     }
     return canonicalControlNetSource(authored) ?? authored;
   };
   var normalizeIcLoraDriveData = (value) => {
-    const compact2 = `${value ?? ""}`.trim().toLowerCase();
-    return compact2 === "none" || compact2 === "audio" ? compact2 : "visual";
+    const compact = `${value ?? ""}`.trim().toLowerCase();
+    return compact === "none" || compact === "audio" ? compact : "visual";
   };
   var mediaKindsForData = (driveData) => icLoraDriveMediaContractForData(driveData).acceptedKinds;
   var normalizeIcLoraDriveMediaKinds = (value, driveData) => {

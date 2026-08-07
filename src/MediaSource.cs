@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace VideoStages;
 
 /// <summary>Every persisted spelling an authored document can name a source by — audio tracks,
@@ -115,6 +117,9 @@ public static class MediaSource
         || StringUtils.Equals(source, Refiner)
         || TryParseBase2EditIndex(source, out _);
 
+    /// <summary>The grammar is exactly digits after the prefix. NumberStyles.None is what makes
+    /// that true: int.TryParse's default allows a sign and surrounding whitespace, which no
+    /// producer emits and the frontend mirror does not accept.</summary>
     private static bool TryParseNonNegativeIndex(
         string source,
         string prefix,
@@ -123,8 +128,11 @@ public static class MediaSource
         string compact = StringUtils.Compact(source);
         index = -1;
         if (compact.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-            && int.TryParse(compact.AsSpan(prefix.Length), out int parsed)
-            && parsed >= 0)
+            && int.TryParse(
+                compact.AsSpan(prefix.Length),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out int parsed))
         {
             index = parsed;
             return true;
