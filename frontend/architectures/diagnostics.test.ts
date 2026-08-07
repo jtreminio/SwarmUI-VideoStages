@@ -1,10 +1,8 @@
 import { describe, expect, it } from "@jest/globals";
 import {
-    fakeArchitectureCatalog,
     testArchitectureCatalog,
-    testSourceOnlyArchitecture,
-    testWanArchitecture,
-    testWanModelEntry,
+    testCombinedCatalog,
+    testCombinedCatalogWithWan,
 } from "../__test_helpers__/architectureFixtures";
 import {
     icLoraFixture,
@@ -25,29 +23,8 @@ const architectureDiagnosticsFor = (
 ) =>
     deriveArchitectureDiagnostics(clips, createCapabilityViewResolver(catalog));
 
-const combinedCatalog = (): ArchitectureModelCatalog => {
-    const ltx = testArchitectureCatalog();
-    const fake = fakeArchitectureCatalog();
-    return {
-        source: "backend",
-        architectures: [
-            ...ltx.architectures,
-            ...fake.architectures,
-            testSourceOnlyArchitecture(),
-        ],
-        entries: [...ltx.entries, ...fake.entries],
-    };
-};
-
-const wanCatalog = (): ArchitectureModelCatalog => {
-    const models = combinedCatalog();
-    models.architectures.push(testWanArchitecture());
-    models.entries.push(testWanModelEntry());
-    return models;
-};
-
 const hostVideoCatalog = (): ArchitectureModelCatalog => {
-    const models = combinedCatalog();
+    const models = testCombinedCatalog();
     const template = models.architectures.find((entry) => entry.id === "ltx2");
     if (!template) throw new Error("missing architecture template");
     const host = structuredClone(template);
@@ -76,9 +53,10 @@ describe("architecture diagnostics", () => {
             stages: [minimalStage({ model: "removed-model.safetensors" })],
         });
 
-        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
-            ({ code }) => code,
-        );
+        const codes = architectureDiagnosticsFor(
+            [clip],
+            testCombinedCatalog(),
+        ).map(({ code }) => code);
 
         expect(codes).toContain("architecture.model-unknown");
         expect(codes).not.toContain("architecture.unknown");
@@ -99,7 +77,7 @@ describe("architecture diagnostics", () => {
 
         const matching = architectureDiagnosticsFor(
             [clip],
-            combinedCatalog(),
+            testCombinedCatalog(),
         ).filter(({ code }) =>
             [
                 "architecture.stale-identity-hint",
@@ -130,7 +108,7 @@ describe("architecture diagnostics", () => {
 
         const diagnostics = architectureDiagnosticsFor(
             [clip],
-            combinedCatalog(),
+            testCombinedCatalog(),
         );
         expect(
             diagnostics.find(
@@ -168,7 +146,7 @@ describe("architecture diagnostics", () => {
 
         const matching = architectureDiagnosticsFor(
             [clip],
-            wanCatalog(),
+            testCombinedCatalogWithWan(),
         ).filter(({ code }) =>
             [
                 "architecture.unsupported.ic-lora",
@@ -285,9 +263,11 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            architectureDiagnosticsFor([clip], wanCatalog()).find(
-                ({ code }) => code === "architecture.unsupported.upscale",
-            )?.severity,
+            architectureDiagnosticsFor(
+                [clip],
+                testCombinedCatalogWithWan(),
+            ).find(({ code }) => code === "architecture.unsupported.upscale")
+                ?.severity,
         ).toBe("error");
     });
 
@@ -327,7 +307,7 @@ describe("architecture diagnostics", () => {
 
         const diagnostics = architectureDiagnosticsFor(
             [clip],
-            combinedCatalog(),
+            testCombinedCatalog(),
         );
 
         expect(diagnostics.map(({ code }) => code)).toContain(
@@ -341,7 +321,7 @@ describe("architecture diagnostics", () => {
     });
 
     it("blocks incompatible model classes inside one architecture", () => {
-        const models = combinedCatalog();
+        const models = testCombinedCatalog();
         const incompatible = models.entries.find(
             (entry) => entry.value === "ltx",
         );
@@ -368,9 +348,10 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
-            ({ code }) => code,
-        );
+        const codes = architectureDiagnosticsFor(
+            [clip],
+            testCombinedCatalog(),
+        ).map(({ code }) => code);
 
         expect(codes).toEqual(
             expect.arrayContaining([
@@ -394,9 +375,10 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
-            ({ code }) => code,
-        );
+        const codes = architectureDiagnosticsFor(
+            [clip],
+            testCombinedCatalog(),
+        ).map(({ code }) => code);
 
         expect(codes).toContain("architecture.unsupported.audio-reuse");
         expect(codes).not.toContain("architecture.unsupported.audio-source");
@@ -419,9 +401,10 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
-            ({ code }) => code,
-        );
+        const codes = architectureDiagnosticsFor(
+            [clip],
+            testCombinedCatalog(),
+        ).map(({ code }) => code);
 
         expect(codes).toContain(
             "architecture.unsupported.audio-derived-duration",
@@ -444,9 +427,10 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
-            ({ code }) => code,
-        );
+        const codes = architectureDiagnosticsFor(
+            [clip],
+            testCombinedCatalog(),
+        ).map(({ code }) => code);
 
         expect(codes).toContain(
             "architecture.unsupported.control-signal-derived-duration",
@@ -470,7 +454,7 @@ describe("architecture diagnostics", () => {
 
         const validCodes = architectureDiagnosticsFor(
             [valid],
-            combinedCatalog(),
+            testCombinedCatalog(),
         ).map(({ code }) => code);
 
         expect(validCodes).not.toContain(
@@ -487,9 +471,10 @@ describe("architecture diagnostics", () => {
             clipLengthFromAudio: true,
         });
 
-        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
-            ({ code }) => code,
-        );
+        const codes = architectureDiagnosticsFor(
+            [clip],
+            testCombinedCatalog(),
+        ).map(({ code }) => code);
 
         expect(codes).toContain("architecture.unsupported.audio-source");
         expect(codes).not.toContain(
@@ -501,7 +486,7 @@ describe("architecture diagnostics", () => {
     });
 
     it("reports persisted unsupported settings without stripping them", () => {
-        const models = combinedCatalog();
+        const models = testCombinedCatalog();
         const fake = models.architectures.find(
             (entry) => entry.id === "test-video",
         );
@@ -568,13 +553,13 @@ describe("architecture diagnostics", () => {
 
         const diagnostic = architectureDiagnosticsFor(
             [left, right],
-            combinedCatalog(),
+            testCombinedCatalog(),
         ).find(({ code }) => code === "architecture.cross-boundary-cut-only");
         expect(diagnostic?.severity).toBe("warning");
     });
 
     it("uses actual WAN models for a same-architecture unsupported continue despite stale LTX hints", () => {
-        const models = wanCatalog();
+        const models = testCombinedCatalogWithWan();
         const staleWanClip = (boundaryOut: Clip["boundaryOut"]) =>
             minimalClip({
                 architectureHint: "ltx2",
@@ -612,7 +597,7 @@ describe("architecture diagnostics", () => {
         const codesFor = (right: Clip): string[] =>
             architectureDiagnosticsFor(
                 [minimalClip({ boundaryOut: "continue" }), right],
-                combinedCatalog(),
+                testCombinedCatalog(),
             ).map(({ code }) => code);
 
         it("accepts a continue into a plain generated neighbour", () => {
@@ -663,7 +648,7 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            architectureDiagnosticsFor([sourceOnly], combinedCatalog()).map(
+            architectureDiagnosticsFor([sourceOnly], testCombinedCatalog()).map(
                 ({ code }) => code,
             ),
         ).toEqual(["architecture.source-only-requires-none"]);
@@ -697,7 +682,7 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            architectureDiagnosticsFor([sourceOnly], combinedCatalog()),
+            architectureDiagnosticsFor([sourceOnly], testCombinedCatalog()),
         ).toEqual([]);
     });
 
@@ -728,14 +713,14 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            architectureDiagnosticsFor([sourceOnly], combinedCatalog()).map(
+            architectureDiagnosticsFor([sourceOnly], testCombinedCatalog()).map(
                 ({ code }) => code,
             ),
         ).toEqual(["architecture.mixed-stage"]);
     });
 
     it("does not diagnose a disabled clip LoRA from legacy profile metadata", () => {
-        const models = combinedCatalog();
+        const models = testCombinedCatalog();
         const clip = minimalClip({
             loras: [{ name: "normal-lora.safetensors" }],
             stages: [minimalStage({ model: "ltx", loraWeights: [0] })],
@@ -751,7 +736,7 @@ describe("architecture diagnostics", () => {
     });
 
     it("leaves normal LoRAs on a samplerless stage undiagnosed", () => {
-        const models = combinedCatalog();
+        const models = testCombinedCatalog();
         const clip = minimalClip({
             loras: [{ name: "normal-lora.safetensors" }],
             stages: [minimalStage({ control: 0, loraWeights: [1] })],

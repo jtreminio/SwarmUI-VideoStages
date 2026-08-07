@@ -273,6 +273,31 @@ export const fakeArchitectureCatalog = (
     ],
 });
 
+/**
+ * Every architecture shape authoring has to cope with at once: a fully featured
+ * one, a featureless one, and source-only.
+ */
+export const testCombinedCatalog = (): ArchitectureModelCatalog => {
+    const ltx = testArchitectureCatalog();
+    const fake = fakeArchitectureCatalog();
+    return {
+        source: "backend",
+        architectures: [
+            ...ltx.architectures,
+            ...fake.architectures,
+            testSourceOnlyArchitecture(),
+        ],
+        entries: [...ltx.entries, ...fake.entries],
+    };
+};
+
+export const testCombinedCatalogWithWan = (): ArchitectureModelCatalog => {
+    const models = testCombinedCatalog();
+    models.architectures.push(testWanArchitecture());
+    models.entries.push(testWanModelEntry());
+    return models;
+};
+
 export const testRootDefaults = (
     modelCatalog: ArchitectureModelCatalog = testArchitectureCatalog(),
 ): RootDefaults => ({

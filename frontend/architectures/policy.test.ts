@@ -1,10 +1,7 @@
 import { describe, expect, it } from "@jest/globals";
 import {
-    fakeArchitectureCatalog,
-    testArchitectureCatalog,
-    testSourceOnlyArchitecture,
-    testWanArchitecture,
-    testWanModelEntry,
+    testCombinedCatalog,
+    testCombinedCatalogWithWan,
 } from "../__test_helpers__/architectureFixtures";
 import {
     icLoraFixture,
@@ -20,28 +17,6 @@ import {
 import { renderTimeline } from "../timelineView";
 import { reconcileClipArchitectureIdentity } from "./clipIdentity";
 import { createCapabilityViewResolver } from "./policy";
-import type { ArchitectureModelCatalog } from "./types";
-
-const catalog = (): ArchitectureModelCatalog => {
-    const ltx = testArchitectureCatalog();
-    const fake = fakeArchitectureCatalog();
-    return {
-        source: "backend",
-        architectures: [
-            ...ltx.architectures,
-            ...fake.architectures,
-            testSourceOnlyArchitecture(),
-        ],
-        entries: [...ltx.entries, ...fake.entries],
-    };
-};
-
-const catalogWithWan = (): ArchitectureModelCatalog => {
-    const models = catalog();
-    models.architectures.push(testWanArchitecture());
-    models.entries.push(testWanModelEntry());
-    return models;
-};
 
 const fakeClip = () =>
     minimalClip({
@@ -57,7 +32,7 @@ const fakeClip = () =>
 
 describe("catalog-backed authoring policy", () => {
     it("reuses clip, stage, and seam views within one resolver snapshot", () => {
-        const resolver = createCapabilityViewResolver(catalog());
+        const resolver = createCapabilityViewResolver(testCombinedCatalog());
         const left = minimalClip();
         const clips = [left, minimalClip()];
 
@@ -69,13 +44,13 @@ describe("catalog-backed authoring policy", () => {
             resolver.forBoundaryIndex(clips, 0),
         );
 
-        expect(createCapabilityViewResolver(catalog()).forClip(left)).not.toBe(
-            resolver.forClip(left),
-        );
+        expect(
+            createCapabilityViewResolver(testCombinedCatalog()).forClip(left),
+        ).not.toBe(resolver.forClip(left));
     });
 
     it("tracks generation stages independently of frame-grid applicability", () => {
-        const resolver = createCapabilityViewResolver(catalog());
+        const resolver = createCapabilityViewResolver(testCombinedCatalog());
         const derivedDuration = minimalClip({
             clipLengthFromControlNet: true,
         });
@@ -92,9 +67,9 @@ describe("catalog-backed authoring policy", () => {
     });
 
     it("uses scoped capabilities and keeps unsupported persisted values removable", () => {
-        const view = createCapabilityViewResolver(catalog()).forClip(
-            fakeClip(),
-        );
+        const view = createCapabilityViewResolver(
+            testCombinedCatalog(),
+        ).forClip(fakeClip());
 
         expect(view.decision("frameReferences").supported).toBe(false);
         expect(view.decision("referenceFraming").supported).toBe(false);
@@ -108,14 +83,14 @@ describe("catalog-backed authoring policy", () => {
             enabled: false,
         });
         expect(
-            createCapabilityViewResolver(catalog())
+            createCapabilityViewResolver(testCombinedCatalog())
                 .forClip(minimalClip())
                 .decision("referenceFraming").supported,
         ).toBe(true);
     });
 
     it("uses typed model narrowing and intersects every active stage model", () => {
-        const models = catalog();
+        const models = testCombinedCatalog();
         const descriptor = models.architectures.find(
             (entry) => entry.id === "ltx2",
         );
@@ -164,7 +139,9 @@ describe("catalog-backed authoring policy", () => {
             ],
         });
 
-        const view = createCapabilityViewResolver(catalog()).forClip(clip);
+        const view = createCapabilityViewResolver(
+            testCombinedCatalog(),
+        ).forClip(clip);
 
         expect(view.architectureId).toBe("unsupported");
         expect(view.known).toBe(false);
@@ -176,7 +153,7 @@ describe("catalog-backed authoring policy", () => {
     });
 
     it("normalizes all-skipped init-video clips to the cataloged none identity", () => {
-        const models = catalog();
+        const models = testCombinedCatalog();
         const clip = minimalClip({
             initVideo: {
                 data: "data:video/mp4;base64,AA==",
@@ -218,7 +195,7 @@ describe("catalog-backed authoring policy", () => {
     });
 
     it("gates neither prompt relay nor audio reuse on a dynamic clip length", () => {
-        const models = catalog();
+        const models = testCombinedCatalog();
         const clip = minimalClip({
             clipLengthFromAudio: true,
             stages: [minimalStage(), minimalStage()],
@@ -232,7 +209,7 @@ describe("catalog-backed authoring policy", () => {
     });
 
     it("disables the retake control on a text-to-video clip", () => {
-        const models = catalog();
+        const models = testCombinedCatalog();
         const view = createCapabilityViewResolver(models).forClip(
             minimalClip(),
         );
@@ -254,7 +231,7 @@ describe("catalog-backed authoring policy", () => {
     });
 
     it("keeps retake available alongside frame references", () => {
-        const models = catalog();
+        const models = testCombinedCatalog();
         const initVideoClip = minimalClip({ initVideo: initVideoFixture() });
         expect(
             createCapabilityViewResolver(models)
@@ -271,7 +248,7 @@ describe("catalog-backed authoring policy", () => {
     });
 
     it("truncates the executable sequence at the first skipped clip", () => {
-        const models = catalog();
+        const models = testCombinedCatalog();
         const left = minimalClip({ boundaryOut: "continue" });
         const skipped = fakeClip();
         skipped.skipped = true;
@@ -312,7 +289,7 @@ describe("catalog-backed authoring policy", () => {
         };
         const body = document.createElement("div");
         renderTimeline(body, [clip], {
-            capabilities: createCapabilityViewResolver(catalog()),
+            capabilities: createCapabilityViewResolver(testCombinedCatalog()),
         });
 
         expect(body.querySelector(".vst-major-seg")).not.toBeNull();
@@ -360,7 +337,7 @@ describe("catalog-backed authoring policy", () => {
     it("drops the relay and retake lanes when no clip architecture offers them", () => {
         const body = document.createElement("div");
         renderTimeline(body, [fakeClip()], {
-            capabilities: createCapabilityViewResolver(catalog()),
+            capabilities: createCapabilityViewResolver(testCombinedCatalog()),
         });
 
         expect(body.querySelector(".vst-minor-lane")).toBeNull();
@@ -378,7 +355,7 @@ describe("catalog-backed authoring policy", () => {
     it("leaves a blank slot for the clips an offered lane skips", () => {
         const body = document.createElement("div");
         renderTimeline(body, [minimalClip(), fakeClip()], {
-            capabilities: createCapabilityViewResolver(catalog()),
+            capabilities: createCapabilityViewResolver(testCombinedCatalog()),
         });
 
         for (const selector of [".vst-minor-lane", ".vst-retake-lane"]) {
@@ -401,7 +378,7 @@ describe("catalog-backed authoring policy", () => {
     it("drops the clip audio row while keeping the timeline audio tracks", () => {
         const body = document.createElement("div");
         renderTimeline(body, [fakeClip()], {
-            capabilities: createCapabilityViewResolver(catalog()),
+            capabilities: createCapabilityViewResolver(testCombinedCatalog()),
         });
 
         expect(body.querySelector(".vst-audio-clip")).toBeNull();
@@ -425,7 +402,7 @@ describe("catalog-backed authoring policy", () => {
     it("keeps the clip audio row for the clips whose model carries audio", () => {
         const body = document.createElement("div");
         renderTimeline(body, [minimalClip(), fakeClip()], {
-            capabilities: createCapabilityViewResolver(catalog()),
+            capabilities: createCapabilityViewResolver(testCombinedCatalog()),
         });
 
         const lanes = body.querySelectorAll(".vst-audio-clip");
@@ -467,7 +444,7 @@ describe("catalog-backed authoring policy", () => {
     });
 
     it("uses typed architecture LoRA support when no model narrowing exists", () => {
-        const models = catalog();
+        const models = testCombinedCatalog();
         const clip = minimalClip();
         const decision = createCapabilityViewResolver(models)
             .forStage(clip, clip.stages[0])
@@ -477,7 +454,7 @@ describe("catalog-backed authoring policy", () => {
     });
 
     it("uses the actual WAN stage model instead of stale LTX identity and profile hints", () => {
-        const models = catalogWithWan();
+        const models = testCombinedCatalogWithWan();
         const clip = minimalClip({
             architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
@@ -505,7 +482,7 @@ describe("catalog-backed authoring policy", () => {
     });
 
     it("keeps stage LoRA authoring enabled on a samplerless stage", () => {
-        const models = catalog();
+        const models = testCombinedCatalog();
         const clip = minimalClip({
             loras: [{ name: "persisted.safetensors" }],
             stages: [minimalStage({ control: 0, loraWeights: [1] })],
@@ -523,7 +500,7 @@ describe("catalog-backed authoring policy", () => {
     });
 
     it("repairs none identity from authored Stage 0 after source removal", () => {
-        const models = catalog();
+        const models = testCombinedCatalog();
         const clip = minimalClip({
             architectureHint: "none",
             modelProfileId: "none",
@@ -552,7 +529,7 @@ describe("catalog-backed authoring policy", () => {
     });
 
     it("restores clip identity from authored stage zero when a later stage is the first active one", () => {
-        const models = catalog();
+        const models = testCombinedCatalog();
         const descriptor = models.architectures.find(
             (entry) => entry.id === "ltx2",
         );
