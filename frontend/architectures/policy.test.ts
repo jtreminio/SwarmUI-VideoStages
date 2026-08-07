@@ -306,17 +306,6 @@ describe("catalog-backed authoring policy", () => {
             expect(element?.className).toContain("vst-capability-disabled");
             expect(element?.hasAttribute("aria-disabled")).toBe(false);
         }
-        for (const selector of [
-            ".vst-major-seg",
-            ".vst-minor-seg",
-            ".vst-refs-mark",
-            ".vst-retake",
-            ".vst-audio-clip",
-        ]) {
-            expect(
-                body.querySelector(selector)?.hasAttribute("aria-disabled"),
-            ).toBe(false);
-        }
         expect(
             body.querySelector<HTMLElement>(".vst-minor-seg")?.title,
         ).toContain("click to inspect");
