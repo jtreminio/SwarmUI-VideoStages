@@ -36,6 +36,26 @@ public static class IcLoraWeights
         ["vr360-outpaint"] = new($"{HF}/TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA/resolve/main/360vroutpaint_v2_step09000.safetensors"),
     };
 
+    /// <summary>
+    /// Renders the checked-in TypeScript projection of the auto-model tokens. A backend test
+    /// compares this byte for byte with <c>frontend/architectures/ltx2/generatedIcLora.ts</c>.
+    /// </summary>
+    internal static string RenderGeneratedTypeScript()
+    {
+        StringBuilder result = new();
+        void Line(string value = "") => result.Append(value).Append('\n');
+
+        Line("// Generated from IcLoraWeights.cs. Do not edit by hand.");
+        Line();
+        Line("/** The model name that means \"download this preset's own weights\". */");
+        Line($"export const IC_LORA_AUTO = \"{AutoModelToken}\";");
+        Line();
+        Line("/** Where auto-downloaded IC-LoRA weights land under the models root. */");
+        Line($"export const IC_LORA_AUTO_FOLDER = \"{AutoModelFolder}\";");
+
+        return result.ToString();
+    }
+
     public static string FileStem(string url)
     {
         string file = url[(url.LastIndexOf('/') + 1)..];

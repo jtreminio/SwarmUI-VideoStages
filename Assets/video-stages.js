@@ -2658,9 +2658,11 @@
     return tracks;
   };
 
-  // frontend/architectures/ltx2/icLoraPresets.ts
-  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
+  // frontend/architectures/ltx2/generatedIcLora.ts
   var IC_LORA_AUTO = "[AUTO]";
+  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
+
+  // frontend/architectures/ltx2/icLoraPresets.ts
   var DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT = {
     acceptedKinds: ["image", "video"],
     driveData: "visual"

@@ -5,8 +5,9 @@ import type {
     IcLoraDriveMediaKind,
 } from "../../types";
 
-const IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
-export const IC_LORA_AUTO = "[AUTO]";
+import { IC_LORA_AUTO_FOLDER } from "./generatedIcLora";
+
+export { IC_LORA_AUTO } from "./generatedIcLora";
 
 export interface IcLoraPreset {
     id: string;
