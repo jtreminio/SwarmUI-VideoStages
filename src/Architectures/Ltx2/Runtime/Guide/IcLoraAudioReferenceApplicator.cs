@@ -17,10 +17,10 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
     internal void ApplyAudioReferenceTokens(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         ClipPlan clip,
-        StageFrame stageFrame,
+        StageContext stageContext,
         WGNodeData incomingMedia)
     {
-        IcLoraPlan audioReference = stageFrame.Stage.RequireLtx2Payload().IcLoras
+        IcLoraPlan audioReference = stageContext.Stage.RequireLtx2Payload().IcLoras
             .SingleOrDefault(entry => entry.HasAudioReference);
         if (audioReference is null
             || genInfo.Model is null
@@ -34,22 +34,22 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
             clip,
             audioReference,
             incomingMedia,
-            stageFrame.Stage.ClipStageRawIndex);
+            stageContext.Stage.ClipStageRawIndex);
         if (audioLatentPath is null)
         {
             return;
         }
 
         using WorkflowBridge bridge = BridgeSync.For(g);
-        stageFrame.AudioReferencePreWrapPosCond = genInfo.PosCond;
-        stageFrame.AudioReferencePreWrapNegCond = genInfo.NegCond;
+        stageContext.AudioReferencePreWrapPosCond = genInfo.PosCond;
+        stageContext.AudioReferencePreWrapNegCond = genInfo.NegCond;
         LTXVSetAudioRefTokensNode refTokens = bridge.AddNode(new LTXVSetAudioRefTokensNode());
         refTokens.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
         refTokens.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
         refTokens.AudioLatent.TryConnectFromPath(bridge, audioLatentPath);
         genInfo.PosCond = WorkflowBridge.ToPath(refTokens.Positive);
         genInfo.NegCond = WorkflowBridge.ToPath(refTokens.Negative);
-        stageFrame.AudioReferenceActive = true;
+        stageContext.AudioReferenceActive = true;
     }
 
     private JArray ResolveAudioReferenceLatent(

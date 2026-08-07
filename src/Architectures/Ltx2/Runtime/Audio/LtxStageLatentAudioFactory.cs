@@ -14,21 +14,21 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
 {
     internal WGNodeData CreateEmpty(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageFrame stageFrame,
+        StageContext stageContext,
         WGNodeData sourceMedia,
         JArray controlNetLengthFrames = null,
         string latentNodeId = null)
     {
-        (int width, int height) = ResolveStageLatentDims(stageFrame, sourceMedia);
+        (int width, int height) = ResolveStageLatentDims(stageContext, sourceMedia);
         int frames = genInfo.Frames
             ?? sourceMedia?.Frames
             ?? LtxStageRuntimeSettings.DefaultFrameCount;
         WGNodeData attachedAudio = ApplyPendingAudioConditioning(
-            stageFrame.ClipContext,
+            stageContext.ClipContext,
             sourceMedia?.AttachedAudio,
             out _);
         return CreateEmpty(
-            stageFrame.ClipContext.PlannedClip?.Audio
+            stageContext.ClipContext.PlannedClip?.Audio
                 ?? throw Invariant.Failure(
                     "LTX stage execution requires the compiled clip plan."),
             genInfo,
@@ -127,14 +127,14 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
     internal WGNodeData EnsureHasAudio(
         WGNodeData latent,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageFrame stageFrame,
+        StageContext stageContext,
         WGNodeData sourceMedia)
     {
         int fps = LtxStageRuntimeSettings.ResolveFps(g, genInfo, sourceMedia);
         WGNodeData nativeHandoff = LtxDecodedAudioHandoff.PreferNativeLatent(g, latent);
         WGNodeData attachedAudio = nativeHandoff.AttachedAudio ?? sourceMedia?.AttachedAudio;
         WGNodeData conditionedAudio = ApplyPendingAudioConditioning(
-            stageFrame.ClipContext,
+            stageContext.ClipContext,
             attachedAudio,
             out bool applied);
         if (applied)
@@ -204,10 +204,10 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
 
     // Prefer planned dimensions because root media can retain its source size.
     private (int Width, int Height) ResolveStageLatentDims(
-        StageFrame stageFrame,
+        StageContext stageContext,
         WGNodeData sourceMedia)
     {
-        ClipDimensionState dims = stageFrame.ClipContext.Dimensions;
+        ClipDimensionState dims = stageContext.ClipContext.Dimensions;
         int width = dims.Width > 0
             ? dims.Width
             : sourceMedia?.Width ?? g.UserInput.GetImageWidth();

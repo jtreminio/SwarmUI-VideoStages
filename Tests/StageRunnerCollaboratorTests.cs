@@ -26,8 +26,8 @@ public class StageRunnerCollaboratorTests
             typeof(ClipPlan),
             typeof(StagePlan));
         AssertTypedMethod(
-            typeof(StageFramePreparer),
-            nameof(StageFramePreparer.Prepare),
+            typeof(StageContextBuilder),
+            nameof(StageContextBuilder.Build),
             typeof(StagePlan),
             typeof(int),
             typeof(ClipContext),
@@ -43,7 +43,7 @@ public class StageRunnerCollaboratorTests
         Type[] collaboratorTypes =
         [
             typeof(PlannedStagePromptResolver),
-            typeof(StageFramePreparer),
+            typeof(StageContextBuilder),
             typeof(StageSourceMediaResolver),
         ];
         Assert.DoesNotContain(

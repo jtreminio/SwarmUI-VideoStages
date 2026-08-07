@@ -53,7 +53,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
     /// <summary>
     /// Applies the mask and returns false without changing the graph when a prerequisite is absent.
     /// </summary>
-    public bool Apply(WorkflowGenerator.ImageToVideoGenInfo genInfo, StageFrame stageFrame)
+    public bool Apply(WorkflowGenerator.ImageToVideoGenInfo genInfo, StageContext stageContext)
     {
         if (!g.IsLTXV2() || g.CurrentAudioVae?.Path is null || genInfo?.Model?.Path is null || genInfo.Vae?.Path is null)
         {
@@ -64,7 +64,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
             return false;
         }
 
-        AudioMaskWindow window = ResolveWindow(genInfo, stageFrame);
+        AudioMaskWindow window = ResolveWindow(genInfo, stageContext);
         if (window.IsEmpty)
         {
             return false;
@@ -90,7 +90,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
                 // a preserved base.
                 MaskInitValueVideo: 0.0,
                 MaskInitValueAudio: 0.0),
-            StableNodeIds.Id(g, StableNodeIds.AudioWindowMask, stageFrame.Stage.StageId));
+            StableNodeIds.Id(g, StableNodeIds.AudioWindowMask, stageContext.Stage.StageId));
         mask.AvLatentInput.ConnectFromPath(bridge, mediaPath);
         mask.Model.ConnectFromPath(bridge, genInfo.Model.Path);
         mask.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
@@ -113,10 +113,10 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
         return true;
     }
 
-    private static AudioMaskWindow ResolveWindow(WorkflowGenerator.ImageToVideoGenInfo genInfo, StageFrame stageFrame)
+    private static AudioMaskWindow ResolveWindow(WorkflowGenerator.ImageToVideoGenInfo genInfo, StageContext stageContext)
     {
-        StagePlan stage = stageFrame.Stage;
-        ClipPlan clip = stageFrame.ClipContext.PlannedClip
+        StagePlan stage = stageContext.Stage;
+        ClipPlan clip = stageContext.ClipContext.PlannedClip
             ?? throw Invariant.Failure(
                 "LTX stage execution requires the compiled clip plan.");
         int fps = genInfo.VideoFPS ?? LtxStageRuntimeSettings.DefaultFps;

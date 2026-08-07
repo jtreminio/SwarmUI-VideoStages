@@ -10,7 +10,7 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
 {
     internal void Execute(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageFrame stageFrame)
+        StageContext stageContext)
     {
         string previewType = g.UserInput.Get(ComfyUIBackendExtension.VideoPreviewType, "animate");
         string explicitSampler = g.UserInput.Get(
@@ -27,7 +27,7 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
         g.CurrentMedia = g.CurrentMedia.AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
         LtxAudioMaskResizer.ApplyCurrentAudioMaskDimensions(g.CurrentMedia);
         // Crop audio and video together so preserved retake media stays synchronized.
-        new LtxAudioWindowMasker(g).Apply(genInfo, stageFrame);
+        new LtxAudioWindowMasker(g).Apply(genInfo, stageContext);
         string samplerNode = g.CreateKSampler(
             genInfo.Model.Path,
             genInfo.PosCond,
@@ -43,7 +43,7 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
             sigmin: 0.002,
             sigmax: 1000,
             previews: previewType,
-            id: stageFrame.Claim.Sampler,
+            id: stageContext.Claim.Sampler,
             defsampler: genInfo.DefaultSampler,
             defscheduler: genInfo.DefaultScheduler,
             hadSpecialCond: genInfo.HadSpecialCond,
@@ -56,26 +56,26 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
         g.CurrentMedia.Frames = genInfo.Frames ?? g.CurrentMedia.Frames;
         g.CurrentMedia.FPS = genInfo.VideoFPS ?? g.CurrentMedia.FPS;
 
-        if (stageFrame.NeedsCropGuidesAfterSampler)
+        if (stageContext.NeedsCropGuidesAfterSampler)
         {
-            CropGuidesAfterSampler(genInfo, stageFrame);
+            CropGuidesAfterSampler(genInfo, stageContext);
         }
 
     }
 
     private void CropGuidesAfterSampler(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageFrame stageFrame)
+        StageContext stageContext)
     {
         bool shouldRestoreAudioVideoLatent =
             g.CurrentMedia.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO;
 
         // Crop against the original conditioning; audio-reference tokens only guide sampling.
-        if (stageFrame.AudioReferenceActive
-            && stageFrame.AudioReferencePreWrapPosCond is not null)
+        if (stageContext.AudioReferenceActive
+            && stageContext.AudioReferencePreWrapPosCond is not null)
         {
-            genInfo.PosCond = stageFrame.AudioReferencePreWrapPosCond;
-            genInfo.NegCond = stageFrame.AudioReferencePreWrapNegCond;
+            genInfo.PosCond = stageContext.AudioReferencePreWrapPosCond;
+            genInfo.NegCond = stageContext.AudioReferencePreWrapNegCond;
         }
 
         using WorkflowBridge bridge = BridgeSync.For(g);

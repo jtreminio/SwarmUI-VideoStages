@@ -26,13 +26,13 @@ internal sealed class LtxStageLatentBuilder
 
     internal WGNodeData Build(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageFrame stageFrame,
+        StageContext stageContext,
         WGNodeData sourceMedia,
         LtxPostVideoChain postVideoChain)
     {
-        StagePlan stage = stageFrame.Stage;
+        StagePlan stage = stageContext.Stage;
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
-        ClipPlan clip = stageFrame.ClipContext.PlannedClip
+        ClipPlan clip = stageContext.ClipContext.PlannedClip
             ?? throw Invariant.Failure(
                 "LTX stage execution requires the compiled clip plan.");
         genInfo.StartStep = StageStartStepPolicy.StartStep(
@@ -47,19 +47,19 @@ internal sealed class LtxStageLatentBuilder
         JArray controlNetLengthFrames =
             latentAudioFactory.TryResolveControlNetLengthFrames(clip);
 
-        if (stageFrame.TakesOverTextToVideoRoot
-            || (stageFrame.ClipContext.IncomingContinueHandleFrames > 0
-                && !stageFrame.ClipContext.ContinueHandleMaterialized))
+        if (stageContext.TakesOverTextToVideoRoot
+            || (stageContext.ClipContext.IncomingContinueHandleFrames > 0
+                && !stageContext.ClipContext.ContinueHandleMaterialized))
         {
             WGNodeData empty = latentAudioFactory.CreateEmpty(
                 genInfo,
-                stageFrame,
+                stageContext,
                 sourceMedia,
                 controlNetLengthFrames,
-                stageFrame.Claim.Latent);
-            if (stageFrame.ClipContext.IncomingContinueHandleFrames > 0)
+                stageContext.Claim.Latent);
+            if (stageContext.ClipContext.IncomingContinueHandleFrames > 0)
             {
-                stageFrame.ClipContext.ContinueHandleMaterialized = true;
+                stageContext.ClipContext.ContinueHandleMaterialized = true;
             }
             return empty;
         }
@@ -75,7 +75,7 @@ internal sealed class LtxStageLatentBuilder
             return latentAudioFactory.EnsureHasAudio(
                 nativeVideoLatent,
                 genInfo,
-                stageFrame,
+                stageContext,
                 sourceMedia);
         }
 
@@ -87,7 +87,7 @@ internal sealed class LtxStageLatentBuilder
         {
             return latentAudioFactory.CreateEmpty(
                 genInfo,
-                stageFrame,
+                stageContext,
                 sourceMedia,
                 controlNetLengthFrames);
         }
@@ -117,7 +117,7 @@ internal sealed class LtxStageLatentBuilder
             return latentAudioFactory.EnsureHasAudio(
                 reusedLatent,
                 genInfo,
-                stageFrame,
+                stageContext,
                 sourceMedia);
         }
 
@@ -168,7 +168,7 @@ internal sealed class LtxStageLatentBuilder
         return latentAudioFactory.EnsureHasAudio(
             encodedLatent,
             genInfo,
-            stageFrame,
+            stageContext,
             sourceMedia);
     }
 

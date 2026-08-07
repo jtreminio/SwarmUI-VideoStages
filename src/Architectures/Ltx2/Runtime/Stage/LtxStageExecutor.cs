@@ -36,17 +36,17 @@ internal sealed class LtxStageExecutor
     }
 
     public void RunStage(
-        StageFrame stageFrame,
+        StageContext stageContext,
         WGNodeData guideMedia,
         Func<WGNodeData> resolveFallbackGuide,
         IReadOnlyList<ResolvedFrameRef> frameRefs,
         double guideMergeStrength)
     {
-        WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
-        WGNodeData sourceMedia = stageFrame.SourceMedia;
-        LtxPostVideoChain postVideoChain = stageFrame.PostVideoChain;
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = stageContext.GenInfo;
+        WGNodeData sourceMedia = stageContext.SourceMedia;
+        LtxPostVideoChain postVideoChain = stageContext.PostVideoChain;
         bool incomingIcLoraMediaIncludesContinueHandle =
-            stageFrame.ClipContext.ContinueHandleMaterialized;
+            stageContext.ClipContext.ContinueHandleMaterialized;
         postVideoChain?.AttachSourceAudio(sourceMedia);
         g.IsImageToVideo = true;
 
@@ -59,13 +59,13 @@ internal sealed class LtxStageExecutor
                 handler(genInfo);
             }
 
-            stageFrame.Claim = rootAdoption.ClaimTextRoot(
-                stageFrame.ClipContext.PlannedClip,
-                stageFrame.Stage,
+            stageContext.Claim = rootAdoption.ClaimTextRoot(
+                stageContext.ClipContext.PlannedClip,
+                stageContext.Stage,
                 includeLatent: true,
                 includeConditioning: true);
             WGNodeData effectiveSourceMedia = g.CurrentMedia ?? sourceMedia;
-            modelPromptPreparer.Prepare(genInfo, stageFrame, effectiveSourceMedia);
+            modelPromptPreparer.Prepare(genInfo, stageContext, effectiveSourceMedia);
             bool canReuseLatent =
                 postVideoChain?.CanReuseCurrentOutputAsStageInput(effectiveSourceMedia) == true;
             if (!canReuseLatent && resolveFallbackGuide is not null)
@@ -75,7 +75,7 @@ internal sealed class LtxStageExecutor
 
             WGNodeData stageLatent = latentBuilder.Build(
                 genInfo,
-                stageFrame,
+                stageContext,
                 effectiveSourceMedia,
                 postVideoChain);
             if (stageLatent is null)
@@ -87,11 +87,11 @@ internal sealed class LtxStageExecutor
                 new LtxConditioningPipeline(
                         g,
                         genInfo,
-                        stageFrame,
+                        stageContext,
                         new LtxGuidePreprocessReuse(
                             g,
                             rootVideoStageResizer,
-                            stageFrame.ClipContext.PlannedClip
+                            stageContext.ClipContext.PlannedClip
                                 .RequireLtx2Payload()
                                 .ReferenceFraming))
                     .WithLatent(stageLatent, effectiveSourceMedia)
@@ -105,20 +105,20 @@ internal sealed class LtxStageExecutor
                     .WithGuideAdditions(frameRefs);
             }
             genInfo.VideoCFG ??= genInfo.DefaultCFG;
-            WGNodeData incomingMedia = ResolveIcLoraStageInput(stageFrame);
-            stageFrame.NeedsCropGuidesAfterSampler |=
+            WGNodeData incomingMedia = ResolveIcLoraStageInput(stageContext);
+            stageContext.NeedsCropGuidesAfterSampler |=
                 new IcLoraApplicator(g).ApplyIcLoras(
                     genInfo,
-                    stageFrame.ClipContext.PlannedClip,
-                    stageFrame.Stage,
+                    stageContext.ClipContext.PlannedClip,
+                    stageContext.Stage,
                     genInfo.Frames,
                     incomingMedia,
-                    stageFrame.ClipContext.IncomingContinueHandleFrames,
+                    stageContext.ClipContext.IncomingContinueHandleFrames,
                     incomingIcLoraMediaIncludesContinueHandle);
             new IcLoraAudioReferenceApplicator(g).ApplyAudioReferenceTokens(
                 genInfo,
-                stageFrame.ClipContext.PlannedClip,
-                stageFrame,
+                stageContext.ClipContext.PlannedClip,
+                stageContext,
                 incomingMedia);
 
             foreach (
@@ -140,9 +140,9 @@ internal sealed class LtxStageExecutor
                         == postVideoChain.VideoDecodeNodeId;
             }
 
-            sampler.Execute(genInfo, stageFrame);
-            outputFinalizer.Complete(genInfo, stageFrame, postVideoChain,
-                stageFrame.RequiresDedicatedOutput || forceDedicatedOutput);
+            sampler.Execute(genInfo, stageContext);
+            outputFinalizer.Complete(genInfo, stageContext, postVideoChain,
+                stageContext.RequiresDedicatedOutput || forceDedicatedOutput);
         }
         finally
         {
@@ -150,18 +150,18 @@ internal sealed class LtxStageExecutor
         }
     }
 
-    private WGNodeData ResolveIcLoraStageInput(StageFrame stageFrame)
+    private WGNodeData ResolveIcLoraStageInput(StageContext stageContext)
     {
-        bool wantsIncoming = stageFrame.Stage.RequireLtx2Payload().IcLoras.Any(entry =>
+        bool wantsIncoming = stageContext.Stage.RequireLtx2Payload().IcLoras.Any(entry =>
             entry.Drive.Source == IcLoraMediaSourceKind.Incoming);
         if (!wantsIncoming)
         {
             return null;
         }
-        WGNodeData source = stageFrame.ClipContext.IsFirstStage(stageFrame.Stage)
-            ? stageFrame.ClipContext.IcLoraEntryIncomingMedia
-            : stageFrame.SourceMedia;
-        LtxPostVideoChain postVideoChain = stageFrame.PostVideoChain;
+        WGNodeData source = stageContext.ClipContext.IsFirstStage(stageContext.Stage)
+            ? stageContext.ClipContext.IcLoraEntryIncomingMedia
+            : stageContext.SourceMedia;
+        LtxPostVideoChain postVideoChain = stageContext.PostVideoChain;
         if (postVideoChain is null || !postVideoChain.ReferencesOutput(source))
         {
             return source;

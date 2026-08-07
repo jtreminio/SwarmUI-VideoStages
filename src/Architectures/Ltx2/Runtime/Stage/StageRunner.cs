@@ -16,7 +16,7 @@ internal class StageRunner
     private readonly LtxStageGuideMediaResolver _guideMediaResolver;
     private readonly FrameRefResolver _frameRefResolver;
     private readonly StageSourceMediaResolver _sourceMediaResolver;
-    private readonly StageFramePreparer _framePreparer;
+    private readonly StageContextBuilder _contextBuilder;
 
     public StageRunner(
         WorkflowGenerator generator,
@@ -31,7 +31,7 @@ internal class StageRunner
         _frameRefResolver = frameRefResolver
             ?? throw new ArgumentNullException(nameof(frameRefResolver));
         _sourceMediaResolver = new StageSourceMediaResolver(generator);
-        _framePreparer = new StageFramePreparer(
+        _contextBuilder = new StageContextBuilder(
             generator,
             _sourceMediaResolver,
             new PlannedStagePromptResolver(generator));
@@ -69,23 +69,23 @@ internal class StageRunner
             stage,
             sectionId);
 
-        StageFrame stageFrame = _framePreparer.Prepare(
+        StageContext stageContext = _contextBuilder.Build(
             stage,
             sectionId,
             clipContext,
             requiresDedicatedOutput,
             root);
-        RunLtxStage(guideReference, refStore, stageFrame);
+        RunLtxStage(guideReference, refStore, stageContext);
     }
 
     private void RunLtxStage(
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
-        StageFrame stageFrame)
+        StageContext stageContext)
     {
-        WorkflowGenerator.ImageToVideoGenInfo genInfo = stageFrame.GenInfo;
-        WGNodeData sourceMedia = stageFrame.SourceMedia;
-        LtxPostVideoChain postVideoChain = stageFrame.PostVideoChain;
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = stageContext.GenInfo;
+        WGNodeData sourceMedia = stageContext.SourceMedia;
+        LtxPostVideoChain postVideoChain = stageContext.PostVideoChain;
         if (!Ltx2ArchitectureModule.IsLtx23VideoModel(genInfo.VideoModel)
             || (sourceMedia?.DataType != WGNodeData.DT_VIDEO
                 && sourceMedia?.DataType != WGNodeData.DT_IMAGE))
@@ -94,8 +94,8 @@ internal class StageRunner
                 "the LTX stage input was neither decoded video nor image media.");
         }
 
-        StagePlan stage = stageFrame.Stage;
-        ClipContext clipContext = stageFrame.ClipContext;
+        StagePlan stage = stageContext.Stage;
+        ClipContext clipContext = stageContext.ClipContext;
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
         ReferenceFramingMode referenceFraming =
             clipContext.PlannedClip.RequireLtx2Payload().ReferenceFraming;
@@ -130,7 +130,7 @@ internal class StageRunner
         else if (reanchorsContinuityTail)
         {
             // A latent handoff does not preserve the opening frames at the new resolution.
-            stageFrame.ContinuityAnchor = GuideMediaPreparation.Prepare(
+            stageContext.ContinuityAnchor = GuideMediaPreparation.Prepare(
                 _generator,
                 clipContext.ContinuityTail.Duplicate(),
                 sourceMedia,
@@ -144,7 +144,7 @@ internal class StageRunner
         {
             guideMedia = PrimaryGuideIsStageInput(
                     primaryGuideFrameRef,
-                    stageFrame.PriorOutputPath,
+                    stageContext.PriorOutputPath,
                     sourceMedia)
                 ? ResolveDefaultLocalGuideMedia(sourceMedia, postVideoChain)
                 : GuideMediaPreparation.Prepare(
@@ -166,7 +166,7 @@ internal class StageRunner
             bool refinesIncomingLatent = clipContext.Plan.Root.HostKind == HostRootKind.ImageToVideo
                 && !payload.ImageReferenceWasExplicit
                 && (clipContext.PlannedClip.ClipId != 0 || stage.ClipStageIndex != 0);
-            if (!stageFrame.TakesOverTextToVideoRoot
+            if (!stageContext.TakesOverTextToVideoRoot
                 && frameRefs.Count == 0
                 && !initVideoFootageIsStageInput
                 && !refinesIncomingLatent)
@@ -180,20 +180,20 @@ internal class StageRunner
                 {
                     resolveFallbackGuide = () => ResolveReinjectedGuideMedia(
                         guideReference,
-                        stageFrame,
+                        stageContext,
                         referenceFraming);
                 }
                 else if (guideReference?.Media is not null)
                 {
                     guideMedia = ResolveReinjectedGuideMedia(
                         guideReference,
-                        stageFrame,
+                        stageContext,
                         referenceFraming);
                 }
             }
         }
         _stageExecutor.RunStage(
-            stageFrame,
+            stageContext,
             guideMedia,
             resolveFallbackGuide,
             frameRefs,
@@ -220,23 +220,23 @@ internal class StageRunner
 
     private WGNodeData ResolveReinjectedGuideMedia(
         StageRefStore.StageRef guideReference,
-        StageFrame stageFrame,
+        StageContext stageContext,
         ReferenceFramingMode referenceFraming)
     {
-        WGNodeData sourceMedia = stageFrame.SourceMedia;
-        Ltx2StagePayload payload = stageFrame.Stage.RequireLtx2Payload();
+        WGNodeData sourceMedia = stageContext.SourceMedia;
+        Ltx2StagePayload payload = stageContext.Stage.RequireLtx2Payload();
         bool guideIsStageInput = GuideReferenceIsStageInput(
             guideReference,
-            stageFrame.PriorOutputPath,
+            stageContext.PriorOutputPath,
             payload.Guide.Kind,
             payload.ImageReferenceWasExplicit,
-            stageFrame.PostVideoChain);
+            stageContext.PostVideoChain);
         bool guideIsLiveOutput = _guideMediaResolver.IsLiveCurrentOutputReference(
             guideReference?.Media,
-            stageFrame.PostVideoChain);
+            stageContext.PostVideoChain);
         WGNodeData authoredGuide = guideIsStageInput && !guideIsLiveOutput
             ? sourceMedia
-            : _guideMediaResolver.ResolveGuideMedia(guideReference, stageFrame.PostVideoChain);
+            : _guideMediaResolver.ResolveGuideMedia(guideReference, stageContext.PostVideoChain);
         if (guideIsStageInput && authoredGuide is not null)
         {
             // The detached decode may retain stale pre-resize metadata.

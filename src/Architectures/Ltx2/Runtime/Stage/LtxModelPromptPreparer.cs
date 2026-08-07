@@ -16,7 +16,7 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
 
     internal void Prepare(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageFrame stageFrame,
+        StageContext stageContext,
         WGNodeData sourceMedia)
     {
         g.FinalLoadedModel = genInfo.VideoModel;
@@ -39,11 +39,11 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
 
         SwarmClipTextEncodeAdvancedNode negCondNode = AddSwarmClipTextEncodeAdvanced(
             bridge, clipOutput, steps, negativePrompt, width, height, guidance,
-            stageFrame?.Claim.Negative);
+            stageContext?.Claim.Negative);
         genInfo.NegCond = negCondNode.CONDITIONING.ToPath();
 
         if (TryBuildPromptRelay(
-                bridge, genInfo, stageFrame, clipOutput, positivePrompt, sourceMedia,
+                bridge, genInfo, stageContext, clipOutput, positivePrompt, sourceMedia,
                 out string overridePositive))
         {
             return;
@@ -53,21 +53,21 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
         // goes unclaimed and is swept as before.
         SwarmClipTextEncodeAdvancedNode posCondNode = AddSwarmClipTextEncodeAdvanced(
             bridge, clipOutput, steps, overridePositive ?? positivePrompt, width, height, guidance,
-            stageFrame?.Claim.Positive);
+            stageContext?.Claim.Positive);
         genInfo.PosCond = posCondNode.CONDITIONING.ToPath();
     }
 
     private bool TryBuildPromptRelay(
         WorkflowBridge bridge,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageFrame stageFrame,
+        StageContext stageContext,
         INodeOutput clipOutput,
         string globalPrompt,
         WGNodeData sourceMedia,
         out string overridePositive)
     {
         overridePositive = null;
-        PromptRelayPlan promptRelay = stageFrame?.Stage?.RequireLtx2Payload().PromptRelay;
+        PromptRelayPlan promptRelay = stageContext?.Stage?.RequireLtx2Payload().PromptRelay;
         if (promptRelay is null || promptRelay.Mode == PromptRelayMode.None)
         {
             return false;
@@ -79,7 +79,7 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
             ?? LtxStageRuntimeSettings.DefaultFrameCount;
         IReadOnlyList<PromptRelaySegmentPlan> segments = promptRelay.Segments;
         PromptRelayMode mode = promptRelay.Mode;
-        int incomingHandleFrames = stageFrame.ClipContext.IncomingContinueHandleFrames;
+        int incomingHandleFrames = stageContext.ClipContext.IncomingContinueHandleFrames;
         if (incomingHandleFrames > 0)
         {
             double handleSeconds = incomingHandleFrames / (double)Math.Max(1, fps);

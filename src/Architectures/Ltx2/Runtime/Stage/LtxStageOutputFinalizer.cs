@@ -10,13 +10,13 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
 {
     internal void Complete(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageFrame stageFrame,
+        StageContext stageContext,
         LtxPostVideoChain postVideoChain,
         bool requiresDedicatedOutput)
     {
         // WGNodeData can retain pre-upscale metadata when a sampler replaces only its graph path.
-        int outputWidth = stageFrame.ClipContext.Dimensions.Width;
-        int outputHeight = stageFrame.ClipContext.Dimensions.Height;
+        int outputWidth = stageContext.ClipContext.Dimensions.Width;
+        int outputHeight = stageContext.ClipContext.Dimensions.Height;
         bool splicedIntoNativeChain = postVideoChain is not null;
         if (splicedIntoNativeChain)
         {
@@ -58,7 +58,7 @@ internal sealed class LtxStageOutputFinalizer(WorkflowGenerator g)
                 g,
                 g.CurrentMedia,
                 genInfo.Vae,
-                stageFrame.Claim.Decode);
+                stageContext.Claim.Decode);
             AttachDecodedLtxAudioFromCurrentVideo();
             ApplyCurrentMediaOutputMetadata(
                 outputWidth,

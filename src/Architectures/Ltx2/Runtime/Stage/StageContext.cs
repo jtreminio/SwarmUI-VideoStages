@@ -5,9 +5,9 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class StageFrame
+internal sealed class StageContext
 {
-    public StageFrame(
+    public StageContext(
         StagePlan stage,
         ClipContext clipContext,
         JArray priorOutputPath,

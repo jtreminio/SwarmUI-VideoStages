@@ -11,7 +11,7 @@ namespace VideoStages.Architectures.Ltx2;
 internal sealed class LtxConditioningPipeline(
         WorkflowGenerator g,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        StageFrame stageFrame,
+        StageContext stageContext,
         LtxGuidePreprocessReuse guidePreprocessReuse)
 {
     private WGNodeData stageLatent;
@@ -34,7 +34,7 @@ internal sealed class LtxConditioningPipeline(
 
     public LtxConditioningPipeline WithUpscaleIfNeeded(WGNodeData sourceMedia)
     {
-        StagePlan stage = stageFrame.Stage;
+        StagePlan stage = stageContext.Stage;
         StageUpscalePlan upscale = stage.Core.Upscale;
         if (upscale.Mode is not (StageUpscaleMode.LatentModel or StageUpscaleMode.Latent))
         {
@@ -49,9 +49,9 @@ internal sealed class LtxConditioningPipeline(
         stageLatent = upscale.Mode == StageUpscaleMode.Latent
             ? ApplyLatentUpscale(upscale.MethodName, upscale.Factor, width, height)
             : ApplyLatentModelUpscale(upscale.MethodName, width, height);
-        stageFrame.ClipContext.Dimensions.Width = width;
-        stageFrame.ClipContext.Dimensions.Height = height;
-        stageFrame.ClipContext.Dimensions.HasLatentUpscale = true;
+        stageContext.ClipContext.Dimensions.Width = width;
+        stageContext.ClipContext.Dimensions.Height = height;
+        stageContext.ClipContext.Dimensions.HasLatentUpscale = true;
         return this;
     }
 
@@ -91,14 +91,14 @@ internal sealed class LtxConditioningPipeline(
     // Apply a continue tail last so it takes precedence over other head conditioning.
     public LtxConditioningPipeline WithContinuityAnchor()
     {
-        if (stageFrame.ContinuityAnchor is null)
+        if (stageContext.ContinuityAnchor is null)
         {
             return this;
         }
 
         g.CurrentMedia = MergeGuideIntoLatent(
             g.CurrentMedia,
-            stageFrame.ContinuityAnchor.Path,
+            stageContext.ContinuityAnchor.Path,
             strength: 1.0);
         return this;
     }
@@ -140,7 +140,7 @@ internal sealed class LtxConditioningPipeline(
             addGuide.LatentInput.ConnectFromPath(bridge, g.CurrentMedia.Path);
             addGuide.Image.ConnectFromPath(bridge, preprocessed);
 
-            stageFrame.NeedsCropGuidesAfterSampler = true;
+            stageContext.NeedsCropGuidesAfterSampler = true;
             genInfo.SetConditioning(addGuide);
             g.CurrentMedia = g.CurrentMedia.WithPath(
                 addGuide.Latent,

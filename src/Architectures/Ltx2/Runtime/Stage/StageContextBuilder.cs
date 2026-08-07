@@ -8,13 +8,13 @@ using VideoStages.Architectures.Ltx2.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
 
-/// <summary>Prepares the source graph and generation frame consumed by the LTX stage executor.</summary>
-internal sealed class StageFramePreparer(
+/// <summary>Builds the source graph and per-stage context the LTX stage executor consumes.</summary>
+internal sealed class StageContextBuilder(
     WorkflowGenerator g,
     StageSourceMediaResolver sourceMediaResolver,
     PlannedStagePromptResolver promptResolver)
 {
-    public StageFrame Prepare(
+    public StageContext Build(
         StagePlan stage,
         int sectionId,
         ClipContext clipContext,
@@ -51,7 +51,7 @@ internal sealed class StageFramePreparer(
             sectionId,
             sourceMedia,
             takesOverTextToVideoRoot);
-        return new StageFrame(
+        return new StageContext(
             stage,
             clipContext,
             priorOutputPath,
