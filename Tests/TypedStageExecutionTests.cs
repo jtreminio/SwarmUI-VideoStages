@@ -83,6 +83,7 @@ public class TypedStageExecutionTests
                 typeof(LtxStageLatentAudioFactory),
                 typeof(LtxReusableLatentResolver),
                 typeof(LtxVideoRetakeMasker),
+                typeof(LtxAudioWindowMasker),
             }.SelectMany(type => type.GetMethods(AnyMember | BindingFlags.DeclaredOnly)),
             method => method.GetParameters().Any(parameter =>
                 parameter.ParameterType == typeof(StageSpec)

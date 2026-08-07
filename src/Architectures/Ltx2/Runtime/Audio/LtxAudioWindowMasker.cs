@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Authoring;
 using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 using VideoStages.Planning;
@@ -31,7 +30,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
     /// <summary>
     /// Retake window in seconds, snapped to the video mask's latent-frame boundaries.
     /// </summary>
-    internal static AudioMaskWindow ComputeRetakeWindow(RetakeWindowSpec retake, int fps, int? clipFrames)
+    internal static AudioMaskWindow ComputeRetakeWindow(RetakePlan retake, int fps, int? clipFrames)
     {
         if (retake is null || retake.LengthFrames <= 0 || fps <= 0)
         {
@@ -126,13 +125,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
         // Match the video mask's frame-count preference so both windows cover the same span.
         if (payload.Retake is not null)
         {
-            return ComputeRetakeWindow(
-                new RetakeWindowSpec(
-                    payload.Retake.StartFrame,
-                    payload.Retake.LengthFrames,
-                    payload.Retake.Strength),
-                fps,
-                genInfo.Frames ?? clip.Frames);
+            return ComputeRetakeWindow(payload.Retake, fps, genInfo.Frames ?? clip.Frames);
         }
 
         return default;
