@@ -6,6 +6,7 @@ using SwarmUI.Text2Image;
 using VideoStages.Execution.Audio;
 using VideoStages.Generated;
 using Xunit;
+using VideoStages.Architectures.Ltx2.Runtime;
 using VideoStages.Architectures.Ltx2.Runtime.Audio;
 
 namespace VideoStages.Tests;
@@ -50,6 +51,63 @@ public class AudioInjectionTests
         generator.CurrentAudioVae = new WGNodeData(new JArray("105", 0), generator,
             WGNodeData.DT_AUDIOVAE, T2IModelClassSorter.CompatLtxv2);
         return generator;
+    }
+
+    private static JObject BuildAudioInjectionWorkflow()
+    {
+        return new JObject
+        {
+            ["1"] = new JObject
+            {
+                ["class_type"] = SwarmKSamplerNode.ClassType,
+                ["inputs"] = new JObject { ["seed"] = 42 }
+            },
+            ["2"] = new JObject
+            {
+                ["class_type"] = LTXVEmptyLatentAudioNode.ClassType,
+                ["inputs"] = new JObject
+                {
+                    ["frames_number"] = 97,
+                    ["frame_rate"] = 24,
+                    ["batch_size"] = 1,
+                    ["audio_vae"] = new JArray("10", 0)
+                }
+            },
+            ["3"] = new JObject
+            {
+                ["class_type"] = LTXVConcatAVLatentNode.ClassType,
+                ["inputs"] = new JObject
+                {
+                    ["video_latent"] = new JArray("1", 0),
+                    ["audio_latent"] = new JArray("2", 0)
+                }
+            }
+        };
+    }
+
+    /// <summary>The concat selection this drives had no coverage: breaking
+    /// <c>LtxAudioInjector</c>'s finder left the whole suite green.</summary>
+    [Fact]
+    public void Injection_replaces_the_model_supplied_empty_audio_latent()
+    {
+        WorkflowGenerator generator = CreateInjectorGenerator(BuildAudioInjectionWorkflow());
+        WGNodeData audio = new(
+            new JArray("901", 0),
+            generator,
+            WGNodeData.DT_AUDIO,
+            T2IModelClassSorter.CompatLtxv2);
+
+        bool injected = new LtxAudioInjector(generator, new RootVideoStageResizer(generator))
+            .TryInject(audio, matchVideoLengthToAudio: false);
+
+        Assert.True(injected);
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
+        SetLatentNoiseMaskNode mask = Assert.Single(
+            bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
+        LTXVConcatAVLatentNode concat = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        Assert.Same(mask.LATENT, concat.AudioLatent.Connection);
     }
 
     /// <summary>
