@@ -2,7 +2,7 @@ import type { CapabilityViewResolver } from "../architectures/policy";
 import { clipHueCss } from "../clipColor";
 import { executableBoundaries } from "../clipSemantics";
 import { mediaPreviewSrc } from "../constants";
-import { escapeAttr as escapeHtml } from "../renderUtils";
+import { escapeHtml } from "../renderUtils";
 import { skipGlyph, skipTitle } from "../skipVocabulary";
 import {
     formatSecondsTenth,

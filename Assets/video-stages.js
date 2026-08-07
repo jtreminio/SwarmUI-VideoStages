@@ -555,7 +555,7 @@
   };
 
   // frontend/renderUtils.ts
-  var escapeAttr = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  var escapeHtml = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   var NEUTRAL_FRAME_GRID = {
     frameGrid: 1,
     frameGridOrigin: 1
@@ -9878,7 +9878,7 @@
     return decision === void 0 || decision.supported || decision.code !== "" || persisted;
   };
   var clipInnerWidth = (widthPx) => Math.max(1, widthPx - 2);
-  var backgroundImageDataAttr = (source) => ` data-vst-background-image="${escapeAttr(source)}"`;
+  var backgroundImageDataAttr = (source) => ` data-vst-background-image="${escapeHtml(source)}"`;
   var applyBackgroundImages = (root) => {
     for (const element of root.querySelectorAll(
       "[data-vst-background-image]"
@@ -9899,7 +9899,7 @@
     if (empty) {
       return "";
     }
-    return `<div class="${options.className}${options.extraClassName ? ` ${options.extraClassName}` : ""}" ${options.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeAttr(options.title)}" aria-label="${escapeAttr(options.ariaLabel)}"><span class="${options.className}-resize ${options.className}-resize-l" ${options.edgeAttr}="left" aria-hidden="true"></span>` + (options.decoration ?? "") + `<span class="${options.labelClass}">${escapeAttr(options.label)}</span><span class="${options.className}-resize ${options.className}-resize-r" ${options.edgeAttr}="right" aria-hidden="true"></span></div>`;
+    return `<div class="${options.className}${options.extraClassName ? ` ${options.extraClassName}` : ""}" ${options.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeHtml(options.title)}" aria-label="${escapeHtml(options.ariaLabel)}"><span class="${options.className}-resize ${options.className}-resize-l" ${options.edgeAttr}="left" aria-hidden="true"></span>` + (options.decoration ?? "") + `<span class="${options.labelClass}">${escapeHtml(options.label)}</span><span class="${options.className}-resize ${options.className}-resize-r" ${options.edgeAttr}="right" aria-hidden="true"></span></div>`;
   };
   var headTag = (kind, label, options) => {
     const action = options?.action;
@@ -9997,7 +9997,7 @@
       const source = refSourceLabel(ref.source ?? "");
       const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)}`;
       const kindClass = (isEnd ? " vst-key-end" : " vst-key-start") + (isPrimary ? " vst-key-primary" : "");
-      return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeAttr(title)}" aria-hidden="true"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
+      return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeHtml(title)}" aria-hidden="true"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
     }).join("");
     return `<div class="vst-keys" title="Frame reference markers">${markers}</div>`;
   };
@@ -10008,10 +10008,10 @@
     }
     const model = firstStage.model ?? "";
     const title = `Clip model: ${`${model}`.trim() || "(default)"} — click to change (applies to Stage 0)`;
-    const modelBadge = `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(title)}">${escapeAttr(shortModelName(model))}</span>`;
+    const modelBadge = `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(shortModelName(model))}</span>`;
     const icLoraCount = (clip.icLoras ?? []).length;
     const icLoraTitle = `${icLoraCount} IC-LoRA${icLoraCount === 1 ? "" : "s"} on this clip — edit in the clip panel`;
-    const icLoraBadge = icLoraCount > 0 ? `<span class="vst-badge vst-badge-iclora" title="${escapeAttr(icLoraTitle)}" aria-label="${escapeAttr(icLoraTitle)}">IC×${icLoraCount}</span>` : "";
+    const icLoraBadge = icLoraCount > 0 ? `<span class="vst-badge vst-badge-iclora" title="${escapeHtml(icLoraTitle)}" aria-label="${escapeHtml(icLoraTitle)}">IC×${icLoraCount}</span>` : "";
     return `<div class="vst-badges">${modelBadge}${icLoraBadge}</div>`;
   };
   var renderStageChips = (clip, clipIdx) => (clip.stages ?? []).map((stage, stageIdx) => {
@@ -10019,7 +10019,7 @@
     const skippedClass = skipped ? " vst-stage-chip-skipped" : "";
     const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit${stageIdx === 0 ? "" : " · Shift+click to delete"}`;
     const label = `${skipped ? "⊘ " : ""}${stageChipLabel(stageIdx)}`;
-    return `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeAttr(title)}">${escapeAttr(label)}</span>`;
+    return `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeHtml(title)}">${escapeHtml(label)}</span>`;
   }).join("");
   var lengthDerived = (clip) => clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
   var BOUNDARY_GLYPH = {
@@ -10060,7 +10060,7 @@
     const ariaLabel = `Clip ${seam.leftIdx} outgoing boundary: ${label}.${fallback}${shared} Click to edit.`;
     const left = layout.startPx;
     return [
-      `<button type="button" class="basic-button vst-boundary-chip vst-boundary-chip-${density} vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-vst-boundary-density="${density}" data-vst-boundary-has-duration="${duration ? "true" : "false"}" data-left-clip-idx="${seam.leftIdx}" data-right-clip-idx="${seam.rightIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${left}px" title="${escapeAttr(title)}" aria-label="${escapeAttr(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeAttr(glyph)}</span>` + (duration ? `<span class="vst-boundary-kind">${escapeAttr(effectiveLabel)}</span><span class="vst-boundary-divider" aria-hidden="true"></span><span class="vst-boundary-duration">${escapeAttr(duration)}</span>` : "") + `</button>`
+      `<button type="button" class="basic-button vst-boundary-chip vst-boundary-chip-${density} vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-vst-boundary-density="${density}" data-vst-boundary-has-duration="${duration ? "true" : "false"}" data-left-clip-idx="${seam.leftIdx}" data-right-clip-idx="${seam.rightIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${left}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeHtml(glyph)}</span>` + (duration ? `<span class="vst-boundary-kind">${escapeHtml(effectiveLabel)}</span><span class="vst-boundary-divider" aria-hidden="true"></span><span class="vst-boundary-duration">${escapeHtml(duration)}</span>` : "") + `</button>`
     ];
   }).join("");
   var renderBoundaryOverlapBands = (layouts, boundaries, pxPerSecond) => boundaries.filter((boundary) => boundary.overlapFrames > 0).map((boundary) => {
@@ -10078,7 +10078,7 @@
     const tinyClass = layout.widthPx <= 12 ? " vst-region-tiny" : "";
     const skippedChip = layout.skipped ? `<span class="vst-chip vst-chip-skip">skipped</span>` : "";
     const authoredDurationSeconds = layout.frameCount > 0 ? layout.frameCount / fps : layout.durationSeconds;
-    const duration = escapeAttr(
+    const duration = escapeHtml(
       unit === "frames" && layout.frameCount > 0 ? `${layout.frameCount}f` : formatTimeLabel(authoredDurationSeconds, unit, fps)
     );
     const sharedAllocation = layout.timelineReductionSeconds;
@@ -10100,7 +10100,7 @@
       authoredDurationSeconds,
       fps,
       unit
-    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div>` + (retakeLaneVisible(clip, capabilities) ? `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(retakeLaneTitle)}">` + renderRetakeOverlay(
+    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div>` + (retakeLaneVisible(clip, capabilities) ? `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(retakeLaneTitle)}">` + renderRetakeOverlay(
       clip,
       layout.index,
       layout.durationSeconds,
@@ -15851,7 +15851,7 @@ ${slot}`;
   // frontend/timelineView/toolbar.ts
   var renderDiagnosticPanel = (diagnostics = []) => {
     const content = diagnostics.map(
-      (item) => `<div class="vst-diagnostic vst-diagnostic-${item.severity}" data-vst-diagnostic="${escapeAttr(item.code)}">${item.clipIdx === void 0 ? "" : `<strong>Clip ${item.clipIdx}:</strong> `}${escapeAttr(item.message)}</div>`
+      (item) => `<div class="vst-diagnostic vst-diagnostic-${item.severity}" data-vst-diagnostic="${escapeHtml(item.code)}">${item.clipIdx === void 0 ? "" : `<strong>Clip ${item.clipIdx}:</strong> `}${escapeHtml(item.message)}</div>`
     ).join("");
     return content ? `<div class="vst-diagnostics" role="status">${content}</div>` : "";
   };
@@ -15875,7 +15875,7 @@ ${slot}`;
       timing?.authoredSeconds ?? totalSeconds
     );
     const secondary = unit === "frames" ? `${timing?.generatedFrames ?? 0}f generated · ${joinFrameLabel} shared` : handleSeconds > 0 ? `${authoredLabel} authored · +${formatSecondsTenth(handleSeconds)} handle · ${joinSecondsLabel} shared` : `${authoredLabel} authored · ${joinSecondsLabel} joins`;
-    const readout = `<span class="vst-readout" data-vst-readout><span class="vst-readout-output" title="Published sequence length">${escapeAttr(totalLabel)} output</span><span class="vst-readout-detail" title="Authored length and resolved shared joins">${escapeAttr(secondary)}</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
+    const readout = `<span class="vst-readout" data-vst-readout><span class="vst-readout-output" title="Published sequence length">${escapeHtml(totalLabel)} output</span><span class="vst-readout-detail" title="Authored length and resolved shared joins">${escapeHtml(secondary)}</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
     const width = Math.max(0, Math.round(options?.width ?? 0));
     const height = Math.max(0, Math.round(options?.height ?? 0));
     const dimsExplicit = options?.dimsExplicit === true;
@@ -15883,7 +15883,7 @@ ${slot}`;
     const dimsSource = dimsExplicit ? ratioId ? `${ratioId} aspect ratio` : "custom" : "inherited from image resolution";
     const fpsSource = "synced with Video FPS";
     const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
-    const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeAttr(settingsTip)}" aria-label="${escapeAttr(settingsTip)}"><span class="vst-settings-dims">${width}×${height}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${fps} fps</span></button>`;
+    const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeHtml(settingsTip)}" aria-label="${escapeHtml(settingsTip)}"><span class="vst-settings-dims">${width}×${height}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${fps} fps</span></button>`;
     const enabled = options?.enabled !== false;
     const enableToggle = `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual."><span class="toggle-switch"><input type="checkbox" class="auto-slider-toggle vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}><div class="auto-slider-toggle-content"></div></span><span class="vst-enable-label">Enable</span></label>`;
     return `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}"><div class="vst-topbar-main"><span class="vst-title">Timeline</span>` + enableToggle + `<span class="vst-sub"><span class="vst-stat-num">${clipCount}</span> ${clipWord}</span>` + settingsChip + `</div><div class="vst-topbar-tools"><button type="button" class="basic-button small-button btn-primary vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="basic-button small-button" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="basic-button small-button" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="basic-button small-button" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="basic-button small-button vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
@@ -16007,14 +16007,14 @@ ${slot}`;
       const majorClass = (major === "" ? " vst-major-empty" : "") + (inherited && major !== "" ? " vst-major-inherited" : "");
       const majorTitle = (major === "" ? PROMPT_PLACEHOLDER : major) + (inherited && major !== "" ? " — inherited from the global prompt; click to set a clip prompt" : " — click to edit");
       parts.push(
-        `<div class="vst-major-seg${majorClass}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(majorTitle)}">` + overlays + `<span class="vst-major-text">${escapeAttr(majorText)}</span></div>`
+        `<div class="vst-major-seg${majorClass}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(majorTitle)}">` + overlays + `<span class="vst-major-text">${escapeHtml(majorText)}</span></div>`
       );
       const minorSegments = windows.map((window2, windowIdx) => {
         const geometry = promptWindowGeom(layout, window2, pxPerSecond);
         const text2 = `${window2.prompt ?? ""}`.trim();
         const label = text2 === "" ? "(empty)" : truncate(text2, 60);
         const title = relaySupported ? `${text2 || "(empty minor prompt)"} · Shift+click to delete` : "Persisted relay prompt is unsupported by this architecture; click to inspect or Shift+click to delete";
-        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeAttr(title)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeAttr(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
+        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeHtml(title)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeHtml(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
       }).join("");
       if (relayLane(clip)) {
         parts.push(
@@ -16123,7 +16123,7 @@ ${slot}`;
       const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
       const renderedTitle = clipAudioSupported ? title : persistedAudio ? "Clip audio is unsupported; click persisted audio to inspect or remove it" : "Clip audio is unsupported by this architecture";
       const ariaLabel = clipAudioSupported ? `Edit audio for clip ${layout.index}` : persistedAudio ? `Inspect unsupported persisted audio for clip ${layout.index}` : `Audio unavailable for clip ${layout.index}`;
-      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${audioOperable ? ' data-vst-audio="clip" role="button" tabindex="0"' : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${escapeAttr(renderedTitle)}" aria-label="${ariaLabel}"><span class="vst-audio-label">${escapeAttr(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
+      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${audioOperable ? ' data-vst-audio="clip" role="button" tabindex="0"' : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(renderedTitle)}" aria-label="${ariaLabel}"><span class="vst-audio-label">${escapeHtml(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
     }).join("");
     const totalSeconds = timelineTotalSeconds ?? layouts.reduce(
       (max, layout) => Math.max(
@@ -16191,7 +16191,7 @@ ${slot}`;
         const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
         const title = refsSupported ? `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete` : `Persisted reference ${refIdx} is unsupported by this architecture · click to inspect or Shift+click to delete`;
         const label = refsSupported ? `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})` : `Inspect unsupported persisted reference ${refIdx} for removal`;
-        return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeAttr(frameLabel)}</span></span></div>`;
+        return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeHtml(frameLabel)}</span></span></div>`;
       }).join("");
       return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.frameRefs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a frame reference here" : "Frame references are unsupported; existing references can be inspected or removed"}">${marks}</div>`;
     }).join("");
@@ -16204,7 +16204,7 @@ ${slot}`;
     const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond).filter(
       (tick) => Math.abs(tick.seconds - totalSeconds) > 1e-6 && !(formatRulerLabel(tick.seconds, unit, fps) === endLabel && Math.abs(tick.x - endPx) < 40)
     ).map(
-      (tick) => `<span class="vst-tick vst-tick-grid" style="left:${tick.x}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(tick.seconds, unit, fps))}</span></span>`
+      (tick) => `<span class="vst-tick vst-tick-grid" style="left:${tick.x}px"><span class="vst-tick-label">${escapeHtml(formatRulerLabel(tick.seconds, unit, fps))}</span></span>`
     );
     const minorStep = chooseRulerStepSeconds(pxPerSecond) / 5;
     const minorTicks = [];
@@ -16225,8 +16225,8 @@ ${slot}`;
       const editPoint = layouts[boundary.rightIdx]?.startPx ?? 0;
       return `<span class="vst-tick vst-tick-seam" style="left:${editPoint}px" aria-hidden="true"></span>`;
     });
-    const endTick = `<span class="vst-tick vst-tick-end" style="left:${endPx}px"><span class="vst-tick-label">${escapeAttr(endLabel)}</span></span>`;
-    const outputTick = timing.outputSeconds < totalSeconds - 1e-6 ? `<span class="vst-tick vst-tick-output" style="left:${timing.outputSeconds * pxPerSecond}px"><span class="vst-tick-label">${escapeAttr(formatRulerLabel(timing.outputSeconds, unit, fps))} output</span></span>` : "";
+    const endTick = `<span class="vst-tick vst-tick-end" style="left:${endPx}px"><span class="vst-tick-label">${escapeHtml(endLabel)}</span></span>`;
+    const outputTick = timing.outputSeconds < totalSeconds - 1e-6 ? `<span class="vst-tick vst-tick-output" style="left:${timing.outputSeconds * pxPerSecond}px"><span class="vst-tick-label">${escapeHtml(formatRulerLabel(timing.outputSeconds, unit, fps))} output</span></span>` : "";
     return [
       ...minorTicks,
       ...gridTicks,

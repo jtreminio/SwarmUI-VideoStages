@@ -1,7 +1,7 @@
 import type { CapabilityViewResolver } from "../architectures/policy";
 import { isAceStepFunAudioSource } from "../audioSource";
 import { mediaPreviewSrc } from "../constants";
-import { escapeAttr as escapeHtml } from "../renderUtils";
+import { escapeHtml } from "../renderUtils";
 import {
     audioSourceBadge,
     formatTimeLabel,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@jest/globals";
-import { escapeAttr as escapeHtml } from "./renderUtils";
+import { escapeHtml } from "./renderUtils";
 import {
     audioSourceBadge,
     chooseRulerStepSeconds,

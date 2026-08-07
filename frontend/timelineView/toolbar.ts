@@ -1,7 +1,7 @@
 import type { CapabilityViewResolver } from "../architectures/policy";
 import type { AuthoringDiagnostic } from "../authoringDiagnostics";
 import { matchAspectRatio } from "../dimensionPresets";
-import { escapeAttr as escapeHtml } from "../renderUtils";
+import { escapeHtml } from "../renderUtils";
 import { formatSecondsTenth, type TimelineUnit } from "../timelineDetail";
 import type { TimelineTiming } from "../timelineTiming";
 import type { AudioTrack } from "../types";

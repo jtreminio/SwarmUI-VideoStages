@@ -2,7 +2,7 @@ import type {
     CapabilityViewResolver,
     GeneratedArchitectureFeature,
 } from "../architectures/policy";
-import { escapeAttr as escapeHtml } from "../renderUtils";
+import { escapeHtml } from "../renderUtils";
 import { spanGeometry } from "../trackDomUtils";
 import type { Clip } from "../types";
 

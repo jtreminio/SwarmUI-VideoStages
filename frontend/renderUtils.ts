@@ -1,4 +1,4 @@
-export const escapeAttr = (value: unknown): string =>
+export const escapeHtml = (value: unknown): string =>
     String(value ?? "")
         .replace(/&/g, "&amp;")
         .replace(/"/g, "&quot;")

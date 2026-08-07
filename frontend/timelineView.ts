@@ -1,4 +1,4 @@
-import { escapeAttr as escapeHtml } from "./renderUtils";
+import { escapeHtml } from "./renderUtils";
 import {
     chooseRulerStepSeconds,
     computeRulerTicks,
