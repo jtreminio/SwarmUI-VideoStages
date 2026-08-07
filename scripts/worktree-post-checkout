@@ -1,0 +1,63 @@
+#! /bin/bash
+# Provision a new worktree the moment git creates it, however it was created.
+#
+# Versioned source for .git/hooks/post-checkout, installed by `scripts/worktree add`.
+# `.git/hooks` is not versioned and is shared by every worktree of this repo (git looks it
+# up in the common dir), so this fires for `scripts/worktree add`, a hand-run
+# `git worktree add`, and any worktree an agent harness makes on its own.
+set -euo pipefail
+
+PREV_HEAD="$1"
+IS_BRANCH_CHECKOUT="$3"
+
+# Only a brand-new worktree: git passes the null sha as the previous HEAD exactly once,
+# when the worktree is first checked out. An ordinary branch switch has a real sha.
+[ "$PREV_HEAD" = "0000000000000000000000000000000000000000" ] || exit 0
+[ "$IS_BRANCH_CHECKOUT" = "1" ] || exit 0
+
+# git runs the hook inside the new worktree.
+WORKTREE="$PWD"
+NAME="$(basename "$WORKTREE")"
+MAIN="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
+[ "$WORKTREE" != "$MAIN" ] || exit 0
+
+# The build cannot be relocated. SwarmUI-VideoStages.csproj imports ../../SwarmUI.extension.props
+# and references ../../SwarmUI.csproj; Tests references ..\..\..\SwarmUI.csproj. MSBuild resolves
+# those against the project file's REAL path, so a symlink into src/Extensions does not help —
+# measured: a worktree at /tmp symlinked into place still fails MSB4019 with "/SwarmUI.extension.props".
+# Two directories above the worktree must literally be SwarmUI's src/.
+if [ ! -f "$WORKTREE/../../SwarmUI.extension.props" ]; then
+    cat >&2 <<EOF
+
+  This worktree cannot build or run ./run-tests where it is.
+
+    worktree  $WORKTREE
+    needs     $(dirname "$MAIN")/$(basename "$MAIN")-<name>
+
+  SwarmUI-VideoStages.csproj imports ../../SwarmUI.extension.props, so two levels up must be
+  SwarmUI's src/. Symlinking into place does not work: MSBuild resolves the real path.
+
+  Re-provision it from the main checkout instead:
+
+      cd $MAIN && scripts/worktree add <name>
+
+EOF
+    exit 0
+fi
+
+# node_modules and nonversioned are untracked, so a fresh worktree has neither. Sharing beats
+# a 280 MB `npm ci`, and reports land where the owner looks for them.
+[ -e "$WORKTREE/node_modules" ] || [ ! -d "$MAIN/node_modules" ] \
+    || ln -s "$MAIN/node_modules" "$WORKTREE/node_modules"
+[ -e "$WORKTREE/nonversioned" ] || [ ! -d "$MAIN/nonversioned" ] \
+    || ln -s "$MAIN/nonversioned" "$WORKTREE/nonversioned"
+[ -e "$WORKTREE/AGENTS.dev.md" ] || [ ! -f "$MAIN/AGENTS.dev.md" ] \
+    || cp "$MAIN/AGENTS.dev.md" "$WORKTREE/AGENTS.dev.md"
+
+# dotnet honours Directory.Build.rsp for every project in the graph, including core's
+# SwarmUI.csproj — a props file cannot reach core, so it would keep building into the shared
+# src/bin|obj and collide with concurrent worktrees.
+printf -- '-p:UseArtifactsOutput=true\n-p:ArtifactsPath=%s\n' \
+    "/tmp/swarmui-msbuild/wt-${NAME#"$(basename "$MAIN")-"}" > "$WORKTREE/Directory.Build.rsp"
+
+echo "provisioned $NAME — ./run-tests will work here"

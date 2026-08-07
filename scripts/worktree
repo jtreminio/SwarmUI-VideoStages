@@ -69,6 +69,20 @@ require_main_checkout() {
 worktree_path() { echo "$EXTENSIONS/$REPO-$1"; }
 artifacts_path() { echo "$ARTIFACTS_ROOT/wt-$1"; }
 
+# Hooks are not versioned, so a fresh clone has none; refresh on every add so an edited
+# source never leaves a stale copy behind. Hooks live in the common dir, shared by every
+# worktree, so installing once covers them all.
+install_hook() {
+    local src="$MAIN/scripts/worktree-post-checkout" dest
+    dest="$(git -C "$MAIN" rev-parse --path-format=absolute --git-common-dir)/hooks/post-checkout"
+    [ -f "$src" ] || die "missing $src"
+    cmp -s "$src" "$dest" 2>/dev/null && return
+    mkdir -p "$(dirname "$dest")"
+    cp "$src" "$dest"
+    chmod +x "$dest"
+    echo "installed $dest"
+}
+
 cmd_add() {
     require_main_checkout add
     local resume=0
@@ -96,6 +110,11 @@ cmd_add() {
         exit 1
     fi
 
+    # The hook owns provisioning, so it has to be in place before the worktree exists. It also
+    # catches a worktree made by a bare `git worktree add` or by an agent harness, which never
+    # come through this script.
+    install_hook
+
     if git -C "$MAIN" show-ref --quiet --verify "refs/heads/$name"; then
         [ "$resume" = 1 ] || die "branch $name already exists at $(git -C "$MAIN" log --oneline -1 "$name")
 a worktree on it would start with those commits already applied — pass --resume if that is
@@ -104,26 +123,8 @@ what you want, otherwise pick another name"
     else
         git -C "$MAIN" worktree add "$path" -b "$name" "$start"
     fi
-
-    # node_modules and nonversioned are untracked, so a fresh worktree has neither.
-    # Sharing beats a 280 MB `npm ci`, and reports land where the owner looks for them.
-    if [ -d "$MAIN/node_modules" ]; then
-        ln -s "$MAIN/node_modules" "$path/node_modules"
-    else
-        echo "warning: $MAIN/node_modules missing — run 'npm ci' in the main checkout, jest will fail" >&2
-    fi
-    if [ -d "$MAIN/nonversioned" ]; then
-        ln -s "$MAIN/nonversioned" "$path/nonversioned"
-    fi
-    if [ -f "$MAIN/AGENTS.dev.md" ]; then
-        cp "$MAIN/AGENTS.dev.md" "$path/AGENTS.dev.md"
-    fi
-
-    # dotnet honours Directory.Build.rsp for every project in the graph, including core's
-    # SwarmUI.csproj — a props file cannot reach core, so it would keep building into the
-    # shared src/bin|obj and collide with concurrent worktrees. Do NOT also copy
-    # Directory.Build.local.props here; ArtifactsPath supersedes it.
-    printf -- '-p:UseArtifactsOutput=true\n-p:ArtifactsPath=%s\n' "$artifacts" > "$path/Directory.Build.rsp"
+    [ -d "$MAIN/node_modules" ] \
+        || echo "warning: $MAIN/node_modules missing — run 'npm ci' in the main checkout, jest will fail" >&2
 
     cat <<EOF
 
