@@ -403,20 +403,18 @@ public class MiniMaxArchitectureTests
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
         clipObject["references"] = new JArray
         {
-            ClipReference("image", "Upload", "subject.png", "data:image/png;base64,QUJD"),
-            ClipReference("image", "Base", null, null),
-            ClipReference(
+            MakeClipReference("image", "data:image/png;base64,QUJD", "subject.png"),
+            MakeClipReference("image", source: "Base"),
+            MakeClipReference(
                 "video",
-                "Upload",
-                "motion.mp4",
                 "data:video/mp4;base64,REVG",
+                "motion.mp4",
                 includeSoundtrack: true,
                 mediaScale: 0.5),
-            ClipReference(
+            MakeClipReference(
                 "audio",
-                "Upload",
-                "voice.wav",
                 "data:audio/wav;base64,QUJD",
+                "voice.wav",
                 mediaScale: 0.25),
         };
 
@@ -456,7 +454,7 @@ public class MiniMaxArchitectureTests
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
         clipObject["references"] = new JArray
         {
-            ClipReference("image", "edit2", null, null),
+            MakeClipReference("image", source: "edit2"),
         };
 
         ArchitectureClipCompilation compilation = Compile(
@@ -485,7 +483,7 @@ public class MiniMaxArchitectureTests
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
         clipObject["references"] = new JArray
         {
-            ClipReference(kind, source, "media.bin", "data:x;base64,QQ=="),
+            MakeClipReference(kind, "data:x;base64,QQ==", "media.bin", source),
         };
 
         ArchitectureClipCompilation compilation = Compile(
@@ -513,7 +511,7 @@ public class MiniMaxArchitectureTests
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
         clipObject["references"] = new JArray
         {
-            ClipReference(kind, source, null, null),
+            MakeClipReference(kind, source: source),
         };
 
         ArchitectureClipCompilation compilation = Compile(
@@ -536,7 +534,7 @@ public class MiniMaxArchitectureTests
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
         clipObject["references"] = new JArray
         {
-            ClipReference("image", "Upload", null, null),
+            MakeClipReference("image"),
         };
 
         ArchitectureClipCompilation compilation = Compile(
@@ -558,11 +556,10 @@ public class MiniMaxArchitectureTests
             MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
         clipObject["references"] = new JArray(
             Enumerable.Range(0, MiniMaxClipReferences.MaxVideos + 2).Select(index =>
-                ClipReference(
+                MakeClipReference(
                     "video",
-                    "Upload",
-                    $"motion{index}.mp4",
-                    "data:video/mp4;base64,REVG")));
+                    "data:video/mp4;base64,REVG",
+                    $"motion{index}.mp4")));
 
         ArchitectureClipCompilation compilation = Compile(
             ParseClip(clipObject, models),
@@ -579,31 +576,6 @@ public class MiniMaxArchitectureTests
                 diagnostic.Code));
     }
 
-    private static JObject ClipReference(
-        string kind,
-        string source,
-        string fileName,
-        string data,
-        bool includeSoundtrack = false,
-        double mediaScale = 1)
-    {
-        JObject reference = new()
-        {
-            ["kind"] = kind,
-            ["source"] = source,
-            ["includeSoundtrack"] = includeSoundtrack,
-            ["mediaScale"] = mediaScale,
-        };
-        if (data is not null)
-        {
-            reference["uploadedMedia"] = new JObject
-            {
-                ["data"] = data,
-                ["fileName"] = fileName,
-            };
-        }
-        return reference;
-    }
 
     private static IReadOnlyList<PlanDiagnostic> CompileDiagnostics(
         TestModelBundle models,

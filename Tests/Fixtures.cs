@@ -159,6 +159,36 @@ internal static class Fixtures
             ["fromEnd"] = fromEnd
         };
 
+    /// <summary>
+    /// A whole-clip reference. Defaults to an upload; pass <paramref name="source"/> for a host
+    /// source, in which case <paramref name="data"/> stays null and no upload is attached.
+    /// </summary>
+    public static JObject MakeClipReference(
+        string kind,
+        string data = null,
+        string fileName = null,
+        string source = MediaSource.Upload,
+        bool includeSoundtrack = false,
+        double mediaScale = 1)
+    {
+        JObject reference = new()
+        {
+            ["kind"] = kind,
+            ["source"] = source,
+            ["includeSoundtrack"] = includeSoundtrack,
+            ["mediaScale"] = mediaScale,
+        };
+        if (data is not null)
+        {
+            reference["uploadedMedia"] = new JObject
+            {
+                ["data"] = data,
+                ["fileName"] = fileName,
+            };
+        }
+        return reference;
+    }
+
     /// <summary>A frame reference carrying its own uploaded image.</summary>
     public static JObject UploadedReference(
         string payload = "AAAA",

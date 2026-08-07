@@ -64,13 +64,13 @@ public class MiniMaxReferenceConditioningContractTests
         clip["duration"] = 1.0;
         clip["frameRefs"] = new JArray(UploadedReference("RklSU1Q=", fromEnd: false));
         clip["references"] = new JArray(
-            ClipReference("image", "data:image/png;base64,U1VCSkVDVA==", "subject.png"),
-            ClipReference(
+            MakeClipReference("image", "data:image/png;base64,U1VCSkVDVA==", "subject.png"),
+            MakeClipReference(
                 "video",
                 "data:video/mp4;base64,TU9USU9O",
                 "motion.mp4",
                 includeSoundtrack: true),
-            ClipReference("audio", "data:audio/wav;base64,Vk9JQ0U=", "voice.wav"));
+            MakeClipReference("audio", "data:audio/wav;base64,Vk9JQ0U=", "voice.wav"));
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -122,7 +122,7 @@ public class MiniMaxReferenceConditioningContractTests
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
         clip["references"] = new JArray(
-            ExternalClipReference(kind, source, includeSoundtrack: kind == "video"));
+            MakeClipReference(kind, source: source, includeSoundtrack: kind == "video"));
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
             fixture.Post(MakeDocument(clip)),
@@ -168,7 +168,7 @@ public class MiniMaxReferenceConditioningContractTests
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
-        clip["references"] = new JArray(ExternalClipReference("audio", "audio0"));
+        clip["references"] = new JArray(MakeClipReference("audio", source: "audio0"));
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
             fixture.Post(MakeDocument(clip)),
@@ -198,7 +198,7 @@ public class MiniMaxReferenceConditioningContractTests
         JObject second = MakeClip(fixture.Stage());
         second["duration"] = 1.0;
         second["references"] = new JArray(
-            ClipReference(
+            MakeClipReference(
                 "video",
                 "data:video/mp4;base64,TU9USU9O",
                 "motion.mp4",
@@ -293,7 +293,7 @@ public class MiniMaxReferenceConditioningContractTests
         JObject second = MakeClip(fixture.Stage());
         second["duration"] = 1.0;
         second["references"] = new JArray(
-            Enumerable.Range(0, 3).Select(index => ClipReference(
+            Enumerable.Range(0, 3).Select(index => MakeClipReference(
                 "video",
                 $"data:video/mp4;base64,VklERU8{index}",
                 $"motion-{index}.mp4")));
@@ -379,7 +379,7 @@ public class MiniMaxReferenceConditioningContractTests
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
         clip["references"] = new JArray(
-            ClipReference("video", "data:video/mp4;base64,TU9USU9O", "motion.mp4", scale: scale));
+            MakeClipReference("video", "data:video/mp4;base64,TU9USU9O", "motion.mp4", mediaScale: scale));
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -432,8 +432,8 @@ public class MiniMaxReferenceConditioningContractTests
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
         clip["references"] = new JArray(
-            ClipReference("video", "data:video/mp4;base64,U0lMRU5U", "silent.mp4"),
-            ClipReference(
+            MakeClipReference("video", "data:video/mp4;base64,U0lMRU5U", "silent.mp4"),
+            MakeClipReference(
                 "video",
                 "data:video/mp4;base64,U0NPUkVE",
                 "scored.mp4",
@@ -493,35 +493,6 @@ public class MiniMaxReferenceConditioningContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    private static JObject ClipReference(
-        string kind,
-        string data,
-        string fileName,
-        bool includeSoundtrack = false,
-        double scale = 1) =>
-        new()
-        {
-            ["kind"] = kind,
-            ["source"] = "Upload",
-            ["includeSoundtrack"] = includeSoundtrack,
-            ["mediaScale"] = scale,
-            ["uploadedMedia"] = new JObject
-            {
-                ["data"] = data,
-                ["fileName"] = fileName,
-            },
-        };
-
-    private static JObject ExternalClipReference(
-        string kind,
-        string source,
-        bool includeSoundtrack = false) =>
-        new()
-        {
-            ["kind"] = kind,
-            ["source"] = source,
-            ["includeSoundtrack"] = includeSoundtrack,
-        };
 
     private static WorkflowGenerator.WorkflowGenStep SeedControlNetReferenceSource(
         int index) =>
