@@ -1303,7 +1303,7 @@ public class MiniMaxGeneratedWorkflowContractTests
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
             fixture.Post(MakeDocument(clip)),
-            extraSteps: [SeedAceStepFunAudioTrack(0)]);
+            extraSteps: [PublishAceStepFunAudioTrackStep(0)]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -1471,13 +1471,4 @@ public class MiniMaxGeneratedWorkflowContractTests
         }, Constants.WorkflowStepPriority.ControlNetPreprocessors + 0.01),
     ];
 
-    /// <summary>Stands in for the sibling extension that publishes AceStepFun tracks.</summary>
-    private static WorkflowGenerator.WorkflowGenStep SeedAceStepFunAudioTrack(int trackIndex) =>
-        new(g =>
-        {
-            using WorkflowBridge bridge = BridgeSync.For(g);
-            bridge.AddNode(
-                new VAEDecodeAudioNode(),
-                AudioHandler.MakeAceStepFunDecodeId(trackIndex));
-        }, 11.05);
 }

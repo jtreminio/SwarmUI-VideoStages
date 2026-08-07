@@ -6,12 +6,24 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
+using VideoStages.Execution.Audio;
 using VideoStages.Authoring;
 
 namespace VideoStages.Tests;
 
 internal static class Fixtures
 {
+    /// <summary>
+    /// Stands in for the sibling extension that publishes AceStepFun audio tracks, so a clip that
+    /// references <c>audioN</c> has a real decode to resolve to.
+    /// </summary>
+    public static WorkflowGenerator.WorkflowGenStep PublishAceStepFunAudioTrackStep(int track) =>
+        new(g =>
+        {
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(track));
+        }, Constants.WorkflowStepPriority.DropCoreImageToVideoOutput);
+
     /// <summary>
     /// Stands in for the Base2Edit extension: publishes an edit stage's image under the key that
     /// extension owns, so a reference to <c>editN</c> has something real to resolve to.

@@ -172,7 +172,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
             fixture.Post(MakeDocument(clip)),
-            extraSteps: [SeedAceStepFunReferenceSource(0)]);
+            extraSteps: [PublishAceStepFunAudioTrackStep(0)]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         ComfyNode referenceNode = Assert.Single(
@@ -548,14 +548,5 @@ public class MiniMaxReferenceConditioningContractTests
             bridge.AddNode(apply, "921");
         }, Constants.WorkflowStepPriority.ControlNetPreprocessors - 0.01);
 
-    private static WorkflowGenerator.WorkflowGenStep SeedAceStepFunReferenceSource(
-        int trackIndex) =>
-        new(g =>
-        {
-            using WorkflowBridge bridge = BridgeSync.For(g);
-            bridge.AddNode(
-                new VAEDecodeAudioNode(),
-                AudioHandler.MakeAceStepFunDecodeId(trackIndex));
-        }, 11.05);
 
 }

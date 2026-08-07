@@ -681,13 +681,6 @@ public class Ltx2StageChainContractTests
     }
 
 
-    private static WorkflowGenerator.WorkflowGenStep PublishAceStepFunAudioTrackStep(int track) =>
-        new(g =>
-        {
-            using WorkflowBridge bridge = BridgeSync.For(g);
-            bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(track));
-        }, Constants.WorkflowStepPriority.DropCoreImageToVideoOutput);
-
     private static void AssertNoStageFeedsItself(WorkflowBridge bridge)
     {
         Assert.All(bridge.Graph.NodesOfType<SwarmKSamplerNode>(), sampler => Assert.False(
