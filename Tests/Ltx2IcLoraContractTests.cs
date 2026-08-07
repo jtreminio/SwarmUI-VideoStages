@@ -952,13 +952,19 @@ public class Ltx2IcLoraContractTests
 
         LTXVSetAudioRefTokensNode refTokens = Assert.Single(
             bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
+        LTXICLoRALoaderModelOnlyNode loader = Assert.Single(
+            bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
         SwarmKSamplerNode scoped = StageSampler(bridge, 0);
         SwarmKSamplerNode unscoped = StageSampler(bridge, 1);
 
         Assert.Same(refTokens, scoped.Positive.Connection?.Node);
+        Assert.Same(loader, scoped.Model.Connection?.Node);
+        // Identity for both, and for the same reason: stage 1 refines stage 0's latent, so it
+        // reaches every node stage 0 sampled through. Only what it names directly is evidence.
         Assert.NotSame(refTokens, unscoped.Positive.Connection?.Node);
+        Assert.NotSame(loader, unscoped.Model.Connection?.Node);
 
-        live.AssertAllLive(refTokens, scoped, unscoped);
+        live.AssertAllLive(refTokens, loader, scoped, unscoped);
         AssertShippable(bridge, workflow, live);
     }
 

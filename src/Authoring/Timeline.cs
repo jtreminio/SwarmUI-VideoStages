@@ -126,8 +126,8 @@ internal static class AuthoringTimeline
         IReadOnlyList<JObject> clips,
         Action<string> warn = null)
     {
-        // The only place the two clip vocabularies meet: the document's own string id, which the
-        // frontend writes into a span projection, and the authored clip number every spec carries.
+        // The document's own string clip id, which only a span projection refers a clip by.
+        // Everything downstream carries the authored clip number this maps it to.
         Dictionary<string, int> clipIdsByDocumentId = [];
         for (int clipIndex = 0; clipIndex < clips.Count; clipIndex++)
         {

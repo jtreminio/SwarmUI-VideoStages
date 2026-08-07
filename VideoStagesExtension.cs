@@ -47,9 +47,8 @@ public class VideoStagesExtension : Extension
         RootHostWorkflowFacts.CaptureCoreImageToVideoStep(WorkflowGenerator.Steps);
         VideoArchitectureManifest.RegisterProductionHostHandlers();
 
-        // Reads/writes per phase: docs/STAGE_RUNTIME.md. The first phase is the only place a
-        // request may be rejected — every later phase mutates the host graph, so a failure past
-        // it leaves the user with a broken workflow.
+        // The first phase is the only place a request may be rejected — every later phase mutates
+        // the host graph, so a failure past it leaves the user with a broken workflow.
         WorkflowGenerator.AddStep(
             WorkflowPhase.Guarded(context => context.PrepareRequest()),
             Constants.WorkflowStepPriority.PreflightRequest);

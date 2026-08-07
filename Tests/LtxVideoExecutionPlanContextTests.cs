@@ -66,9 +66,8 @@ public class VideoExecutionPlanContextTests
         WorkflowGenerator generator = CreateGenerator(input);
         VideoExecutionPlanContext context = generator.RequireVideoExecutionPlanContext();
 
-        // Six of the registered phases now differ only in which host method the lambda names, so
-        // one of them stands for all six; what is worth pinning is that each distinct shape of
-        // entry is guarded.
+        // One row per distinct shape of guarded entry. The registered host phases all share the
+        // first one, differing only in which host method the lambda names.
         Action[] phases =
         [
             () => context.ExecutePrepared(host => host.CaptureBaseReference()),

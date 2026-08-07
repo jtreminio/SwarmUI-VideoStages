@@ -99,7 +99,7 @@ public class DecisionOwnerRegressionTests
     [Fact]
     public void Ltx2_default_decode_uses_core_tiling_geometry()
     {
-        using SwarmUiTestContext context = new();
+        using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
 
         VAEDecodeTiledNode core = Ltx2TiledDecode(
