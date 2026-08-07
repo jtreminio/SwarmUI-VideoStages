@@ -1,7 +1,7 @@
 import {
-    AUDIO_SEGMENT_VOLUME_DEFAULT,
-    AUDIO_SEGMENT_VOLUME_MAX,
-    AUDIO_SEGMENT_VOLUME_MIN,
+    AUDIO_SPAN_VOLUME_DEFAULT,
+    AUDIO_SPAN_VOLUME_MAX,
+    AUDIO_SPAN_VOLUME_MIN,
 } from "./constants";
 import { normalizeUploadedMedia } from "./normalizationMedia";
 import {
@@ -55,7 +55,7 @@ export const normalizeAudioTrackSpan = (
 /**
  * Splits a multi-span track into one single-span lane per span, which is the
  * shape both the authoring UI and the backend already work in: the backend
- * flattens every span into its own segment with exactly this
+ * flattens every span into its own lane with exactly this
  * `trackId:spanIndex` identity, so the split is projection-preserving. Without
  * it, spans past the first would execute with nothing on screen to edit them.
  */
@@ -88,9 +88,9 @@ export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
                 ? undefined
                 : clampedNumber(
                       rawTrack.volume,
-                      AUDIO_SEGMENT_VOLUME_DEFAULT,
-                      AUDIO_SEGMENT_VOLUME_MIN,
-                      AUDIO_SEGMENT_VOLUME_MAX,
+                      AUDIO_SPAN_VOLUME_DEFAULT,
+                      AUDIO_SPAN_VOLUME_MIN,
+                      AUDIO_SPAN_VOLUME_MAX,
                   );
         tracks.push(
             ...splitSpansIntoLanes({

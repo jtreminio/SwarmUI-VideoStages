@@ -34,7 +34,7 @@ import {
     readGlobalPrompt,
     setVideoStagesEnabled,
 } from "./swarmInputs";
-import { createTimelineAudioSegmentTrack } from "./timelineAudioSegmentTrack";
+import { createTimelineAudioSpanTrack } from "./timelineAudioSpanTrack";
 import { safeFps } from "./timelineDetail";
 import { createTimelineDetailStrip } from "./timelineDetailStrip";
 import { createTimelineHistory } from "./timelineHistory";
@@ -87,7 +87,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
     const gestures = createGestureRouter();
     const retakeTrack = createTimelineRetakeTrack(capabilities);
     const promptTrack = createTimelinePromptTrack(capabilities);
-    const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
+    const audioSpanTrack = createTimelineAudioSpanTrack(capabilities);
     const selectionTracks = createTimelineSelectionTracks();
     const referencesTrack = createTimelineReferencesTrack(
         captureAuthoringTransactionSnapshot,
@@ -373,10 +373,10 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         const body = document.getElementById(TIMELINE_BODY_ID);
         if (body) {
             // Press-drag priority lives in the gesture router's table
-            // (retake 50 > audio-segment 40 > prompt-track 20 >
+            // (retake 50 > audio-span 40 > prompt-track 20 >
             // linking 10), not in attach order.
             retakeTrack.attach(body, gestures);
-            audioSegmentTrack.attach(body, gestures);
+            audioSpanTrack.attach(body, gestures);
             linking.attach(body, gestures);
             promptTrack.attach(body, gestures);
             selectionTracks.attach(body);
@@ -431,7 +431,7 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         catalogUnsub = null;
         hostLifecycle.dispose();
         retakeTrack.dispose();
-        audioSegmentTrack.dispose();
+        audioSpanTrack.dispose();
         linking.dispose();
         promptTrack.dispose();
         gestures.dispose();

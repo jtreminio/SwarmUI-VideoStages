@@ -7,7 +7,7 @@ const REGION_SELECTED = "vst-region-selected";
  * Reflects the shared selection onto the track DOM, and is the ONLY owner of
  * both highlight classes. Clip-scoped selections get `.vst-region-selected` on
  * the clip region; every other selection kind gets `.vst-selected` on its own
- * mark/segment so the user can see which element the detail strip is bound to.
+ * mark/span so the user can see which element the detail strip is bound to.
  *
  * Sole ownership is load-bearing: a stage chip stops click propagation, so a
  * second owner reacting to region clicks would leave the previously selected
@@ -36,7 +36,7 @@ export const applySelectionHighlight = (body: HTMLElement): void => {
             selector = `.vst-audio-clip[data-clip-idx="${sel.clipIdx}"]`;
             break;
         case "audio-track":
-            selector = `.vst-audio-seg[data-track-idx="${sel.trackIdx}"]`;
+            selector = `.vst-audio-span[data-track-idx="${sel.trackIdx}"]`;
             break;
         case "prompt-major":
             selector = `.vst-major-seg[data-clip-idx="${sel.clipIdx}"]`;

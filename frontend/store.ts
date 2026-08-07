@@ -15,7 +15,7 @@ export type UpdateOrigin =
     | "detail-strip"
     | "linking"
     | "prompt-track"
-    | "audio-segment-track"
+    | "audio-span-track"
     | "boundary-track"
     | "references-track"
     | "retake-track"

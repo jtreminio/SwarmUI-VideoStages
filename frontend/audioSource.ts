@@ -96,7 +96,7 @@ const appendMissingSelectedRef = (
             : null,
     );
 
-export const buildSegmentAudioSourceOptions = (
+export const buildAudioTrackSourceOptions = (
     currentValue = "",
 ): AudioSourceOption[] => {
     const options: AudioSourceOption[] = [

@@ -443,13 +443,15 @@ describe("catalog-backed authoring policy", () => {
             "vst-no-clip-audio",
         );
         // Audio mixed outside the video model stays authorable regardless.
-        expect(body.querySelector(".vst-audio-seg-lane-blank")).not.toBeNull();
+        expect(
+            body.querySelector(".vst-audio-track-lane-blank"),
+        ).not.toBeNull();
         // Nothing above or below it, so the lone add-lane is centred.
         expect(body.querySelector(".vst-track-audio")?.className).toContain(
             "vst-audio-solo-lane",
         );
         expect(
-            body.querySelector(".vst-head-tag-seg[data-vst-audio-seg-add]"),
+            body.querySelector(".vst-head-tag-track[data-vst-audio-span-add]"),
         ).not.toBeNull();
     });
 

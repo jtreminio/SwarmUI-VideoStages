@@ -336,7 +336,7 @@ describe("videoStagesTimeline", () => {
             scroll().scrollTop = 140;
             const next = structuredClone(getState());
             mutate(next);
-            saveState(next, { origin: "audio-segment-track" });
+            saveState(next, { origin: "audio-span-track" });
             expect(scroll().scrollLeft).toBe(120);
             expect(scroll().scrollTop).toBe(140);
         };

@@ -73,7 +73,7 @@ const DEFAULT_THRESHOLD_PX = 5;
  * A session that claims a press (blocking lower-priority routes) without ever
  * becoming a drag: it never activates, so the concluding click still fires
  * even after mouse movement — used for shift-presses whose shift-CLICK
- * handler does the actual work (retake / audio-segment delete).
+ * handler does the actual work (retake / audio-span delete).
  */
 export const claimOnly = (): GestureSession => ({
     threshold: Number.POSITIVE_INFINITY,

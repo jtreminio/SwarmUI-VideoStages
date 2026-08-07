@@ -5,7 +5,7 @@ import { createCapabilityViewResolver } from "./architectures/policy";
 import { resolveTimelineTiming } from "./timelineTiming";
 import { renderTimeline } from "./timelineView";
 import {
-    audioSegmentWaveBarHeights,
+    audioSpanWaveBarHeights,
     clampPxPerSecond,
     computeFitPxPerSecond,
     computeRegionLayout,
@@ -138,15 +138,15 @@ describe("waveBarHeights", () => {
         expect(waveBarHeights(0, 16)).not.toEqual(waveBarHeights(1, 16));
     });
 
-    it("gives each audio segment a deterministic, clip-aware waveform", () => {
-        expect(audioSegmentWaveBarHeights(2, 1, 20)).toEqual(
-            audioSegmentWaveBarHeights(2, 1, 20),
+    it("gives each audio span a deterministic, clip-aware waveform", () => {
+        expect(audioSpanWaveBarHeights(2, 1, 20)).toEqual(
+            audioSpanWaveBarHeights(2, 1, 20),
         );
-        expect(audioSegmentWaveBarHeights(2, 1, 20)).not.toEqual(
-            audioSegmentWaveBarHeights(2, 2, 20),
+        expect(audioSpanWaveBarHeights(2, 1, 20)).not.toEqual(
+            audioSpanWaveBarHeights(2, 2, 20),
         );
-        expect(audioSegmentWaveBarHeights(2, 1, 20)).not.toEqual(
-            audioSegmentWaveBarHeights(3, 1, 20),
+        expect(audioSpanWaveBarHeights(2, 1, 20)).not.toEqual(
+            audioSpanWaveBarHeights(3, 1, 20),
         );
     });
 });
@@ -658,7 +658,7 @@ describe("renderTimeline (DOM)", () => {
         expect(hueOf(regions[2])).toBe("hsl(300 65% 55%)");
     });
 
-    it("always renders an editable audio segment per clip, tinted per source", () => {
+    it("always renders an editable audio span per clip, tinted per source", () => {
         // The lane is always present so every clip (even Native) is clickable
         // to set/change its audio source.
         renderTimeline(body, [makeClip(2, 1, 0)]);
@@ -724,27 +724,29 @@ describe("renderTimeline (DOM)", () => {
         );
         const host = document.createElement("div");
         host.innerHTML = html;
-        const segments = host.querySelectorAll<HTMLElement>(".vst-audio-seg");
+        const segments = host.querySelectorAll<HTMLElement>(".vst-audio-span");
 
         expect(segments).toHaveLength(6);
-        expect(segments[0].classList.contains("vst-audio-seg-tone-0")).toBe(
+        expect(segments[0].classList.contains("vst-audio-span-tone-0")).toBe(
             true,
         );
-        expect(segments[4].classList.contains("vst-audio-seg-tone-4")).toBe(
+        expect(segments[4].classList.contains("vst-audio-span-tone-4")).toBe(
             true,
         );
-        expect(segments[5].classList.contains("vst-audio-seg-tone-0")).toBe(
+        expect(segments[5].classList.contains("vst-audio-span-tone-0")).toBe(
             true,
         );
         expect(
-            segments[0].querySelectorAll(".vst-audio-seg-wave span"),
+            segments[0].querySelectorAll(".vst-audio-span-wave span"),
         ).toHaveLength(40);
         expect(segments[0].querySelector(".vst-audio-label")?.textContent).toBe(
             "audio0",
         );
         expect(
-            segments[0].querySelector(".vst-audio-seg-wave")?.innerHTML,
-        ).not.toBe(segments[1].querySelector(".vst-audio-seg-wave")?.innerHTML);
+            segments[0].querySelector(".vst-audio-span-wave")?.innerHTML,
+        ).not.toBe(
+            segments[1].querySelector(".vst-audio-span-wave")?.innerHTML,
+        );
     });
 
     it("uses aligned generated width when deciding whether a region is tiny", () => {
@@ -1259,7 +1261,7 @@ describe("track-head lane tags", () => {
         expect(audio).toContain(">A1<");
         expect(audio).toContain(">A2<");
         expect(audio).toMatch(
-            /vst-head-tag-seg vst-head-tag-muted vst-head-tag-action" style="--vst-audio-lane-idx:2"/,
+            /vst-head-tag-track vst-head-tag-muted vst-head-tag-action" style="--vst-audio-lane-idx:2"/,
         );
 
         const prompt = renderPromptTrackRow(clips, layouts, 60, "global");
@@ -1275,7 +1277,7 @@ describe("track-head lane tags", () => {
         expect(empty).toContain(">+ Audio<");
         expect(empty).toContain("vst-head-tag-action");
         expect(empty).toContain(
-            'data-vst-audio-seg-add title="Add an audio track spanning the timeline" aria-label="Add an audio track" role="button" tabindex="0"',
+            'data-vst-audio-span-add title="Add an audio track spanning the timeline" aria-label="Add an audio track" role="button" tabindex="0"',
         );
 
         const filled = renderAudioTrackRow(
@@ -1302,7 +1304,7 @@ describe("track-head lane tags", () => {
     });
 });
 
-describe("timeline-wide audio segment lanes", () => {
+describe("timeline-wide audio span lanes", () => {
     it("renders one global lane whose window crosses clip seams", () => {
         const clips = [
             minimalClip({ duration: 3 }),
@@ -1332,10 +1334,10 @@ describe("timeline-wide audio segment lanes", () => {
         });
 
         const lane = document.querySelector<HTMLElement>(
-            '.vst-audio-seg-lane[data-track-idx="0"]',
+            '.vst-audio-track-lane[data-track-idx="0"]',
         );
         const segment = lane?.querySelector<HTMLElement>(
-            '.vst-audio-seg[data-track-idx="0"]',
+            '.vst-audio-span[data-track-idx="0"]',
         );
         expect(lane?.style.left).toBe("0px");
         expect(Number.parseFloat(lane?.style.width ?? "")).toBeCloseTo(
@@ -1350,7 +1352,7 @@ describe("timeline-wide audio segment lanes", () => {
             (4 / (170 / 24)) * 100,
             5,
         );
-        expect(document.querySelectorAll(".vst-audio-seg-lane")).toHaveLength(
+        expect(document.querySelectorAll(".vst-audio-track-lane")).toHaveLength(
             2,
         );
         expect(document.body.innerHTML).toContain(">A1<");

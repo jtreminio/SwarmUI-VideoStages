@@ -1,18 +1,18 @@
 import {
     AUDIO_SOURCE_UPLOAD,
-    buildSegmentAudioSourceOptions,
+    buildAudioTrackSourceOptions,
     isAceStepFunAudioSource,
 } from "../audioSource";
 import {
-    AUDIO_SEGMENT_DEFAULT_LENGTH,
-    AUDIO_SEGMENT_MIN_LENGTH,
-    AUDIO_SEGMENT_STEP,
-    AUDIO_SEGMENT_VOLUME_DEFAULT,
-    AUDIO_SEGMENT_VOLUME_MAX,
-    AUDIO_SEGMENT_VOLUME_MIN,
-    AUDIO_SEGMENT_VOLUME_SLIDER_MAX,
-    AUDIO_SEGMENT_VOLUME_SLIDER_MIN,
-    AUDIO_SEGMENT_VOLUME_SLIDER_STEP,
+    AUDIO_SPAN_DEFAULT_LENGTH,
+    AUDIO_SPAN_MIN_LENGTH,
+    AUDIO_SPAN_STEP,
+    AUDIO_SPAN_VOLUME_DEFAULT,
+    AUDIO_SPAN_VOLUME_MAX,
+    AUDIO_SPAN_VOLUME_MIN,
+    AUDIO_SPAN_VOLUME_SLIDER_MAX,
+    AUDIO_SPAN_VOLUME_SLIDER_MIN,
+    AUDIO_SPAN_VOLUME_SLIDER_STEP,
 } from "../constants";
 import {
     buildField,
@@ -80,18 +80,18 @@ const buildTrackEditor = (
         return fields;
     }
 
-    const total = Math.max(AUDIO_SEGMENT_MIN_LENGTH, timelineDuration(state));
+    const total = Math.max(AUDIO_SPAN_MIN_LENGTH, timelineDuration(state));
     const clamped = (): { start: number; length: number } =>
         clampStartLength(
             span.timelineStartSeconds ?? 0,
-            span.timelineLengthSeconds ?? AUDIO_SEGMENT_DEFAULT_LENGTH,
+            span.timelineLengthSeconds ?? AUDIO_SPAN_DEFAULT_LENGTH,
             total,
-            AUDIO_SEGMENT_MIN_LENGTH,
+            AUDIO_SPAN_MIN_LENGTH,
         );
     const aceReference =
         track.source.kind === "AceStepFun" ? track.source.reference : "";
     const sourceSelect = buildOptionSelect(
-        buildSegmentAudioSourceOptions(aceReference),
+        buildAudioTrackSourceOptions(aceReference),
         aceReference || AUDIO_SOURCE_UPLOAD,
         (value) => {
             commitTrack(ctx, trackId, (next) => {
@@ -144,29 +144,29 @@ const buildTrackEditor = (
         );
     }
 
-    const volume = track.volume ?? AUDIO_SEGMENT_VOLUME_DEFAULT;
+    const volume = track.volume ?? AUDIO_SPAN_VOLUME_DEFAULT;
     const volumeSlider = buildSlider(
         "Volume",
         volume,
-        AUDIO_SEGMENT_VOLUME_MIN,
-        AUDIO_SEGMENT_VOLUME_MAX,
-        AUDIO_SEGMENT_VOLUME_SLIDER_STEP,
+        AUDIO_SPAN_VOLUME_MIN,
+        AUDIO_SPAN_VOLUME_MAX,
+        AUDIO_SPAN_VOLUME_SLIDER_STEP,
         (value) => {
             commitTrack(
                 ctx,
                 trackId,
                 (next) => {
                     next.volume = Math.min(
-                        AUDIO_SEGMENT_VOLUME_MAX,
-                        Math.max(AUDIO_SEGMENT_VOLUME_MIN, value),
+                        AUDIO_SPAN_VOLUME_MAX,
+                        Math.max(AUDIO_SPAN_VOLUME_MIN, value),
                     );
                 },
                 `audio-track-${trackId}-volume`,
             );
         },
         {
-            sliderMin: AUDIO_SEGMENT_VOLUME_SLIDER_MIN,
-            sliderMax: AUDIO_SEGMENT_VOLUME_SLIDER_MAX,
+            sliderMin: AUDIO_SPAN_VOLUME_SLIDER_MIN,
+            sliderMax: AUDIO_SPAN_VOLUME_SLIDER_MAX,
             numberStep: "any",
         },
     );
@@ -179,8 +179,8 @@ const buildTrackEditor = (
     const startInput = buildNumber(
         geometry.start,
         0,
-        Math.max(0, total - AUDIO_SEGMENT_MIN_LENGTH),
-        AUDIO_SEGMENT_STEP,
+        Math.max(0, total - AUDIO_SPAN_MIN_LENGTH),
+        AUDIO_SPAN_STEP,
         (value) => {
             commitTrack(
                 ctx,
@@ -189,9 +189,9 @@ const buildTrackEditor = (
                     const next = clampStartLength(
                         value,
                         nextSpan.timelineLengthSeconds ??
-                            AUDIO_SEGMENT_DEFAULT_LENGTH,
+                            AUDIO_SPAN_DEFAULT_LENGTH,
                         total,
-                        AUDIO_SEGMENT_MIN_LENGTH,
+                        AUDIO_SPAN_MIN_LENGTH,
                     );
                     nextSpan.timelineStartSeconds = next.start;
                     nextSpan.timelineLengthSeconds = next.length;
@@ -217,7 +217,7 @@ const buildTrackEditor = (
         span.sourceStartSeconds,
         0,
         Number.MAX_SAFE_INTEGER,
-        AUDIO_SEGMENT_STEP,
+        AUDIO_SPAN_STEP,
         (value) => {
             commitTrack(
                 ctx,
@@ -241,9 +241,9 @@ const buildTrackEditor = (
 
     const lengthInput = buildNumber(
         geometry.length,
-        AUDIO_SEGMENT_MIN_LENGTH,
+        AUDIO_SPAN_MIN_LENGTH,
         total,
-        AUDIO_SEGMENT_STEP,
+        AUDIO_SPAN_STEP,
         (value) => {
             commitTrack(
                 ctx,
@@ -253,7 +253,7 @@ const buildTrackEditor = (
                         nextSpan.timelineStartSeconds ?? 0,
                         value,
                         total,
-                        AUDIO_SEGMENT_MIN_LENGTH,
+                        AUDIO_SPAN_MIN_LENGTH,
                     );
                     nextSpan.timelineStartSeconds = next.start;
                     nextSpan.timelineLengthSeconds = next.length;
@@ -284,13 +284,13 @@ const addAudioTrack = (
     state: VideoStagesConfig,
     clipWindow?: ClipTimelineWindow,
 ): number => {
-    const total = Math.max(AUDIO_SEGMENT_MIN_LENGTH, timelineDuration(state));
+    const total = Math.max(AUDIO_SPAN_MIN_LENGTH, timelineDuration(state));
     const start = Math.min(
         Math.max(0, clipWindow?.startSeconds ?? 0),
-        Math.max(0, total - AUDIO_SEGMENT_MIN_LENGTH),
+        Math.max(0, total - AUDIO_SPAN_MIN_LENGTH),
     );
     const availableLength = Math.max(
-        AUDIO_SEGMENT_MIN_LENGTH,
+        AUDIO_SPAN_MIN_LENGTH,
         Math.min(
             total - start,
             clipWindow
@@ -308,13 +308,13 @@ const addAudioTrack = (
                 reference: "",
                 uploadedAudio: null,
             },
-            volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
+            volume: AUDIO_SPAN_VOLUME_DEFAULT,
             spans: [
                 {
                     id: createEntityId("audio_span"),
                     timelineStartSeconds: start,
                     timelineLengthSeconds: Math.min(
-                        AUDIO_SEGMENT_DEFAULT_LENGTH,
+                        AUDIO_SPAN_DEFAULT_LENGTH,
                         availableLength,
                     ),
                     sourceStartSeconds: 0,
@@ -416,7 +416,7 @@ export const buildAudioTracksPanel = (
     return built.section;
 };
 
-export const buildTimelineAudioSegmentsBody = (
+export const buildTimelineAudioTracksBody = (
     ctx: DetailStripContext,
     state: VideoStagesConfig,
     selection: Extract<TimelineSelection, { kind: "audio-track" }>,

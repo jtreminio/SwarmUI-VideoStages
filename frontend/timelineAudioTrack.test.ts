@@ -100,6 +100,6 @@ describe("renderAudioTrackRow (timeline audio lanes)", () => {
         const layouts = computeRegionLayout(clips, { pxPerSecond: PPS });
         const host = document.createElement("div");
         host.innerHTML = renderAudioTrackRow(clips, layouts);
-        expect(host.querySelectorAll(".vst-audio-seg")).toHaveLength(0);
+        expect(host.querySelectorAll(".vst-audio-span")).toHaveLength(0);
     });
 });

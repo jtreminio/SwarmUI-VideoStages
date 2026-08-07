@@ -11,9 +11,9 @@ import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence/repository";
 import { getSelection, resetSelectionForTests } from "./selection";
 import {
-    createTimelineAudioSegmentTrack,
-    type TimelineAudioSegmentTrack,
-} from "./timelineAudioSegmentTrack";
+    createTimelineAudioSpanTrack,
+    type TimelineAudioSpanTrack,
+} from "./timelineAudioSpanTrack";
 import { setTimelineAuthoringSetting } from "./timelineAuthoringSettings";
 import type { VideoStagesConfig } from "./types";
 
@@ -50,8 +50,8 @@ const mouse = (type: string, clientX: number, shiftKey = false): MouseEvent =>
         shiftKey,
     });
 
-describe("timeline-wide audio segment gestures", () => {
-    let track: TimelineAudioSegmentTrack | null = null;
+describe("timeline-wide audio span gestures", () => {
+    let track: TimelineAudioSpanTrack | null = null;
     let router: GestureRouter | null = null;
     let saveSpy: jest.SpiedFunction<typeof persistence.saveState>;
 
@@ -99,14 +99,14 @@ describe("timeline-wide audio segment gestures", () => {
         const duration = withJoin ? 6 : 7;
         const body = makeBody();
         body.innerHTML =
-            `<div class="vst-audio-seg-lane${withTrack ? "" : " vst-audio-seg-lane-blank"}" ` +
-            `${withTrack ? 'data-track-idx="0"' : "data-vst-audio-seg-add"} style="left:0;width:${duration * PPS}px">` +
+            `<div class="vst-audio-track-lane${withTrack ? "" : " vst-audio-track-lane-blank"}" ` +
+            `${withTrack ? 'data-track-idx="0"' : "data-vst-audio-span-add"} style="left:0;width:${duration * PPS}px">` +
             (withTrack
-                ? `<div class="vst-audio-seg" data-vst-audio-seg data-track-idx="0" style="left:${(2 / duration) * 100}%;width:${(3 / duration) * 100}%">` +
-                  `<span data-vst-audio-seg-edge="left"></span><span data-vst-audio-seg-edge="right"></span></div>`
+                ? `<div class="vst-audio-span" data-vst-audio-span data-track-idx="0" style="left:${(2 / duration) * 100}%;width:${(3 / duration) * 100}%">` +
+                  `<span data-vst-audio-span-edge="left"></span><span data-vst-audio-span-edge="right"></span></div>`
                 : "") +
             `</div>`;
-        const lane = body.querySelector<HTMLElement>(".vst-audio-seg-lane");
+        const lane = body.querySelector<HTMLElement>(".vst-audio-track-lane");
         if (lane) {
             lane.getBoundingClientRect = (() =>
                 ({
@@ -121,7 +121,7 @@ describe("timeline-wide audio segment gestures", () => {
                     toJSON: () => ({}),
                 }) as DOMRect) as HTMLElement["getBoundingClientRect"];
         }
-        track = createTimelineAudioSegmentTrack();
+        track = createTimelineAudioSpanTrack();
         router = createGestureRouter();
         router.attach(body);
         track.attach(body, router);
@@ -148,7 +148,7 @@ describe("timeline-wide audio segment gestures", () => {
 
     it("moves a segment across the whole timeline without changing trim or length", () => {
         const body = setupGlobal();
-        const segment = el(body, '.vst-audio-seg[data-track-idx="0"]');
+        const segment = el(body, '.vst-audio-span[data-track-idx="0"]');
 
         segment.dispatchEvent(mouse("mousedown", 2 * PPS));
         document.dispatchEvent(mouse("mousemove", 3.5 * PPS));
@@ -165,7 +165,7 @@ describe("timeline-wide audio segment gestures", () => {
 
     it("clamps movement to the join-adjusted output duration", () => {
         const body = setupGlobal(true, true);
-        const segment = el(body, '.vst-audio-seg[data-track-idx="0"]');
+        const segment = el(body, '.vst-audio-span[data-track-idx="0"]');
 
         segment.dispatchEvent(mouse("mousedown", 2 * PPS));
         document.dispatchEvent(mouse("mousemove", 5 * PPS));
@@ -198,14 +198,14 @@ describe("timeline-wide audio segment gestures", () => {
         mountPromptBox("");
         const body = makeBody();
         body.innerHTML =
-            `<div class="vst-audio-seg" data-vst-audio-seg data-track-idx="0"></div>` +
-            `<div class="vst-audio-seg" data-vst-audio-seg data-track-idx="1"></div>`;
-        track = createTimelineAudioSegmentTrack();
+            `<div class="vst-audio-span" data-vst-audio-span data-track-idx="0"></div>` +
+            `<div class="vst-audio-span" data-vst-audio-span data-track-idx="1"></div>`;
+        track = createTimelineAudioSpanTrack();
         router = createGestureRouter();
         router.attach(body);
         track.attach(body, router);
 
-        const lower = el(body, '.vst-audio-seg[data-track-idx="1"]');
+        const lower = el(body, '.vst-audio-span[data-track-idx="1"]');
         lower.dispatchEvent(mouse("mousedown", 1 * PPS));
         document.dispatchEvent(mouse("mousemove", 2.1 * PPS));
         document.dispatchEvent(mouse("mouseup", 2.1 * PPS));
@@ -216,7 +216,7 @@ describe("timeline-wide audio segment gestures", () => {
 
     it("shift+click deletes the whole track behind the last segment", () => {
         const body = setupGlobal();
-        const segment = el(body, '.vst-audio-seg[data-track-idx="0"]');
+        const segment = el(body, '.vst-audio-span[data-track-idx="0"]');
 
         segment.dispatchEvent(mouse("click", 2 * PPS, true));
 
@@ -244,14 +244,14 @@ describe("timeline-wide audio segment gestures", () => {
         mountPromptBox("");
         const body = makeBody();
         body.innerHTML =
-            `<div class="vst-audio-seg" data-track-idx="0"></div>` +
-            `<div class="vst-audio-seg" data-track-idx="1"></div>`;
-        track = createTimelineAudioSegmentTrack();
+            `<div class="vst-audio-span" data-track-idx="0"></div>` +
+            `<div class="vst-audio-span" data-track-idx="1"></div>`;
+        track = createTimelineAudioSpanTrack();
         router = createGestureRouter();
         router.attach(body);
         track.attach(body, router);
 
-        el(body, '.vst-audio-seg[data-track-idx="1"]').dispatchEvent(
+        el(body, '.vst-audio-span[data-track-idx="1"]').dispatchEvent(
             mouse("click", 10, true),
         );
 
@@ -263,7 +263,7 @@ describe("timeline-wide audio segment gestures", () => {
 
     it("left resize stops at the untrimmed start of the source", () => {
         const body = setupGlobal();
-        const left = el(body, '[data-vst-audio-seg-edge="left"]');
+        const left = el(body, '[data-vst-audio-span-edge="left"]');
 
         // The segment starts at 2s with a 1s trim, so its source began at 1s.
         left.dispatchEvent(mouse("mousedown", 2 * PPS));
@@ -281,7 +281,7 @@ describe("timeline-wide audio segment gestures", () => {
 
     it("falls back to clip edges and bypasses snapping when disabled", () => {
         let body = setupGlobal();
-        let segment = el(body, '.vst-audio-seg[data-track-idx="0"]');
+        let segment = el(body, '.vst-audio-span[data-track-idx="0"]');
         segment.dispatchEvent(mouse("mousedown", 2 * PPS));
         document.dispatchEvent(mouse("mousemove", 3.1 * PPS));
         document.dispatchEvent(mouse("mouseup", 3.1 * PPS));
@@ -298,7 +298,7 @@ describe("timeline-wide audio segment gestures", () => {
         saveSpy.mockClear();
         setTimelineAuthoringSetting("snap", false);
         body = setupGlobal();
-        segment = el(body, '.vst-audio-seg[data-track-idx="0"]');
+        segment = el(body, '.vst-audio-span[data-track-idx="0"]');
         segment.dispatchEvent(mouse("mousedown", 2 * PPS));
         document.dispatchEvent(mouse("mousemove", 3.1 * PPS));
         document.dispatchEvent(mouse("mouseup", 3.1 * PPS));
@@ -310,7 +310,7 @@ describe("timeline-wide audio segment gestures", () => {
 
     it("left resize advances the source trim while keeping the end fixed", () => {
         const body = setupGlobal();
-        const left = el(body, '[data-vst-audio-seg-edge="left"]');
+        const left = el(body, '[data-vst-audio-span-edge="left"]');
 
         left.dispatchEvent(mouse("mousedown", 2 * PPS));
         document.dispatchEvent(mouse("mousemove", 3 * PPS));
@@ -327,7 +327,7 @@ describe("timeline-wide audio segment gestures", () => {
 
     it("creates a default segment on the global blank lane", () => {
         const body = setupGlobal(false);
-        const lane = el(body, "[data-vst-audio-seg-add]");
+        const lane = el(body, "[data-vst-audio-span-add]");
 
         lane.dispatchEvent(mouse("mousedown", 4 * PPS));
         document.dispatchEvent(mouse("mouseup", 4 * PPS));
@@ -343,8 +343,9 @@ describe("timeline-wide audio segment gestures", () => {
 
     const headAddButton = (body: HTMLElement): HTMLElement => {
         const button = document.createElement("div");
-        button.className = "vst-head-tag vst-head-tag-seg vst-head-tag-action";
-        button.setAttribute("data-vst-audio-seg-add", "");
+        button.className =
+            "vst-head-tag vst-head-tag-track vst-head-tag-action";
+        button.setAttribute("data-vst-audio-span-add", "");
         button.setAttribute("role", "button");
         button.tabIndex = 0;
         body.appendChild(button);
@@ -383,7 +384,7 @@ describe("timeline-wide audio segment gestures", () => {
 
     it("allows independently overlapping global lanes", () => {
         const body = setupGlobal(false);
-        const lane = el(body, "[data-vst-audio-seg-add]");
+        const lane = el(body, "[data-vst-audio-span-add]");
 
         lane.dispatchEvent(mouse("mousedown", 2 * PPS));
         document.dispatchEvent(mouse("mousemove", 5 * PPS));

@@ -1,8 +1,8 @@
 import type { CapabilityViewResolver } from "./architectures/policy";
 import {
-    AUDIO_SEGMENT_DEFAULT_LENGTH,
-    AUDIO_SEGMENT_MIN_LENGTH,
-    AUDIO_SEGMENT_VOLUME_DEFAULT,
+    AUDIO_SPAN_DEFAULT_LENGTH,
+    AUDIO_SPAN_MIN_LENGTH,
+    AUDIO_SPAN_VOLUME_DEFAULT,
 } from "./constants";
 import type { GestureRouter } from "./gestureRouter";
 import { createEntityId } from "./identity";
@@ -20,7 +20,7 @@ import {
     type WindowTrackScope,
 } from "./windowTrack";
 
-export interface TimelineAudioSegmentTrack {
+export interface TimelineAudioSpanTrack {
     attach(body: HTMLElement, router: GestureRouter): void;
     dispose(): void;
 }
@@ -37,7 +37,7 @@ const timelineDuration = (
     capabilities?: CapabilitySource,
 ): number => timelineTiming(state, capabilities).outputSeconds;
 
-/** Each track owns one lane-spanning segment; `sourceStartSeconds` is its trim. */
+/** Each track owns one lane-spanning span; `sourceStartSeconds` is its trim. */
 const pressSpanOf = (span: AudioTrackSpan | undefined): PressSpan | null =>
     span &&
     span.timelineStartSeconds !== null &&
@@ -52,7 +52,7 @@ const pressSpanOf = (span: AudioTrackSpan | undefined): PressSpan | null =>
 const blankTrack = (): AudioTrack => ({
     id: createEntityId("audio_track"),
     source: { kind: "Upload", reference: "", uploadedAudio: null },
-    volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
+    volume: AUDIO_SPAN_VOLUME_DEFAULT,
     spans: [],
 });
 
@@ -107,7 +107,7 @@ const audioTrackScope = (
         if (!applied) {
             return false;
         }
-        saveState(state, { origin: "audio-segment-track" });
+        saveState(state, { origin: "audio-span-track" });
         return true;
     },
 });
@@ -118,31 +118,31 @@ const audioTrackScope = (
  * overlapping audio additively). Left-edge resize keeps the end fixed and the
  * source offset FOLLOWS the edge, floored at 0.
  */
-export const createTimelineAudioSegmentTrack = (
+export const createTimelineAudioSpanTrack = (
     capabilities?: CapabilitySource,
-): TimelineAudioSegmentTrack =>
+): TimelineAudioSpanTrack =>
     createWindowTrack<AudioTrack>({
-        routeId: "timeline-audio-segment",
+        routeId: "timeline-audio-span",
         priority: 40,
         scope: audioTrackScope(capabilities),
-        spanSelector: ".vst-audio-seg[data-track-idx]",
+        spanSelector: ".vst-audio-span[data-track-idx]",
         ownerIdxAttr: "data-track-idx",
         itemIdxAttr: null,
-        edgeSelector: "[data-vst-audio-seg-edge]",
-        edgeAttr: "data-vst-audio-seg-edge",
+        edgeSelector: "[data-vst-audio-span-edge]",
+        edgeAttr: "data-vst-audio-span-edge",
         laneSelector:
-            ".vst-audio-seg-lane[data-vst-audio-seg-add]:not([data-clip-idx])",
-        createButtonSelector: ".vst-head-tag-seg[data-vst-audio-seg-add]",
-        draggingClass: "vst-audio-seg-dragging",
-        ghostClass: "vst-audio-seg-ghost",
+            ".vst-audio-track-lane[data-vst-audio-span-add]:not([data-clip-idx])",
+        createButtonSelector: ".vst-head-tag-track[data-vst-audio-span-add]",
+        draggingClass: "vst-audio-span-dragging",
+        ghostClass: "vst-audio-span-ghost",
         unit: "pct",
         keyboardSelect: true,
-        // The segment sits on the audio row; its clicks must not bubble
+        // The span sits on the audio row; its clicks must not bubble
         // into that row's select handler.
         isolateClicks: true,
         readSpan: ({ owner }) => pressSpanOf(owner.spans[0]),
-        canCreate: ({ duration }) => duration >= AUDIO_SEGMENT_MIN_LENGTH,
-        // Segments snap to the track immediately above before falling back
+        canCreate: ({ duration }) => duration >= AUDIO_SPAN_MIN_LENGTH,
+        // Spans snap to the track immediately above before falling back
         // to the clip boundaries underneath them.
         snapTargets: (ownerIdx) => {
             const state = getState();
@@ -175,7 +175,7 @@ export const createTimelineAudioSegmentTrack = (
                 edge,
                 press,
                 delta,
-                AUDIO_SEGMENT_MIN_LENGTH,
+                AUDIO_SPAN_MIN_LENGTH,
                 Math.max(0, press.start - press.trim),
                 duration,
             ),
@@ -198,8 +198,8 @@ export const createTimelineAudioSegmentTrack = (
                 endSec,
                 0,
                 duration,
-                AUDIO_SEGMENT_MIN_LENGTH,
-                AUDIO_SEGMENT_DEFAULT_LENGTH,
+                AUDIO_SPAN_MIN_LENGTH,
+                AUDIO_SPAN_DEFAULT_LENGTH,
             );
             if (!geom) {
                 return null;
@@ -212,7 +212,7 @@ export const createTimelineAudioSegmentTrack = (
             });
             return { kind: "audio-track", trackIdx: ownerIdx };
         },
-        // A track exists only for its segments: deleting the last one
+        // A track exists only for its spans: deleting the last one
         // deletes the track, and the selection moves to a sibling track.
         deleteItem: ({ owner, ownerIdx, removeOwner }, itemIdx) => {
             if (!owner.spans[itemIdx]) {

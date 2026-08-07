@@ -430,7 +430,7 @@ const noticeOutdatedSchema = (serialized: string): void => {
 const DIVERGENT_PROJECTION_NOTICE =
     "VideoStages: the saved timeline has audio spans whose clip anchors " +
     "disagree with their timeline seconds. The seconds were used and the " +
-    "anchors will be rewritten on the next save — re-check those segments.";
+    "anchors will be rewritten on the next save — re-check those spans.";
 
 let noticedDivergentProjection: string | null = null;
 

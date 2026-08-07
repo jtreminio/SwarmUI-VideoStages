@@ -11,13 +11,13 @@
     --vst-lane-video-h: 118px;
     --vst-retake-lane-h: 20px;
     --vst-retake-band: calc(var(--vst-retake-lane-h) + 12px);
-    /* Audio track: a clip mini-row on top, then one mini lane PER audio
-       segment plus a blank add-lane — the row height scales with
+    /* Audio track: a clip mini-row on top, then one lane per timeline audio
+       track plus a blank add-lane — the row height scales with
        --vst-audio-lane-count (set inline by the renderer). */
     --vst-audio-cliprow-h: 36px;
     /* Timeline audio lanes stand as tall as the clip mini-row: same band, same
        bar height, so A0 and A1+ read as one stack. */
-    --vst-audio-seg-lane-h: 36px;
+    --vst-audio-track-lane-h: 36px;
     --vst-lane-audio-h: 72px;
     --vst-lane-prompt-h: 72px;
     /* Major prompt segment: the top half, or the whole row under .vst-no-relay. */
@@ -488,18 +488,18 @@
     top: 0;
     bottom: 0;
 }
-/* Audio: source mini-row on top, then one tag per segment-lane index via the
-   same --vst-audio-lane-idx idiom .vst-audio-seg-lane uses. */
+/* Audio: source mini-row on top, then one tag per track-lane index via the
+   same --vst-audio-lane-idx idiom .vst-audio-track-lane uses. */
 .vst-track-audio .vst-head-tag-src {
     top: 0;
     height: var(--vst-audio-cliprow-h);
 }
-.vst-track-audio .vst-head-tag-seg {
+.vst-track-audio .vst-head-tag-track {
     top: calc(
         var(--vst-audio-cliprow-h) + var(--vst-audio-lane-idx, 0) *
-            var(--vst-audio-seg-lane-h)
+            var(--vst-audio-track-lane-h)
     );
-    height: var(--vst-audio-seg-lane-h);
+    height: var(--vst-audio-track-lane-h);
 }
 .vst-track-cell {
     flex: 1;
@@ -511,7 +511,7 @@
 .vst-track-audio .vst-track-cell {
     height: calc(
         var(--vst-audio-cliprow-h) + var(--vst-audio-lane-count, 1) *
-            var(--vst-audio-seg-lane-h) + 6px
+            var(--vst-audio-track-lane-h) + 6px
     );
 }
 .vst-track-cell::before {
@@ -810,7 +810,7 @@
 .vst-region-resize,
 .vst-minor-resize,
 .vst-retake-resize,
-.vst-audio-seg-resize {
+.vst-audio-span-resize {
     position: absolute;
     top: 0;
     bottom: 0;
@@ -899,7 +899,7 @@
 }
 
 .vst-audio-clip {
-    /* Top mini-row of the audio track (per-segment lanes sit beneath). Every
+    /* Top mini-row of the audio track (per-track lanes sit beneath). Every
        source kind renders the full-width fake waveform in its own tint (set
        by .vst-audio-kind-*). */
     --vst-audio-tint: var(--green);
@@ -1071,7 +1071,7 @@
 /* Empty add-lanes share the radius + tint + inset hairline chrome. */
 .vst-minor-lane,
 .vst-retake-lane,
-.vst-audio-seg-lane,
+.vst-audio-track-lane,
 .vst-refs-lane {
     border-radius: var(--vst-radius-sm);
     background: color-mix(in srgb, var(--emphasis) 5%, transparent);
@@ -1201,9 +1201,9 @@
     color: var(--text-soft);
 }
 
-/* The audio track's per-segment mini lanes: the array index IS the lane
+/* The audio track's per-track mini lanes: the array index IS the lane
    (--vst-audio-lane-idx), stacked under the clip mini-row; the last, blank
-   lane adds a segment on click/drag. */
+   lane adds a span on click/drag. */
 .vst-audio-cell::after {
     content: "";
     position: absolute;
@@ -1230,25 +1230,25 @@
 /* The collapsed clip row puts the first lane tag level with the track title,
    whose block sits a layer up (.vst-head-top). The tags take that layer back so
    the pill is not painted over — and so the add button keeps its whole hit area. */
-.vst-no-clip-audio .vst-head-tag-seg {
+.vst-no-clip-audio .vst-head-tag-track {
     z-index: 2;
 }
-.vst-audio-seg-lane {
+.vst-audio-track-lane {
     position: absolute;
     top: calc(
         var(--vst-audio-cliprow-h) + var(--vst-audio-lane-idx, 0) *
-            var(--vst-audio-seg-lane-h) + 3px
+            var(--vst-audio-track-lane-h) + 3px
     );
-    height: calc(var(--vst-audio-seg-lane-h) - 6px);
+    height: calc(var(--vst-audio-track-lane-h) - 6px);
 }
-.vst-audio-seg-lane-blank {
+.vst-audio-track-lane-blank {
     cursor: copy;
     background: transparent;
     box-shadow: inset 0 0 0 1px
         color-mix(in srgb, var(--vst-hairline) 60%, transparent);
     border: 1px dashed color-mix(in srgb, var(--emphasis) 25%, transparent);
 }
-.vst-audio-seg-ghost {
+.vst-audio-span-ghost {
     position: absolute;
     top: 2px;
     bottom: 2px;
@@ -1258,9 +1258,9 @@
     pointer-events: none;
     z-index: 4;
 }
-.vst-audio-seg {
-    --vst-audio-seg-tint: hsl(198 72% 51%);
-    --vst-audio-tint: var(--vst-audio-seg-tint);
+.vst-audio-span {
+    --vst-audio-span-tint: hsl(198 72% 51%);
+    --vst-audio-tint: var(--vst-audio-span-tint);
     position: absolute;
     top: 2px;
     bottom: 2px;
@@ -1273,30 +1273,30 @@
     min-width: 8px;
     border-radius: var(--vst-radius-sm);
     border: 1px solid
-        color-mix(in srgb, var(--vst-audio-seg-tint) 70%, var(--light-border));
+        color-mix(in srgb, var(--vst-audio-span-tint) 70%, var(--light-border));
     background: linear-gradient(
         180deg,
-        color-mix(in srgb, var(--vst-audio-seg-tint) 17%, var(--vst-panel)) 0%,
-        color-mix(in srgb, var(--vst-audio-seg-tint) 38%, var(--vst-panel)) 50%,
-        color-mix(in srgb, var(--vst-audio-seg-tint) 17%, var(--vst-panel)) 100%
+        color-mix(in srgb, var(--vst-audio-span-tint) 17%, var(--vst-panel)) 0%,
+        color-mix(in srgb, var(--vst-audio-span-tint) 38%, var(--vst-panel)) 50%,
+        color-mix(in srgb, var(--vst-audio-span-tint) 17%, var(--vst-panel)) 100%
     );
 }
-.vst-audio-seg-tone-0 {
-    --vst-audio-seg-tint: hsl(198 72% 51%);
+.vst-audio-span-tone-0 {
+    --vst-audio-span-tint: hsl(198 72% 51%);
 }
-.vst-audio-seg-tone-1 {
-    --vst-audio-seg-tint: hsl(278 62% 60%);
+.vst-audio-span-tone-1 {
+    --vst-audio-span-tint: hsl(278 62% 60%);
 }
-.vst-audio-seg-tone-2 {
-    --vst-audio-seg-tint: hsl(24 78% 55%);
+.vst-audio-span-tone-2 {
+    --vst-audio-span-tint: hsl(24 78% 55%);
 }
-.vst-audio-seg-tone-3 {
-    --vst-audio-seg-tint: hsl(146 55% 44%);
+.vst-audio-span-tone-3 {
+    --vst-audio-span-tint: hsl(146 55% 44%);
 }
-.vst-audio-seg-tone-4 {
-    --vst-audio-seg-tint: hsl(342 70% 59%);
+.vst-audio-span-tone-4 {
+    --vst-audio-span-tint: hsl(342 70% 59%);
 }
-.vst-audio-seg-wave {
+.vst-audio-span-wave {
     position: absolute;
     inset: 3px 5px;
     display: flex;
@@ -1306,14 +1306,14 @@
     pointer-events: none;
     opacity: 0.72;
 }
-.vst-audio-seg-wave span {
+.vst-audio-span-wave span {
     flex: 1 1 1px;
     min-width: 1px;
     min-height: 2px;
     border-radius: 1px;
-    background: color-mix(in srgb, var(--vst-audio-seg-tint) 46%, var(--text));
+    background: color-mix(in srgb, var(--vst-audio-span-tint) 46%, var(--text));
 }
-.vst-audio-seg .vst-audio-label {
+.vst-audio-span .vst-audio-label {
     top: 0;
     bottom: 0;
     display: flex;
@@ -1327,20 +1327,20 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.vst-audio-seg-dragging .vst-audio-seg {
+.vst-audio-span-dragging .vst-audio-span {
     cursor: grabbing;
 }
-.vst-audio-seg-resize-l {
+.vst-audio-span-resize-l {
     left: 0;
 }
-.vst-audio-seg-resize-r {
+.vst-audio-span-resize-r {
     right: 0;
 }
 
 /* Track elements bound to the detail strip (non-clip selection kinds) share
    one selection affordance. */
 .vst-retake.vst-selected,
-.vst-audio-seg.vst-selected,
+.vst-audio-span.vst-selected,
 .vst-major-seg.vst-selected,
 .vst-minor-seg.vst-selected,
 .vst-audio-clip.vst-selected,

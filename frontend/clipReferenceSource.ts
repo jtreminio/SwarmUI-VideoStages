@@ -1,5 +1,5 @@
 import {
-    buildSegmentAudioSourceOptions,
+    buildAudioTrackSourceOptions,
     isAceStepFunAudioSource,
 } from "./audioSource";
 import { parseBase2EditStageIndex } from "./constants";
@@ -33,7 +33,7 @@ export const buildClipReferenceSourceOptions = (
     ];
     if (kind === "audio") {
         options.push(
-            ...buildSegmentAudioSourceOptions(currentValue).filter(
+            ...buildAudioTrackSourceOptions(currentValue).filter(
                 (option) => option.value !== REF_SOURCE_UPLOAD,
             ),
         );

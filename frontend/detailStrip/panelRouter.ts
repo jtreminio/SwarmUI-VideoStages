@@ -12,7 +12,7 @@ import type {
 } from "../types";
 import { roundToTenth } from "../utils";
 import { buildAudioBody } from "./audioPanel";
-import { buildTimelineAudioSegmentsBody } from "./audioTracksPanel";
+import { buildTimelineAudioTracksBody } from "./audioTracksPanel";
 import { buildBoundaryBody } from "./boundaryPanel";
 import { buildClipBody } from "./clipPanel";
 import type { DetailStripContext } from "./context";
@@ -235,7 +235,7 @@ export const buildDetailPanelBody = (
         case "audio":
             return buildAudioBody(context, selection, state);
         case "audio-track":
-            return buildTimelineAudioSegmentsBody(context, state, selection);
+            return buildTimelineAudioTracksBody(context, state, selection);
         case "prompt-major":
             return buildPromptMajorBody(context, selection, clips);
         case "prompt-minor":

@@ -517,7 +517,7 @@
     "end",
     (value) => isAceStepFunAudioSource(value) ? { value, label: getAceStepFunRefLabel(value) } : null
   );
-  var buildSegmentAudioSourceOptions = (currentValue = "") => {
+  var buildAudioTrackSourceOptions = (currentValue = "") => {
     const options = [
       { value: AUDIO_SOURCE_UPLOAD, label: AUDIO_SOURCE_UPLOAD }
     ];
@@ -1388,15 +1388,15 @@
   var RETAKE_STRENGTH_MAX = 1;
   var RETAKE_STRENGTH_STEP = 0.05;
   var RETAKE_STRENGTH_DEFAULT = 1;
-  var AUDIO_SEGMENT_MIN_LENGTH = 0.1;
-  var AUDIO_SEGMENT_DEFAULT_LENGTH = 2;
-  var AUDIO_SEGMENT_STEP = 0.1;
-  var AUDIO_SEGMENT_VOLUME_MIN = 1e-5;
-  var AUDIO_SEGMENT_VOLUME_MAX = 1e5;
-  var AUDIO_SEGMENT_VOLUME_SLIDER_MIN = 0.1;
-  var AUDIO_SEGMENT_VOLUME_SLIDER_MAX = 4;
-  var AUDIO_SEGMENT_VOLUME_SLIDER_STEP = 0.1;
-  var AUDIO_SEGMENT_VOLUME_DEFAULT = 1;
+  var AUDIO_SPAN_MIN_LENGTH = 0.1;
+  var AUDIO_SPAN_DEFAULT_LENGTH = 2;
+  var AUDIO_SPAN_STEP = 0.1;
+  var AUDIO_SPAN_VOLUME_MIN = 1e-5;
+  var AUDIO_SPAN_VOLUME_MAX = 1e5;
+  var AUDIO_SPAN_VOLUME_SLIDER_MIN = 0.1;
+  var AUDIO_SPAN_VOLUME_SLIDER_MAX = 4;
+  var AUDIO_SPAN_VOLUME_SLIDER_STEP = 0.1;
+  var AUDIO_SPAN_VOLUME_DEFAULT = 1;
   var ROOT_DIMENSION_MIN = 256;
   var ROOT_DIMENSION_MAX = 4096;
   var ROOT_DIMENSION_STEP = 32;
@@ -2636,9 +2636,9 @@
       const rawSpans = rawTrack.spans;
       const volume = rawTrack.volume === void 0 ? void 0 : clampedNumber(
         rawTrack.volume,
-        AUDIO_SEGMENT_VOLUME_DEFAULT,
-        AUDIO_SEGMENT_VOLUME_MIN,
-        AUDIO_SEGMENT_VOLUME_MAX
+        AUDIO_SPAN_VOLUME_DEFAULT,
+        AUDIO_SPAN_VOLUME_MIN,
+        AUDIO_SPAN_VOLUME_MAX
       );
       tracks.push(
         ...splitSpansIntoLanes({
@@ -4100,7 +4100,7 @@
     noticedOutdatedDocument = serialized;
     getVideoStagesHostBridge().showError(OUTDATED_SCHEMA_NOTICE);
   };
-  var DIVERGENT_PROJECTION_NOTICE = "VideoStages: the saved timeline has audio spans whose clip anchors disagree with their timeline seconds. The seconds were used and the anchors will be rewritten on the next save — re-check those segments.";
+  var DIVERGENT_PROJECTION_NOTICE = "VideoStages: the saved timeline has audio spans whose clip anchors disagree with their timeline seconds. The seconds were used and the anchors will be rewritten on the next save — re-check those spans.";
   var noticedDivergentProjection = null;
   var SPAN_PROJECTION_TOLERANCE = 1e-6;
   var numberAt = (owner, key) => typeof owner[key] === "number" && Number.isFinite(owner[key]) ? owner[key] : null;
@@ -7282,7 +7282,7 @@
     }
     return heights;
   };
-  var audioSegmentWaveBarHeights = (clipIdx, segmentIdx, count) => waveBarHeights(clipIdx * 4099 + segmentIdx + 1, count);
+  var audioSpanWaveBarHeights = (clipIdx, spanIdx, count) => waveBarHeights(clipIdx * 4099 + spanIdx + 1, count);
   var clampPxPerSecond = (value) => Number.isFinite(value) ? Math.min(MAX_PX_PER_SECOND, Math.max(MIN_PX_PER_SECOND, value)) : DEFAULT_PX_PER_SECOND;
   var zoomAnchorTime = (offsetX, scrollLeft, pxPerSecond, headerW = TRACK_HEADER_W_PX) => {
     if (pxPerSecond <= 0) {
@@ -7927,7 +7927,7 @@
     return { attach, dispose };
   };
 
-  // frontend/timelineAudioSegmentTrack.ts
+  // frontend/timelineAudioSpanTrack.ts
   var timelineTiming = (state, capabilities) => resolveTimelineTiming(state.clips, state.fps, capabilities?.());
   var timelineDuration = (state, capabilities) => timelineTiming(state, capabilities).outputSeconds;
   var pressSpanOf = (span) => span && span.timelineStartSeconds !== null && span.timelineLengthSeconds !== null ? {
@@ -7938,7 +7938,7 @@
   var blankTrack = () => ({
     id: createEntityId("audio_track"),
     source: { kind: "Upload", reference: "", uploadedAudio: null },
-    volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
+    volume: AUDIO_SPAN_VOLUME_DEFAULT,
     spans: []
   });
   var audioTrackScope = (capabilities) => ({
@@ -7983,31 +7983,31 @@
       if (!applied) {
         return false;
       }
-      saveState(state, { origin: "audio-segment-track" });
+      saveState(state, { origin: "audio-span-track" });
       return true;
     }
   });
-  var createTimelineAudioSegmentTrack = (capabilities) => createWindowTrack({
-    routeId: "timeline-audio-segment",
+  var createTimelineAudioSpanTrack = (capabilities) => createWindowTrack({
+    routeId: "timeline-audio-span",
     priority: 40,
     scope: audioTrackScope(capabilities),
-    spanSelector: ".vst-audio-seg[data-track-idx]",
+    spanSelector: ".vst-audio-span[data-track-idx]",
     ownerIdxAttr: "data-track-idx",
     itemIdxAttr: null,
-    edgeSelector: "[data-vst-audio-seg-edge]",
-    edgeAttr: "data-vst-audio-seg-edge",
-    laneSelector: ".vst-audio-seg-lane[data-vst-audio-seg-add]:not([data-clip-idx])",
-    createButtonSelector: ".vst-head-tag-seg[data-vst-audio-seg-add]",
-    draggingClass: "vst-audio-seg-dragging",
-    ghostClass: "vst-audio-seg-ghost",
+    edgeSelector: "[data-vst-audio-span-edge]",
+    edgeAttr: "data-vst-audio-span-edge",
+    laneSelector: ".vst-audio-track-lane[data-vst-audio-span-add]:not([data-clip-idx])",
+    createButtonSelector: ".vst-head-tag-track[data-vst-audio-span-add]",
+    draggingClass: "vst-audio-span-dragging",
+    ghostClass: "vst-audio-span-ghost",
     unit: "pct",
     keyboardSelect: true,
-    // The segment sits on the audio row; its clicks must not bubble
+    // The span sits on the audio row; its clicks must not bubble
     // into that row's select handler.
     isolateClicks: true,
     readSpan: ({ owner }) => pressSpanOf(owner.spans[0]),
-    canCreate: ({ duration }) => duration >= AUDIO_SEGMENT_MIN_LENGTH,
-    // Segments snap to the track immediately above before falling back
+    canCreate: ({ duration }) => duration >= AUDIO_SPAN_MIN_LENGTH,
+    // Spans snap to the track immediately above before falling back
     // to the clip boundaries underneath them.
     snapTargets: (ownerIdx) => {
       const state = getState();
@@ -8036,7 +8036,7 @@
       edge,
       press,
       delta,
-      AUDIO_SEGMENT_MIN_LENGTH,
+      AUDIO_SPAN_MIN_LENGTH,
       Math.max(0, press.start - press.trim),
       duration
     ),
@@ -8059,8 +8059,8 @@
         endSec,
         0,
         duration,
-        AUDIO_SEGMENT_MIN_LENGTH,
-        AUDIO_SEGMENT_DEFAULT_LENGTH
+        AUDIO_SPAN_MIN_LENGTH,
+        AUDIO_SPAN_DEFAULT_LENGTH
       );
       if (!geom) {
         return null;
@@ -8073,7 +8073,7 @@
       });
       return { kind: "audio-track", trackIdx: ownerIdx };
     },
-    // A track exists only for its segments: deleting the last one
+    // A track exists only for its spans: deleting the last one
     // deletes the track, and the selection moves to a sibling track.
     deleteItem: ({ owner, ownerIdx, removeOwner }, itemIdx) => {
       if (!owner.spans[itemIdx]) {
@@ -9263,16 +9263,16 @@
       fields.appendChild(note);
       return fields;
     }
-    const total = Math.max(AUDIO_SEGMENT_MIN_LENGTH, timelineDuration2(state));
+    const total = Math.max(AUDIO_SPAN_MIN_LENGTH, timelineDuration2(state));
     const clamped = () => clampStartLength(
       span.timelineStartSeconds ?? 0,
-      span.timelineLengthSeconds ?? AUDIO_SEGMENT_DEFAULT_LENGTH,
+      span.timelineLengthSeconds ?? AUDIO_SPAN_DEFAULT_LENGTH,
       total,
-      AUDIO_SEGMENT_MIN_LENGTH
+      AUDIO_SPAN_MIN_LENGTH
     );
     const aceReference = track.source.kind === "AceStepFun" ? track.source.reference : "";
     const sourceSelect = buildOptionSelect(
-      buildSegmentAudioSourceOptions(aceReference),
+      buildAudioTrackSourceOptions(aceReference),
       aceReference || AUDIO_SOURCE_UPLOAD,
       (value) => {
         commitTrack(ctx, trackId, (next) => {
@@ -9321,29 +9321,29 @@
         )
       );
     }
-    const volume = track.volume ?? AUDIO_SEGMENT_VOLUME_DEFAULT;
+    const volume = track.volume ?? AUDIO_SPAN_VOLUME_DEFAULT;
     const volumeSlider = buildSlider(
       "Volume",
       volume,
-      AUDIO_SEGMENT_VOLUME_MIN,
-      AUDIO_SEGMENT_VOLUME_MAX,
-      AUDIO_SEGMENT_VOLUME_SLIDER_STEP,
+      AUDIO_SPAN_VOLUME_MIN,
+      AUDIO_SPAN_VOLUME_MAX,
+      AUDIO_SPAN_VOLUME_SLIDER_STEP,
       (value) => {
         commitTrack(
           ctx,
           trackId,
           (next) => {
             next.volume = Math.min(
-              AUDIO_SEGMENT_VOLUME_MAX,
-              Math.max(AUDIO_SEGMENT_VOLUME_MIN, value)
+              AUDIO_SPAN_VOLUME_MAX,
+              Math.max(AUDIO_SPAN_VOLUME_MIN, value)
             );
           },
           `audio-track-${trackId}-volume`
         );
       },
       {
-        sliderMin: AUDIO_SEGMENT_VOLUME_SLIDER_MIN,
-        sliderMax: AUDIO_SEGMENT_VOLUME_SLIDER_MAX,
+        sliderMin: AUDIO_SPAN_VOLUME_SLIDER_MIN,
+        sliderMax: AUDIO_SPAN_VOLUME_SLIDER_MAX,
         numberStep: "any"
       }
     );
@@ -9353,8 +9353,8 @@
     const startInput = buildNumber(
       geometry.start,
       0,
-      Math.max(0, total - AUDIO_SEGMENT_MIN_LENGTH),
-      AUDIO_SEGMENT_STEP,
+      Math.max(0, total - AUDIO_SPAN_MIN_LENGTH),
+      AUDIO_SPAN_STEP,
       (value) => {
         commitTrack(
           ctx,
@@ -9362,9 +9362,9 @@
           (_next, nextSpan) => {
             const next = clampStartLength(
               value,
-              nextSpan.timelineLengthSeconds ?? AUDIO_SEGMENT_DEFAULT_LENGTH,
+              nextSpan.timelineLengthSeconds ?? AUDIO_SPAN_DEFAULT_LENGTH,
               total,
-              AUDIO_SEGMENT_MIN_LENGTH
+              AUDIO_SPAN_MIN_LENGTH
             );
             nextSpan.timelineStartSeconds = next.start;
             nextSpan.timelineLengthSeconds = next.length;
@@ -9389,7 +9389,7 @@
       span.sourceStartSeconds,
       0,
       Number.MAX_SAFE_INTEGER,
-      AUDIO_SEGMENT_STEP,
+      AUDIO_SPAN_STEP,
       (value) => {
         commitTrack(
           ctx,
@@ -9412,9 +9412,9 @@
     );
     const lengthInput = buildNumber(
       geometry.length,
-      AUDIO_SEGMENT_MIN_LENGTH,
+      AUDIO_SPAN_MIN_LENGTH,
       total,
-      AUDIO_SEGMENT_STEP,
+      AUDIO_SPAN_STEP,
       (value) => {
         commitTrack(
           ctx,
@@ -9424,7 +9424,7 @@
               nextSpan.timelineStartSeconds ?? 0,
               value,
               total,
-              AUDIO_SEGMENT_MIN_LENGTH
+              AUDIO_SPAN_MIN_LENGTH
             );
             nextSpan.timelineStartSeconds = next.start;
             nextSpan.timelineLengthSeconds = next.length;
@@ -9449,13 +9449,13 @@
     return fields;
   };
   var addAudioTrack = (ctx, state, clipWindow) => {
-    const total = Math.max(AUDIO_SEGMENT_MIN_LENGTH, timelineDuration2(state));
+    const total = Math.max(AUDIO_SPAN_MIN_LENGTH, timelineDuration2(state));
     const start = Math.min(
       Math.max(0, clipWindow?.startSeconds ?? 0),
-      Math.max(0, total - AUDIO_SEGMENT_MIN_LENGTH)
+      Math.max(0, total - AUDIO_SPAN_MIN_LENGTH)
     );
     const availableLength = Math.max(
-      AUDIO_SEGMENT_MIN_LENGTH,
+      AUDIO_SPAN_MIN_LENGTH,
       Math.min(
         total - start,
         clipWindow ? clipWindow.endSeconds - clipWindow.startSeconds : total
@@ -9471,13 +9471,13 @@
           reference: "",
           uploadedAudio: null
         },
-        volume: AUDIO_SEGMENT_VOLUME_DEFAULT,
+        volume: AUDIO_SPAN_VOLUME_DEFAULT,
         spans: [
           {
             id: createEntityId("audio_span"),
             timelineStartSeconds: start,
             timelineLengthSeconds: Math.min(
-              AUDIO_SEGMENT_DEFAULT_LENGTH,
+              AUDIO_SPAN_DEFAULT_LENGTH,
               availableLength
             ),
             sourceStartSeconds: 0
@@ -9549,7 +9549,7 @@
     built.content.insertBefore(note, built.content.firstChild);
     return built.section;
   };
-  var buildTimelineAudioSegmentsBody = (ctx, state, selection) => {
+  var buildTimelineAudioTracksBody = (ctx, state, selection) => {
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-audio-body";
     body.appendChild(buildAudioTracksPanel(ctx, state, selection));
@@ -11428,7 +11428,7 @@ ${slot}`;
     ];
     if (kind === "audio") {
       options.push(
-        ...buildSegmentAudioSourceOptions(currentValue).filter(
+        ...buildAudioTrackSourceOptions(currentValue).filter(
           (option) => option.value !== REF_SOURCE_UPLOAD
         )
       );
@@ -13765,7 +13765,7 @@ ${slot}`;
       case "audio":
         return buildAudioBody(context, selection, state);
       case "audio-track":
-        return buildTimelineAudioSegmentsBody(context, state, selection);
+        return buildTimelineAudioTracksBody(context, state, selection);
       case "prompt-major":
         return buildPromptMajorBody(context, selection, clips);
       case "prompt-minor":
@@ -14876,7 +14876,7 @@ ${slot}`;
         selector = `.vst-audio-clip[data-clip-idx="${sel.clipIdx}"]`;
         break;
       case "audio-track":
-        selector = `.vst-audio-seg[data-track-idx="${sel.trackIdx}"]`;
+        selector = `.vst-audio-span[data-track-idx="${sel.trackIdx}"]`;
         break;
       case "prompt-major":
         selector = `.vst-major-seg[data-clip-idx="${sel.clipIdx}"]`;
@@ -16062,7 +16062,7 @@ ${slot}`;
   };
   var audioTrackTag = (trackIdx) => `A${trackIdx + 1}`;
   var audioTrackName = (track, trackIdx) => track.source.reference || track.source.uploadedAudio?.fileName || `Audio track ${audioTrackTag(trackIdx)}`;
-  var renderTimelineAudioSegmentBlock = (track, trackIdx, totalSeconds) => {
+  var renderTimelineAudioSpanBlock = (track, trackIdx, totalSeconds) => {
     const span = track.spans[0];
     if (!span || span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
       return "";
@@ -16074,12 +16074,12 @@ ${slot}`;
     );
     const labelText = audioTrackName(track, trackIdx);
     const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
-    const waveform = audioSegmentWaveBarHeights(trackIdx, trackIdx, 40).map((height) => `<span style="height:${height}%"></span>`).join("");
+    const waveform = audioSpanWaveBarHeights(trackIdx, trackIdx, 40).map((height) => `<span style="height:${height}%"></span>`).join("");
     return renderWindowSpan({
-      className: "vst-audio-seg",
-      extraClassName: `vst-audio-seg-tone-${trackIdx % 5}`,
-      dataAttrs: `data-vst-audio-seg data-track-idx="${trackIdx}"`,
-      edgeAttr: "data-vst-audio-seg-edge",
+      className: "vst-audio-span",
+      extraClassName: `vst-audio-span-tone-${trackIdx % 5}`,
+      dataAttrs: `data-vst-audio-span data-track-idx="${trackIdx}"`,
+      edgeAttr: "data-vst-audio-span-edge",
       labelClass: "vst-audio-label",
       label: labelText,
       title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
@@ -16087,16 +16087,16 @@ ${slot}`;
       startSeconds: start,
       lengthSeconds: end - start,
       durationSeconds: totalSeconds,
-      decoration: `<span class="vst-audio-seg-wave" aria-hidden="true">${waveform}</span>`
+      decoration: `<span class="vst-audio-span-wave" aria-hidden="true">${waveform}</span>`
     });
   };
-  var renderTimelineAudioSegmentLanes = (tracks, totalSeconds, totalWidthPx) => {
+  var renderTimelineAudioSpanLanes = (tracks, totalSeconds, totalWidthPx) => {
     const place = (laneIdx) => `left:0;width:${totalWidthPx}px;--vst-audio-lane-idx:${laneIdx}`;
     const lanes = tracks.map(
-      (track, trackIdx) => `<div class="vst-audio-seg-lane" data-track-idx="${trackIdx}" style="${place(trackIdx)}">` + renderTimelineAudioSegmentBlock(track, trackIdx, totalSeconds) + `</div>`
+      (track, trackIdx) => `<div class="vst-audio-track-lane" data-track-idx="${trackIdx}" style="${place(trackIdx)}">` + renderTimelineAudioSpanBlock(track, trackIdx, totalSeconds) + `</div>`
     );
     lanes.push(
-      `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add style="${place(tracks.length)}" title="Click or drag to add an audio track spanning the timeline"></div>`
+      `<div class="vst-audio-track-lane vst-audio-track-lane-blank" data-vst-audio-span-add style="${place(tracks.length)}" title="Click or drag to add an audio track spanning the timeline"></div>`
     );
     return lanes.join("");
   };
@@ -16138,7 +16138,7 @@ ${slot}`;
       0
     );
     const totalWidthPx = totalSeconds * pxPerSecond;
-    const overlaySegments = renderTimelineAudioSegmentLanes(
+    const overlaySegments = renderTimelineAudioSpanLanes(
       audioTracks,
       totalSeconds,
       totalWidthPx
@@ -16148,11 +16148,11 @@ ${slot}`;
     for (let i = 0; i < laneCount; i++) {
       const blank = i === laneCount - 1;
       laneTags.push(
-        headTag("seg", blank ? "+ Audio" : audioTrackTag(i), {
+        headTag("track", blank ? "+ Audio" : audioTrackTag(i), {
           active: !blank,
           muted: blank,
           style: `--vst-audio-lane-idx:${i}`,
-          action: blank ? `data-vst-audio-seg-add title="Add an audio track spanning the timeline" aria-label="Add an audio track"` : void 0
+          action: blank ? `data-vst-audio-span-add title="Add an audio track spanning the timeline" aria-label="Add an audio track"` : void 0
         })
       );
     }
@@ -16455,7 +16455,7 @@ ${slot}`;
     const gestures = createGestureRouter();
     const retakeTrack = createTimelineRetakeTrack(capabilities);
     const promptTrack = createTimelinePromptTrack(capabilities);
-    const audioSegmentTrack = createTimelineAudioSegmentTrack(capabilities);
+    const audioSpanTrack = createTimelineAudioSpanTrack(capabilities);
     const selectionTracks = createTimelineSelectionTracks();
     const referencesTrack = createTimelineReferencesTrack(
       captureAuthoringTransactionSnapshot
@@ -16689,7 +16689,7 @@ ${slot}`;
       const body = document.getElementById(TIMELINE_BODY_ID);
       if (body) {
         retakeTrack.attach(body, gestures);
-        audioSegmentTrack.attach(body, gestures);
+        audioSpanTrack.attach(body, gestures);
         linking.attach(body, gestures);
         promptTrack.attach(body, gestures);
         selectionTracks.attach(body);
@@ -16731,7 +16731,7 @@ ${slot}`;
       catalogUnsub = null;
       hostLifecycle.dispose();
       retakeTrack.dispose();
-      audioSegmentTrack.dispose();
+      audioSpanTrack.dispose();
       linking.dispose();
       promptTrack.dispose();
       gestures.dispose();

@@ -1,6 +1,6 @@
 /**
  * Shared gesture lifecycle for every "span on a lane" track (retake, relay
- * prompt windows, timeline-wide audio segments). Each track was originally a
+ * prompt windows, timeline-wide audio spans). Each track was originally a
  * near-verbatim copy of the same move / edge-resize / drag-to-create-with-
  * ghost / tap-create / shift-click-delete machinery; this factory owns that
  * skeleton once, and the tracks supply a config of selectors plus PURE
@@ -201,7 +201,7 @@ export interface WindowTrackConfig<TOwner = Clip> {
     keyboardSelect: boolean;
     /**
      * stopImmediatePropagation on span click/keydown — for spans nested inside
-     * another clickable surface (retake in the clip region, segment on the
+     * another clickable surface (retake in the clip region, span on the
      * audio row).
      */
     isolateClicks: boolean;

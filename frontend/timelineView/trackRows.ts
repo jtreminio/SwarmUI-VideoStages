@@ -14,7 +14,7 @@ import { keyframeLeftPercent, spanGeometry } from "../trackDomUtils";
 import type { AudioTrack, Clip, FrameRefImage, PromptWindow } from "../types";
 import { roundToTenth } from "../utils";
 import {
-    audioSegmentWaveBarHeights,
+    audioSpanWaveBarHeights,
     type RegionLayout,
     waveBarHeights,
 } from "./layout";
@@ -210,7 +210,7 @@ const audioTrackName = (track: AudioTrack, trackIdx: number): string =>
     track.source.uploadedAudio?.fileName ||
     `Audio track ${audioTrackTag(trackIdx)}`;
 
-const renderTimelineAudioSegmentBlock = (
+const renderTimelineAudioSpanBlock = (
     track: AudioTrack,
     trackIdx: number,
     totalSeconds: number,
@@ -230,14 +230,14 @@ const renderTimelineAudioSegmentBlock = (
     );
     const labelText = audioTrackName(track, trackIdx);
     const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
-    const waveform = audioSegmentWaveBarHeights(trackIdx, trackIdx, 40)
+    const waveform = audioSpanWaveBarHeights(trackIdx, trackIdx, 40)
         .map((height) => `<span style="height:${height}%"></span>`)
         .join("");
     return renderWindowSpan({
-        className: "vst-audio-seg",
-        extraClassName: `vst-audio-seg-tone-${trackIdx % 5}`,
-        dataAttrs: `data-vst-audio-seg data-track-idx="${trackIdx}"`,
-        edgeAttr: "data-vst-audio-seg-edge",
+        className: "vst-audio-span",
+        extraClassName: `vst-audio-span-tone-${trackIdx % 5}`,
+        dataAttrs: `data-vst-audio-span data-track-idx="${trackIdx}"`,
+        edgeAttr: "data-vst-audio-span-edge",
         labelClass: "vst-audio-label",
         label: labelText,
         title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
@@ -245,11 +245,11 @@ const renderTimelineAudioSegmentBlock = (
         startSeconds: start,
         lengthSeconds: end - start,
         durationSeconds: totalSeconds,
-        decoration: `<span class="vst-audio-seg-wave" aria-hidden="true">${waveform}</span>`,
+        decoration: `<span class="vst-audio-span-wave" aria-hidden="true">${waveform}</span>`,
     });
 };
 
-const renderTimelineAudioSegmentLanes = (
+const renderTimelineAudioSpanLanes = (
     tracks: AudioTrack[],
     totalSeconds: number,
     totalWidthPx: number,
@@ -258,12 +258,12 @@ const renderTimelineAudioSegmentLanes = (
         `left:0;width:${totalWidthPx}px;--vst-audio-lane-idx:${laneIdx}`;
     const lanes = tracks.map(
         (track, trackIdx) =>
-            `<div class="vst-audio-seg-lane" data-track-idx="${trackIdx}" style="${place(trackIdx)}">` +
-            renderTimelineAudioSegmentBlock(track, trackIdx, totalSeconds) +
+            `<div class="vst-audio-track-lane" data-track-idx="${trackIdx}" style="${place(trackIdx)}">` +
+            renderTimelineAudioSpanBlock(track, trackIdx, totalSeconds) +
             `</div>`,
     );
     lanes.push(
-        `<div class="vst-audio-seg-lane vst-audio-seg-lane-blank" data-vst-audio-seg-add ` +
+        `<div class="vst-audio-track-lane vst-audio-track-lane-blank" data-vst-audio-span-add ` +
             `style="${place(tracks.length)}" title="Click or drag to add an audio track spanning the timeline"></div>`,
     );
     return lanes.join("");
@@ -350,7 +350,7 @@ export const renderAudioTrackRow = (
             0,
         );
     const totalWidthPx = totalSeconds * pxPerSecond;
-    const overlaySegments = renderTimelineAudioSegmentLanes(
+    const overlaySegments = renderTimelineAudioSpanLanes(
         audioTracks,
         totalSeconds,
         totalWidthPx,
@@ -363,12 +363,12 @@ export const renderAudioTrackRow = (
         // The blank lane's tag is the track head's only button, and it names
         // what it adds at every track count — the full wording is in the tooltip.
         laneTags.push(
-            headTag("seg", blank ? "+ Audio" : audioTrackTag(i), {
+            headTag("track", blank ? "+ Audio" : audioTrackTag(i), {
                 active: !blank,
                 muted: blank,
                 style: `--vst-audio-lane-idx:${i}`,
                 action: blank
-                    ? `data-vst-audio-seg-add title="Add an audio track spanning the timeline" aria-label="Add an audio track"`
+                    ? `data-vst-audio-span-add title="Add an audio track spanning the timeline" aria-label="Add an audio track"`
                     : undefined,
             }),
         );

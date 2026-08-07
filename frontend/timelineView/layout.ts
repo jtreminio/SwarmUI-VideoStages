@@ -44,12 +44,12 @@ export const waveBarHeights = (clipIdx: number, count: number): number[] => {
     return heights;
 };
 
-/** Stable per-segment waveform seed: unique across practical clip/segment indices. */
-export const audioSegmentWaveBarHeights = (
+/** Stable per-span waveform seed: unique across practical clip/span indices. */
+export const audioSpanWaveBarHeights = (
     clipIdx: number,
-    segmentIdx: number,
+    spanIdx: number,
     count: number,
-): number[] => waveBarHeights(clipIdx * 4099 + segmentIdx + 1, count);
+): number[] => waveBarHeights(clipIdx * 4099 + spanIdx + 1, count);
 
 export const clampPxPerSecond = (value: number): number =>
     Number.isFinite(value)

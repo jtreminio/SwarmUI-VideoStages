@@ -262,7 +262,7 @@ export type AudioTrackSourceKind =
     | "ControlNet"
     | "External";
 
-/** Source identity for a timeline-wide audio segment. */
+/** Source identity for a timeline-wide audio span. */
 export interface AudioTrackSource {
     kind: AudioTrackSourceKind;
     reference: string;
@@ -281,7 +281,7 @@ export interface AudioTrackSpan {
 }
 
 /**
- * A logical timeline-wide audio segment. New authoring creates exactly one
+ * A logical timeline-wide audio span. New authoring creates exactly one
  * span per track; the array remains for compatibility with the earlier
  * planned-track schema and is normalized into independent lanes on load.
  */

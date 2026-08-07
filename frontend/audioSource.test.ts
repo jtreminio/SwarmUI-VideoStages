@@ -3,7 +3,7 @@ import { stubAceStepFunRegistry } from "./__test_helpers__/registries";
 import {
     AUDIO_SOURCE_CONTROLNET,
     buildAudioSourceOptions,
-    buildSegmentAudioSourceOptions,
+    buildAudioTrackSourceOptions,
     canUseClipLengthFromAudio,
     isControlNetAudioSource,
 } from "./audioSource";
@@ -73,16 +73,16 @@ describe("audioSource", () => {
         });
     });
 
-    describe("buildSegmentAudioSourceOptions", () => {
+    describe("buildAudioTrackSourceOptions", () => {
         it("offers Upload plus AceStepFun refs, without Native/ControlNet", () => {
             stubAceStepFunRegistry(["audio0"]);
 
-            const values = buildSegmentAudioSourceOptions().map((o) => o.value);
+            const values = buildAudioTrackSourceOptions().map((o) => o.value);
             expect(values).toEqual(["Upload", "audio0"]);
         });
 
         it("keeps a selected AceStepFun ref that left the registry", () => {
-            expect(buildSegmentAudioSourceOptions("audio2")).toContainEqual({
+            expect(buildAudioTrackSourceOptions("audio2")).toContainEqual({
                 value: "audio2",
                 label: "AceStepFun Audio 2",
             });
