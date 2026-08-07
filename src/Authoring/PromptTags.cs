@@ -65,7 +65,7 @@ internal static class PromptTags
         {
             return PromptSyntax.FormatStageSectionMarker(clip, stage, sectionId);
         }
-        return $"<{PromptSyntax.TagName}{PromptSyntax.CidMarker}{sectionId}>";
+        return PromptSyntax.FormatSectionMarker(sectionId);
     }
 
     public static string ProcessVideoStages(string data, T2IPromptHandling.PromptTagContext context)
@@ -104,7 +104,7 @@ internal static class PromptTags
     private static string UnmatchedSectionMarker(T2IPromptHandling.PromptTagContext context)
     {
         context.SectionID = Constants.SectionID_VideoClipUnmatched;
-        return $"<{PromptSyntax.TagName}{PromptSyntax.CidMarker}{Constants.SectionID_VideoClipUnmatched}>";
+        return PromptSyntax.FormatSectionMarker(Constants.SectionID_VideoClipUnmatched);
     }
 
     private static bool TryBuildWindowMarker(string[] tokens, string value, out string marker)
@@ -116,8 +116,8 @@ internal static class PromptTags
         {
             return false;
         }
-        marker = $"<{PromptSyntax.TagName}:w|{clip}|{PromptSyntax.FormatWindowBound(start)}"
-            + $"|{PromptSyntax.FormatWindowBound(end)}{PromptSyntax.CidMarker}{Constants.SectionID_VideoClipUnmatched}>";
+        marker = PromptSyntax.FormatWindowMarker(
+            clip, start, end, Constants.SectionID_VideoClipUnmatched);
         return true;
     }
 

@@ -220,8 +220,7 @@ internal static class PromptText
             int cid = string.IsNullOrEmpty(value)
                 ? ResolveBracketCid(preData, clipIndex, clipStageIndexWithinClip, globalCid, clipCid, stageCid)
                 : PromptSyntax.NoMatchCid;
-            result.Append('<').Append(PromptSyntax.TagName).Append(PromptSyntax.CidMarker).Append(cid)
-                .Append('>').Append(piece.Content);
+            result.Append(PromptSyntax.FormatSectionMarker(cid)).Append(piece.Content);
         }
         return result.ToString();
     }

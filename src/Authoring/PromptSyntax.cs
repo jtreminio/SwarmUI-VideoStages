@@ -91,8 +91,14 @@ internal static class PromptSyntax
         (value ?? "").Replace("<", "").Replace(">", "").Replace("|", "").Replace(CidMarker, "")
             .Replace("\n", " ").Replace("\r", " ").Trim();
 
-    public static string FormatWindowBound(double value) =>
+    private static string FormatWindowBound(double value) =>
         value.ToString("0.####", CultureInfo.InvariantCulture);
+
+    public static string FormatSectionMarker(int sectionId) =>
+        $"<{TagName}{CidMarker}{sectionId}>";
+
+    public static string FormatWindowMarker(int clip, double start, double end, int sectionId) =>
+        $"<{TagName}:w|{clip}|{FormatWindowBound(start)}|{FormatWindowBound(end)}{CidMarker}{sectionId}>";
 
     public static string FormatStageSectionMarker(int clip, int stage, int sectionId) =>
         $"<{TagName}:s|{clip}|{stage}{CidMarker}{sectionId}>";
