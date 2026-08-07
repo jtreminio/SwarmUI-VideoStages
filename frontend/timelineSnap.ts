@@ -91,8 +91,9 @@ export const timelineClipEdges = (
             const duration = (timing.clipFrames[clipIdx] ?? 0) / timing.fps;
             const incoming = boundaryBefore.get(clipIdx);
             const outgoing = boundaryAfter.get(clipIdx);
-            // Snap targets are always laid out on the compacted output ruler,
-            // even where the cards themselves are not.
+            // Known divergence, not a design: these edges are always measured
+            // on the compacted output ruler, while a dormant clip puts the
+            // cards on the authored one. Both rulers would have to move.
             const trim = clipTrimSeconds(incoming, outgoing, true);
             const editEnd =
                 cursor + Math.max(0, duration - trim.before - trim.after);
