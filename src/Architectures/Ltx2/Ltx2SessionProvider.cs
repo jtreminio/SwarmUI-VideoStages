@@ -10,7 +10,7 @@ using VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 namespace VideoStages.Architectures.Ltx2;
 
-internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
+internal sealed class Ltx2SessionProvider(WorkflowGenerator generator) :
     IArchitectureGenerationSessionProvider
 {
     public ArchitectureId ArchitectureId => Ltx2ArchitectureModule.ArchitectureId;

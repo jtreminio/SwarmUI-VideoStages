@@ -7,7 +7,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Execution;
 
-internal sealed class SourceOnlyExecutionAdapter(
+internal sealed class SourceOnlySessionProvider(
     WorkflowGenerator generator) :
     IArchitectureGenerationSessionProvider
 {

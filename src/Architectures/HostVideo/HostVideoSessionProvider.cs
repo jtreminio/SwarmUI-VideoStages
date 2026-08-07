@@ -7,7 +7,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.HostVideo;
 
-internal sealed class HostVideoExecutionAdapter(WorkflowGenerator generator) :
+internal sealed class HostVideoSessionProvider(WorkflowGenerator generator) :
     IArchitectureGenerationSessionProvider
 {
     public ArchitectureId ArchitectureId =>

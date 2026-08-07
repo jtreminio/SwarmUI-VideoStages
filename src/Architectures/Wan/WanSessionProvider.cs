@@ -6,7 +6,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Wan;
 
-internal sealed class WanExecutionAdapter(WorkflowGenerator generator) :
+internal sealed class WanSessionProvider(WorkflowGenerator generator) :
     IArchitectureGenerationSessionProvider
 {
     public ArchitectureId ArchitectureId => WanArchitectureModule.ArchitectureId;

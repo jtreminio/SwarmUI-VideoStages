@@ -41,7 +41,7 @@ public class MiniMaxRuntimeFlowTests
         };
         VideoExecutionPlan plan = generator.RequireVideoExecutionPlanContext().Plan;
 
-        IReadOnlyList<PlanDiagnostic> diagnostics = new MiniMaxExecutionAdapter(generator)
+        IReadOnlyList<PlanDiagnostic> diagnostics = new MiniMaxSessionProvider(generator)
             .PreflightRequest(new(plan, MiniMaxArchitectureModule.ArchitectureId));
 
         Assert.Contains(

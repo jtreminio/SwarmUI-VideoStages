@@ -6,7 +6,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.MiniMax;
 
-internal sealed class MiniMaxExecutionAdapter(WorkflowGenerator generator) :
+internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
     IArchitectureGenerationSessionProvider
 {
     private CapturedHostReference _baseReference;

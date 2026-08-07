@@ -27,32 +27,32 @@ internal static class VideoArchitectureManifest
         new(
             NoneArchitecture.Descriptor,
             null,
-            generator => new SourceOnlyExecutionAdapter(generator)),
+            generator => new SourceOnlySessionProvider(generator)),
         new(
             Ltx2ArchitectureModule.Instance.Descriptor,
             Ltx2ArchitectureModule.Instance,
-            generator => new Ltx2ExecutionAdapter(generator),
+            generator => new Ltx2SessionProvider(generator),
             RootVideoStageResizer.RegisterHandlers,
             Ltx2ApiRoutes.Register,
             Ltx2HostIntegration.RegisterDependencies),
         new(
             MiniMaxArchitectureModule.Instance.Descriptor,
             MiniMaxArchitectureModule.Instance,
-            generator => new MiniMaxExecutionAdapter(generator)),
+            generator => new MiniMaxSessionProvider(generator)),
         // Wan's graph is built by SwarmUI's stock image-to-video path. Narrow host callbacks keep
         // request-global options out of the discarded core pass; the authored session applies the
         // supported values itself.
         new(
             WanArchitectureModule.Instance.Descriptor,
             WanArchitectureModule.Instance,
-            generator => new WanExecutionAdapter(generator),
+            generator => new WanSessionProvider(generator),
             WanHostHandlers.Register),
         // The fallback resolves only exact model classes with proven stock host video branches.
         // Its resolution tier keeps every specialized module authoritative.
         new(
             HostVideoArchitectureModule.Instance.Descriptor,
             HostVideoArchitectureModule.Instance,
-            generator => new HostVideoExecutionAdapter(generator),
+            generator => new HostVideoSessionProvider(generator),
             HostVideoCorePassIsolation.RegisterHandlers),
     ];
 

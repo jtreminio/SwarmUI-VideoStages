@@ -351,7 +351,7 @@ public class DecisionOwnerRegressionTests
         VideoExecutionPlanContext request = BoundContext(
             generator,
             plan,
-            [new ForeignRootAdapter(generator, foreign.Id), new Ltx2ExecutionAdapter(generator)]);
+            [new ForeignRootAdapter(generator, foreign.Id), new Ltx2SessionProvider(generator)]);
 
         request.CaptureControlNetPreprocessors();
 
