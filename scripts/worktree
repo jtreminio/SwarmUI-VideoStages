@@ -22,20 +22,26 @@ EXTENSIONS="$(dirname "$MAIN")"
 usage() {
     cat <<EOF
 Usage:
-  scripts/worktree add <name> [start-point]   provision $EXTENSIONS/$REPO-<name>
-  scripts/worktree rm  <name>                 remove it and its build output
-  scripts/worktree ls                         list worktrees of this repo
+  scripts/worktree add [--resume] <name> [start-point]   provision $EXTENSIONS/$REPO-<name>
+  scripts/worktree rm  [--keep-branch] <name>            remove it and its build output
+  scripts/worktree ls                                    list worktrees of this repo
 
 <name> is the suffix only: letters, digits and dashes, not starting with a dash.
 \`add\` and \`rm\` only run from $MAIN itself, never from inside a worktree.
 
-\`add\` checks out branch <name> if it exists, otherwise creates it from
-[start-point] (default HEAD).
+\`add\` creates branch <name> from [start-point] (default HEAD). If that branch already
+exists it refuses, because silently resuming someone else's commits under a fresh-looking
+worktree is how an agent ends up building on work it cannot see — pass --resume when
+continuing it is what you meant.
+
+\`rm\` deletes branch <name> once every one of its commits is in HEAD, compared by patch
+id, so a branch harvested with cherry-pick still counts as done. Otherwise it keeps the
+branch and says how many commits would be lost. --keep-branch skips the check entirely.
 EOF
 }
 
 # Rejects path traversal, globs, whitespace and anything git would read as an option. Every
-# other use of \$name — path, branch, artifacts dir — trusts this check and nothing else.
+# other use of $name — path, branch, artifacts dir — trusts this check and nothing else.
 check_name() {
     local name="${1-}"
     [ -n "$name" ] || die "name required"
@@ -65,9 +71,19 @@ artifacts_path() { echo "$ARTIFACTS_ROOT/wt-$1"; }
 
 cmd_add() {
     require_main_checkout add
-    [ $# -le 2 ] || die "add takes only <name> [start-point]"
+    local resume=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --resume) resume=1; shift ;;
+            --) shift; break ;;
+            -*) die "unknown option: $1" ;;
+            *) break ;;
+        esac
+    done
+    [ $# -le 2 ] || die "add takes only [--resume] <name> [start-point]"
     local name="${1-}" start="${2:-HEAD}"
     check_name "$name"
+    [ "$resume" = 0 ] || [ $# -le 1 ] || die "--resume continues branch $name; it takes no start-point"
     case "$start" in -*) die "start-point may not start with a dash: $start" ;; esac
     git -C "$MAIN" rev-parse --verify --quiet "$start^{commit}" >/dev/null \
         || die "unknown start-point: $start"
@@ -81,6 +97,9 @@ cmd_add() {
     fi
 
     if git -C "$MAIN" show-ref --quiet --verify "refs/heads/$name"; then
+        [ "$resume" = 1 ] || die "branch $name already exists at $(git -C "$MAIN" log --oneline -1 "$name")
+a worktree on it would start with those commits already applied — pass --resume if that is
+what you want, otherwise pick another name"
         git -C "$MAIN" worktree add "$path" "$name"
     else
         git -C "$MAIN" worktree add "$path" -b "$name" "$start"
@@ -121,7 +140,16 @@ EOF
 
 cmd_rm() {
     require_main_checkout rm
-    [ $# -le 1 ] || die "rm takes only <name>"
+    local keep_branch=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --keep-branch) keep_branch=1; shift ;;
+            --) shift; break ;;
+            -*) die "unknown option: $1" ;;
+            *) break ;;
+        esac
+    done
+    [ $# -le 1 ] || die "rm takes only [--keep-branch] <name>"
     local name="${1-}" path
     check_name "$name"
     path="$(worktree_path "$name")"
@@ -135,6 +163,25 @@ cmd_rm() {
     git -C "$MAIN" worktree remove "$path"
     rm -rf "$(artifacts_path "$name")"
     echo "removed $path"
+
+    if [ "$keep_branch" = 1 ]; then
+        echo "kept branch $name"
+        return
+    fi
+    git -C "$MAIN" show-ref --quiet --verify "refs/heads/$name" || return
+    # By patch id, not reachability: harvesting with cherry-pick leaves the branch's own
+    # commits unreachable from HEAD, so `branch -d` would refuse every branch this script
+    # makes. `git cherry` marks a commit `-` once an equivalent patch is upstream, `+` when
+    # it is nowhere else.
+    local unharvested
+    unharvested="$(git -C "$MAIN" cherry HEAD "$name" | grep -c '^+' || true)"
+    if [ "$unharvested" -eq 0 ]; then
+        git -C "$MAIN" branch -D "$name" >/dev/null
+        echo "deleted branch $name — every commit is already in HEAD"
+    else
+        echo "kept branch $name — $unharvested commit(s) are in no other branch." >&2
+        echo "harvest them, then: git branch -D $name" >&2
+    fi
 }
 
 case "${1:-}" in
