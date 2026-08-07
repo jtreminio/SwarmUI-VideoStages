@@ -12,11 +12,11 @@ For the detailed execution and frontend designs, continue to
 priorities, runtime lifetimes, and stage-loop ownership, use
 [`STAGE_RUNTIME.md`](STAGE_RUNTIME.md).
 
-VideoStages is a modular monolith with specialized overlays and a conservative
+VideoStages is a modular monolith with specialized overlays and a permissive
 host-video fallback. Production registers the source-only `none` architecture,
 specialized LTX Video 2.3 (`ltx2`), MiniMax H3 (`minimax`), the WAN family
-(`wan22`), and a cut-only generic profile (`host-video`) for exact SwarmUI model
-classes whose stock video graph branches have been verified.
+(`wan22`), and a cut-only generic profile (`host-video`) for any other model
+SwarmUI's compatibility classes report as video.
 
 ## Ownership
 
@@ -108,12 +108,12 @@ allowlist. Other ordinary WAN models resolve to the generic
 `wan-i2v` profile. First/last-frame support remains compatibility-driven;
 native 5B behavior requires the exact resolved profile. These profiles are not
 separate user-facing text-versus-image families.
-`HostVideoArchitectureModule.TryResolveModel` is the last-priority baseline. It
-does not trust `IsText2Video` / `IsImage2Video` by themselves. Its proof table
-admits exact stock branches for Hunyuan Video, Hunyuan Video 1.5, Mochi,
-Cosmos 1, Kandinsky 5 Video, LTX Video 1, and non-2.3 LTX Video 2. Cosmos
-Predict2, SVD, component LoRA/VAE checkpoints, Hunyuan 1.5 SR, and unknown
-synthetic video classes remain unresolved.
+`HostVideoArchitectureModule.TryResolveModel` is the last-priority baseline, and
+the compatibility flags are its whole test: any model whose
+`T2IModelCompatClass` reports `IsText2Video` or `IsImage2Video` resolves,
+including unknown and synthetic video classes. It refuses only LoRA component
+classes and the two Cosmos Predict2 text-to-image classes, which core registers
+as text-to-video.
 No module resolves a model to `none`; common planning assigns `NoneArchitecture`
 only to init-video clips with no active stages.
 

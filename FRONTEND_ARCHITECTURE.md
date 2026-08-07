@@ -2,10 +2,10 @@
 
 The frontend authors one timeline. Each generated clip is locked to one video
 architecture, while different clips may use different architectures.
-Production registers specialized LTX Video 2.3, WAN, the conservative generic
-host-video fallback, and the source-only `none` architecture. The editor is
-driven by the backend architecture catalog rather than model-name checks in
-generic UI code.
+Production registers specialized LTX Video 2.3, MiniMax H3, WAN, the permissive
+generic host-video fallback, and the source-only `none` architecture. The
+editor is driven by the backend architecture catalog rather than model-name
+checks in generic UI code.
 
 ## User-facing path model
 

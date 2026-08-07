@@ -6,10 +6,10 @@ stages, must resolve to the same architecture. Different executable clips may
 use different architectures.
 
 Production registers source-only `none`, specialized LTX Video 2.3, MiniMax H3,
-the WAN family, and a cut-only generic fallback for video models with verified
-SwarmUI graph paths. The registry, planning contracts, runtime dispatch, and
-timeline assembly host all five architectures through one top-level execution
-path.
+the WAN family, and a cut-only generic fallback for any other model SwarmUI's
+compatibility classes report as video. The registry, planning contracts,
+runtime dispatch, and timeline assembly host all five architectures through one
+top-level execution path.
 
 ## The execution model
 
