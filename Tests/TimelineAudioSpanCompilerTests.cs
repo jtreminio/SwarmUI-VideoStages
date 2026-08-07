@@ -167,6 +167,62 @@ public class TimelineAudioSpanCompilerTests
         string code) => Assert.Contains(result.Diagnostics, diagnostic =>
             diagnostic.Code == code && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
 
+    [Fact]
+    public void A_track_with_no_id_is_ignored_with_a_warning()
+    {
+        VideoExecutionPlan plan = Plan(Clip(0));
+
+        TimelineAudioSpanCompilation result = TimelineAudioSpanCompiler.Compile(
+            plan.FramesPerSecond,
+            plan.Clips,
+            plan.Boundaries,
+            [Segment("", 0, 1)]);
+
+        Assert.All(result.Clips, clip => Assert.Empty(clip.Audio.Spans));
+        Assert.Contains(result.Diagnostics, diagnostic =>
+            diagnostic.Code == "audio.timeline.track.missing_id");
+    }
+
+    [Fact]
+    public void A_boundary_trim_that_eats_a_whole_clip_is_reported()
+    {
+        // The frame-budget pass would normally clamp an overlap this large, so the boundary is
+        // handed in directly: this is the guard for a plan that reaches the audio compiler unclamped.
+        VideoExecutionPlan plan = Plan(Clip(0, frames: 17), Clip(1));
+        BoundaryPlan devouring = new(
+            0,
+            BoundaryJoinType.Crossfade,
+            OverlapFrames: 17,
+            ContinuityWindowFrames: 0,
+            BoundaryFallbackReason.None);
+
+        TimelineAudioSpanCompilation result = TimelineAudioSpanCompiler.Compile(
+            plan.FramesPerSecond,
+            plan.Clips,
+            [devouring],
+            [Segment("score", 0, 5)]);
+
+        Assert.Contains(result.Diagnostics, diagnostic =>
+            diagnostic.Code == "audio.timeline.clip_trim_exceeds_length"
+            && diagnostic.ClipId == 0);
+    }
+
+    [Fact]
+    public void A_clip_with_no_frame_count_reports_unusable_timing()
+    {
+        VideoExecutionPlan plan = Plan(Clip(0, frames: null));
+
+        TimelineAudioSpanCompilation result = TimelineAudioSpanCompiler.Compile(
+            plan.FramesPerSecond,
+            plan.Clips,
+            plan.Boundaries,
+            []);
+
+        Assert.Contains(result.Diagnostics, diagnostic =>
+            diagnostic.Code == "audio.timeline.clip_timing_unavailable"
+            && diagnostic.ClipId == 0);
+    }
+
     private static TimelineAudioSpanSpec Segment(
         string id,
         double start,

@@ -382,9 +382,17 @@ public sealed class EffectiveVideoRequestTests
             "latentmodel-detail.safetensors",
             effective.Stages[1].UpscaleMethod);
         Assert.Equal(
-            4,
-            request.Diagnostics.Count(diagnostic =>
-                diagnostic.Code.Contains("stale", StringComparison.Ordinal)));
+            [
+                "effective-request.stale-architecture-hint",
+                "effective-request.stale-clip-profile-hint",
+                "effective-request.stale-stage-profile-hint",
+                "effective-request.stale-stage-profile-hint",
+            ],
+            request.Diagnostics
+                .Where(diagnostic => diagnostic.Code.Contains("stale", StringComparison.Ordinal))
+                .Select(diagnostic => diagnostic.Code)
+                .Order()
+                .ToArray());
         Assert.All(
             request.Diagnostics,
             diagnostic => Assert.Equal(

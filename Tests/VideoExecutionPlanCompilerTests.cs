@@ -27,6 +27,42 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
+    public void Compile_ClipWithNoSourceAndNoStages_IsDroppedWithAWarning()
+    {
+        ClipSpec inactive = new(
+            1, 49, MediaSource.Native, [], false, false, false, false, null, [], []);
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(
+            Spec(false, GeneratedClip(0, Stage(10)), inactive));
+
+        Assert.Single(plan.Clips);
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic => diagnostic.Code == "inactive-clips-ignored");
+    }
+
+    [Fact]
+    public void Compile_BoundaryAudioCarryIntoAStagelessClip_IsRefused()
+    {
+        // A continue into a stage-less clip already degrades to a cut, so the carry refusal is
+        // only reachable on a crossfade whose target refines nothing.
+        ClipSpec carrying = GeneratedClip(0, Stage(10)) with
+        {
+            BoundaryOut = Constants.BoundaryOutCrossfade,
+            BoundaryOutCarryAudio = true,
+        };
+        ClipSpec sourceOnly = InitVideoClip(1) with { Stages = [Stage(11, control: 0)] };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, carrying, sourceOnly));
+
+        Assert.Contains(
+            plan.Diagnostics,
+            diagnostic =>
+                diagnostic.Code == "boundary-audio-carry-target-has-no-stage"
+                && diagnostic.ClipId == 0);
+    }
+
+    [Fact]
     public void Compile_InitVideoClip_UsesSourceAndDistinguishesPassthroughRefineAndRetake()
     {
         ClipSpec initVideoClip = new(
