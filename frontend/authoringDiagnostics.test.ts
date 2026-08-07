@@ -33,19 +33,15 @@ describe("backend-aligned authoring diagnostics", () => {
         expect(activeStageCount(clip)).toBe(3);
     });
 
-    it("stays silent when requested audio reuse lacks generate/capture/reuse stages", () => {
-        const diagnostics = deriveAuthoringDiagnostics(
-            [
+    it("accepts audio reuse an architecture supports", () => {
+        expect(
+            codes([
                 minimalClip({
                     reuseAudio: true,
                     stages: [minimalStage(), minimalStage({ skipped: true })],
                 }),
-            ],
-            createCapabilityViewResolver(testArchitectureCatalog()),
-        );
-        expect(diagnostics.map((item) => item.code)).not.toContain(
-            "audio.reuse.requires_three_stages",
-        );
+            ]),
+        ).toEqual([]);
     });
 
     it.each([
