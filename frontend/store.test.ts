@@ -379,13 +379,16 @@ describe("createTimelineStore", () => {
             h.carrier.data = '{"width":640,"clips":[]}';
             h.store.getState();
             const seen: UpdateMeta[] = [];
+            const notified: AuthoringDocument[] = [];
             h.store.subscribe((state, meta) => {
                 seen.push(meta);
-                expect(state.width).toBe(512);
+                notified.push(state);
             });
             h.carrier.data = '{"width":512,"clips":[]}';
             expect(h.store.syncFromCarrier()).toBe(true);
             expect(seen).toEqual([{ origin: "external" }]);
+            // notify() swallows subscriber throws — assert out here or not at all.
+            expect(notified[0].width).toBe(512);
             expect(h.store.getState().width).toBe(512);
             expect(h.writeDurableCalls).toHaveLength(1);
             expect(h.writeDurableCalls[0].width).toBe(512);
