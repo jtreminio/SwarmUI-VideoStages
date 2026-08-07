@@ -116,8 +116,7 @@ internal static class PromptTags
         {
             return false;
         }
-        marker = PromptSyntax.FormatWindowMarker(
-            clip, start, end, Constants.SectionID_VideoClipUnmatched);
+        marker = PromptSyntax.FormatWindowMarker(clip, start, end);
         return true;
     }
 

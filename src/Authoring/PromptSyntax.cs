@@ -95,11 +95,20 @@ internal static class PromptSyntax
         value.ToString("0.####", CultureInfo.InvariantCulture);
 
     public static string FormatSectionMarker(int sectionId) =>
-        $"<{TagName}{CidMarker}{sectionId}>";
+        $"<{TagName}{CidMarker}{Cid(sectionId)}>";
 
-    public static string FormatWindowMarker(int clip, double start, double end, int sectionId) =>
-        $"<{TagName}:w|{clip}|{FormatWindowBound(start)}|{FormatWindowBound(end)}{CidMarker}{sectionId}>";
+    /// <summary>
+    /// The cid a window marker carries is never read back — <see cref="WindowMarkerPattern"/>
+    /// matches it without capturing — so every window is the unmatched section.
+    /// </summary>
+    public static string FormatWindowMarker(int clip, double start, double end) =>
+        $"<{TagName}:w|{clip}|{FormatWindowBound(start)}|{FormatWindowBound(end)}"
+        + $"{CidMarker}{Cid(Constants.SectionID_VideoClipUnmatched)}>";
 
     public static string FormatStageSectionMarker(int clip, int stage, int sectionId) =>
-        $"<{TagName}:s|{clip}|{stage}{CidMarker}{sectionId}>";
+        $"<{TagName}:s|{clip}|{stage}{CidMarker}{Cid(sectionId)}>";
+
+    // Markers are parsed back with the invariant culture, so they must be written with it.
+    private static string Cid(int sectionId) =>
+        sectionId.ToString(CultureInfo.InvariantCulture);
 }
