@@ -658,7 +658,7 @@ public class WanRuntimeFlowTests
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         WorkflowGenerator.WorkflowGenStep corrupt = new(
             g => g.GetVideoExecutionPlanContext()
-                .DropCoreOutput(),
+                .ExecutePrepared(host => host.DropCoreOutput()),
             Constants.WorkflowStepPriority.DropCoreImageToVideoOutput - 0.01);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>

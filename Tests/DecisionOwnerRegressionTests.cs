@@ -236,7 +236,7 @@ public class DecisionOwnerRegressionTests
         VideoExecutionPlan plan = InitVideoOnlyPlan();
         VideoExecutionPlanContext request = BoundContext(generator, plan);
 
-        request.CaptureControlNetPreprocessors();
+        request.ExecutePrepared(host => host.CaptureControlNetPreprocessors());
 
         Assert.True(
             new ControlNetCoreMediaCapture(generator).TryGetCapturedAudio(0, out _));
@@ -249,7 +249,7 @@ public class DecisionOwnerRegressionTests
         WorkflowGenerator generator = GeneratorWithVideoControlNet();
 
         VideoExecutionPlan plan = PlanWithArchitectures(NoneArchitecture.Descriptor);
-        BoundContext(generator, plan).CaptureControlNetPreprocessors();
+        BoundContext(generator, plan).ExecutePrepared(host => host.CaptureControlNetPreprocessors());
 
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         ResizeImageMaskNodeNode hostResize =
@@ -289,8 +289,8 @@ public class DecisionOwnerRegressionTests
         VideoExecutionPlan plan = PlanWithArchitectures(architectures);
         VideoExecutionPlanContext request = BoundContext(generator, plan);
 
-        request.CaptureControlNetPreprocessors();
-        request.CaptureControlNetPreprocessors();
+        request.ExecutePrepared(host => host.CaptureControlNetPreprocessors());
+        request.ExecutePrepared(host => host.CaptureControlNetPreprocessors());
 
         Assert.True(
             new ControlNetCoreMediaCapture(generator)
@@ -353,7 +353,7 @@ public class DecisionOwnerRegressionTests
             plan,
             [new ForeignRootAdapter(generator, foreign.Id), new Ltx2SessionProvider(generator)]);
 
-        request.CaptureControlNetPreprocessors();
+        request.ExecutePrepared(host => host.CaptureControlNetPreprocessors());
 
         Assert.True(
             new ControlNetCoreMediaCapture(generator)

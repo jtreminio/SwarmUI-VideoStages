@@ -195,27 +195,18 @@ internal sealed class VideoExecutionPlanContext
                 + "Graph-free request preflight must complete first.");
     }
 
-    internal void CaptureControlNetPreprocessors() => ExecutePrepared(() =>
-        _executionHost.CaptureControlNetPreprocessors());
+    /// <summary>The host is private, so this is how a caller reaches a phase on it. Every workflow
+    /// phase but the first and last is exactly one of these.</summary>
+    internal void ExecutePrepared(Action<VideoArchitectureExecutionHost> phase)
+    {
+        ArgumentNullException.ThrowIfNull(phase);
+        ExecutePrepared(() => phase(_executionHost));
+    }
 
-    internal void CaptureBaseReference() => ExecutePrepared(() =>
-        _executionHost.CaptureBaseReference());
-
-    internal void CaptureRefinerReference() => ExecutePrepared(() =>
-        _executionHost.CaptureRefinerReference());
-
-    internal void CapturePreCoreMedia() => ExecutePrepared(() =>
-        _executionHost.CapturePreCoreMedia());
-
-    internal void DropCoreOutput() => ExecutePrepared(() =>
-        _executionHost.DropCoreOutput());
-
-    internal void ApplyRootAudioMaskDimensions() => ExecutePrepared(() =>
-        _executionHost.ApplyRootAudioMaskDimensions());
-
+    /// <summary>The last phase, which is the only one that also ends the request.</summary>
     internal void RunConfiguredStages()
     {
-        ExecutePrepared(() => _executionHost.RunConfiguredStages());
+        ExecutePrepared(host => host.RunConfiguredStages());
         State = VideoExecutionState.Completed;
     }
 

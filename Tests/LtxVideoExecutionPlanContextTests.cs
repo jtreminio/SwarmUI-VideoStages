@@ -66,14 +66,15 @@ public class VideoExecutionPlanContextTests
         WorkflowGenerator generator = CreateGenerator(input);
         VideoExecutionPlanContext context = generator.RequireVideoExecutionPlanContext();
 
+        // Six of the registered phases now differ only in which host method the lambda names, so
+        // one of them stands for all six; what is worth pinning is that each distinct shape of
+        // entry is guarded.
         Action[] phases =
         [
-            context.CaptureControlNetPreprocessors,
-            context.CaptureBaseReference,
-            context.CaptureRefinerReference,
-            context.CapturePreCoreMedia,
-            context.DropCoreOutput,
-            context.ApplyRootAudioMaskDimensions,
+            () => context.ExecutePrepared(host => host.CaptureBaseReference()),
+            // The guard must reject before the closure runs, or this throws the wrong exception.
+            () => context.ExecutePrepared(
+                () => throw new NotSupportedException("reached past the guard")),
             context.RunConfiguredStages,
             () => RootVideoStageResizer.ApplyRootResolutionBeforeImageToVideo(new()
             {

@@ -39,7 +39,7 @@ public class ArchitectureRuntimeOwnershipTests
             plan,
             [initVideoClip, future]);
 
-        request.ApplyRootAudioMaskDimensions();
+        request.ExecutePrepared(host => host.ApplyRootAudioMaskDimensions());
 
         Assert.Empty(initVideoClip.LifecycleCalls);
         Assert.Equal(["audio-mask"], future.LifecycleCalls);
@@ -57,7 +57,7 @@ public class ArchitectureRuntimeOwnershipTests
             plan,
             [initVideoClip, future]);
 
-        request.CaptureControlNetPreprocessors();
+        request.ExecutePrepared(host => host.CaptureControlNetPreprocessors());
 
         Assert.Equal(["control-net"], initVideoClip.LifecycleCalls);
         Assert.Equal(["control-net"], future.LifecycleCalls);
@@ -135,8 +135,8 @@ public class ArchitectureRuntimeOwnershipTests
 
         request.PrepareRequest();
         request.PrepareRequest();
-        request.CaptureBaseReference();
-        request.CaptureRefinerReference();
+        request.ExecutePrepared(host => host.CaptureBaseReference());
+        request.ExecutePrepared(host => host.CaptureRefinerReference());
 
         Assert.Equal(1, bindingCount);
         Assert.Equal(
@@ -160,7 +160,7 @@ public class ArchitectureRuntimeOwnershipTests
         VideoExecutionPlanContext request = new(plan, () => host);
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            request.CaptureBaseReference());
+            request.ExecutePrepared(host => host.CaptureBaseReference()));
 
         Assert.Contains("preflight must complete first", error.Message);
         Assert.Empty(initVideoClip.LifecycleCalls);
@@ -222,9 +222,9 @@ public class ArchitectureRuntimeOwnershipTests
         request.PrepareRequest();
 
         InvalidOperationException first = Assert.Throws<InvalidOperationException>(() =>
-            request.CaptureBaseReference());
+            request.ExecutePrepared(host => host.CaptureBaseReference()));
         InvalidOperationException repeated = Assert.Throws<InvalidOperationException>(() =>
-            request.CaptureRefinerReference());
+            request.ExecutePrepared(host => host.CaptureRefinerReference()));
 
         Assert.Same(phaseFailure, first);
         Assert.Same(first, repeated);
