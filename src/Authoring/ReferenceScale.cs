@@ -5,13 +5,13 @@ namespace VideoStages.Authoring;
 /// <summary>How much of a reference video's own resolution an authored document may keep.</summary>
 internal static class ReferenceScale
 {
-    public const double Full = 1;
-    public const double Half = 0.5;
-    public const double Quarter = 0.25;
+    internal const double Full = 1;
+    internal const double Half = 0.5;
+    internal const double Quarter = 0.25;
 
     private static readonly double[] Admissible = [Full, Half, Quarter];
 
-    public static double Normalize(double scale) =>
+    internal static double Normalize(double scale) =>
         Admissible.Contains(scale) ? scale : Full;
 
     /// <summary>

@@ -130,7 +130,7 @@ internal sealed record BoundaryPlan(
     /// </summary>
     public bool CarryAudio { get; init; }
 
-    public double ReferenceScale { get; init; } = 1;
+    public double ReferenceScale { get; init; } = Authoring.ReferenceScale.Full;
 
     public bool ReferenceIncludeSoundtrack { get; init; } = true;
 }
