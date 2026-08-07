@@ -1,7 +1,7 @@
 import { deriveArchitectureDiagnostics } from "./architectures/diagnostics";
 import { createCapabilityViewResolver } from "./architectures/policy";
 import type { ArchitectureModelCatalog } from "./architectures/types";
-import { executableClipIndexes } from "./clipSemantics";
+import { activePrefix, executableClipIndexes } from "./clipSemantics";
 import type { Clip } from "./types";
 
 export type AuthoringDiagnosticSeverity = "warning" | "error";
@@ -34,9 +34,7 @@ export const deriveAuthoringDiagnostics = (
     context: AuthoringDiagnosticContext = {},
 ): AuthoringDiagnostic[] => {
     const diagnostics: AuthoringDiagnostic[] = [];
-    const firstSkippedClip = clips.findIndex((clip) => clip.skipped === true);
-    const authoredPrefix =
-        firstSkippedClip < 0 ? clips : clips.slice(0, firstSkippedClip);
+    const authoredPrefix = activePrefix(clips);
     const executable = executableClipIndexes(clips).map((clipIdx) => ({
         clip: clips[clipIdx],
         clipIdx,

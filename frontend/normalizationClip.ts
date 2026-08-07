@@ -14,6 +14,7 @@ import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
 import { AUDIO_SOURCE_NATIVE } from "./audioSource";
 import { normalizeStoredHue, UNASSIGNED_HUE } from "./clipColor";
 import { normalizeClipReferenceScale } from "./clipReferenceAuthoring";
+import { sealSkipSuffix } from "./clipSemantics";
 import {
     CLIP_DURATION_MIN,
     DEFAULT_CLIP_DURATION_SECONDS,
@@ -246,14 +247,7 @@ export const normalizeClip = (
             ),
         );
     }
-    const firstSkippedStage = stages.findIndex(
-        (stage) => stage.skipped === true,
-    );
-    if (firstSkippedStage >= 0) {
-        for (let index = firstSkippedStage; index < stages.length; index++) {
-            stages[index].skipped = true;
-        }
-    }
+    sealSkipSuffix(stages);
     const retake = normalizeRetake(rawClip.retake, duration);
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const refFrameMax = getKnownReferenceFrameMax(

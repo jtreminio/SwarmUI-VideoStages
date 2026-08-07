@@ -11,6 +11,7 @@ import {
     resolveArchitectureRetarget,
 } from "./architectures/conversion/plan";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
+import { applySkipSuffix } from "./clipSemantics";
 import {
     addBefore,
     clone,
@@ -121,14 +122,7 @@ export const reduceDocumentCommand = (
             if (clipIndex === 0 && clip.skipped !== true) {
                 return failure(document, "invalid-operation");
             }
-            const skipped = !clip.skipped;
-            const firstSkipped = document.clips.findIndex(
-                (candidate) => candidate.skipped === true,
-            );
-            const start = skipped ? clipIndex : Math.max(0, firstSkipped);
-            for (let index = start; index < document.clips.length; index++) {
-                document.clips[index].skipped = skipped;
-            }
+            applySkipSuffix(document.clips, clipIndex, !clip.skipped);
             reconcileArchitectureIncomingIcLoraDrives(
                 document.clips,
                 context.generatedEntryMode ?? "text-to-video",
@@ -261,14 +255,7 @@ export const reduceDocumentCommand = (
             if (stageIndex === 0 && stage.skipped !== true) {
                 return failure(document, "invalid-operation");
             }
-            const skipped = !stage.skipped;
-            const firstSkipped = clip.stages.findIndex(
-                (candidate) => candidate.skipped === true,
-            );
-            const start = skipped ? stageIndex : Math.max(0, firstSkipped);
-            for (let index = start; index < clip.stages.length; index++) {
-                clip.stages[index].skipped = skipped;
-            }
+            applySkipSuffix(clip.stages, stageIndex, !stage.skipped);
             if (
                 !reconcileClipArchitectureIdentity(
                     clip,

@@ -301,20 +301,28 @@
   var getVideoStagesHostBridge = () => bridge;
 
   // frontend/clipSemantics.ts
-  var activeStageCount = (clip) => {
-    const firstSkipped = clip.stages.findIndex(
-      (stage) => stage.skipped === true
-    );
-    return firstSkipped < 0 ? clip.stages.length : firstSkipped;
+  var activePrefix = (items) => {
+    const firstSkipped = items.findIndex((item) => item.skipped === true);
+    return firstSkipped < 0 ? [...items] : items.slice(0, firstSkipped);
   };
+  var applySkipSuffix = (items, fromIndex, skipped) => {
+    const firstSkipped = items.findIndex((item) => item.skipped === true);
+    const start = skipped ? fromIndex : Math.max(0, firstSkipped);
+    for (let index = start; index < items.length; index++) {
+      items[index].skipped = skipped;
+    }
+  };
+  var sealSkipSuffix = (items) => {
+    const firstSkipped = items.findIndex((item) => item.skipped === true);
+    if (firstSkipped >= 0) {
+      applySkipSuffix(items, firstSkipped, true);
+    }
+  };
+  var activeStageCount = (clip) => activePrefix(clip.stages).length;
   var isExecutableClip = (clip) => !clip.skipped && (clip.initVideo !== null || activeStageCount(clip) > 0);
-  var executableClipIndexes = (clips) => {
-    const firstSkipped = clips.findIndex((clip) => clip.skipped === true);
-    const prefix = firstSkipped < 0 ? clips : clips.slice(0, firstSkipped);
-    return prefix.flatMap(
-      (clip, index) => isExecutableClip(clip) ? [index] : []
-    );
-  };
+  var executableClipIndexes = (clips) => activePrefix(clips).flatMap(
+    (clip, index) => isExecutableClip(clip) ? [index] : []
+  );
   var executableBoundaries = (clips) => {
     const indexes = executableClipIndexes(clips);
     const boundaries = [];
@@ -3723,14 +3731,7 @@
         )
       );
     }
-    const firstSkippedStage = stages.findIndex(
-      (stage) => stage.skipped === true
-    );
-    if (firstSkippedStage >= 0) {
-      for (let index = firstSkippedStage; index < stages.length; index++) {
-        stages[index].skipped = true;
-      }
-    }
+    sealSkipSuffix(stages);
     const retake = normalizeRetake(rawClip.retake, duration);
     const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
     const refFrameMax = getKnownReferenceFrameMax(
@@ -4226,14 +4227,7 @@
           dims.fps
         )
       );
-      const firstSkippedClip = clips.findIndex(
-        (clip) => clip.skipped === true
-      );
-      if (firstSkippedClip >= 0) {
-        for (let index = firstSkippedClip; index < clips.length; index++) {
-          clips[index].skipped = true;
-        }
-      }
+      sealSkipSuffix(clips);
       return {
         dims,
         clips,
@@ -5147,14 +5141,7 @@
         if (clipIndex === 0 && clip.skipped !== true) {
           return failure(document2, "invalid-operation");
         }
-        const skipped = !clip.skipped;
-        const firstSkipped = document2.clips.findIndex(
-          (candidate) => candidate.skipped === true
-        );
-        const start = skipped ? clipIndex : Math.max(0, firstSkipped);
-        for (let index = start; index < document2.clips.length; index++) {
-          document2.clips[index].skipped = skipped;
-        }
+        applySkipSuffix(document2.clips, clipIndex, !clip.skipped);
         reconcileArchitectureIncomingIcLoraDrives(
           document2.clips,
           context.generatedEntryMode ?? "text-to-video",
@@ -5276,14 +5263,7 @@
         if (stageIndex === 0 && stage.skipped !== true) {
           return failure(document2, "invalid-operation");
         }
-        const skipped = !stage.skipped;
-        const firstSkipped = clip.stages.findIndex(
-          (candidate) => candidate.skipped === true
-        );
-        const start = skipped ? stageIndex : Math.max(0, firstSkipped);
-        for (let index = start; index < clip.stages.length; index++) {
-          clip.stages[index].skipped = skipped;
-        }
+        applySkipSuffix(clip.stages, stageIndex, !stage.skipped);
         if (!reconcileClipArchitectureIdentity(
           clip,
           context.architectureCatalog
@@ -6473,8 +6453,7 @@
   var diagnostic = (severity, code, message, clipIdx) => ({ severity, code, message, clipIdx });
   var deriveAuthoringDiagnostics = (clips, context = {}) => {
     const diagnostics = [];
-    const firstSkippedClip = clips.findIndex((clip) => clip.skipped === true);
-    const authoredPrefix = firstSkippedClip < 0 ? clips : clips.slice(0, firstSkippedClip);
+    const authoredPrefix = activePrefix(clips);
     const executable = executableClipIndexes(clips).map((clipIdx) => ({
       clip: clips[clipIdx],
       clipIdx

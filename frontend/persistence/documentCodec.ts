@@ -1,3 +1,4 @@
+import { sealSkipSuffix } from "../clipSemantics";
 import { ROOT_DIMENSION_MIN } from "../constants";
 import { getVideoStagesHostBridge } from "../host";
 import {
@@ -613,14 +614,7 @@ export const decodeStoredDocument = (
                 dims.fps,
             ),
         );
-        const firstSkippedClip = clips.findIndex(
-            (clip) => clip.skipped === true,
-        );
-        if (firstSkippedClip >= 0) {
-            for (let index = firstSkippedClip; index < clips.length; index++) {
-                clips[index].skipped = true;
-            }
-        }
+        sealSkipSuffix(clips);
         return {
             dims,
             clips,
