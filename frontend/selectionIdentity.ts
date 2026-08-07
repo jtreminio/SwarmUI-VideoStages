@@ -22,11 +22,9 @@ import type { TimelineSelection } from "./selectionTypes";
 import type { Clip, VideoStagesConfig } from "./types";
 
 /**
- * The one delete-then-reselect convention: keep the nearest surviving sibling
- * (the same slot, or the new last one), else fall back to the owning entity.
- * Every removal path routes through this — the detail strip's `commitRemoval`,
- * the timeline's clip delete, the tracks' shift-click deletes, and the
- * degradation branch of anchor resolution.
+ * The delete-then-reselect convention for list-shaped removals: keep the
+ * nearest surviving sibling (the same slot, or the new last one), else fall
+ * back to the owning entity.
  */
 export const selectionAfterRemoval = (
     index: number,
