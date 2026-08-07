@@ -26,41 +26,6 @@ public class WanTimelineMergeWorkflowTests
     /// support models are installed so the same fixture serves the cross-architecture timelines;
     /// each installer replaces the shared VAE handler, so WAN's VAEs are re-added last.
     /// </summary>
-    private sealed class MultiModelFixture : VideoStagesWorkflowFixture
-    {
-        private MultiModelFixture(IReadOnlyList<string> modelFixturePaths, bool withBaseModel)
-            : base(modelFixturePaths, withBaseModel)
-        {
-        }
-
-        public static MultiModelFixture Create(params string[] modelFixturePaths) =>
-            new(modelFixturePaths, withBaseModel: false);
-
-        public static MultiModelFixture CreateWithBaseModel(params string[] modelFixturePaths) =>
-            new(modelFixturePaths, withBaseModel: true);
-
-        public override JObject Post(JObject document, Action<JObject> customize = null) =>
-            base.Post(document, post =>
-            {
-                post["clipvisionmodel"] = TestModelFactory.WanClipVisionFileName;
-                customize?.Invoke(post);
-            });
-
-        protected override void InstallSupportModels()
-        {
-            TestModelFactory.InstallWanSupportModels();
-            TestModelFactory.InstallLtx2SupportModels();
-            InstallModel("VAE", CommonModels.Known["wan21-vae"].FileName);
-            InstallModel("VAE", CommonModels.Known["wan22-vae"].FileName);
-        }
-
-        public override int DefaultSteps => WanWorkflowFixture.Steps;
-
-        public override double DefaultCfgScale => WanWorkflowFixture.CfgScale;
-
-        public override int ExpectedGeneratedFrames => WanWorkflowFixture.GeneratedFrames;
-    }
-
     /// <summary>
     /// Two identical hard-cut clips share one conditioning node — same host image, same prompt, same
     /// length — and differ only in sampler seed. The timeline merge is what makes them two clips,

@@ -42,10 +42,6 @@ public class HostVideoContractTests
             VideoStagesWorkflowFixture.Width,
             VideoStagesWorkflowFixture.Height);
 
-    private static IReadOnlyList<PlanDiagnostic> Diagnostics(WorkflowGenerator generator) =>
-        generator.RequireVideoExecutionPlanContext().Plan.Diagnostics;
-
-
     /// <summary>
     /// A model with no architecture module of its own runs on SwarmUI's stock video graph, twice:
     /// each stage builds its own <c>HunyuanVideo15ImageToVideo</c> conditioning. Stage 0 samples

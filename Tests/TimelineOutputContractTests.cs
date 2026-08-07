@@ -32,11 +32,6 @@ public class TimelineOutputContractTests
     /// <summary>Frames a 0.6s LTX-2 source clip conforms to on the 8k+1 grid at 24 fps.</summary>
     private const int SourceClipFrames = 17;
 
-    /// <summary>A ControlNet guide payload; <c>ValidateParam</c> rejects anything under 10 base64
-    /// characters.</summary>
-    private const string ControlNetVideoPayload =
-        "data:video/mp4;base64,AAAAAAAAAAAAAAAAAAAAAA==";
-
     /// <summary>
     /// The decode that reads a stage's sampled video latent. A multi-stage clip grows a second,
     /// identical decode of the same latent for the next stage's guide — core does not dedup
@@ -72,11 +67,6 @@ public class TimelineOutputContractTests
             expectedFrames,
             VideoStagesWorkflowFixture.Width,
             VideoStagesWorkflowFixture.Height);
-
-    private static IReadOnlyList<PlanDiagnostic> Diagnostics(WorkflowGenerator generator) =>
-        generator.RequireVideoExecutionPlanContext().Plan.Diagnostics;
-
-    // ---- timeline output plumbing -------------------------------------------------------
 
     /// <summary>
     /// One authored stage produces exactly one video pass alongside core's base pass, sampling the

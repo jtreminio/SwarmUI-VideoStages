@@ -576,7 +576,6 @@ public class MiniMaxArchitectureTests
                 diagnostic.Code));
     }
 
-
     private static IReadOnlyList<PlanDiagnostic> CompileDiagnostics(
         TestModelBundle models,
         params JObject[] stages) =>

@@ -7,6 +7,13 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
+/// <summary>
+/// The POST shape decides the topology every Wan contract test reads. An image-to-video request
+/// keeps core's base image pass and feeds the timeline from it, while the extension prunes core's
+/// own WAN video chain — so the stage sampler is the only video sampler left, and reachability
+/// upstream from it proves nothing about stage membership. WAN checkpoints live under
+/// <c>diffusion_models</c>, so a stage's model branch ends at a <c>UNETLoader</c>.
+/// </summary>
 internal sealed class WanWorkflowFixture : VideoStagesWorkflowFixture
 {
     public const string Wan22I2v14bFixturePath =
@@ -92,6 +99,10 @@ internal sealed class WanWorkflowFixture : VideoStagesWorkflowFixture
 
     public const string EndImagePayload = $"data:image/png;base64,{EndImageBase64}";
 
+    /// <summary>
+    /// A clip that refines uploaded footage instead of generating from noise. Stage 0's default
+    /// <c>Generated</c> reference is stripped, because a source clip conditions on its own footage.
+    /// </summary>
     public static JObject SourceClip(params JObject[] stages) =>
         SourceClip(withFileName: true, stages);
 

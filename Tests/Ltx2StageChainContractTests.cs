@@ -680,7 +680,6 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-
     private static void AssertNoStageFeedsItself(WorkflowBridge bridge)
     {
         Assert.All(bridge.Graph.NodesOfType<SwarmKSamplerNode>(), sampler => Assert.False(
@@ -728,7 +727,6 @@ public class Ltx2StageChainContractTests
         live.AssertAllLive(track, length, StageSampler(bridge, stageCount - 1));
         AssertShippable(bridge, workflow, live);
     }
-
 
     [Fact]
     public async Task Native_ltx_stage_can_use_base2edit_edit_stage_as_clip_ref_image()

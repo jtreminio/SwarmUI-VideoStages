@@ -466,10 +466,11 @@ public class ArchitectureFoundationTests
             RootEnvironment.FromSpec(spec),
             ArchitecturePlanResolver.Resolve(spec, registry));
 
-        StagePlan plannedStage = Assert.Single(Assert.Single(plan.Clips).Stages);
+        ClipPlan plannedClip = Assert.Single(plan.Clips);
+        Assert.NotNull(plannedClip.ArchitecturePayload);
         Assert.Equal(
             ["ltx-owned-option.safetensors"],
-            plannedStage.Core.Loras.Select(lora => lora.Name).ToArray());
+            Assert.Single(plannedClip.Stages).Core.Loras.Select(lora => lora.Name).ToArray());
         Assert.Equal(1, registry.CompileCounts[new ArchitectureId("fake")]);
     }
 

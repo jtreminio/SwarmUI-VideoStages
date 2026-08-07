@@ -135,25 +135,10 @@ export const requireEl = (root: ParentNode, selector: string): HTMLElement => {
     return found;
 };
 
-/** jsdom lays nothing out, so a gesture test has to state the geometry it drags over. */
-export const stubRect = (
-    el: HTMLElement,
-    rect: { left: number; width: number; top?: number; height?: number },
-): void => {
-    const { left, width, top = 0, height = 24 } = rect;
-    el.getBoundingClientRect = (() => ({
-        left,
-        width,
-        top,
-        height,
-        right: left + width,
-        bottom: top + height,
-        x: left,
-        y: top,
-        toJSON: () => ({}),
-    })) as HTMLElement["getBoundingClientRect"];
-};
-
+/**
+ * A gesture event. `clientY` picks which lane the router hits, so a track test states the row it
+ * means; the default is the clip-region row.
+ */
 export const mouse = (
     type: string,
     clientX: number,

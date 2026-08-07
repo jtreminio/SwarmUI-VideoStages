@@ -23,41 +23,6 @@ public class WanLoraWorkflowTests
     /// support models are installed so the same fixture serves the cross-architecture timelines;
     /// each installer replaces the shared VAE handler, so WAN's VAEs are re-added last.
     /// </summary>
-    private sealed class MultiModelFixture : VideoStagesWorkflowFixture
-    {
-        private MultiModelFixture(IReadOnlyList<string> modelFixturePaths, bool withBaseModel)
-            : base(modelFixturePaths, withBaseModel)
-        {
-        }
-
-        public static MultiModelFixture Create(params string[] modelFixturePaths) =>
-            new(modelFixturePaths, withBaseModel: false);
-
-        public static MultiModelFixture CreateWithBaseModel(params string[] modelFixturePaths) =>
-            new(modelFixturePaths, withBaseModel: true);
-
-        public override JObject Post(JObject document, Action<JObject> customize = null) =>
-            base.Post(document, post =>
-            {
-                post["clipvisionmodel"] = TestModelFactory.WanClipVisionFileName;
-                customize?.Invoke(post);
-            });
-
-        protected override void InstallSupportModels()
-        {
-            TestModelFactory.InstallWanSupportModels();
-            TestModelFactory.InstallLtx2SupportModels();
-            InstallModel("VAE", CommonModels.Known["wan21-vae"].FileName);
-            InstallModel("VAE", CommonModels.Known["wan22-vae"].FileName);
-        }
-
-        public override int DefaultSteps => WanWorkflowFixture.Steps;
-
-        public override double DefaultCfgScale => WanWorkflowFixture.CfgScale;
-
-        public override int ExpectedGeneratedFrames => WanWorkflowFixture.GeneratedFrames;
-    }
-
     /// <summary>A clip-level LoRA reaches the stage generated off that clip's source.</summary>
     [Fact]
     public async Task A_source_clip_lora_applies_to_its_generating_stage()
@@ -88,8 +53,6 @@ public class WanLoraWorkflowTests
         live.AssertAllLive(window, lora, stage);
         AssertShippable(bridge, workflow, live);
     }
-
-    // ---- LoRAs --------------------------------------------------------------------------
 
     /// <summary>
     /// WAN's compat class does not target the text encoder, so both prompt-tagged and stage

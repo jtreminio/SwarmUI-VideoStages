@@ -295,10 +295,10 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         linking.reapplySelection(body, 3);
 
         // Grab region 0 (centre x=50), drag right past region 1's midpoint (x=220 → gap index 2), release.
-        region(body, 0).dispatchEvent(mouse("mousedown", 50));
-        document.dispatchEvent(mouse("mousemove", 220));
+        region(body, 0).dispatchEvent(mouse("mousedown", 50, { clientY: 90 }));
+        document.dispatchEvent(mouse("mousemove", 220, { clientY: 90 }));
         expect(body.querySelectorAll(".vst-drop-indicator")).toHaveLength(1);
-        document.dispatchEvent(mouse("mouseup", 220));
+        document.dispatchEvent(mouse("mouseup", 220, { clientY: 90 }));
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
         expect(
@@ -321,8 +321,8 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         linking.attach(body, router);
         linking.reapplySelection(body, 3);
 
-        region(body, 0).dispatchEvent(mouse("mousedown", 50));
-        document.dispatchEvent(mouse("mouseup", 50));
+        region(body, 0).dispatchEvent(mouse("mousedown", 50, { clientY: 90 }));
+        document.dispatchEvent(mouse("mouseup", 50, { clientY: 90 }));
         region(body, 0).dispatchEvent(
             new MouseEvent("click", { bubbles: true }),
         );
@@ -348,9 +348,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         // Grab region 0's right grip, drag from x=100 to x=176 (176px / 44px/s = 4s at 24fps).
         region(body, 0)
             .querySelector<HTMLElement>(".vst-region-resize")
-            ?.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 176));
-        document.dispatchEvent(mouse("mouseup", 176));
+            ?.dispatchEvent(mouse("mousedown", 100, { clientY: 90 }));
+        document.dispatchEvent(mouse("mousemove", 176, { clientY: 90 }));
+        document.dispatchEvent(mouse("mouseup", 176, { clientY: 90 }));
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
         const clips = firstSavedClips<Clip[]>(saveSpy);
@@ -373,9 +373,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
         region(body, 0)
             .querySelector<HTMLElement>(".vst-region-resize")
-            ?.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 176));
-        document.dispatchEvent(mouse("mouseup", 176));
+            ?.dispatchEvent(mouse("mousedown", 100, { clientY: 90 }));
+        document.dispatchEvent(mouse("mousemove", 176, { clientY: 90 }));
+        document.dispatchEvent(mouse("mouseup", 176, { clientY: 90 }));
 
         expect(firstSavedClips<Clip[]>(saveSpy)[0].duration).toBe(4.5);
     });
@@ -403,9 +403,9 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
         region(body, 0)
             .querySelector<HTMLElement>(".vst-region-resize")
-            ?.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 56));
-        document.dispatchEvent(mouse("mouseup", 56));
+            ?.dispatchEvent(mouse("mousedown", 100, { clientY: 90 }));
+        document.dispatchEvent(mouse("mousemove", 56, { clientY: 90 }));
+        document.dispatchEvent(mouse("mouseup", 56, { clientY: 90 }));
 
         const clips = firstSavedClips<Clip[]>(saveSpy);
         expect(persistence.getState().fps).toBe(16);

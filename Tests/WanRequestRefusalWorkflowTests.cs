@@ -26,41 +26,6 @@ public class WanRequestRefusalWorkflowTests
     /// support models are installed so the same fixture serves the cross-architecture timelines;
     /// each installer replaces the shared VAE handler, so WAN's VAEs are re-added last.
     /// </summary>
-    private sealed class MultiModelFixture : VideoStagesWorkflowFixture
-    {
-        private MultiModelFixture(IReadOnlyList<string> modelFixturePaths, bool withBaseModel)
-            : base(modelFixturePaths, withBaseModel)
-        {
-        }
-
-        public static MultiModelFixture Create(params string[] modelFixturePaths) =>
-            new(modelFixturePaths, withBaseModel: false);
-
-        public static MultiModelFixture CreateWithBaseModel(params string[] modelFixturePaths) =>
-            new(modelFixturePaths, withBaseModel: true);
-
-        public override JObject Post(JObject document, Action<JObject> customize = null) =>
-            base.Post(document, post =>
-            {
-                post["clipvisionmodel"] = TestModelFactory.WanClipVisionFileName;
-                customize?.Invoke(post);
-            });
-
-        protected override void InstallSupportModels()
-        {
-            TestModelFactory.InstallWanSupportModels();
-            TestModelFactory.InstallLtx2SupportModels();
-            InstallModel("VAE", CommonModels.Known["wan21-vae"].FileName);
-            InstallModel("VAE", CommonModels.Known["wan22-vae"].FileName);
-        }
-
-        public override int DefaultSteps => WanWorkflowFixture.Steps;
-
-        public override double DefaultCfgScale => WanWorkflowFixture.CfgScale;
-
-        public override int ExpectedGeneratedFrames => WanWorkflowFixture.GeneratedFrames;
-    }
-
     /// <summary>
     /// A later stage's Control is a fraction of its own step count, and 0.9 over 8 steps floors to
     /// start step 0 — a refining pass that would silently regenerate everything. The request is
@@ -113,7 +78,7 @@ public class WanRequestRefusalWorkflowTests
     /// ending is the footage's.
     /// <para>
     /// The end image is left on the request in every case — it is ignored, not consumed — and
-    /// <see cref="The_global_end_image_belongs_to_the_clips_terminal_generating_stage"/> is the
+    /// <see cref="WanFrameReferenceWorkflowTests.The_global_end_image_belongs_to_the_clips_terminal_generating_stage"/> is the
     /// control that it does reach the graph when it can.
     /// </para>
     /// <para>

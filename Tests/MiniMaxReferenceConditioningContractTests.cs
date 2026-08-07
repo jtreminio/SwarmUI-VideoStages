@@ -493,7 +493,6 @@ public class MiniMaxReferenceConditioningContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-
     private static WorkflowGenerator.WorkflowGenStep SeedControlNetReferenceSource(
         int index) =>
         new(g =>
@@ -518,6 +517,4 @@ public class MiniMaxReferenceConditioningContractTests
             apply.Image.ConnectTo(components.Images);
             bridge.AddNode(apply, "921");
         }, Constants.WorkflowStepPriority.ControlNetPreprocessors - 0.01);
-
-
 }

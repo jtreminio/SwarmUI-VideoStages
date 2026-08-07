@@ -3,8 +3,8 @@ using VideoStages.Authoring;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// The one place a test constructs an authored spec record. Every field is a named parameter, so
-/// adding a record component here does not touch a dozen positional call sites.
+/// The shared owner of the authored spec builders. Every field is a named parameter, so adding a
+/// record component here does not touch a dozen positional call sites.
 /// <para>
 /// Test files keep their own thin wrappers where their defaults genuinely differ (steps, CFG, the
 /// model name a family expects); those wrappers call through here rather than the constructor.
@@ -84,12 +84,4 @@ internal static class SpecFixtures
         string fileName = "source.mp4",
         double startSeconds = 0) =>
         Clip(id, stages, frames, initVideo: new InitVideoSpec(data, fileName, startSeconds));
-
-    internal static TimelineSpec Spec(
-        IReadOnlyList<ClipSpec> clips,
-        bool isTextToVideo = false,
-        int width = 512,
-        int height = 512,
-        int fps = 24) =>
-        new(width, height, fps, isTextToVideo, clips);
 }

@@ -26,41 +26,6 @@ public class WanSourceClipWorkflowTests
     /// support models are installed so the same fixture serves the cross-architecture timelines;
     /// each installer replaces the shared VAE handler, so WAN's VAEs are re-added last.
     /// </summary>
-    private sealed class MultiModelFixture : VideoStagesWorkflowFixture
-    {
-        private MultiModelFixture(IReadOnlyList<string> modelFixturePaths, bool withBaseModel)
-            : base(modelFixturePaths, withBaseModel)
-        {
-        }
-
-        public static MultiModelFixture Create(params string[] modelFixturePaths) =>
-            new(modelFixturePaths, withBaseModel: false);
-
-        public static MultiModelFixture CreateWithBaseModel(params string[] modelFixturePaths) =>
-            new(modelFixturePaths, withBaseModel: true);
-
-        public override JObject Post(JObject document, Action<JObject> customize = null) =>
-            base.Post(document, post =>
-            {
-                post["clipvisionmodel"] = TestModelFactory.WanClipVisionFileName;
-                customize?.Invoke(post);
-            });
-
-        protected override void InstallSupportModels()
-        {
-            TestModelFactory.InstallWanSupportModels();
-            TestModelFactory.InstallLtx2SupportModels();
-            InstallModel("VAE", CommonModels.Known["wan21-vae"].FileName);
-            InstallModel("VAE", CommonModels.Known["wan22-vae"].FileName);
-        }
-
-        public override int DefaultSteps => WanWorkflowFixture.Steps;
-
-        public override double DefaultCfgScale => WanWorkflowFixture.CfgScale;
-
-        public override int ExpectedGeneratedFrames => WanWorkflowFixture.GeneratedFrames;
-    }
-
     // ---- source clips -------------------------------------------------------------------
 
     /// <summary>
@@ -282,7 +247,7 @@ public class WanSourceClipWorkflowTests
     /// <summary>
     /// A source clip whose only stage is a passthrough contributes no sampler of its own: the
     /// conformed, trimmed footage is the output. Its window is 16 frames rather than the
-    /// <see cref="SourceClipFrames"/> a generating stage takes — nothing generates, so WAN's 4k+1
+    /// <see cref="WanWorkflowFixture.SourceClipFrames"/> a generating stage takes — nothing generates, so WAN's 4k+1
     /// grid does not apply.
     /// </summary>
     [Fact]
