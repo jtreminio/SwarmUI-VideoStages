@@ -447,8 +447,10 @@ public class ArchitectureFoundationTests
             architecture.Clips[0].StageModels[0].ModelProfileId.Value);
     }
 
+    /// <summary>The lora list here is <c>FakeModule</c>'s own output, so this pins the
+    /// pass-through, not lora planning — that is covered by PlanningCompilerComponentTests.</summary>
     [Fact]
-    public void Common_projection_keeps_stage_loras_for_every_architecture()
+    public void Common_projection_passes_the_module_stage_payload_through_to_Core()
     {
         FakeRegistry registry = new();
         StageSpec stage = Stage(10, "fake-model") with
