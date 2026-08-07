@@ -2,10 +2,8 @@ using System.Globalization;
 
 namespace VideoStages.Authoring;
 
-/// <summary>How much of a reference video's own resolution an authored document may keep. The
-/// model fits every reference onto its own aligned canvas, so a smaller input just costs fewer
-/// reference tokens.</summary>
-public static class ReferenceScale
+/// <summary>How much of a reference video's own resolution an authored document may keep.</summary>
+internal static class ReferenceScale
 {
     public const double Full = 1;
     public const double Half = 0.5;

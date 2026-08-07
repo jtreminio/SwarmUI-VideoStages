@@ -234,7 +234,6 @@ internal static class RequestReader
                 "modelProfileId")?.Trim().ToLowerInvariant(),
             AuthoredStages = ProjectAuthoredStages(rawStages),
         };
-
     }
 
     private static List<StageSpec> ReadStages(
