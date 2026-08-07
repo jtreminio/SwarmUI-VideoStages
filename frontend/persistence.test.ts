@@ -1047,7 +1047,14 @@ describe("persistence", () => {
                 .spyOn(console, "error")
                 .mockImplementation(() => {});
             jest.spyOn(store, "dispatch").mockImplementation(
-                (command, origin, notifyDomChange, expectedRevision, hint) => {
+                (
+                    command,
+                    origin,
+                    notifyDomChange,
+                    expectedRevision,
+                    hint,
+                    context,
+                ) => {
                     const external = JSON.parse(dataInput().value) as {
                         clips: { duration: number }[];
                     };
@@ -1059,6 +1066,7 @@ describe("persistence", () => {
                         notifyDomChange,
                         expectedRevision,
                         hint,
+                        context,
                     );
                 },
             );

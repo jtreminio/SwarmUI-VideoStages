@@ -5427,10 +5427,7 @@
         };
       }
       ensureAuthoringDocumentIdentity(source);
-      const reduced = reduceDocumentCommand(source, command, {
-        architectureCatalog: context ? context.architectureCatalog : deps.architectureCatalog?.() ?? null,
-        generatedEntryMode: context?.generatedEntryMode ?? deps.generatedEntryMode?.() ?? "text-to-video"
-      });
+      const reduced = reduceDocumentCommand(source, command, context);
       if (!reduced.applied) {
         return {
           applied: false,
@@ -5847,11 +5844,7 @@
   var dataCarrierNeedsCanonicalIdRepair = () => storedDocumentNeedsCanonicalIdRepair(readDataParam2());
 
   // frontend/persistence/repository.ts
-  var store = createTimelineStore({
-    architectureCatalog: () => getRootDefaults().modelCatalog,
-    generatedEntryMode: getRootGeneratedEntryMode,
-    ...timelineCarrierAdapter
-  });
+  var store = createTimelineStore(timelineCarrierAdapter);
   var getTimelineStore = () => store;
   var getState = () => store.getState();
   var throwSaveFailure = (phase, error) => {

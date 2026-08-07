@@ -1,5 +1,3 @@
-import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
-import type { ArchitectureModelCatalog } from "./architectures/types";
 import { videoStagesDebugLog } from "./debugLog";
 import {
     type CommandFailure,
@@ -60,13 +58,6 @@ export interface TimelineDispatchResult {
  */
 export interface StoreDeps {
     /**
-     * Current backend-owned architecture catalog. Architecture-sensitive
-     * commands fail closed when it is unavailable.
-     */
-    architectureCatalog?(): ArchitectureModelCatalog | null;
-    /** Current host input mode used by generated clip roots. */
-    generatedEntryMode?(): GeneratedEntryMode;
-    /**
      * Change token covering everything a cached parse depends on: both
      * carrier values plus the inherited-dims signature (inherited width/
      * height/fps resolve from live core inputs at parse time).
@@ -104,9 +95,9 @@ export interface TimelineStore {
         command: DocumentCommand,
         origin: UpdateOrigin,
         notifyDomChange: boolean,
-        expectedRevision?: number,
-        hint?: UpdateMeta["hint"],
-        context?: DocumentCommandContext,
+        expectedRevision: number | undefined,
+        hint: UpdateMeta["hint"] | undefined,
+        context: DocumentCommandContext,
     ): TimelineDispatchResult;
     /**
      * Absorb a carrier change made by someone else (host undo, paste, prompt
@@ -235,9 +226,9 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         command: DocumentCommand,
         origin: UpdateOrigin,
         notifyDomChange: boolean,
-        expectedRevision?: number,
-        hint?: UpdateMeta["hint"],
-        context?: DocumentCommandContext,
+        expectedRevision: number | undefined,
+        hint: UpdateMeta["hint"] | undefined,
+        context: DocumentCommandContext,
     ): TimelineDispatchResult => {
         // This is the dispatch's only pre-reduction carrier revalidation.
         const source = structuredClone(revalidate());
@@ -253,15 +244,7 @@ export const createTimelineStore = (deps: StoreDeps): TimelineStore => {
         }
 
         ensureAuthoringDocumentIdentity(source);
-        const reduced = reduceDocumentCommand(source, command, {
-            architectureCatalog: context
-                ? context.architectureCatalog
-                : (deps.architectureCatalog?.() ?? null),
-            generatedEntryMode:
-                context?.generatedEntryMode ??
-                deps.generatedEntryMode?.() ??
-                "text-to-video",
-        });
+        const reduced = reduceDocumentCommand(source, command, context);
         if (!reduced.applied) {
             return {
                 applied: false,

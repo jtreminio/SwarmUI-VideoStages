@@ -7,17 +7,13 @@ import { diffDocuments } from "../documentDiff";
 import { snapExplicitDocumentDimensions } from "../documentDimensionSnap";
 import { getVideoStagesHostBridge } from "../host";
 import { ensureAuthoringDocumentIdentity } from "../identity";
-import { getRootDefaults } from "../rootDefaults";
 import {
     createTimelineStore,
     type TimelineDispatchResult,
     type TimelineStore,
     type UpdateOrigin,
 } from "../store";
-import {
-    getRootGeneratedEntryMode,
-    isVideoStagesEnabled,
-} from "../swarmInputs";
+import { isVideoStagesEnabled } from "../swarmInputs";
 import type { Clip, VideoStagesConfig } from "../types";
 import {
     dataCarrierNeedsCanonicalIdRepair,
@@ -37,11 +33,7 @@ export interface SaveStateOptions {
 
 export type DispatchDocumentCommandOptions = SaveStateOptions;
 
-const store = createTimelineStore({
-    architectureCatalog: () => getRootDefaults().modelCatalog,
-    generatedEntryMode: getRootGeneratedEntryMode,
-    ...timelineCarrierAdapter,
-});
+const store = createTimelineStore(timelineCarrierAdapter);
 
 export const getTimelineStore = (): TimelineStore => store;
 
