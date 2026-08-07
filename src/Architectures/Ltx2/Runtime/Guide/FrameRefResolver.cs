@@ -64,8 +64,7 @@ internal sealed class FrameRefResolver(
     {
         foreach (ResolvedFrameRef frameRef in frameRefs)
         {
-            if (frameRef.Reference.FrameOrigin == FrameRefEdge.Start
-                && frameRef.Reference.Frame == 1)
+            if (frameRef.Reference.IsOpeningFrame)
             {
                 return frameRef;
             }

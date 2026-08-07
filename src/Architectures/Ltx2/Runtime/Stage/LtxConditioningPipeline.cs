@@ -60,7 +60,7 @@ internal sealed class LtxConditioningPipeline(
     {
         foreach (ResolvedFrameRef frameRef in frameRefs)
         {
-            if (!UseLtxvInplaceForRef(frameRef.Reference) || frameRef.Strength <= 0)
+            if (!frameRef.Reference.IsOpeningFrame || frameRef.Strength <= 0)
             {
                 continue;
             }
@@ -147,7 +147,7 @@ internal sealed class LtxConditioningPipeline(
     {
         foreach (ResolvedFrameRef frameRef in frameRefs)
         {
-            if (UseLtxvInplaceForRef(frameRef.Reference) || frameRef.Strength <= 0)
+            if (frameRef.Reference.IsOpeningFrame || frameRef.Strength <= 0)
             {
                 continue;
             }
@@ -230,10 +230,6 @@ internal sealed class LtxConditioningPipeline(
         JArray guideImagePath,
         WGNodeData targetMedia) =>
         guidePreprocessReuse.ResolvePreprocessedGuidePath(guideImagePath, targetMedia);
-
-    private static bool UseLtxvInplaceForRef(FrameRefPlan reference) =>
-        reference.FrameOrigin == FrameRefEdge.Start
-        && reference.Frame == 1;
 
     private static int ComputeLtxvAddGuideFrameIndex(FrameRefPlan reference) =>
         reference.FrameOrigin == FrameRefEdge.End

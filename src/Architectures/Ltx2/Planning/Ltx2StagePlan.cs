@@ -47,8 +47,7 @@ internal static class Ltx2StagePlanExtensions
 
     /// <summary>The stage authors its own opening frame, which outranks any implicit frame-1 guide.</summary>
     internal static bool HasExplicitFirstFrameReference(this StagePlan stage) =>
-        stage.RequireLtx2Payload().FrameReferences.Any(reference =>
-            reference.FrameOrigin == FrameRefEdge.Start && reference.Frame == 1);
+        stage.RequireLtx2Payload().FrameReferences.Any(reference => reference.IsOpeningFrame);
 
     internal static Ltx2ClipPayload RequireLtx2Payload(this ClipPlan clip)
     {
@@ -168,7 +167,13 @@ internal sealed record FrameRefPlan(
     FrameRefEdge FrameOrigin,
     double Strength,
     string UploadFileName,
-    string InlineData);
+    string InlineData)
+{
+    /// <summary>
+    /// The clip's very first frame, which LTX merges in place instead of adding as a guide.
+    /// </summary>
+    internal bool IsOpeningFrame => FrameOrigin == FrameRefEdge.Start && Frame == 1;
+}
 
 internal enum StageAudioAction
 {
