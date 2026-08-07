@@ -5042,8 +5042,16 @@ describe("createTimelineDetailStrip", () => {
             }
         });
 
-        it("contains Punked's open-group minimum width inside the detail dock", () => {
+        it("clears the open-group minimum width only inside the detail dock", () => {
             injectHostCss("punked.css");
+            const outsideDock = document.createElement("div");
+            outsideDock.className = "input-group input-group-open";
+            document.body.appendChild(outsideDock);
+            // Punked is the theme that forces open groups wider than the dock;
+            // without a floor to override, this test proves nothing.
+            const hostMinWidth = computed(outsideDock).minWidth;
+            expect(Number.parseFloat(hostMinWidth)).toBeGreaterThan(0);
+
             injectDockCss();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
 
@@ -5056,11 +5064,7 @@ describe("createTimelineDetailStrip", () => {
                     0,
                 );
             }
-
-            const outsideDock = document.createElement("div");
-            outsideDock.className = "input-group input-group-open";
-            document.body.appendChild(outsideDock);
-            expect(computed(outsideDock).minWidth).toBe("280px");
+            expect(computed(outsideDock).minWidth).toBe(hostMinWidth);
         });
 
         it("(d) wraps prompt textareas in the host's wide text-field row", () => {
