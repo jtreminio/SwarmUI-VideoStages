@@ -1129,10 +1129,6 @@
 .vst-minor-resize-r {
     right: -1px;
 }
-/* Drag-to-create ghosts share one look across the window tracks. */
-.vst-minor-ghost,
-.vst-retake-ghost,
-
 /* Retake mini-lane under each clip region — same idiom as the relay lane:
    click empty space to add, drag the window to move/resize. */
 .vst-retake-lane {
@@ -1248,6 +1244,9 @@
         color-mix(in srgb, var(--vst-hairline) 60%, transparent);
     border: 1px dashed color-mix(in srgb, var(--emphasis) 25%, transparent);
 }
+/* Drag-to-create ghosts share one look across every window track. */
+.vst-minor-ghost,
+.vst-retake-ghost,
 .vst-audio-span-ghost {
     position: absolute;
     top: 2px;
