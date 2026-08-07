@@ -294,10 +294,10 @@ The ComfyTyped surface has two different meanings of “retention”:
 For code-generation pruning, `comfytyped.keep.json` retains the
 `custom_nodes.ComfyUI-LTXVideo` module and the `SwarmFrameImage` class type.
 Generation expands those facts into `src/Generated/PruneManifest.g.cs`.
-The current generated directory contains 83 node wrappers: 78 are in
-`PruneManifest.AlwaysKeep`; the remaining five are extension-owned Swarm nodes
-directly referenced by production C# and are therefore discovered by the prune
-source scan:
+Every node wrapper in the generated directory is retained one of two ways: it
+is in `PruneManifest.AlwaysKeep`, or it is one of the five extension-owned
+Swarm nodes directly referenced by production C# and therefore discovered by
+the prune source scan:
 
 - `SwarmAudioLengthToFramesNode`;
 - `SwarmFrameWindowNode`;
@@ -305,8 +305,10 @@ source scan:
 - `SwarmRampMaskBatchNode`; and
 - `SwarmSetAudioMaskWindowsNode`.
 
-`GeneratedBindingRetentionTests` makes that 78-plus-5 classification exhaustive
-and verifies that every manifest entry names an existing unique generated node.
+`GeneratedBindingRetentionTests` owns that split: it makes the two-way
+classification exhaustive and verifies that every manifest entry names an
+existing unique generated node. It is the count, so this doc does not restate
+one.
 
 At runtime, `VideoStagesExtension.OnInit` calls both
 `ComfyTyped.Generated.NodeRegistrations.EnsureRegistered()` and
