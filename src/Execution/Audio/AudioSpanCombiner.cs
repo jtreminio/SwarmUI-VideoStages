@@ -12,8 +12,6 @@ namespace VideoStages.Execution.Audio;
 /// <summary>Combines one clip's base and overlay audio before the cross-clip merge.</summary>
 internal sealed class AudioSpanCombiner(WorkflowGenerator g)
 {
-    private const long SilenceSampleRate = 44100;
-    private const long SilenceChannels = 2;
     private const string MergeMethodAdd = "add";
     private const string ConcatDirectionAfter = "after";
 
@@ -198,9 +196,10 @@ internal sealed class AudioSpanCombiner(WorkflowGenerator g)
             StartIndex: 0.0,
             Duration: audioDuration));
         trim.Audio.ConnectTo(ensure.AUDIO);
+        INodeOutput silence = Silence(bridge, delaySeconds);
         AudioConcatNode concat = bridge.AddNode(
             new AudioConcatNode().With(Direction: ConcatDirectionAfter));
-        concat.Audio1.ConnectToUntyped(Silence(bridge, delaySeconds));
+        concat.Audio1.ConnectToUntyped(silence);
         concat.Audio2.ConnectTo(trim.AUDIO);
         return new WGNodeData(
             WorkflowBridge.ToPath(concat.AUDIO),
@@ -234,10 +233,8 @@ internal sealed class AudioSpanCombiner(WorkflowGenerator g)
     /// <summary>The extension's one silent-audio bed; every silence in the graph comes from here.</summary>
     internal static INodeOutput Silence(WorkflowBridge bridge, double durationSeconds)
     {
-        EmptyAudioNode empty = bridge.AddNode(new EmptyAudioNode()).With(
-            Duration: durationSeconds,
-            SampleRate: SilenceSampleRate,
-            Channels: SilenceChannels);
+        // Sample rate and channel count are the node's own defaults.
+        EmptyAudioNode empty = bridge.AddNode(new EmptyAudioNode()).With(Duration: durationSeconds);
         return empty.AUDIO;
     }
 

@@ -10,6 +10,12 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
 {
     internal static ArchitectureId ArchitectureId { get; } = new("ltx2");
 
+    /// <summary>
+    /// The grid an authored frame count snaps to, which for LTX-2 is also the VAE's temporal
+    /// downscale — so pixel↔latent index conversions divide by it. Matches
+    /// <c>ltx_director_guide.py</c>'s <c>downscale_index_formula[0]</c>. The two meanings coincide
+    /// only here: MiniMax's snap grid is 17 and says nothing about its VAE.
+    /// </summary>
     internal const int FrameGrid = 8;
     internal static ModelProfileId ProfileId { get; } = new("ltx-2.3");
 

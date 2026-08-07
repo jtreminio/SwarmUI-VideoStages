@@ -50,6 +50,7 @@ internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
 
         (int startPixel, int endPixel) = RetakeWindowSpec.ClampFrameWindow(startFrame, lengthFrames, safePixels);
 
+        // Floor the inclusive start so a partially-covered latent frame still regenerates.
         int lStart = Math.Clamp(startPixel / Ltx2ArchitectureModule.FrameGrid, 0, latentLength);
         // Ceil-divide the exclusive end so any pixel frame that touches a latent frame regenerates it.
         int lEnd = Math.Clamp(
