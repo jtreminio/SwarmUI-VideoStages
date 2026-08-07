@@ -126,7 +126,9 @@ internal sealed class LtxConditioningPipeline(
                 continue;
             }
 
-            JArray preprocessed = ResolvePreprocessedGuidePath(frameRef.Image.Path, g.CurrentMedia);
+            JArray preprocessed = guidePreprocessReuse.ResolvePreprocessedGuidePath(
+                frameRef.Image.Path,
+                g.CurrentMedia);
             int frameIdx = ComputeLtxvAddGuideFrameIndex(frameRef.Reference);
 
             using WorkflowBridge bridge = BridgeSync.For(g);
@@ -189,7 +191,8 @@ internal sealed class LtxConditioningPipeline(
         JArray guideImagePath,
         double strength)
     {
-        JArray preprocessed = ResolvePreprocessedGuidePath(guideImagePath, target);
+        JArray preprocessed =
+            guidePreprocessReuse.ResolvePreprocessedGuidePath(guideImagePath, target);
         string nodeId = CreateLtxvImgToVideoInplaceNode(preprocessed, target.Path, strength);
         return target.WithPath([nodeId, 0], WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat);
     }
@@ -211,11 +214,6 @@ internal sealed class LtxConditioningPipeline(
         node.LatentInput.ConnectFromPath(bridge, latentPath);
         return node.Id;
     }
-
-    private JArray ResolvePreprocessedGuidePath(
-        JArray guideImagePath,
-        WGNodeData targetMedia) =>
-        guidePreprocessReuse.ResolvePreprocessedGuidePath(guideImagePath, targetMedia);
 
     private static int ComputeLtxvAddGuideFrameIndex(FrameRefPlan reference) =>
         reference.FrameOrigin == FrameRefEdge.End
