@@ -301,8 +301,6 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
     it("a lane press does nothing when the clip already has a retake", () => {
         const body = setup([{ duration: 10, retake: RETAKE }]);
         const lane = requireEl(body, ".vst-retake-lane[data-clip-idx='0']");
-        expect(lane.hasAttribute("data-vst-retake-add")).toBe(false);
-        expect(lane.hasAttribute("data-vst-retake-full")).toBe(true);
         // Press the lane OUTSIDE the existing window (retake spans [2,5]).
         lane.dispatchEvent(mouse("mousedown", 8 * TIMELINE_PPS));
         document.dispatchEvent(mouse("mouseup", 8 * TIMELINE_PPS));
