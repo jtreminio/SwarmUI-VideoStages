@@ -1,4 +1,4 @@
-import type { GeneratedEntryMode } from "./architectures/conversion/entryModePolicy";
+import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
 import type { ArchitectureModelCatalog } from "./architectures/types";
 import { videoStagesDebugLog } from "./debugLog";
 import {

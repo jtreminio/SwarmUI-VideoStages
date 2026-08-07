@@ -19,3 +19,13 @@ export type GeneratedArchitectureFeature =
 
 /** The entry modes a generated clip can take; a sourced clip is always init-video. */
 export type GeneratedEntryMode = "text-to-video" | "image-to-video";
+
+/** Every entry mode the serialized catalog can carry, in declaration order. */
+export const ENTRY_MODES = [
+    "text-to-video",
+    "image-to-video",
+    "init-video",
+] as const;
+
+/** Every boundary join the serialized catalog can carry, in declaration order. */
+export const BOUNDARY_MODES = ["cut", "continue", "crossfade"] as const;

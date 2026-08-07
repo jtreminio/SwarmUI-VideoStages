@@ -1,3 +1,5 @@
+using VideoStages.Planning;
+
 namespace VideoStages.Architectures.Abstractions;
 
 internal sealed record ArchitectureFeatureVocabularyEntry(
@@ -46,6 +48,14 @@ internal static class ArchitectureFeatureVocabulary
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 
+    internal static string WireName(BoundaryJoinType join) => join switch
+    {
+        BoundaryJoinType.Cut => "cut",
+        BoundaryJoinType.Continue => "continue",
+        BoundaryJoinType.Crossfade => "crossfade",
+        _ => throw new ArgumentOutOfRangeException(nameof(join)),
+    };
+
     internal static IEnumerable<string> WireNames(ArchitectureFeature features) =>
         Features
             .Where(entry => features.HasFlag(entry.Feature))
@@ -76,9 +86,37 @@ internal static class ArchitectureFeatureVocabulary
         Line("    keyof typeof ARCHITECTURE_FEATURE_LABELS;");
         Line();
         Line("/** The entry modes a generated clip can take; a sourced clip is always init-video. */");
-        Line($"export type GeneratedEntryMode ="
+        Line("export type GeneratedEntryMode ="
             + $" \"{WireName(ArchitectureEntryMode.TextToVideo)}\""
             + $" | \"{WireName(ArchitectureEntryMode.ImageToVideo)}\";");
+        Line();
+        Line("/** Every entry mode the serialized catalog can carry, in declaration order. */");
+        StringList(
+            "ENTRY_MODES",
+            [.. Enum.GetValues<ArchitectureEntryMode>().Select(WireName)]);
+        Line();
+        Line("/** Every boundary join the serialized catalog can carry, in declaration order. */");
+        StringList(
+            "BOUNDARY_MODES",
+            [.. Enum.GetValues<BoundaryJoinType>().Select(WireName)]);
+
+        // Biome keeps a const array on one line while it fits its 80-column width.
+        void StringList(string name, IReadOnlyList<string> values)
+        {
+            string quoted = string.Join(", ", values.Select(value => $"\"{value}\""));
+            string single = $"export const {name} = [{quoted}] as const;";
+            if (single.Length <= 80)
+            {
+                Line(single);
+                return;
+            }
+            Line($"export const {name} = [");
+            foreach (string value in values)
+            {
+                Line($"    \"{value}\",");
+            }
+            Line("] as const;");
+        }
 
         return result.ToString();
     }

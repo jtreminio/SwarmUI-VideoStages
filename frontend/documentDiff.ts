@@ -8,8 +8,8 @@ import {
     modelIdentityFromCatalog,
     reconcileClipArchitectureIdentity,
 } from "./architectures/clipIdentity";
-import type { GeneratedEntryMode } from "./architectures/conversion/entryModePolicy";
 import { planArchitectureConversion } from "./architectures/conversion/plan";
+import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
 import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
 import type { ArchitectureModelCatalog } from "./architectures/types";

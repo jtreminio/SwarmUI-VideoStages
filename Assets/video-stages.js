@@ -448,6 +448,27 @@
     return true;
   };
 
+  // frontend/architectures/generatedFeatures.ts
+  var ARCHITECTURE_FEATURE_LABELS = {
+    promptRelay: "Relay prompts",
+    frameReferences: "Frame references",
+    clipReferences: "Clip references",
+    referenceFraming: "Reference framing",
+    retake: "Retake",
+    audioBoundaryCarry: "Boundary audio carry",
+    latentUpscale: "Latent interpolation upscaling",
+    latentModelUpscale: "Latent-model upscaling",
+    audioReuse: "Captured stage audio reuse",
+    audioDerivedDuration: "Audio-derived clip duration",
+    icLora: "IC-LoRA"
+  };
+  var ENTRY_MODES = [
+    "text-to-video",
+    "image-to-video",
+    "init-video"
+  ];
+  var BOUNDARY_MODES = ["cut", "continue", "crossfade"];
+
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
     const value = `${selectedValue || ""}`.trim();
@@ -619,21 +640,6 @@
     }, structuredClone(architecture.capabilities));
   };
 
-  // frontend/architectures/generatedFeatures.ts
-  var ARCHITECTURE_FEATURE_LABELS = {
-    promptRelay: "Relay prompts",
-    frameReferences: "Frame references",
-    clipReferences: "Clip references",
-    referenceFraming: "Reference framing",
-    retake: "Retake",
-    audioBoundaryCarry: "Boundary audio carry",
-    latentUpscale: "Latent interpolation upscaling",
-    latentModelUpscale: "Latent-model upscaling",
-    audioReuse: "Captured stage audio reuse",
-    audioDerivedDuration: "Audio-derived clip duration",
-    icLora: "IC-LoRA"
-  };
-
   // frontend/architectures/policy/featureValues.ts
   var RETAKE_SOURCE_RULE = {
     code: "retake-source-required",
@@ -784,8 +790,6 @@
   };
 
   // frontend/architectures/catalogWire.ts
-  var BOUNDARY_MODES = ["cut", "continue", "crossfade"];
-  var ENTRY_MODES = ["text-to-video", "image-to-video", "init-video"];
   var REFERENCE_POSITIONS = ["first", "last", "any"];
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var isTrimmedNonEmpty = (value) => typeof value === "string" && value.length > 0 && value === value.trim();

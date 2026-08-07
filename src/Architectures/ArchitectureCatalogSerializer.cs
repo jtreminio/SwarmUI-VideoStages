@@ -25,7 +25,7 @@ internal static class ArchitectureCatalogSerializer
         ["capabilities"] = SerializeCapabilities(descriptor),
         ["boundaryRules"] = new JObject(descriptor.BoundaryRules.Select(pair =>
             new JProperty(
-                SerializeBoundaryMode(pair.Key),
+                ArchitectureFeatureVocabulary.WireName(pair.Key),
                 SerializeRule(pair.Value)))),
     };
 
@@ -91,14 +91,6 @@ internal static class ArchitectureCatalogSerializer
         AudioSourceKind.ControlNet => MediaSource.ControlNet,
         AudioSourceKind.AceStepFun => MediaSource.AceStepFun,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-    };
-
-    private static string SerializeBoundaryMode(BoundaryJoinType mode) => mode switch
-    {
-        BoundaryJoinType.Cut => "cut",
-        BoundaryJoinType.Continue => "continue",
-        BoundaryJoinType.Crossfade => "crossfade",
-        _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 
     private static string SerializeRuleSupport(RuleSupport support) => support switch

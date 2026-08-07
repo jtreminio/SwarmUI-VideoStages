@@ -1,3 +1,4 @@
+import { BOUNDARY_MODES, ENTRY_MODES } from "./generatedFeatures";
 import { MAX_FRAME_GRID } from "./temporalGrid";
 import type {
     ArchitectureCapabilities,
@@ -6,8 +7,6 @@ import type {
     VideoArchitectureCatalogDto,
 } from "./types";
 
-const BOUNDARY_MODES = ["cut", "continue", "crossfade"] as const;
-const ENTRY_MODES = ["text-to-video", "image-to-video", "init-video"] as const;
 const REFERENCE_POSITIONS = ["first", "last", "any"] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
