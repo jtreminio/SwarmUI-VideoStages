@@ -72,7 +72,7 @@ internal static class LtxPostChainRebuilder
         LtxDecodeConfig decodeConfig)
     {
         ArgumentNullException.ThrowIfNull(bridge);
-        if (!TryValidateCurrentOutputRecipe(
+        if (!CanSpliceCurrentOutput(
             bridge,
             currentOutputMedia,
             decode,
@@ -80,27 +80,17 @@ internal static class LtxPostChainRebuilder
             audioDecode,
             stageOutput,
             vae,
-            decodeConfig,
-            out CurrentOutputSpliceRecipe recipe))
+            decodeConfig))
         {
             return null;
         }
 
         LTXVSeparateAVLatentNode newSeparate = bridge.AddNode(new LTXVSeparateAVLatentNode());
-        newSeparate.AvLatent.ConnectToUntyped(recipe.StageOutput);
+        newSeparate.AvLatent.ConnectToUntyped(stageOutput.Output);
 
-        ReplaceVideoDecode(
-            bridge,
-            recipe.Decode,
-            recipe.VaeOutput,
-            newSeparate,
-            decodeConfig);
+        ReplaceVideoDecode(bridge, decode, vae.Output, newSeparate, decodeConfig);
 
-        RetargetCapturedAudioDecode(
-            bridge,
-            recipe.OldSeparate,
-            recipe.AudioDecode,
-            newSeparate);
+        RetargetCapturedAudioDecode(bridge, oldSeparate, audioDecode, newSeparate);
         return currentOutputMedia.Clone();
     }
 
@@ -117,23 +107,22 @@ internal static class LtxPostChainRebuilder
         int? outputFps)
     {
         ArgumentNullException.ThrowIfNull(bridge);
-        if (!TryValidateDedicatedBranchRecipe(
+        if (!CanSpliceToDedicatedBranch(
             bridge,
             currentOutputMedia,
             audioVaeSource,
             stageOutput,
             vae,
-            decodeConfig,
-            out DedicatedBranchSpliceRecipe recipe))
+            decodeConfig))
         {
             return null;
         }
 
         LTXVSeparateAVLatentNode newSeparate = bridge.AddNode(new LTXVSeparateAVLatentNode());
-        newSeparate.AvLatent.ConnectToUntyped(recipe.StageOutput);
+        newSeparate.AvLatent.ConnectToUntyped(stageOutput.Output);
 
         ComfyNode dedicatedDecode =
-            AddDecode(bridge, recipe.VaeOutput, newSeparate.VideoLatent, decodeConfig);
+            AddDecode(bridge, vae.Output, newSeparate.VideoLatent, decodeConfig);
 
         MediaRef result = new()
         {
@@ -150,7 +139,7 @@ internal static class LtxPostChainRebuilder
             result,
             new MediaRef
             {
-                Output = recipe.AudioVaeOutput,
+                Output = audioVaeSource,
                 DataType = WGNodeData.DT_AUDIOVAE,
                 Compat = currentOutputMedia.Compat
             });
@@ -269,7 +258,7 @@ internal static class LtxPostChainRebuilder
                           && input.Name == "samples");
     }
 
-    private static bool TryValidateCurrentOutputRecipe(
+    private static bool CanSpliceCurrentOutput(
         WorkflowBridge bridge,
         MediaRef currentOutputMedia,
         ComfyNode decode,
@@ -277,10 +266,8 @@ internal static class LtxPostChainRebuilder
         ComfyNode audioDecode,
         MediaRef stageOutput,
         MediaRef vae,
-        LtxDecodeConfig decodeConfig,
-        out CurrentOutputSpliceRecipe recipe)
+        LtxDecodeConfig decodeConfig)
     {
-        recipe = null;
         if (currentOutputMedia?.Output is null
             || stageOutput?.Output is null
             || vae?.Output is null
@@ -313,25 +300,17 @@ internal static class LtxPostChainRebuilder
             }
         }
 
-        recipe = new(
-            stageOutput.Output,
-            vae.Output,
-            decode,
-            oldSeparate,
-            audioDecode);
         return true;
     }
 
-    private static bool TryValidateDedicatedBranchRecipe(
+    private static bool CanSpliceToDedicatedBranch(
         WorkflowBridge bridge,
         MediaRef currentOutputMedia,
         INodeOutput audioVaeSource,
         MediaRef stageOutput,
         MediaRef vae,
-        LtxDecodeConfig decodeConfig,
-        out DedicatedBranchSpliceRecipe recipe)
+        LtxDecodeConfig decodeConfig)
     {
-        recipe = null;
         if (currentOutputMedia is null
             || stageOutput?.Output is null
             || vae?.Output is null
@@ -344,10 +323,6 @@ internal static class LtxPostChainRebuilder
             return false;
         }
 
-        recipe = new(
-            stageOutput.Output,
-            vae.Output,
-            audioVaeSource);
         return true;
     }
 
@@ -356,16 +331,4 @@ internal static class LtxPostChainRebuilder
         && bridge.Graph.GetNode(id) is ComfyNode node
         && output.SlotIndex >= 0
         && output.SlotIndex < node.Outputs.Count;
-
-    private sealed record CurrentOutputSpliceRecipe(
-        INodeOutput StageOutput,
-        INodeOutput VaeOutput,
-        ComfyNode Decode,
-        LTXVSeparateAVLatentNode OldSeparate,
-        ComfyNode AudioDecode);
-
-    private sealed record DedicatedBranchSpliceRecipe(
-        INodeOutput StageOutput,
-        INodeOutput VaeOutput,
-        INodeOutput AudioVaeOutput);
 }
