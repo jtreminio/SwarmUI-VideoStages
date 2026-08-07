@@ -5,6 +5,7 @@
   { "source": "ControlNet", "canDriveClipDuration": true },
   { "source": "upload", "canDriveClipDuration": true },
   { "source": "CONTROLNET", "canDriveClipDuration": true },
+  { "source": "ControlNet 1", "canDriveClipDuration": false },
   { "source": "audio0", "canDriveClipDuration": true },
   { "source": "audio3", "canDriveClipDuration": true },
   { "source": "audio 3", "canDriveClipDuration": true },

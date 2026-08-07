@@ -83,9 +83,6 @@ export const defaultAuthoringAudioSource = (
         ? AUDIO_SOURCE_NATIVE
         : (allowedKinds[0] ?? AUDIO_SOURCE_NATIVE);
 
-export const isControlNetAudioSource = (source: string): boolean =>
-    audioSourceKind(source) === AUDIO_SOURCE_CONTROLNET;
-
 /** Mirrors AudioSourceKindPolicy.CanDriveClipDuration. */
 export const canUseClipLengthFromAudio = (source: string): boolean => {
     const kind = audioSourceKind(source);
