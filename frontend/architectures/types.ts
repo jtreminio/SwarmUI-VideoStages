@@ -1,4 +1,5 @@
 import type {
+    AUDIO_SOURCE_KINDS,
     ENTRY_MODES,
     FRAME_REFERENCE_POSITIONS,
     RULE_SUPPORTS,
@@ -9,6 +10,7 @@ export type ModelProfileId = string;
 
 export type CapabilitySupport = (typeof RULE_SUPPORTS)[number];
 export type ArchitectureEntryMode = (typeof ENTRY_MODES)[number];
+export type AudioSourceKind = (typeof AUDIO_SOURCE_KINDS)[number];
 export type FrameReferencePosition = (typeof FRAME_REFERENCE_POSITIONS)[number];
 
 export interface CapabilityRuleDecision {
@@ -21,7 +23,7 @@ export interface CapabilityRuleDecision {
 export interface ArchitectureCapabilities {
     features: string[];
     entryModes: ArchitectureEntryMode[];
-    audioSourceKinds: string[];
+    audioSourceKinds: AudioSourceKind[];
 }
 
 export interface ArchitectureModelEntry {

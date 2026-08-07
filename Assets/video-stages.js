@@ -473,6 +473,13 @@
   ];
   var CONTINUE_MODES = ["overlap", "reference"];
   var FRAME_REFERENCE_POSITIONS = ["first", "last", "any"];
+  var AUDIO_SOURCE_KINDS = [
+    "Disabled",
+    "Native",
+    "Upload",
+    "ControlNet",
+    "AceStepFun"
+  ];
 
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
@@ -496,15 +503,18 @@
   };
 
   // frontend/audioSource.ts
-  var AUDIO_SOURCE_NATIVE = "Native";
-  var AUDIO_SOURCE_UPLOAD = "Upload";
-  var AUDIO_SOURCE_CONTROLNET = "ControlNet";
-  var AUDIO_SOURCE_DISABLED_KIND = "Disabled";
+  var [
+    AUDIO_SOURCE_DISABLED_KIND,
+    AUDIO_SOURCE_NATIVE,
+    AUDIO_SOURCE_UPLOAD,
+    AUDIO_SOURCE_CONTROLNET,
+    AUDIO_SOURCE_ACE_STEP_FUN
+  ] = AUDIO_SOURCE_KINDS;
   var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
   var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
   var audioSourceKind = (source) => {
     const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
-    return isAceStepFunAudioSource(normalized) ? "AceStepFun" : normalized;
+    return isAceStepFunAudioSource(normalized) ? AUDIO_SOURCE_ACE_STEP_FUN : normalized;
   };
   var isAllowedAudioSource = (allowedKinds, source) => {
     const kind = audioSourceKind(source);
@@ -799,6 +809,9 @@
   var isTrimmedNonEmpty = (value) => typeof value === "string" && value.length > 0 && value === value.trim();
   var isUniqueStringArray = (value) => Array.isArray(value) && value.every((entry) => isTrimmedNonEmpty(entry)) && new Set(value).size === value.length;
   var isEntryModeArray = (value) => isUniqueStringArray(value) && value.every((entry) => ENTRY_MODES.includes(entry));
+  var isAudioSourceKindArray = (value) => isUniqueStringArray(value) && value.every(
+    (entry) => AUDIO_SOURCE_KINDS.includes(entry)
+  );
   var isFrameReferencePositionArray = (value) => isUniqueStringArray(value) && value.every(
     (entry) => FRAME_REFERENCE_POSITIONS.includes(entry)
   );
@@ -850,7 +863,7 @@
     if (!isRecord(value) || !hasExactKeys(value, ["features", "entryModes", "audioSourceKinds"])) {
       return false;
     }
-    return [value.features, value.audioSourceKinds].every(isUniqueStringArray) && isEntryModeArray(value.entryModes);
+    return isUniqueStringArray(value.features) && isAudioSourceKindArray(value.audioSourceKinds) && isEntryModeArray(value.entryModes);
   };
   var hasCompleteBoundaryRules = (value) => {
     if (!isRecord(value)) {
@@ -6186,7 +6199,7 @@
     const clipAudioCapabilitySupported = supportsClipAudio(
       capabilities.audioSourceKinds
     );
-    const standaloneAudioSupported = capabilities.audioSourceKinds.includes("Native");
+    const standaloneAudioSupported = capabilities.audioSourceKinds.includes(AUDIO_SOURCE_NATIVE);
     const selectedAudioSourceSupported = isAllowedAudioSource(
       capabilities.audioSourceKinds,
       clip.audioSource
@@ -9546,7 +9559,9 @@
       reason: "No IC-LoRA supplies a ControlNet 1-3 drive source for clip duration."
     } : null;
     const options = buildAudioSourceOptions(clip.audioSource ?? "", {
-      controlNetEnabled: capabilityView.audioSourceKinds.includes("ControlNet"),
+      controlNetEnabled: capabilityView.audioSourceKinds.includes(
+        AUDIO_SOURCE_CONTROLNET
+      ),
       allowedKinds: capabilityView.audioSourceKinds
     });
     const source = options.find((option) => option.value === clip.audioSource)?.value ?? clip.audioSource ?? "";

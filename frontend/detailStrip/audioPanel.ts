@@ -1,5 +1,6 @@
 import { hasArchitectureSlotSourcedIcLora } from "../architectures/behaviorRegistry";
 import {
+    AUDIO_SOURCE_CONTROLNET,
     AUDIO_SOURCE_UPLOAD,
     buildAudioSourceOptions,
     canUseClipLengthFromAudio,
@@ -64,8 +65,9 @@ export const buildAudioBody = (
                 }
               : null;
     const options = buildAudioSourceOptions(clip.audioSource ?? "", {
-        controlNetEnabled:
-            capabilityView.audioSourceKinds.includes("ControlNet"),
+        controlNetEnabled: capabilityView.audioSourceKinds.includes(
+            AUDIO_SOURCE_CONTROLNET,
+        ),
         allowedKinds: capabilityView.audioSourceKinds,
     });
     const source =

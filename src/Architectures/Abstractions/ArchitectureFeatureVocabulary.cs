@@ -79,6 +79,16 @@ internal static class ArchitectureFeatureVocabulary
         _ => throw new ArgumentOutOfRangeException(nameof(position)),
     };
 
+    internal static string WireName(AudioSourceKind kind) => kind switch
+    {
+        AudioSourceKind.Disabled => "Disabled",
+        AudioSourceKind.Native => MediaSource.Native,
+        AudioSourceKind.Upload => MediaSource.Upload,
+        AudioSourceKind.ControlNet => MediaSource.ControlNet,
+        AudioSourceKind.AceStepFun => MediaSource.AceStepFun,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
     internal static IEnumerable<string> WireNames(ArchitectureFeature features) =>
         Features
             .Where(entry => features.HasFlag(entry.Feature))
@@ -137,6 +147,14 @@ internal static class ArchitectureFeatureVocabulary
         StringList(
             "FRAME_REFERENCE_POSITIONS",
             [.. Enum.GetValues<FrameReferencePosition>().Select(WireName)]);
+        Line();
+        Line("/** Every audio source the catalog can carry, in declaration order. */");
+        // Unknown is the parse-failure sentinel and is never serialized.
+        StringList(
+            "AUDIO_SOURCE_KINDS",
+            [.. Enum.GetValues<AudioSourceKind>()
+                .Where(kind => kind != AudioSourceKind.Unknown)
+                .Select(WireName)]);
 
         // Biome keeps a const array on one line while it fits its 80-column width.
         void StringList(string name, IReadOnlyList<string> values)

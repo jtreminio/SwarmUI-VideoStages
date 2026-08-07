@@ -1,3 +1,4 @@
+import { AUDIO_SOURCE_KINDS } from "./architectures/generatedFeatures";
 import { getVideoStagesHostBridge } from "./host";
 import { preserveSelectedOption, type SelectOption } from "./selectOption";
 
@@ -8,10 +9,22 @@ export interface AudioSourceContext {
     allowedKinds?: readonly string[];
 }
 
-export const AUDIO_SOURCE_NATIVE = "Native";
-export const AUDIO_SOURCE_UPLOAD = "Upload";
-export const AUDIO_SOURCE_CONTROLNET = "ControlNet";
-export const AUDIO_SOURCE_DISABLED_KIND = "Disabled";
+const [
+    AUDIO_SOURCE_DISABLED_KIND,
+    AUDIO_SOURCE_NATIVE,
+    AUDIO_SOURCE_UPLOAD,
+    AUDIO_SOURCE_CONTROLNET,
+    AUDIO_SOURCE_ACE_STEP_FUN,
+] = AUDIO_SOURCE_KINDS;
+
+export {
+    AUDIO_SOURCE_ACE_STEP_FUN,
+    AUDIO_SOURCE_CONTROLNET,
+    AUDIO_SOURCE_DISABLED_KIND,
+    AUDIO_SOURCE_NATIVE,
+    AUDIO_SOURCE_UPLOAD,
+};
+
 const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
 
 export const isAceStepFunAudioSource = (source: string): boolean =>
@@ -19,7 +32,9 @@ export const isAceStepFunAudioSource = (source: string): boolean =>
 
 export const audioSourceKind = (source: string): string => {
     const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
-    return isAceStepFunAudioSource(normalized) ? "AceStepFun" : normalized;
+    return isAceStepFunAudioSource(normalized)
+        ? AUDIO_SOURCE_ACE_STEP_FUN
+        : normalized;
 };
 
 export const isAllowedAudioSource = (

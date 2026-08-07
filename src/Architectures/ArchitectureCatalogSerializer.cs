@@ -35,7 +35,7 @@ internal static class ArchitectureCatalogSerializer
         // Exact inputs that are not representable as flag sets.
         ["entryModes"] = new JArray(descriptor.EntryModes.Select(ArchitectureFeatureVocabulary.WireName)),
         ["audioSourceKinds"] = new JArray(descriptor.AudioSourceKinds.Select(
-            SerializeAudioSourceKind)),
+            ArchitectureFeatureVocabulary.WireName)),
     };
 
     private static JObject SerializeRule(RuleDecision decision) => new()
@@ -80,13 +80,4 @@ internal static class ArchitectureCatalogSerializer
         },
     };
 
-    private static string SerializeAudioSourceKind(AudioSourceKind kind) => kind switch
-    {
-        AudioSourceKind.Disabled => "Disabled",
-        AudioSourceKind.Native => MediaSource.Native,
-        AudioSourceKind.Upload => MediaSource.Upload,
-        AudioSourceKind.ControlNet => MediaSource.ControlNet,
-        AudioSourceKind.AceStepFun => MediaSource.AceStepFun,
-        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-    };
 }

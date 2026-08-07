@@ -1,4 +1,5 @@
 import {
+    AUDIO_SOURCE_KINDS,
     BOUNDARY_MODES,
     CONTINUE_MODES,
     ENTRY_MODES,
@@ -10,6 +11,7 @@ import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
     ArchitectureEntryMode,
+    AudioSourceKind,
     CapabilityRuleDecision,
     CapabilitySupport,
     FrameReferencePosition,
@@ -30,6 +32,12 @@ const isUniqueStringArray = (value: unknown): value is string[] =>
 const isEntryModeArray = (value: unknown): value is ArchitectureEntryMode[] =>
     isUniqueStringArray(value) &&
     value.every((entry) => (ENTRY_MODES as readonly string[]).includes(entry));
+
+const isAudioSourceKindArray = (value: unknown): value is AudioSourceKind[] =>
+    isUniqueStringArray(value) &&
+    value.every((entry) =>
+        (AUDIO_SOURCE_KINDS as readonly string[]).includes(entry),
+    );
 
 const isFrameReferencePositionArray = (
     value: unknown,
@@ -125,7 +133,8 @@ const isCapabilities = (value: unknown): value is ArchitectureCapabilities => {
         return false;
     }
     return (
-        [value.features, value.audioSourceKinds].every(isUniqueStringArray) &&
+        isUniqueStringArray(value.features) &&
+        isAudioSourceKindArray(value.audioSourceKinds) &&
         isEntryModeArray(value.entryModes)
     );
 };

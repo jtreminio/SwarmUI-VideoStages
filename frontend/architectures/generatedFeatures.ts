@@ -42,3 +42,12 @@ export const CONTINUE_MODES = ["overlap", "reference"] as const;
 
 /** Every frame reference position the catalog can carry, in declaration order. */
 export const FRAME_REFERENCE_POSITIONS = ["first", "last", "any"] as const;
+
+/** Every audio source the catalog can carry, in declaration order. */
+export const AUDIO_SOURCE_KINDS = [
+    "Disabled",
+    "Native",
+    "Upload",
+    "ControlNet",
+    "AceStepFun",
+] as const;

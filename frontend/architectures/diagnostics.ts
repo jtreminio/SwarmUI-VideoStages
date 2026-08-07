@@ -1,4 +1,5 @@
 import {
+    AUDIO_SOURCE_NATIVE,
     audioSourceKind,
     canUseClipLengthFromAudio,
     isAllowedAudioSource,
@@ -126,7 +127,7 @@ const persistedCapabilityIssues = (
         capabilities.audioSourceKinds,
     );
     const standaloneAudioSupported =
-        capabilities.audioSourceKinds.includes("Native");
+        capabilities.audioSourceKinds.includes(AUDIO_SOURCE_NATIVE);
     const selectedAudioSourceSupported = isAllowedAudioSource(
         capabilities.audioSourceKinds,
         clip.audioSource,
