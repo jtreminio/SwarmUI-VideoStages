@@ -160,10 +160,22 @@ cmd_rm() {
     grep -qxF "worktree $path" <<<"$(git -C "$MAIN" worktree list --porcelain)" \
         || die "not a worktree of $MAIN: $path"
 
+    # A worktree the hook relocated left a symlink at the path its creator asked for, which
+    # can be anywhere, so the hook recorded it. Read it before the admin dir goes away.
+    local relocated_from="" admin
+    admin="$(git -C "$path" rev-parse --absolute-git-dir 2>/dev/null || true)"
+    [ -z "$admin" ] || [ ! -f "$admin/relocated-from" ] || relocated_from="$(<"$admin/relocated-from")"
+
     rm -f "$path/node_modules" "$path/nonversioned" "$path/Directory.Build.rsp"
     git -C "$MAIN" worktree remove "$path"
     rm -rf "$(artifacts_path "$name")"
     echo "removed $path"
+
+    # Only ever unlink a symlink that still points at what was just removed.
+    if [ -L "$relocated_from" ] && [ "$(readlink "$relocated_from")" = "$path" ]; then
+        rm -f "$relocated_from"
+        echo "removed dangling $relocated_from"
+    fi
 
     if [ "$keep_branch" = 1 ]; then
         echo "kept branch $name"

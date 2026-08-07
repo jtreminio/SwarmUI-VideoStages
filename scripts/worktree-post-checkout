@@ -21,28 +21,52 @@ NAME="$(basename "$WORKTREE")"
 MAIN="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
 [ "$WORKTREE" != "$MAIN" ] || exit 0
 
-# The build cannot be relocated. SwarmUI-VideoStages.csproj imports ../../SwarmUI.extension.props
-# and references ../../SwarmUI.csproj; Tests references ..\..\..\SwarmUI.csproj. MSBuild resolves
-# those against the project file's REAL path, so a symlink into src/Extensions does not help —
-# measured: a worktree at /tmp symlinked into place still fails MSB4019 with "/SwarmUI.extension.props".
-# Two directories above the worktree must literally be SwarmUI's src/.
+# A worktree anywhere else cannot build: SwarmUI-VideoStages.csproj imports
+# ../../SwarmUI.extension.props and references ../../SwarmUI.csproj, Tests references
+# ..\..\..\SwarmUI.csproj, and MSBuild resolves those against the project file's REAL path.
+# So relocate it and leave a symlink behind. The symlink direction is the whole trick: whoever
+# asked for the original path still finds it, while MSBuild resolves through to the real
+# directory under src/Extensions and its ../.. is SwarmUI's src/. The other direction — real
+# directory elsewhere, symlink here — fails MSB4019 looking for "/SwarmUI.extension.props".
 if [ ! -f "$WORKTREE/../../SwarmUI.extension.props" ]; then
-    cat >&2 <<EOF
+    DEST="$MAIN-$NAME"
+    if [ -e "$DEST" ]; then
+        echo "cannot relocate $NAME: $DEST already exists" >&2
+        exit 0
+    fi
+    # Move from the main checkout: git rewrites both the worktree's .git file and the
+    # gitdir pointer in the common dir, which a bare `mv` would leave dangling.
+    cd "$MAIN"
+    # `git worktree move` is a rename, so it fails across filesystems (the harness has used
+    # /tmp, which is tmpfs). Copy-then-repair is the same outcome by hand: `repair` rewrites
+    # the .git file and the gitdir pointer to wherever the worktree now is.
+    if ! git worktree move "$WORKTREE" "$DEST" 2>/dev/null; then
+        if cp -a "$WORKTREE" "$DEST" 2>/dev/null && git worktree repair "$DEST" >/dev/null 2>&1; then
+            rm -rf "${WORKTREE:?}"
+        else
+            rm -rf "$DEST"
+        fi
+    fi
+    if [ ! -d "$DEST" ]; then
+        cat >&2 <<EOF
 
-  This worktree cannot build or run ./run-tests where it is.
+  This worktree cannot build or run ./run-tests where it is, and moving it failed.
 
     worktree  $WORKTREE
-    needs     $(dirname "$MAIN")/$(basename "$MAIN")-<name>
-
-  SwarmUI-VideoStages.csproj imports ../../SwarmUI.extension.props, so two levels up must be
-  SwarmUI's src/. Symlinking into place does not work: MSBuild resolves the real path.
+    needs     $DEST
 
   Re-provision it from the main checkout instead:
 
       cd $MAIN && scripts/worktree add <name>
 
 EOF
-    exit 0
+        exit 0
+    fi
+    ln -s "$DEST" "$WORKTREE"
+    # So teardown can unlink it again wherever it was — the symlink can be outside the repo.
+    echo "$WORKTREE" > "$(git -C "$DEST" rev-parse --absolute-git-dir)/relocated-from"
+    echo "relocated $NAME to $DEST (a symlink keeps the original path working)"
+    WORKTREE="$DEST"
 fi
 
 # node_modules and nonversioned are untracked, so a fresh worktree has neither. Sharing beats
