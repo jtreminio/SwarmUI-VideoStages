@@ -32,9 +32,11 @@ internal static class StagePassthroughPolicy
 
     internal static bool IsPassthrough(
         StageSpec stage,
-        VideoArchitectureDescriptor descriptor) =>
-        stage.Control <= 0
-        && !(stage.RetakeWindow is not null
-            && Supports(descriptor, ArchitectureFeature.Retake))
-        && !RunsLatentUpscale(StageUpscalePlanCompiler.Mode(stage), descriptor);
+        VideoArchitectureDescriptor descriptor)
+    {
+        bool retakes = stage.RetakeWindow is not null
+            && Supports(descriptor, ArchitectureFeature.Retake);
+        bool upscales = RunsLatentUpscale(StageUpscalePlanCompiler.Mode(stage), descriptor);
+        return stage.Control <= 0 && !retakes && !upscales;
+    }
 }

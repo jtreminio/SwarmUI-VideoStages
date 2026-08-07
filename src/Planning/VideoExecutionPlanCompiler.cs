@@ -25,13 +25,13 @@ internal static class VideoExecutionPlanCompiler
                 spec,
                 rootEnvironment.HostKind,
                 architecturePlanning);
-        spec = request.Spec;
+        TimelineSpec effective = request.Spec;
         List<PlanDiagnostic> diagnostics =
         [
             .. architecturePlanning.Diagnostics,
             .. request.Diagnostics,
         ];
-        if (spec.LegacyVideoSwap?.IsConfigured == true
+        if (effective.LegacyVideoSwap?.IsConfigured == true
             && architecturePlanning.Clips.Values.Any(assignment =>
                 assignment?.Architecture.RunsOnStockHostSampler == true))
         {
@@ -43,8 +43,8 @@ internal static class VideoExecutionPlanCompiler
                     + "The authored values remain in request metadata. Create separate timeline "
                     + "stages instead."));
         }
-        IReadOnlyList<ClipSpec> executableClips = (spec.Clips ?? []).Where(IsExecutableClip).ToArray();
-        if (executableClips.Count != (spec.Clips?.Count ?? 0))
+        IReadOnlyList<ClipSpec> executableClips = (effective.Clips ?? []).Where(IsExecutableClip).ToArray();
+        if (executableClips.Count != (effective.Clips?.Count ?? 0))
         {
             diagnostics.Add(new PlanDiagnostic(
                 PlanDiagnosticSeverity.Warning,
@@ -95,9 +95,9 @@ internal static class VideoExecutionPlanCompiler
                             activeClips[i],
                             assignment,
                             new(
-                                spec.Width,
-                                spec.Height,
-                                spec.FPS,
+                                effective.Width,
+                                effective.Height,
+                                effective.FPS,
                                 entryMode,
                                 HasPreviousClipOutput: i > 0));
                     diagnostics.AddRange(architectureCompilation.Diagnostics);
@@ -111,9 +111,9 @@ internal static class VideoExecutionPlanCompiler
             clips.Add(ClipPlanCompiler.Compile(
                 activeClips[i],
                 new ClipPlanCompilationContext(
-                    spec.Width,
-                    spec.Height,
-                    spec.FPS,
+                    effective.Width,
+                    effective.Height,
+                    effective.FPS,
                     totalStageCount,
                     firstStageOrdinal,
                     entryMode,
@@ -121,7 +121,7 @@ internal static class VideoExecutionPlanCompiler
                     acceptedArchitectureCompilation)));
             firstStageOrdinal += activeClips[i].Stages?.Count ?? 0;
         }
-        diagnostics.AddRange(ClipGeometryValidator.Validate(clips, spec.Width, spec.Height));
+        diagnostics.AddRange(ClipGeometryValidator.Validate(clips, effective.Width, effective.Height));
         BoundaryPlanningResult boundaryResult = BoundaryPlanCompiler.Compile(
             activeClips,
             clips);
@@ -139,10 +139,10 @@ internal static class VideoExecutionPlanCompiler
         }
         // Timeline audio remains architecture-neutral; non-consuming architectures overlay it after decode.
         TimelineAudioSpanCompilation audio = TimelineAudioSpanCompiler.Compile(
-            spec.FPS,
+            effective.FPS,
             clips,
             resolvedBoundaries,
-            spec.TimelineAudioSpans);
+            effective.TimelineAudioSpans);
         IReadOnlyList<ClipPlan> clipsWithTimelineAudio = audio.Clips;
         foreach (ClipPlan clipPlan in clipsWithTimelineAudio)
         {
@@ -151,15 +151,15 @@ internal static class VideoExecutionPlanCompiler
         }
         diagnostics.AddRange(audio.Diagnostics);
         return new(
-            spec.Width,
-            spec.Height,
-            spec.FPS,
+            effective.Width,
+            effective.Height,
+            effective.FPS,
             root,
             clipsWithTimelineAudio,
             Array.AsReadOnly(resolvedBoundaries.ToArray()),
             Array.AsReadOnly(diagnostics.ToArray()))
         {
-            HasConfiguredResolution = spec.HasConfiguredResolution,
+            HasConfiguredResolution = effective.HasConfiguredResolution,
         };
     }
 
