@@ -115,10 +115,6 @@ priorities live in `Constants.WorkflowStepPriority`.
 | 11.4 | `ApplyRootAudioMaskDimensions` | root-owner architecture only; resizes audio SolidMask nodes to root dims |
 | 11.5 | `RunConfiguredStages` | reads architecture references and the phase-2 captures; executes the planned sessions and publishes |
 
-`PrepareRequest` is the only place a request may be rejected for a missing
-dependency: every later phase mutates the host graph, so a failure past it
-leaves the user with a broken workflow.
-
 SwarmUI core image-to-video is expected around priority 11. The extension
 discovers that step at startup and disables unsafe handoff when it is missing
 or ambiguous.

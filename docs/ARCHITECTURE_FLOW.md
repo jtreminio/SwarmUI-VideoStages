@@ -59,7 +59,7 @@ that belongs to core or to a shared safe-download service, not to this route.
 ### A1. Backend registration and exact recognition
 
 `VideoStagesExtension.OnInit` registers dependencies, API routes, host handlers,
-and the ordered `Runner` workflow steps. The backend composition root is
+and the ordered workflow phases. The backend composition root is
 `VideoArchitectureManifest.Production`; a `VideoArchitectureRegistration`
 keeps a module, runtime provider, host handlers, API routes, and dependencies
 together.
@@ -306,7 +306,7 @@ The frontend writes the versioned document to
 the prompt carrier. `DocumentJson.IsActive` requires an enabled
 group and non-empty Data JSON.
 
-The first `Runner` lookup builds and caches one plan per `WorkflowGenerator` through
+The first lookup builds and caches one plan per `WorkflowGenerator` through
 `VideoStagesContext`:
 
 ```text
@@ -395,10 +395,10 @@ Blocking `PlanDiagnostic` values are thrown by
 
 ### B3. Preflight before VideoStages graph mutation
 
-`PrepareRequest` is the first registered VideoStages workflow phase.
-It is the only caller of `VideoExecutionPlanContext.PrepareRequest`, which
-constructs one `VideoArchitectureExecutionHost` and invokes each active runtime
-provider with graph-free `ArchitectureRequestPreflightContext`. Every later
+The first registered VideoStages workflow phase is the only caller of
+`VideoExecutionPlanContext.PrepareRequest`, which constructs one
+`VideoArchitectureExecutionHost` and invokes each active runtime provider with
+a graph-free `ArchitectureRequestPreflightContext`. Every later
 phase calls `RequirePrepared`; preparation is never lazy after graph mutation
 has begun.
 
