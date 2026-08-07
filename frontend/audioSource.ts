@@ -1,6 +1,6 @@
 import { AUDIO_SOURCE_KINDS } from "./architectures/generatedFeatures";
 import { getVideoStagesHostBridge } from "./host";
-import { parseAceStepFunIndex } from "./mediaSourceSyntax";
+import { equalsMediaSource, parseAceStepFunIndex } from "./mediaSourceSyntax";
 import { preserveSelectedOption, type SelectOption } from "./selectOption";
 
 export type AudioSourceOption = Pick<SelectOption, "value" | "label">;
@@ -29,11 +29,28 @@ export {
 export const isAceStepFunAudioSource = (source: string): boolean =>
     parseAceStepFunIndex(source) !== null;
 
+/** The spellings AudioSource.Parse matches literally, in its order. */
+const LITERAL_AUDIO_SOURCES = [
+    AUDIO_SOURCE_NATIVE,
+    AUDIO_SOURCE_UPLOAD,
+    AUDIO_SOURCE_CONTROLNET,
+];
+
+/**
+ * Mirrors AudioSource.Parse, which compares through StringUtils.Equals — so a
+ * differently-cased spelling names the same kind here as it does on the backend.
+ * An unrecognized value is passed through, standing in for AudioSourceKind.Unknown.
+ */
 export const audioSourceKind = (source: string): string => {
     const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
-    return isAceStepFunAudioSource(normalized)
-        ? AUDIO_SOURCE_ACE_STEP_FUN
-        : normalized;
+    if (isAceStepFunAudioSource(normalized)) {
+        return AUDIO_SOURCE_ACE_STEP_FUN;
+    }
+    return (
+        LITERAL_AUDIO_SOURCES.find((kind) =>
+            equalsMediaSource(kind, normalized),
+        ) ?? normalized
+    );
 };
 
 export const isAllowedAudioSource = (
@@ -57,14 +74,15 @@ export const defaultAuthoringAudioSource = (
         : (allowedKinds[0] ?? AUDIO_SOURCE_NATIVE);
 
 export const isControlNetAudioSource = (source: string): boolean =>
-    `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
+    audioSourceKind(source) === AUDIO_SOURCE_CONTROLNET;
 
+/** Mirrors AudioSourceKindPolicy.CanDriveClipDuration. */
 export const canUseClipLengthFromAudio = (source: string): boolean => {
-    const normalized = `${source ?? ""}`.trim();
+    const kind = audioSourceKind(source);
     return (
-        normalized === AUDIO_SOURCE_UPLOAD ||
-        isAceStepFunAudioSource(normalized) ||
-        isControlNetAudioSource(normalized)
+        kind === AUDIO_SOURCE_UPLOAD ||
+        kind === AUDIO_SOURCE_CONTROLNET ||
+        kind === AUDIO_SOURCE_ACE_STEP_FUN
     );
 };
 

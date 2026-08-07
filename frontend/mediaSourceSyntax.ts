@@ -13,6 +13,10 @@ import {
 export const compactMediaSource = (value: unknown): string =>
     `${value ?? ""}`.trim().replaceAll(" ", "");
 
+/** Mirrors StringUtils.Equals, which every backend source comparison goes through. */
+export const equalsMediaSource = (left: string, right: string): boolean =>
+    left.toLowerCase() === right.toLowerCase();
+
 /** Beyond this the backend's int.TryParse overflows and rejects the value. */
 const INT_MAX = 2147483647;
 

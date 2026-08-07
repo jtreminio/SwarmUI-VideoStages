@@ -3,6 +3,8 @@
   { "source": "", "canDriveClipDuration": false },
   { "source": "Upload", "canDriveClipDuration": true },
   { "source": "ControlNet", "canDriveClipDuration": true },
+  { "source": "upload", "canDriveClipDuration": true },
+  { "source": "CONTROLNET", "canDriveClipDuration": true },
   { "source": "audio0", "canDriveClipDuration": true },
   { "source": "audio3", "canDriveClipDuration": true },
   { "source": "audio 3", "canDriveClipDuration": true },

@@ -90,11 +90,12 @@ describe("audioSource", () => {
     });
 
     describe("ControlNet audio source", () => {
-        it("isControlNetAudioSource matches only the literal 'ControlNet' value", () => {
+        it("isControlNetAudioSource matches the bare source, not a numbered slot", () => {
             expect(isControlNetAudioSource("ControlNet")).toBe(true);
             expect(isControlNetAudioSource("  ControlNet  ")).toBe(true);
+            // The backend compares through StringUtils.Equals, so case is not the signal.
+            expect(isControlNetAudioSource("controlnet")).toBe(true);
             expect(isControlNetAudioSource("ControlNet 1")).toBe(false);
-            expect(isControlNetAudioSource("controlnet")).toBe(false);
             expect(isControlNetAudioSource("Native")).toBe(false);
             expect(isControlNetAudioSource("")).toBe(false);
         });

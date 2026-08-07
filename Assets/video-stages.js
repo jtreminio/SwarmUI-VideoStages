@@ -499,6 +499,7 @@
 
   // frontend/mediaSourceSyntax.ts
   var compactMediaSource = (value) => `${value ?? ""}`.trim().replaceAll(" ", "");
+  var equalsMediaSource = (left, right) => left.toLowerCase() === right.toLowerCase();
   var INT_MAX = 2147483647;
   var parseIndexedMediaSource = (value, prefix) => {
     const text2 = compactMediaSource(value);
@@ -549,19 +550,28 @@
     AUDIO_SOURCE_ACE_STEP_FUN
   ] = AUDIO_SOURCE_KINDS;
   var isAceStepFunAudioSource = (source) => parseAceStepFunIndex(source) !== null;
+  var LITERAL_AUDIO_SOURCES = [
+    AUDIO_SOURCE_NATIVE,
+    AUDIO_SOURCE_UPLOAD,
+    AUDIO_SOURCE_CONTROLNET
+  ];
   var audioSourceKind = (source) => {
     const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
-    return isAceStepFunAudioSource(normalized) ? AUDIO_SOURCE_ACE_STEP_FUN : normalized;
+    if (isAceStepFunAudioSource(normalized)) {
+      return AUDIO_SOURCE_ACE_STEP_FUN;
+    }
+    return LITERAL_AUDIO_SOURCES.find(
+      (kind) => equalsMediaSource(kind, normalized)
+    ) ?? normalized;
   };
   var isAllowedAudioSource = (allowedKinds, source) => {
     const kind = audioSourceKind(source);
     return allowedKinds.includes(kind) || kind === AUDIO_SOURCE_NATIVE && allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND);
   };
   var defaultAuthoringAudioSource = (allowedKinds) => allowedKinds.includes(AUDIO_SOURCE_NATIVE) || allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND) ? AUDIO_SOURCE_NATIVE : allowedKinds[0] ?? AUDIO_SOURCE_NATIVE;
-  var isControlNetAudioSource = (source) => `${source ?? ""}`.trim() === AUDIO_SOURCE_CONTROLNET;
   var canUseClipLengthFromAudio = (source) => {
-    const normalized = `${source ?? ""}`.trim();
-    return normalized === AUDIO_SOURCE_UPLOAD || isAceStepFunAudioSource(normalized) || isControlNetAudioSource(normalized);
+    const kind = audioSourceKind(source);
+    return kind === AUDIO_SOURCE_UPLOAD || kind === AUDIO_SOURCE_CONTROLNET || kind === AUDIO_SOURCE_ACE_STEP_FUN;
   };
   var getAceStepFunRefs = () => {
     const snapshot = getVideoStagesHostBridge().getAceStepFunRegistry();
