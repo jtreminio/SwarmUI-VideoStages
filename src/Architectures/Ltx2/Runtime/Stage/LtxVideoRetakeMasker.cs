@@ -22,18 +22,14 @@ namespace VideoStages.Architectures.Ltx2;
 internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
 {
     /// <summary>
-    /// LTXV VAE temporal downscale: latent frames = (pixelFrames-1)/8 + 1, pixel index → latent
-    /// floor(index/8). Matches ltx_director_guide.py's downscale_index_formula[0].
-    /// </summary>
-    internal const int TemporalDownscale = 8;
-
-    /// <summary>
     /// First pixel frame of latent frame <paramref name="latentIndex"/>: latent 0 holds pixel 0 alone,
     /// latent k holds pixels [8k-7, 8k]. This is the boundary grid LTXVSetAudioVideoMaskByTime
     /// searchsorts its start/end times against, so seconds snapped to it select exact latent indices.
     /// </summary>
     internal static int LatentFrameStartPixel(int latentIndex) =>
-        latentIndex <= 0 ? 0 : latentIndex * TemporalDownscale - (TemporalDownscale - 1);
+        latentIndex <= 0
+            ? 0
+            : latentIndex * Ltx2ArchitectureModule.FrameGrid - (Ltx2ArchitectureModule.FrameGrid - 1);
 
     private const int DefaultFrameCount = LtxStageRuntimeSettings.DefaultFrameCount;
 
@@ -50,13 +46,16 @@ internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
     internal static LatentWindow ComputeLatentWindow(int pixelFrames, int startFrame, int lengthFrames)
     {
         int safePixels = Math.Max(1, pixelFrames);
-        int latentLength = (safePixels - 1) / TemporalDownscale + 1;
+        int latentLength = Ltx2ArchitectureModule.LatentFrameCount(safePixels);
 
         (int startPixel, int endPixel) = RetakeWindowSpec.ClampFrameWindow(startFrame, lengthFrames, safePixels);
 
-        int lStart = Math.Clamp(startPixel / TemporalDownscale, 0, latentLength);
+        int lStart = Math.Clamp(startPixel / Ltx2ArchitectureModule.FrameGrid, 0, latentLength);
         // Ceil-divide the exclusive end so any pixel frame that touches a latent frame regenerates it.
-        int lEnd = Math.Clamp((endPixel + TemporalDownscale - 1) / TemporalDownscale, lStart, latentLength);
+        int lEnd = Math.Clamp(
+            (endPixel + Ltx2ArchitectureModule.FrameGrid - 1) / Ltx2ArchitectureModule.FrameGrid,
+            lStart,
+            latentLength);
 
         return new LatentWindow(lStart, lEnd - lStart, latentLength - lEnd);
     }
