@@ -193,6 +193,17 @@ public class WanArchitectureTests
         Assert.Equal(
             ["first"],
             catalogModel["enhancements"]["referencePositions"].Values<string>());
+        // The only multi-position producer: order and multiplicity must survive the enum round trip.
+        Assert.Equal(
+            ["first", "last"],
+            ArchitectureCatalogSerializer
+                .Serialize(new WanCatalogRegistry(ResolvedWan(
+                    "wan-14b.safetensors",
+                    WanArchitectureModule.ImageToVideoProfileId,
+                    WanArchitectureModule.Instance.Descriptor)))["models"]
+                .Values<JObject>()
+                .Single()["enhancements"]["referencePositions"]
+                .Values<string>());
         Assert.Equal(
             ["text-to-video", "image-to-video", "init-video"],
             catalogModel["capabilities"]["entryModes"].Values<string>());

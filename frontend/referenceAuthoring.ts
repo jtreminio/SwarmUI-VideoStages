@@ -1,3 +1,4 @@
+import type { FrameReferencePosition } from "./architectures/types";
 import { clamp, REF_FRAME_MIN } from "./constants";
 import type { FrameRefImage } from "./types";
 
@@ -59,7 +60,7 @@ export const nextAvailableReferenceFrame = (
 export const nextAllowedReferencePosition = (
     frameRefs: readonly Pick<FrameRefImage, "frame" | "fromEnd">[],
     rawFrameMax: number,
-    allowed: readonly string[],
+    allowed: readonly FrameReferencePosition[],
 ): { frame: number; fromEnd: boolean } | null => {
     if (allowed.includes("any")) {
         const frame = nextAvailableReferenceFrame(frameRefs, rawFrameMax);
