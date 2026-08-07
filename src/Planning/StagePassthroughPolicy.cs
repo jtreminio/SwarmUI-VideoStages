@@ -19,9 +19,9 @@ internal static class StagePassthroughPolicy
     /// instead, so it never brings the sampler back.
     /// </summary>
     internal static bool RunsLatentUpscale(
-        StageSpec stage,
+        StageUpscaleMode mode,
         VideoArchitectureDescriptor descriptor) =>
-        StageUpscalePlanCompiler.Mode(stage) switch
+        mode switch
         {
             StageUpscaleMode.Latent =>
                 Supports(descriptor, ArchitectureFeature.LatentUpscale),
@@ -36,5 +36,5 @@ internal static class StagePassthroughPolicy
         stage.Control <= 0
         && !(stage.RetakeWindow is not null
             && Supports(descriptor, ArchitectureFeature.Retake))
-        && !RunsLatentUpscale(stage, descriptor);
+        && !RunsLatentUpscale(StageUpscalePlanCompiler.Mode(stage), descriptor);
 }

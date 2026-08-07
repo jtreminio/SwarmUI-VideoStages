@@ -179,7 +179,7 @@ internal static class ArchitectureCapabilityValidator
                     stage.ClipStageRawIndex));
             }
             else if (upscaleMode is StageUpscaleMode.Latent or StageUpscaleMode.LatentModel
-                && !StagePassthroughPolicy.RunsLatentUpscale(stage, descriptor))
+                && !StagePassthroughPolicy.RunsLatentUpscale(upscaleMode, descriptor))
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Warning,
