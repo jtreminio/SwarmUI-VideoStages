@@ -559,7 +559,7 @@ public class DecisionOwnerRegressionTests
             ?? VideoArchitectureManifest.CreateProductionRuntimeProviders(
                 generator,
                 plan.Clips.Select(clip => clip.Architecture.Id));
-        VideoArchitectureExecutionHost host = new(
+        TimelineRunner host = new(
             generator,
             plan,
             innerProviders.Select(provider => new LifecycleTestProvider(provider)));

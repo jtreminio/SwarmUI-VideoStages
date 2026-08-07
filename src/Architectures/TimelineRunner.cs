@@ -11,7 +11,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures;
 
-internal sealed class VideoArchitectureExecutionHost
+internal sealed class TimelineRunner
 {
     private readonly WorkflowGenerator _generator;
     private readonly VideoExecutionPlan _plan;
@@ -26,7 +26,7 @@ internal sealed class VideoArchitectureExecutionHost
     internal T2IParamInput RequestInput => _generator.UserInput;
     internal VideoExecutionPlan Plan => _plan;
 
-    internal VideoArchitectureExecutionHost(
+    internal TimelineRunner(
         WorkflowGenerator generator,
         VideoExecutionPlan plan) : this(
         generator,
@@ -35,7 +35,7 @@ internal sealed class VideoArchitectureExecutionHost
     {
     }
 
-    internal VideoArchitectureExecutionHost(
+    internal TimelineRunner(
         WorkflowGenerator generator,
         VideoExecutionPlan plan,
         IEnumerable<IArchitectureGenerationSessionProvider> providers) : this(
@@ -45,7 +45,7 @@ internal sealed class VideoArchitectureExecutionHost
     {
     }
 
-    private VideoArchitectureExecutionHost(
+    private TimelineRunner(
         WorkflowGenerator generator,
         VideoExecutionPlan plan,
         RuntimeProviderBinding binding)

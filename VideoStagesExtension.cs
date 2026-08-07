@@ -53,22 +53,22 @@ public class VideoStagesExtension : Extension
             WorkflowPhase.Guarded(context => context.PrepareRequest()),
             Constants.WorkflowStepPriority.PreflightRequest);
         WorkflowGenerator.AddStep(
-            WorkflowPhase.OnHost(host => host.CaptureControlNetPreprocessors()),
+            WorkflowPhase.Run(runner => runner.CaptureControlNetPreprocessors()),
             Constants.WorkflowStepPriority.ControlNetPreprocessors);
         WorkflowGenerator.AddStep(
-            WorkflowPhase.OnHost(host => host.CaptureBaseReference()),
+            WorkflowPhase.Run(runner => runner.CaptureBaseReference()),
             Constants.WorkflowStepPriority.CaptureBase);
         WorkflowGenerator.AddStep(
-            WorkflowPhase.OnHost(host => host.CaptureRefinerReference()),
+            WorkflowPhase.Run(runner => runner.CaptureRefinerReference()),
             Constants.WorkflowStepPriority.CaptureRefiner);
         WorkflowGenerator.AddStep(
-            WorkflowPhase.OnHost(host => host.CapturePreCoreMedia()),
+            WorkflowPhase.Run(runner => runner.CapturePreCoreMedia()),
             Constants.WorkflowStepPriority.CapturePreCoreVideoMedia);
         WorkflowGenerator.AddStep(
-            WorkflowPhase.OnHost(host => host.DropCoreOutput()),
+            WorkflowPhase.Run(runner => runner.DropCoreOutput()),
             Constants.WorkflowStepPriority.DropCoreImageToVideoOutput);
         WorkflowGenerator.AddStep(
-            WorkflowPhase.OnHost(host => host.ApplyRootAudioMaskDimensions()),
+            WorkflowPhase.Run(runner => runner.ApplyRootAudioMaskDimensions()),
             Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);
         WorkflowGenerator.AddStep(
             WorkflowPhase.Guarded(context => context.RunConfiguredStages()),

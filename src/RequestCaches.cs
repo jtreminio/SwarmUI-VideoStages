@@ -84,6 +84,6 @@ internal static class RequestCaches
         PlanDiagnosticReporter.ReportToRequest(plan.Diagnostics, g.UserInput);
         return new VideoExecutionPlanContext(
             plan,
-            () => new VideoArchitectureExecutionHost(g, plan));
+            () => new TimelineRunner(g, plan));
     }
 }

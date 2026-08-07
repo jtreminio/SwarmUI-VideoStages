@@ -1048,7 +1048,7 @@ public class ArchitectureFoundationTests
             new("fake"),
             calls,
             runtimeContexts);
-        VideoArchitectureExecutionHost host = new(
+        TimelineRunner host = new(
             generator,
             plan,
             [ltx, fake]);
@@ -1564,7 +1564,7 @@ public class ArchitectureFoundationTests
             Frames = 25,
             FPS = 24,
         };
-        VideoArchitectureExecutionHost host = new(generator, plan, providers);
+        TimelineRunner host = new(generator, plan, providers);
         VideoExecutionPlanContext request = new(plan, () => host);
         request.PrepareRequest();
         request.RunConfiguredStages();

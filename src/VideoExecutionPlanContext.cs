@@ -18,22 +18,22 @@ internal enum VideoExecutionState
 internal sealed class VideoExecutionPlanContext
 {
     private readonly object _preparationLock = new();
-    private readonly Func<VideoArchitectureExecutionHost> _createExecutionHost;
-    private VideoArchitectureExecutionHost _executionHost;
+    private readonly Func<TimelineRunner> _createRunner;
+    private TimelineRunner _runner;
     private ExceptionDispatchInfo _failure;
 
     internal VideoExecutionPlanContext(
         VideoExecutionPlan plan,
-        Func<VideoArchitectureExecutionHost> createExecutionHost)
+        Func<TimelineRunner> createRunner)
     {
-        ArgumentNullException.ThrowIfNull(createExecutionHost);
+        ArgumentNullException.ThrowIfNull(createRunner);
         Plan = plan ?? throw new ArgumentNullException(nameof(plan));
         RootOwnerArchitectureId = ArchitectureRootOwnerResolver.TryResolve(
             plan,
             out ArchitectureId? rootOwner)
             ? rootOwner
             : null;
-        _createExecutionHost = createExecutionHost;
+        _createRunner = createRunner;
     }
 
     public VideoExecutionPlan Plan { get; }
@@ -68,16 +68,16 @@ internal sealed class VideoExecutionPlanContext
                 PlanDiagnosticReporter.ThrowIfBlocking(
                     Plan.Diagnostics,
                     "VideoStages could not create a valid architecture execution plan");
-                _executionHost = _createExecutionHost();
-                if (!ReferenceEquals(Plan, _executionHost.Plan))
+                _runner = _createRunner();
+                if (!ReferenceEquals(Plan, _runner.Plan))
                 {
                     throw Invariant.Failure(
                         "The execution host was created for a different video execution plan.");
                 }
-                PreflightDiagnostics = _executionHost.CollectPreflightDiagnostics();
+                PreflightDiagnostics = _runner.CollectPreflightDiagnostics();
                 PlanDiagnosticReporter.ReportToRequest(
                     PreflightDiagnostics,
-                    _executionHost.RequestInput);
+                    _runner.RequestInput);
                 PlanDiagnosticReporter.ThrowIfBlocking(
                     PreflightDiagnostics,
                     "VideoStages cannot run this request");
@@ -110,12 +110,12 @@ internal sealed class VideoExecutionPlanContext
                 + "Graph-free request preflight must complete first.");
     }
 
-    /// <summary>The host is private, so this is how a caller reaches a phase on it. Every workflow
-    /// phase but the first and last is exactly one of these.</summary>
-    internal void ExecutePrepared(Action<VideoArchitectureExecutionHost> phase)
+    /// <summary>The runner is private, so this is how a caller reaches a phase on it. Every
+    /// workflow phase but the first and last is exactly one of these.</summary>
+    internal void ExecutePrepared(Action<TimelineRunner> phase)
     {
         ArgumentNullException.ThrowIfNull(phase);
-        ExecutePrepared(() => phase(_executionHost));
+        ExecutePrepared(() => phase(_runner));
     }
 
     /// <summary>The last phase, which is the only one that also ends the request.</summary>

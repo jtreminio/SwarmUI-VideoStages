@@ -6,9 +6,8 @@ namespace VideoStages;
 
 internal static class WorkflowPhase
 {
-    /// <summary>Every phase but the first and last is one host call under the prepared guard.</summary>
-    internal static Action<WorkflowGenerator> OnHost(
-        Action<VideoArchitectureExecutionHost> phase) =>
+    /// <summary>Every phase but the first and last is one runner call under the prepared guard.</summary>
+    internal static Action<WorkflowGenerator> Run(Action<TimelineRunner> phase) =>
         Guarded(context => context.ExecutePrepared(phase));
 
     // The gate is what keeps a registered step inert on a request this extension is not driving.

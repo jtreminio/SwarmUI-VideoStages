@@ -95,7 +95,7 @@ public class ArchitectureRuntimeOwnershipTests
         WorkflowGenerator generator = Generator();
         JObject before = (JObject)generator.Workflow.DeepClone();
         WGNodeData beforeMedia = generator.CurrentMedia;
-        VideoArchitectureExecutionHost host = new(generator, plan, [initVideoClip, future]);
+        TimelineRunner host = new(generator, plan, [initVideoClip, future]);
         VideoExecutionPlanContext request = new(plan, () => host);
 
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(() =>
@@ -152,7 +152,7 @@ public class ArchitectureRuntimeOwnershipTests
         VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         RecordingProvider initVideoClip = new(new("init-video-arch"));
         RecordingProvider future = new(new("future-arch"));
-        VideoArchitectureExecutionHost host = new(
+        TimelineRunner host = new(
             Generator(),
             plan,
             [initVideoClip, future]);
@@ -172,7 +172,7 @@ public class ArchitectureRuntimeOwnershipTests
     {
         VideoExecutionPlan plan = MixedInitVideoLeadingPlan();
         VideoExecutionPlan otherPlan = MixedInitVideoLeadingPlan();
-        VideoArchitectureExecutionHost host = new(
+        TimelineRunner host = new(
             Generator(),
             otherPlan,
             [
@@ -196,7 +196,7 @@ public class ArchitectureRuntimeOwnershipTests
         RecordingProvider duplicate = new(new("init-video-arch"));
 
         InvalidOperationException error = Assert.Throws<InvalidOperationException>(() =>
-            new VideoArchitectureExecutionHost(
+            new TimelineRunner(
                 Generator(),
                 plan,
                 [first, duplicate]));
@@ -214,7 +214,7 @@ public class ArchitectureRuntimeOwnershipTests
             new("future-arch"),
             lifecycleFailure: phaseFailure);
         WorkflowGenerator generator = Generator();
-        VideoArchitectureExecutionHost host = new(
+        TimelineRunner host = new(
             generator,
             plan,
             [initVideoClip, future]);
@@ -346,7 +346,7 @@ public class ArchitectureRuntimeOwnershipTests
         VideoExecutionPlan plan,
         IEnumerable<IArchitectureGenerationSessionProvider> providers)
     {
-        VideoArchitectureExecutionHost host = new(generator, plan, providers);
+        TimelineRunner host = new(generator, plan, providers);
         VideoExecutionPlanContext request = new(plan, () => host);
         request.PrepareRequest();
         return request;
