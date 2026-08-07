@@ -1237,6 +1237,17 @@ describe("renderTimeline (DOM)", () => {
 });
 
 describe("track-head lane tags", () => {
+    const parse = (html: string): HTMLElement => {
+        const host = document.createElement("div");
+        host.innerHTML = html;
+        return host;
+    };
+
+    const tagLabels = (host: HTMLElement): (string | null)[] =>
+        [...host.querySelectorAll(".vst-head-tags .vst-head-tag")].map(
+            (tag) => tag.textContent,
+        );
+
     it("emits lane tags with data-driven active/muted states", () => {
         const clips = [
             minimalClip({
@@ -1247,58 +1258,77 @@ describe("track-head lane tags", () => {
         ];
         const layouts = computeRegionLayout(clips, { pxPerSecond: 60 });
 
-        // Audio: laneCount = 3 -> Clip, A1, A2 active; the trailing add
-        // button is muted, placed via the same lane-idx var the lanes use.
-        const audio = renderAudioTrackRow(
-            clips,
-            layouts,
-            undefined,
-            audioTracks(2),
+        const audio = parse(
+            renderAudioTrackRow(clips, layouts, undefined, audioTracks(2)),
         );
-        expect(audio).toContain("vst-head-tag-src");
-        expect(audio).toContain(">A1<");
-        expect(audio).toContain(">A2<");
-        expect(audio).toMatch(
-            /vst-head-tag-track vst-head-tag-muted vst-head-tag-action" style="--vst-audio-lane-idx:2"/,
+        expect(tagLabels(audio)).toEqual(["A0", "A1", "A2", "+ Audio"]);
+        const trackTags = audio.querySelectorAll<HTMLElement>(
+            ".vst-head-tags .vst-head-tag-track",
         );
+        expect(trackTags[0].classList.contains("vst-head-tag-active")).toBe(
+            true,
+        );
+        expect(
+            trackTags[0].style.getPropertyValue("--vst-audio-lane-idx"),
+        ).toBe("0");
+        // The add button trails the two tracks, so it lands in lane 2.
+        const add = trackTags[trackTags.length - 1];
+        expect(add.classList.contains("vst-head-tag-muted")).toBe(true);
+        expect(add.classList.contains("vst-head-tag-active")).toBe(false);
+        expect(add.style.getPropertyValue("--vst-audio-lane-idx")).toBe("2");
 
-        const prompt = renderPromptTrackRow(clips, layouts, 60, "global");
-        expect(prompt).toContain("vst-head-tag-major vst-head-tag-active");
-        expect(prompt).toContain("vst-head-tag-relay vst-head-tag-active");
+        const prompt = parse(
+            renderPromptTrackRow(clips, layouts, 60, "global"),
+        );
+        expect(
+            requireEl(prompt, ".vst-head-tag-major").classList.contains(
+                "vst-head-tag-active",
+            ),
+        ).toBe(true);
+        expect(
+            requireEl(prompt, ".vst-head-tag-relay").classList.contains(
+                "vst-head-tag-active",
+            ),
+        ).toBe(true);
     });
 
     it("names the audio add button at every track count", () => {
         const clips = [minimalClip({ duration: 4 })];
         const layouts = computeRegionLayout(clips, { pxPerSecond: 60 });
 
-        const empty = renderAudioTrackRow(clips, layouts);
-        expect(empty).toContain(">+ Audio<");
-        expect(empty).toContain("vst-head-tag-action");
-        expect(empty).toContain(
-            'data-vst-audio-track-add title="Add an audio track spanning the timeline" aria-label="Add an audio track" role="button" tabindex="0"',
+        const empty = parse(renderAudioTrackRow(clips, layouts));
+        expect(tagLabels(empty)).toEqual(["A0", "+ Audio"]);
+        const add = requireEl(
+            empty,
+            ".vst-head-tags [data-vst-audio-track-add]",
         );
+        expect(add.classList.contains("vst-head-tag-action")).toBe(true);
+        expect(add.title).toBe("Add an audio track spanning the timeline");
+        expect(add.getAttribute("aria-label")).toBe("Add an audio track");
+        expect(add.getAttribute("role")).toBe("button");
+        expect(add.tabIndex).toBe(0);
 
-        const filled = renderAudioTrackRow(
-            clips,
-            layouts,
-            undefined,
-            audioTracks(1),
-        );
         // The added track takes lane 0's tag; the button keeps its own wording.
-        expect(filled).toContain(">A1<");
-        expect(filled).toContain(">+ Audio<");
+        const filled = parse(
+            renderAudioTrackRow(clips, layouts, undefined, audioTracks(1)),
+        );
+        expect(tagLabels(filled)).toEqual(["A0", "A1", "+ Audio"]);
     });
 
     it("leaves the relay tag inactive when no clip has prompt windows", () => {
         const bare = [minimalClip({ duration: 3 })];
-        const html = renderPromptTrackRow(
-            bare,
-            computeRegionLayout(bare, { pxPerSecond: 60 }),
-            60,
-            "global",
+        const relay = requireEl(
+            parse(
+                renderPromptTrackRow(
+                    bare,
+                    computeRegionLayout(bare, { pxPerSecond: 60 }),
+                    60,
+                    "global",
+                ),
+            ),
+            ".vst-head-tag-relay",
         );
-        expect(html).toContain("vst-head-tag-relay");
-        expect(html).not.toContain("vst-head-tag-relay vst-head-tag-active");
+        expect(relay.classList.contains("vst-head-tag-active")).toBe(false);
     });
 });
 
@@ -1353,7 +1383,12 @@ describe("timeline-wide audio span lanes", () => {
         expect(document.querySelectorAll(".vst-audio-track-lane")).toHaveLength(
             2,
         );
-        expect(document.body.innerHTML).toContain(">A1<");
+        expect(
+            requireEl(
+                document.body,
+                ".vst-track-audio .vst-head-tags .vst-head-tag-track",
+            ).textContent,
+        ).toBe("A1");
     });
 });
 
