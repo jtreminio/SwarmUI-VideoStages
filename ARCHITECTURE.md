@@ -142,7 +142,7 @@ construction all belong to the module.
 An architecture module owns:
 
 - model recognition and profile resolution;
-- its catalog descriptor and conditional rules;
+- its catalog descriptor and boundary rules;
 - validation and compilation of architecture-specific stage options;
 - request preflight of its own dependencies, and creation and preparation of its
   runtime session;
@@ -205,36 +205,34 @@ graph details live in [ARCHITECTURE_FLOW.md](docs/ARCHITECTURE_FLOW.md#b6b-minim
 
 ## Capability catalog
 
-The backend catalog is authoritative. It publishes stable capabilities by
-scope. Catalog schema v2 has exactly an architecture table and a resolved-model
-table:
+The backend catalog is authoritative. Catalog schema v2 has exactly an
+architecture table and a resolved-model table:
 
-- each architecture publishes its ID, label, complete descriptor capability
-  set, boundary rules, and conditional rules;
+- each architecture publishes exactly `id`, `label`, `capabilities`, and
+  `boundaryRules`;
+- `capabilities` is exactly the three lists `features`, `entryModes`, and
+  `audioSourceKinds`; `features` is the flag vocabulary
+  `ArchitectureFeatureVocabulary` owns;
+- `boundaryRules` is exactly the cut, continue, and crossfade rules;
 - each resolved model publishes architecture/profile identity, core model and
-  compatibility identities, frame grid and grid origin, complete effective
-  capabilities, and supported frame-reference positions;
-- clip: source video, prompts, relay, references, retakes, audio sources, and
-  projected audio segments;
-- stage: input modes, each upscale mode (also republished as a flat
-  `upscaleModes` list), LoRA, IC-LoRA, frame references;
-- boundary: cut, continue, and crossfade rules.
+  compatibility identities, frame grid and grid origin, its architecture's
+  capabilities, and supported frame-reference positions.
 
-The resolved-model capability set is complete rather than an additive
-“extras” overlay, so it may narrow architecture defaults. The wire has no
-profile table, architecture/model extras, duplicate entry-mode alias, or
-separate output-capability alias. `modelProfileId` remains an opaque resolved
-runtime identity, not a frontend authorization table.
+There is no clip/stage scoping on the wire, and no flat upscale-mode list. A
+resolved model is handed its architecture's descriptor verbatim, so a model
+cannot narrow its architecture's capabilities. The wire has no profile table,
+architecture/model extras, duplicate entry-mode alias, or separate
+output-capability alias. `modelProfileId` remains an opaque resolved runtime
+identity, not a frontend authorization table.
 
-A rule decision includes support state, a stable code, a user-facing reason,
-scope, optional entity identity, and typed constraints. The frontend mirrors
-these decisions for authoring, but the backend revalidates them before graph
-mutation.
+A rule decision is exactly support state, a stable code, a user-facing reason,
+and typed constraints. The frontend mirrors these decisions for authoring, but
+the backend revalidates them before graph mutation.
 
-Typed boundary and conditional-rule policies are also the publication source:
-the evaluator that accepts or rejects a plan consumes the same policy object
-serialized into the catalog, and reads its thresholds back out of the published
-rule rather than keeping a second copy. Shared C#/TypeScript contract fixtures
+The typed boundary policy is also the publication source: the evaluator that
+accepts or rejects a plan consumes the same policy object serialized into the
+catalog, and reads its thresholds back out of the published rule rather than
+keeping a second copy. Shared C#/TypeScript contract fixtures
 guard the exact wire keys, constraints, resolved-model gates, frame alignment,
 crossfade budgeting, IC-LoRA presets, and the IC-LoRA drive contract.
 

@@ -134,10 +134,10 @@ cookie-backed params asynchronously and the first value observed can be blank.
 ## Catalog and capability views
 
 Backend catalog schema v2 has exactly architecture and resolved-model records.
-Architecture records carry ID, label, complete descriptor capabilities,
-boundary decisions, conditional rules, and constraints. Resolved-model records
-carry architecture/profile identity, core model facts, frame grid, entry
-abilities, complete effective capabilities, and frame-reference positions. It
+Architecture records carry exactly ID, label, capabilities, and boundary rules;
+a rule's constraints are nested inside the rule, never a sibling field.
+Resolved-model records carry architecture/profile identity, core model facts,
+frame grid, its architecture's capabilities, and frame-reference positions. It
 is the frontend's sole authority for executable architecture/model identity and
 authoring policy; model names and host model-class metadata are never used to
 infer identity.
@@ -162,7 +162,7 @@ references, unknown capability values, or malformed rule constraints reject
 the response instead of creating a partial capability view. There is no
 frontend profile table, extras overlay, or output-capability alias. Shared
 C#/TypeScript fixtures keep entry abilities, frame-reference positions,
-boundary constraint keys, conditional rules, and resolved-model gates aligned.
+boundary constraint keys, boundary rules, and resolved-model gates aligned.
 
 `buildArchitectureModelCatalog` may apply current host dropdown labels to
 backend-known model entries and retains backend-only models. A host model absent
@@ -195,11 +195,14 @@ or disabled. Persisted unsupported values stay visible and disabled with an
 inline reason plus a panel-owned removal affordance; normalization never erases
 them, and diagnostics report them instead.
 
-The feature vocabulary is `initVideo`, `frameReferences`, `clipReferences`,
-`retake`, `majorPrompt`, `promptRelay`, `clipAudio`, `audioReuse`,
-`stageLoras`, `icLora`, `upscale`, plus per-stage `sampler` and
-`scheduler`. Supported audio source kinds and upscale modes are lists on the
-same views.
+The feature vocabulary is C#-owned and generated: `ARCHITECTURE_FEATURE_LABELS`
+in `architectures/generatedFeatures.ts` is the single frontend source, and it
+is drift-tested against `ArchitectureFeatureVocabulary.cs`. Two gates are
+shaped differently and are not features: per-stage `stageLoras`, `sampler` and
+`scheduler` decide on `StageCapabilityView`, and audio sourcing is stated by
+the `audioSourceKinds` list rather than a flag. Upscaling is not a list either:
+`upscaleModeForMethod` classifies a persisted method name, and the
+`latentUpscale` / `latentModelUpscale` features gate the two latent modes.
 
 Two related gates use their own shapes rather than `decision()`: clip entry
 material, through the catalog's per-model `entryModes` list
