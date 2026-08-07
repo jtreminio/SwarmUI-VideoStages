@@ -1284,14 +1284,14 @@ describe("persistence", () => {
         });
 
         it("treats out-of-range stored values as inherit", () => {
-            dataInput().value = '{"width":100,"height":100,"fps":0,"clips":[]}';
+            mountVideoStagesData({ width: 100, height: 100, clips: [] });
             const state = getState();
             expect(state.dimsExplicit).toBe(false);
             expect(state.width).toBe(1024);
         });
 
         it("treats a lone width (no height) as inherit for dims", () => {
-            dataInput().value = '{"width":512,"clips":[]}';
+            mountVideoStagesData({ width: 512, clips: [] });
             const state = getState();
             expect(state.dimsExplicit).toBe(false);
             expect(state.width).toBe(1024);
