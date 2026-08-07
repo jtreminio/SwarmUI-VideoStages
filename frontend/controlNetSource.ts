@@ -1,8 +1,4 @@
-export const CONTROLNET_SOURCE_OPTIONS = [
-    "ControlNet 1",
-    "ControlNet 2",
-    "ControlNet 3",
-] as const;
+import { CONTROLNET_SOURCE_OPTIONS } from "./generatedMediaSource";
 
 export const canonicalControlNetSource = (value: unknown): string | null => {
     const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();

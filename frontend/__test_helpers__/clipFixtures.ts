@@ -1,11 +1,11 @@
-import {
-    type Clip,
-    type ClipReference,
-    type FrameRefImage,
-    type IcLora,
-    type InitVideo,
-    REF_SOURCE_BASE,
-    type Stage,
+import { MEDIA_SOURCE_BASE } from "../generatedMediaSource";
+import type {
+    Clip,
+    ClipReference,
+    FrameRefImage,
+    IcLora,
+    InitVideo,
+    Stage,
 } from "../types";
 
 export const initVideoFixture = (
@@ -55,7 +55,7 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
 export const minimalRef = (
     overrides: Partial<FrameRefImage> = {},
 ): FrameRefImage => ({
-    source: REF_SOURCE_BASE,
+    source: MEDIA_SOURCE_BASE,
     uploadFileName: null,
     uploadedImage: null,
     frame: 0,

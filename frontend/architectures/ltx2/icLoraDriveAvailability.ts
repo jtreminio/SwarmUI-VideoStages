@@ -1,8 +1,9 @@
 import { activeStageCount, executableClipIndexes } from "../../clipSemantics";
 import {
-    IC_LORA_SOURCE_INCOMING,
-    IC_LORA_SOURCE_UPLOAD,
-} from "../../icLoraAuthoring";
+    MEDIA_SOURCE_INCOMING,
+    MEDIA_SOURCE_UPLOAD,
+} from "../../generatedMediaSource";
+
 import type { Clip, IcLora } from "../../types";
 import type { GeneratedEntryMode } from "../generatedFeatures";
 
@@ -64,7 +65,7 @@ export const reconcileIncomingIcLoraDrives = (
     let changed = false;
     for (const entry of clip.icLoras) {
         if (
-            entry.driveSource === IC_LORA_SOURCE_INCOMING &&
+            entry.driveSource === MEDIA_SOURCE_INCOMING &&
             !canUseIncomingIcLoraDrive(
                 entry,
                 clip,
@@ -73,7 +74,7 @@ export const reconcileIncomingIcLoraDrives = (
                 generatedEntryMode,
             )
         ) {
-            entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+            entry.driveSource = MEDIA_SOURCE_UPLOAD;
             changed = true;
         }
     }

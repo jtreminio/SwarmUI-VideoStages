@@ -31,8 +31,19 @@ public static class MediaSource
         Line();
         Line($"export const MEDIA_SOURCE_UPLOAD = \"{Upload}\";");
         Line($"export const MEDIA_SOURCE_NATIVE = \"{Native}\";");
+        Line($"export const MEDIA_SOURCE_INCOMING = \"{Incoming}\";");
         Line($"export const MEDIA_SOURCE_CONTROLNET = \"{ControlNet}\";");
         Line($"export const MEDIA_SOURCE_ACE_STEP_FUN = \"{AceStepFun}\";");
+        Line($"export const MEDIA_SOURCE_BASE = \"{Base}\";");
+        Line($"export const MEDIA_SOURCE_REFINER = \"{Refiner}\";");
+        Line();
+        Line("/** The per-slot spellings, in slot order. */");
+        Line("export const CONTROLNET_SOURCE_OPTIONS = [");
+        for (int index = 0; index < ControlNetSlotCount; index++)
+        {
+            Line($"    \"{FormatControlNet(index)}\",");
+        }
+        Line("] as const;");
         Line();
         Line("/**");
         Line(" * The audio-track sources the backend recognises. Anything else an authored");
@@ -52,10 +63,13 @@ public static class MediaSource
     private const string Base2EditPrefix = "edit";
     private const string ExplicitStagePrefix = "Stage";
 
+    /// <summary>ControlNet slots are numbered from one and the host exposes exactly this many.</summary>
+    public const int ControlNetSlotCount = 3;
+
     public static bool TryParseControlNetIndex(string source, out int index)
     {
         if (TryParseNonNegativeIndex(source, ControlNet, out int oneBased)
-            && oneBased is >= 1 and <= 3)
+            && oneBased is >= 1 and <= ControlNetSlotCount)
         {
             index = oneBased - 1;
             return true;

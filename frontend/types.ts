@@ -334,10 +334,6 @@ export {
     UNSTORED_CLIP_KEYS,
 } from "./storageTypes";
 
-export const REF_SOURCE_BASE = "Base";
-export const REF_SOURCE_REFINER = "Refiner";
-export const REF_SOURCE_UPLOAD = "Upload";
-
 export interface ImageSourceOption {
     value: string;
     label: string;

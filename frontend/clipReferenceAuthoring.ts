@@ -1,9 +1,9 @@
+import { MEDIA_SOURCE_UPLOAD } from "./generatedMediaSource";
 import {
     REFERENCE_SCALE_FULL,
     REFERENCE_SCALES,
 } from "./generatedReferenceScale";
 import type { ClipReference, ClipReferenceKind } from "./types";
-import { REF_SOURCE_UPLOAD } from "./types";
 
 /**
  * Everything that varies per reference kind. `tag` is the name the model
@@ -72,7 +72,7 @@ export const buildDefaultClipReference = (
     kind: ClipReferenceKind = "image",
 ): ClipReference => ({
     kind,
-    source: REF_SOURCE_UPLOAD,
+    source: MEDIA_SOURCE_UPLOAD,
     uploadedMedia: null,
     includeSoundtrack: false,
     mediaDurationSeconds: 0,

@@ -12,6 +12,10 @@ import {
 } from "./architectures/ltx2/icLoraNormalization";
 import { clipReferenceTags } from "./clipReferenceAuthoring";
 import {
+    MEDIA_SOURCE_BASE,
+    MEDIA_SOURCE_REFINER,
+} from "./generatedMediaSource";
+import {
     buildDefaultClip,
     normalizeClip,
     normalizeContinueOverlap,
@@ -34,11 +38,7 @@ import {
     removeRefAt,
 } from "./normalizationStage";
 import { framesForClip } from "./renderUtils";
-import {
-    REF_SOURCE_BASE,
-    REF_SOURCE_REFINER,
-    type RootDefaults,
-} from "./types";
+import type { RootDefaults } from "./types";
 
 const moduleRootDefaults = (): RootDefaults => ({
     modelCatalog: testArchitectureCatalog(),
@@ -104,7 +104,7 @@ describe("normalization", () => {
     });
 
     it("normalizeRef clamps frame to max", () => {
-        const ref = normalizeRef({ source: REF_SOURCE_BASE, frame: 999 }, 10);
+        const ref = normalizeRef({ source: MEDIA_SOURCE_BASE, frame: 999 }, 10);
         expect(ref.frame).toBe(10);
     });
 
@@ -113,7 +113,7 @@ describe("normalization", () => {
             {
                 duration: 1.05,
                 stages: [{ ...minimalStageRaw, model: "removed-model" }],
-                frameRefs: [{ source: REF_SOURCE_BASE, frame: 33 }],
+                frameRefs: [{ source: MEDIA_SOURCE_BASE, frame: 33 }],
             },
             moduleRootDefaults(),
             testStageModel,
@@ -237,7 +237,7 @@ describe("normalization", () => {
     it("normalizeClip pads frameRefStrengths for each stage from raw", () => {
         const rawClip: Record<string, unknown> = {
             duration: 2,
-            frameRefs: [{ source: REF_SOURCE_BASE, frame: 1 }],
+            frameRefs: [{ source: MEDIA_SOURCE_BASE, frame: 1 }],
             stages: [
                 {
                     model: "ltx",
@@ -1003,7 +1003,7 @@ describe("normalization", () => {
 
     it("buildDefaultRef matches editor defaults", () => {
         const ref = buildDefaultRef();
-        expect(ref.source).toBe(REF_SOURCE_REFINER);
+        expect(ref.source).toBe(MEDIA_SOURCE_REFINER);
         expect(ref.frame).toBe(1);
         expect(ref.uploadedImage).toBeNull();
     });
@@ -1031,7 +1031,7 @@ describe("appendRefToClip / removeRefAt", () => {
         normalizeClip(
             {
                 duration: 4,
-                frameRefs: [{ source: REF_SOURCE_REFINER, frame: 2 }],
+                frameRefs: [{ source: MEDIA_SOURCE_REFINER, frame: 2 }],
                 stages: [
                     { frameRefStrengths: [0.3] },
                     { frameRefStrengths: [0.7] },
@@ -1043,9 +1043,9 @@ describe("appendRefToClip / removeRefAt", () => {
 
     it("appendRefToClip adds the ref and pads every stage's frameRefStrengths", () => {
         const clip = twoStageClip();
-        appendRefToClip(clip, buildDefaultRef(REF_SOURCE_BASE));
+        appendRefToClip(clip, buildDefaultRef(MEDIA_SOURCE_BASE));
         expect(clip.frameRefs).toHaveLength(2);
-        expect(clip.frameRefs[1].source).toBe(REF_SOURCE_BASE);
+        expect(clip.frameRefs[1].source).toBe(MEDIA_SOURCE_BASE);
         expect(clip.stages[0].frameRefStrengths).toHaveLength(2);
         expect(clip.stages[1].frameRefStrengths).toHaveLength(2);
         expect(clip.stages[0].frameRefStrengths[0]).toBe(0.3);
@@ -1055,10 +1055,10 @@ describe("appendRefToClip / removeRefAt", () => {
 
     it("removeRefAt removes the ref and the matching strength from every stage", () => {
         const clip = twoStageClip();
-        appendRefToClip(clip, buildDefaultRef(REF_SOURCE_BASE));
+        appendRefToClip(clip, buildDefaultRef(MEDIA_SOURCE_BASE));
         expect(removeRefAt(clip, 0)).toBe(true);
         expect(clip.frameRefs).toHaveLength(1);
-        expect(clip.frameRefs[0].source).toBe(REF_SOURCE_BASE);
+        expect(clip.frameRefs[0].source).toBe(MEDIA_SOURCE_BASE);
         expect(clip.stages[0].frameRefStrengths).toEqual([0.8]);
         expect(clip.stages[1].frameRefStrengths).toEqual([0.8]);
     });

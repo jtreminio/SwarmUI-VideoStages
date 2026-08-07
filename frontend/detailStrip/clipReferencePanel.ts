@@ -19,16 +19,16 @@ import {
     buildOptionSelect,
     buildRepeatingEditor,
 } from "../detailWidgets";
+import { MEDIA_SOURCE_UPLOAD } from "../generatedMediaSource";
 import { probeMediaDurationSeconds } from "../initVideoProbe";
 import { setSelection } from "../selection";
 import { applyClipDurationResize } from "../timelineEdit";
 import { incomingReferenceContinueForClip } from "../timelineTiming";
-import {
-    type Clip,
-    type ClipReference,
-    type ClipReferenceKind,
-    REF_SOURCE_UPLOAD,
-    type RootDefaults,
+import type {
+    Clip,
+    ClipReference,
+    ClipReferenceKind,
+    RootDefaults,
 } from "../types";
 import { roundToTenth } from "../utils";
 import type { DetailStripContext } from "./context";
@@ -293,7 +293,7 @@ export const buildClipReferenceSection = (
                                     target.source,
                                 )
                             ) {
-                                target.source = REF_SOURCE_UPLOAD;
+                                target.source = MEDIA_SOURCE_UPLOAD;
                             }
                         });
                         ctx.render();
@@ -323,7 +323,7 @@ export const buildClipReferenceSection = (
                             buildClipReferenceSourceOptions(target.kind, value),
                         );
                         target.source = resolved;
-                        if (resolved !== REF_SOURCE_UPLOAD) {
+                        if (resolved !== MEDIA_SOURCE_UPLOAD) {
                             target.uploadedMedia = null;
                             target.mediaDurationSeconds = 0;
                             target.drivesClipLength = false;
@@ -337,7 +337,7 @@ export const buildClipReferenceSection = (
             ),
         );
 
-        if (source === REF_SOURCE_UPLOAD) {
+        if (source === MEDIA_SOURCE_UPLOAD) {
             const data = reference.uploadedMedia?.data;
             if (reference.kind === "image" && data) {
                 const preview = document.createElement("div");

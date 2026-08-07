@@ -12,6 +12,7 @@ import {
     STAGE_REF_STRENGTH_MIN,
     STAGE_REF_STRENGTH_STEP,
 } from "./constants";
+import { MEDIA_SOURCE_REFINER } from "./generatedMediaSource";
 import {
     STAGE_CONTROLNET_STRENGTH_DEFAULT,
     STAGE_CONTROLNET_STRENGTH_MAX,
@@ -30,13 +31,12 @@ import {
     trimmedText,
 } from "./normalizationShared";
 import { framesForClip, NEUTRAL_FRAME_GRID } from "./renderUtils";
-import {
-    type Clip,
-    type ClipLora,
-    type FrameRefImage,
-    REF_SOURCE_REFINER,
-    type RootDefaults,
-    type Stage,
+import type {
+    Clip,
+    ClipLora,
+    FrameRefImage,
+    RootDefaults,
+    Stage,
 } from "./types";
 import { isRecord } from "./utils";
 
@@ -186,7 +186,7 @@ export const buildDefaultStage = (
 };
 
 export const buildDefaultRef = (
-    source: string = REF_SOURCE_REFINER,
+    source: string = MEDIA_SOURCE_REFINER,
 ): FrameRefImage => ({
     source,
     uploadFileName: null,

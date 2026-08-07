@@ -24,6 +24,7 @@ import {
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
+import { MEDIA_SOURCE_BASE } from "./generatedMediaSource";
 import {
     getVideoStagesHostBridge,
     setVideoStagesHostBridgeForTests,
@@ -50,7 +51,7 @@ import {
 } from "./persistence/repository";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import type { StoredClip } from "./storageTypes";
-import { REF_SOURCE_BASE, type VideoStagesConfig } from "./types";
+import type { VideoStagesConfig } from "./types";
 import { clearUiStateForTests } from "./uiState";
 
 const dataInput = (): HTMLTextAreaElement =>
@@ -361,7 +362,7 @@ describe("persistence", () => {
                     frameRefs: [
                         {
                             id: clips[0].frameRefs[0].id as string,
-                            source: REF_SOURCE_BASE,
+                            source: MEDIA_SOURCE_BASE,
                             uploadFileName: null,
                             uploadedImage: null,
                             frame: 2,

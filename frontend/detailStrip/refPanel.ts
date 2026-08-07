@@ -12,13 +12,14 @@ import {
     buildOptionSelect,
     buildRepeatingEditor,
 } from "../detailWidgets";
+import { MEDIA_SOURCE_UPLOAD } from "../generatedMediaSource";
 import {
     buildImageSourceOptions,
     resolveImageSourceValue,
 } from "../imageSource";
 import { getReferenceFrameMax } from "../normalizationStage";
 import { setSelection } from "../selection";
-import { type Clip, REF_SOURCE_UPLOAD } from "../types";
+import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
 
 /**
@@ -90,7 +91,7 @@ export const buildRefSection = (
         }
         const options = buildImageSourceOptions(ref.source ?? "");
         const source = resolveImageSourceValue(ref.source ?? "", options);
-        const isUpload = source === REF_SOURCE_UPLOAD;
+        const isUpload = source === MEDIA_SOURCE_UPLOAD;
         const fields = document.createElement("div");
         fields.className =
             "vst-detail-col vst-detail-instance-fields vst-detail-ref-row vst-detail-ref-editor";
@@ -107,7 +108,7 @@ export const buildRefSection = (
                     buildImageSourceOptions(value),
                 );
                 target.source = resolved;
-                if (resolved !== REF_SOURCE_UPLOAD) {
+                if (resolved !== MEDIA_SOURCE_UPLOAD) {
                     target.uploadedImage = null;
                     target.uploadFileName = null;
                 }

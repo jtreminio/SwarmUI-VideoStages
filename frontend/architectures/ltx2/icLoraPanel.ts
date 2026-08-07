@@ -7,11 +7,13 @@ import {
     buildRepeatingEditor,
 } from "../../detailWidgets";
 import {
+    MEDIA_SOURCE_INCOMING,
+    MEDIA_SOURCE_UPLOAD,
+} from "../../generatedMediaSource";
+import {
     IC_LORA_ATTENTION_MAX,
     IC_LORA_ATTENTION_MIN,
     IC_LORA_ATTENTION_STEP,
-    IC_LORA_SOURCE_INCOMING,
-    IC_LORA_SOURCE_UPLOAD,
     IC_LORA_STAGE_ALL,
     IC_LORA_STRENGTH_MAX,
     IC_LORA_STRENGTH_MIN,
@@ -280,7 +282,7 @@ export const buildIcLorasSection = (
                         const targetClip = clips[clipIdx];
                         if (
                             targetClip &&
-                            target.driveSource === IC_LORA_SOURCE_INCOMING &&
+                            target.driveSource === MEDIA_SOURCE_INCOMING &&
                             !canUseIncomingIcLoraDrive(
                                 target,
                                 targetClip,
@@ -289,7 +291,7 @@ export const buildIcLorasSection = (
                                 authoring.generatedEntryMode,
                             )
                         ) {
-                            target.driveSource = IC_LORA_SOURCE_UPLOAD;
+                            target.driveSource = MEDIA_SOURCE_UPLOAD;
                         }
                     });
                     clearIcLoraAutoFailure(value);
@@ -479,7 +481,7 @@ export const buildIcLorasSection = (
                         const targetClip = clips[clipIdx];
                         if (
                             targetClip &&
-                            target.driveSource === IC_LORA_SOURCE_INCOMING &&
+                            target.driveSource === MEDIA_SOURCE_INCOMING &&
                             !canUseIncomingIcLoraDrive(
                                 target,
                                 targetClip,
@@ -488,7 +490,7 @@ export const buildIcLorasSection = (
                                 authoring.generatedEntryMode,
                             )
                         ) {
-                            target.driveSource = IC_LORA_SOURCE_UPLOAD;
+                            target.driveSource = MEDIA_SOURCE_UPLOAD;
                         }
                     });
                     context.render();
@@ -528,7 +530,7 @@ export const buildIcLorasSection = (
                                 target.controlType = "none";
                             }
                             if (target.driveData === "none") {
-                                target.driveSource = IC_LORA_SOURCE_UPLOAD;
+                                target.driveSource = MEDIA_SOURCE_UPLOAD;
                                 target.driveMedia = null;
                                 return;
                             }
@@ -544,8 +546,7 @@ export const buildIcLorasSection = (
                             const targetClip = clips[clipIdx];
                             if (
                                 targetClip &&
-                                target.driveSource ===
-                                    IC_LORA_SOURCE_INCOMING &&
+                                target.driveSource === MEDIA_SOURCE_INCOMING &&
                                 !canUseIncomingIcLoraDrive(
                                     target,
                                     targetClip,
@@ -554,7 +555,7 @@ export const buildIcLorasSection = (
                                     authoring.generatedEntryMode,
                                 )
                             ) {
-                                target.driveSource = IC_LORA_SOURCE_UPLOAD;
+                                target.driveSource = MEDIA_SOURCE_UPLOAD;
                             }
                         });
                         context.render();
@@ -584,9 +585,9 @@ export const buildIcLorasSection = (
                 );
                 const sourceSelect = buildOptionSelect(
                     [
-                        { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
+                        { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
                         {
-                            value: IC_LORA_SOURCE_INCOMING,
+                            value: MEDIA_SOURCE_INCOMING,
                             label: incomingAvailable
                                 ? "Incoming media"
                                 : "Incoming media (unavailable)",
@@ -599,7 +600,7 @@ export const buildIcLorasSection = (
                             const target = entryAt(clips, entryIdx);
                             if (target) {
                                 target.driveSource = value;
-                                if (value !== IC_LORA_SOURCE_UPLOAD) {
+                                if (value !== MEDIA_SOURCE_UPLOAD) {
                                     target.driveMedia = null;
                                 }
                             }
@@ -621,7 +622,7 @@ export const buildIcLorasSection = (
 
             if (
                 entry.driveData !== "none" &&
-                entry.driveSource === IC_LORA_SOURCE_UPLOAD
+                entry.driveSource === MEDIA_SOURCE_UPLOAD
             ) {
                 const acceptedKinds = driveMediaKinds;
                 fields.appendChild(
@@ -659,7 +660,7 @@ export const buildIcLorasSection = (
                         "text, image, or video entry path supplies visuals.";
                     fields.appendChild(hint);
                 }
-            } else if (entry.driveSource === IC_LORA_SOURCE_INCOMING) {
+            } else if (entry.driveSource === MEDIA_SOURCE_INCOMING) {
                 const hint = document.createElement("small");
                 hint.className = "vst-detail-field-hint";
                 hint.textContent =

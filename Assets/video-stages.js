@@ -2240,9 +2240,6 @@
 
   // frontend/types.ts
   var CURRENT_AUTHORING_SCHEMA_VERSION = 7;
-  var REF_SOURCE_BASE = "Base";
-  var REF_SOURCE_REFINER = "Refiner";
-  var REF_SOURCE_UPLOAD = "Upload";
 
   // frontend/identity.ts
   var fallbackSequence = 0;
@@ -2398,8 +2395,16 @@
   // frontend/generatedMediaSource.ts
   var MEDIA_SOURCE_UPLOAD = "Upload";
   var MEDIA_SOURCE_NATIVE = "Native";
+  var MEDIA_SOURCE_INCOMING = "Incoming";
   var MEDIA_SOURCE_CONTROLNET = "ControlNet";
   var MEDIA_SOURCE_ACE_STEP_FUN = "AceStepFun";
+  var MEDIA_SOURCE_BASE = "Base";
+  var MEDIA_SOURCE_REFINER = "Refiner";
+  var CONTROLNET_SOURCE_OPTIONS = [
+    "ControlNet 1",
+    "ControlNet 2",
+    "ControlNet 3"
+  ];
 
   // frontend/generatedReferenceScale.ts
   var REFERENCE_SCALE_FULL = 1;
@@ -2446,7 +2451,7 @@
   };
   var buildDefaultClipReference = (kind = "image") => ({
     kind,
-    source: REF_SOURCE_UPLOAD,
+    source: MEDIA_SOURCE_UPLOAD,
     uploadedMedia: null,
     includeSoundtrack: false,
     mediaDurationSeconds: 0,
@@ -2568,7 +2573,7 @@
     return value.map((entry) => {
       const raw = isRecord2(entry) ? entry : {};
       const kind = normalizeClipReferenceKind(raw.kind);
-      const source = trimmedText(raw.source) || REF_SOURCE_UPLOAD;
+      const source = trimmedText(raw.source) || MEDIA_SOURCE_UPLOAD;
       const mediaDurationSeconds = roundToTenth(
         nonNegativeNumber(raw.mediaDurationSeconds)
       );
@@ -2957,23 +2962,6 @@
   var ltx2DimensionFactor = (clip) => Math.max(1, ...clip.icLoras.map((entry) => icLoraDimensionFactor(entry)));
   var ltx2DimensionMultiple = (clip) => ROOT_DIMENSION_STEP * ltx2DimensionFactor(clip);
 
-  // frontend/icLoraAuthoring.ts
-  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
-  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
-  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
-  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
-  var IC_LORA_SOURCE_UPLOAD = "Upload";
-  var IC_LORA_SOURCE_INCOMING = "Incoming";
-  var IC_LORA_STAGE_ALL = -1;
-  var IC_LORA_STRENGTH_MIN = 0;
-  var IC_LORA_STRENGTH_MAX = 5;
-  var IC_LORA_STRENGTH_STEP = 0.05;
-  var IC_LORA_STRENGTH_DEFAULT = 1;
-  var IC_LORA_ATTENTION_MIN = 0;
-  var IC_LORA_ATTENTION_MAX = 1;
-  var IC_LORA_ATTENTION_STEP = 0.05;
-  var IC_LORA_ATTENTION_DEFAULT = 1;
-
   // frontend/architectures/ltx2/icLoraDriveAvailability.ts
   var canUseIncomingIcLoraDrive = (entry, clip, clipIdx, clips, generatedEntryMode) => {
     const executable = executableClipIndexes(clips);
@@ -2997,14 +2985,14 @@
     }
     let changed = false;
     for (const entry of clip.icLoras) {
-      if (entry.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+      if (entry.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
         entry,
         clip,
         clipIdx,
         clips,
         generatedEntryMode
       )) {
-        entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+        entry.driveSource = MEDIA_SOURCE_UPLOAD;
         changed = true;
       }
     }
@@ -3012,11 +3000,6 @@
   };
 
   // frontend/controlNetSource.ts
-  var CONTROLNET_SOURCE_OPTIONS = [
-    "ControlNet 1",
-    "ControlNet 2",
-    "ControlNet 3"
-  ];
   var canonicalControlNetSource = (value) => {
     const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
     if (!compact.startsWith("controlnet")) {
@@ -3030,11 +3013,26 @@
     return Number.isSafeInteger(oneBased) && oneBased >= 1 && oneBased <= 3 ? CONTROLNET_SOURCE_OPTIONS[oneBased - 1] : null;
   };
 
+  // frontend/icLoraAuthoring.ts
+  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
+  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
+  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
+  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
+  var IC_LORA_STAGE_ALL = -1;
+  var IC_LORA_STRENGTH_MIN = 0;
+  var IC_LORA_STRENGTH_MAX = 5;
+  var IC_LORA_STRENGTH_STEP = 0.05;
+  var IC_LORA_STRENGTH_DEFAULT = 1;
+  var IC_LORA_ATTENTION_MIN = 0;
+  var IC_LORA_ATTENTION_MAX = 1;
+  var IC_LORA_ATTENTION_STEP = 0.05;
+  var IC_LORA_ATTENTION_DEFAULT = 1;
+
   // frontend/architectures/ltx2/icLoraNormalization.ts
   var defaultIcLora = (overrides = {}) => ({
     lora: "",
     preset: IC_LORA_PRESET_CUSTOM_ID,
-    driveSource: IC_LORA_SOURCE_UPLOAD,
+    driveSource: MEDIA_SOURCE_UPLOAD,
     driveData: "visual",
     driveMediaKinds: ["image", "video"],
     stage: IC_LORA_STAGE_ALL,
@@ -3063,10 +3061,10 @@
     const authored = `${value ?? ""}`.trim();
     const compact = authored.replace(/\s+/g, "").toLowerCase();
     if (!compact || compact === "upload") {
-      return IC_LORA_SOURCE_UPLOAD;
+      return MEDIA_SOURCE_UPLOAD;
     }
     if (compact === "incoming" || compact === "stageinput") {
-      return IC_LORA_SOURCE_INCOMING;
+      return MEDIA_SOURCE_INCOMING;
     }
     return canonicalControlNetSource(authored) ?? authored;
   };
@@ -3118,12 +3116,12 @@
     );
     const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
     let driveSource = normalizeIcLoraDriveSource(raw.driveSource);
-    const driveMedia = driveSource === IC_LORA_SOURCE_UPLOAD && driveData !== "none" && normalizedDriveMedia && driveMediaKinds.some(
+    const driveMedia = driveSource === MEDIA_SOURCE_UPLOAD && driveData !== "none" && normalizedDriveMedia && driveMediaKinds.some(
       (kind) => normalizedDriveMedia.data.startsWith(`data:${kind}/`)
     ) ? normalizedDriveMedia : null;
     const stage = normalizeIcLoraStage(raw.stage, stageCount);
     if (driveData === "none") {
-      driveSource = IC_LORA_SOURCE_UPLOAD;
+      driveSource = MEDIA_SOURCE_UPLOAD;
     }
     return {
       id: normalizeOptionalEntityId(raw.id),
@@ -3159,7 +3157,7 @@
   };
   var canonicalizeIcLoraFields = (entry) => {
     if (entry.driveData === "none") {
-      entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+      entry.driveSource = MEDIA_SOURCE_UPLOAD;
       entry.driveMedia = null;
     }
     entry.driveMediaKinds = normalizeIcLoraDriveMediaKinds(
@@ -3422,7 +3420,7 @@
       scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal"
     };
   };
-  var buildDefaultRef = (source = REF_SOURCE_REFINER) => ({
+  var buildDefaultRef = (source = MEDIA_SOURCE_REFINER) => ({
     source,
     uploadFileName: null,
     uploadedImage: null,
@@ -7029,7 +7027,7 @@
   var refSourceLabel = (source) => {
     const value = `${source ?? ""}`.trim();
     if (!value) {
-      return REF_SOURCE_REFINER;
+      return MEDIA_SOURCE_REFINER;
     }
     const editStage = parseBase2EditStageIndex(value);
     if (editStage != null) {
@@ -10556,14 +10554,14 @@
                 target.driveMedia = null;
               }
               const targetClip = clips[clipIdx];
-              if (targetClip && target.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+              if (targetClip && target.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
                 target,
                 targetClip,
                 clipIdx,
                 clips,
                 authoring.generatedEntryMode
               )) {
-                target.driveSource = IC_LORA_SOURCE_UPLOAD;
+                target.driveSource = MEDIA_SOURCE_UPLOAD;
               }
             });
             clearIcLoraAutoFailure(value);
@@ -10726,14 +10724,14 @@
               target.stage = Number.isInteger(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
               canonicalizeIcLoraFields(target);
               const targetClip = clips[clipIdx];
-              if (targetClip && target.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+              if (targetClip && target.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
                 target,
                 targetClip,
                 clipIdx,
                 clips,
                 authoring.generatedEntryMode
               )) {
-                target.driveSource = IC_LORA_SOURCE_UPLOAD;
+                target.driveSource = MEDIA_SOURCE_UPLOAD;
               }
             });
             context.render();
@@ -10771,7 +10769,7 @@
                   target.controlType = "none";
                 }
                 if (target.driveData === "none") {
-                  target.driveSource = IC_LORA_SOURCE_UPLOAD;
+                  target.driveSource = MEDIA_SOURCE_UPLOAD;
                   target.driveMedia = null;
                   return;
                 }
@@ -10782,14 +10780,14 @@
                   target.driveMedia = null;
                 }
                 const targetClip = clips[clipIdx];
-                if (targetClip && target.driveSource === IC_LORA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+                if (targetClip && target.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
                   target,
                   targetClip,
                   clipIdx,
                   clips,
                   authoring.generatedEntryMode
                 )) {
-                  target.driveSource = IC_LORA_SOURCE_UPLOAD;
+                  target.driveSource = MEDIA_SOURCE_UPLOAD;
                 }
               });
               context.render();
@@ -10815,9 +10813,9 @@
           );
           const sourceSelect = buildOptionSelect(
             [
-              { value: IC_LORA_SOURCE_UPLOAD, label: "Upload" },
+              { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
               {
-                value: IC_LORA_SOURCE_INCOMING,
+                value: MEDIA_SOURCE_INCOMING,
                 label: incomingAvailable ? "Incoming media" : "Incoming media (unavailable)",
                 disabled: !incomingAvailable
               }
@@ -10828,7 +10826,7 @@
                 const target = entryAt(clips, entryIdx2);
                 if (target) {
                   target.driveSource = value;
-                  if (value !== IC_LORA_SOURCE_UPLOAD) {
+                  if (value !== MEDIA_SOURCE_UPLOAD) {
                     target.driveMedia = null;
                   }
                 }
@@ -10845,7 +10843,7 @@
             )
           );
         }
-        if (entry.driveData !== "none" && entry.driveSource === IC_LORA_SOURCE_UPLOAD) {
+        if (entry.driveData !== "none" && entry.driveSource === MEDIA_SOURCE_UPLOAD) {
           const acceptedKinds = driveMediaKinds;
           fields.appendChild(
             buildMediaPickRow(
@@ -10879,7 +10877,7 @@
             hint.textContent = "Only this media's audio is used as the reference sample. For a video upload, its frames are ignored; the clip's normal text, image, or video entry path supplies visuals.";
             fields.appendChild(hint);
           }
-        } else if (entry.driveSource === IC_LORA_SOURCE_INCOMING) {
+        } else if (entry.driveSource === MEDIA_SOURCE_INCOMING) {
           const hint = document.createElement("small");
           hint.className = "vst-detail-field-hint";
           hint.textContent = entry.stage >= 0 ? `Uses ${entry.driveData} from stage ${entry.stage}'s incoming media.` : `Uses ${entry.driveData} from each stage's incoming media.`;
@@ -11305,9 +11303,9 @@ ${slot}`;
   // frontend/imageSource.ts
   var buildImageSourceOptions = (currentValue = "", includeControlNet = false) => {
     const options = [
-      { value: REF_SOURCE_BASE, label: "Base Output" },
-      { value: REF_SOURCE_REFINER, label: "Refiner Output" },
-      { value: REF_SOURCE_UPLOAD, label: "Upload" }
+      { value: MEDIA_SOURCE_BASE, label: "Base Output" },
+      { value: MEDIA_SOURCE_REFINER, label: "Refiner Output" },
+      { value: MEDIA_SOURCE_UPLOAD, label: "Upload" }
     ];
     for (const editRef of getBase2EditStageRefs()) {
       const editStage = parseBase2EditStageIndex(editRef);
@@ -11331,7 +11329,7 @@ ${slot}`;
     });
     return options;
   };
-  var resolveImageSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, REF_SOURCE_REFINER);
+  var resolveImageSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, MEDIA_SOURCE_REFINER);
 
   // frontend/clipReferenceSource.ts
   var buildClipReferenceSourceOptions = (kind, currentValue = "") => {
@@ -11339,7 +11337,7 @@ ${slot}`;
       return buildImageSourceOptions(currentValue, true);
     }
     const options = [
-      { value: REF_SOURCE_UPLOAD, label: "Upload" },
+      { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
       ...CONTROLNET_SOURCE_OPTIONS.map((source) => ({
         value: source,
         label: source
@@ -11348,7 +11346,7 @@ ${slot}`;
     if (kind === "audio") {
       options.push(
         ...buildAudioTrackSourceOptions(currentValue).filter(
-          (option) => option.value !== REF_SOURCE_UPLOAD
+          (option) => option.value !== MEDIA_SOURCE_UPLOAD
         )
       );
     }
@@ -11358,16 +11356,16 @@ ${slot}`;
     }));
     return options;
   };
-  var resolveClipReferenceSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, REF_SOURCE_UPLOAD);
+  var resolveClipReferenceSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, MEDIA_SOURCE_UPLOAD);
   var clipReferenceSourceSupportsKind = (kind, source) => {
     const value = `${source ?? ""}`.trim();
-    if (value === REF_SOURCE_UPLOAD || canonicalControlNetSource(value)) {
+    if (value === MEDIA_SOURCE_UPLOAD || canonicalControlNetSource(value)) {
       return true;
     }
     if (kind === "audio") {
       return isAceStepFunAudioSource(value);
     }
-    return kind === "image" && (value === REF_SOURCE_BASE || value === REF_SOURCE_REFINER || parseBase2EditStageIndex(value) !== null);
+    return kind === "image" && (value === MEDIA_SOURCE_BASE || value === MEDIA_SOURCE_REFINER || parseBase2EditStageIndex(value) !== null);
   };
 
   // frontend/detailStrip/clipReferencePanel.ts
@@ -11572,7 +11570,7 @@ ${slot}`;
                   target.kind,
                   target.source
                 )) {
-                  target.source = REF_SOURCE_UPLOAD;
+                  target.source = MEDIA_SOURCE_UPLOAD;
                 }
               });
               ctx.render();
@@ -11600,7 +11598,7 @@ ${slot}`;
                 buildClipReferenceSourceOptions(target.kind, value)
               );
               target.source = resolved;
-              if (resolved !== REF_SOURCE_UPLOAD) {
+              if (resolved !== MEDIA_SOURCE_UPLOAD) {
                 target.uploadedMedia = null;
                 target.mediaDurationSeconds = 0;
                 target.drivesClipLength = false;
@@ -11612,7 +11610,7 @@ ${slot}`;
           "Where this reference comes from — an upload, a ControlNet input, or another source available for this media kind."
         )
       );
-      if (source === REF_SOURCE_UPLOAD) {
+      if (source === MEDIA_SOURCE_UPLOAD) {
         const data = reference.uploadedMedia?.data;
         if (reference.kind === "image" && data) {
           const preview = document.createElement("div");
@@ -12007,7 +12005,7 @@ ${slot}`;
       }
       const options = buildImageSourceOptions(ref.source ?? "");
       const source = resolveImageSourceValue(ref.source ?? "", options);
-      const isUpload = source === REF_SOURCE_UPLOAD;
+      const isUpload = source === MEDIA_SOURCE_UPLOAD;
       const fields = document.createElement("div");
       fields.className = "vst-detail-col vst-detail-instance-fields vst-detail-ref-row vst-detail-ref-editor";
       fields.setAttribute("data-vst-ref-index", `${editorRefIdx}`);
@@ -12022,7 +12020,7 @@ ${slot}`;
             buildImageSourceOptions(value)
           );
           target.source = resolved;
-          if (resolved !== REF_SOURCE_UPLOAD) {
+          if (resolved !== MEDIA_SOURCE_UPLOAD) {
             target.uploadedImage = null;
             target.uploadFileName = null;
           }

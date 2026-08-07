@@ -1,22 +1,23 @@
 import { parseBase2EditStageIndex } from "./constants";
-import { CONTROLNET_SOURCE_OPTIONS } from "./controlNetSource";
+import {
+    CONTROLNET_SOURCE_OPTIONS,
+    MEDIA_SOURCE_BASE,
+    MEDIA_SOURCE_REFINER,
+    MEDIA_SOURCE_UPLOAD,
+} from "./generatedMediaSource";
+
 import { preserveSelectedOption, resolveSelectValue } from "./selectOption";
 import { getBase2EditStageRefs } from "./swarmInputs";
-import {
-    type ImageSourceOption,
-    REF_SOURCE_BASE,
-    REF_SOURCE_REFINER,
-    REF_SOURCE_UPLOAD,
-} from "./types";
+import type { ImageSourceOption } from "./types";
 
 export const buildImageSourceOptions = (
     currentValue = "",
     includeControlNet = false,
 ): ImageSourceOption[] => {
     const options: ImageSourceOption[] = [
-        { value: REF_SOURCE_BASE, label: "Base Output" },
-        { value: REF_SOURCE_REFINER, label: "Refiner Output" },
-        { value: REF_SOURCE_UPLOAD, label: "Upload" },
+        { value: MEDIA_SOURCE_BASE, label: "Base Output" },
+        { value: MEDIA_SOURCE_REFINER, label: "Refiner Output" },
+        { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
     ];
     for (const editRef of getBase2EditStageRefs()) {
         const editStage = parseBase2EditStageIndex(editRef);
@@ -44,4 +45,4 @@ export const buildImageSourceOptions = (
 export const resolveImageSourceValue = (
     currentValue: string,
     options: ImageSourceOption[],
-): string => resolveSelectValue(currentValue, options, REF_SOURCE_REFINER);
+): string => resolveSelectValue(currentValue, options, MEDIA_SOURCE_REFINER);

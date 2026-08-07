@@ -12,6 +12,7 @@ import {
     RETAKE_STRENGTH_MAX,
     RETAKE_STRENGTH_MIN,
 } from "./constants";
+import { MEDIA_SOURCE_UPLOAD } from "./generatedMediaSource";
 import { REFERENCE_SCALE_FULL } from "./generatedReferenceScale";
 import {
     clampedNumber,
@@ -29,7 +30,7 @@ import type {
     Retake,
     UploadedMedia,
 } from "./types";
-import { REF_SOURCE_UPLOAD } from "./types";
+
 import { isRecord, roundToTenth } from "./utils";
 
 const normalizePromptWindow = (
@@ -159,7 +160,7 @@ export const normalizeClipReferences = (
     return value.map((entry): ClipReference => {
         const raw = isRecord(entry) ? entry : {};
         const kind = normalizeClipReferenceKind(raw.kind);
-        const source = trimmedText(raw.source) || REF_SOURCE_UPLOAD;
+        const source = trimmedText(raw.source) || MEDIA_SOURCE_UPLOAD;
         const mediaDurationSeconds = roundToTenth(
             nonNegativeNumber(raw.mediaDurationSeconds),
         );

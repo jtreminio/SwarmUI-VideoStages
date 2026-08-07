@@ -1,14 +1,14 @@
+import { canonicalControlNetSource } from "../../controlNetSource";
 import {
     CONTROLNET_SOURCE_OPTIONS,
-    canonicalControlNetSource,
-} from "../../controlNetSource";
+    MEDIA_SOURCE_INCOMING,
+    MEDIA_SOURCE_UPLOAD,
+} from "../../generatedMediaSource";
 import {
     IC_LORA_ATTENTION_DEFAULT,
     IC_LORA_ATTENTION_MAX,
     IC_LORA_ATTENTION_MIN,
     IC_LORA_ATTENTION_STEP,
-    IC_LORA_SOURCE_INCOMING,
-    IC_LORA_SOURCE_UPLOAD,
     IC_LORA_STAGE_ALL,
     IC_LORA_STRENGTH_DEFAULT,
     IC_LORA_STRENGTH_MAX,
@@ -42,7 +42,7 @@ export const normalizeControlNetSource = (value: unknown): string => {
 export const defaultIcLora = (overrides: Partial<IcLora> = {}): IcLora => ({
     lora: "",
     preset: IC_LORA_PRESET_CUSTOM_ID,
-    driveSource: IC_LORA_SOURCE_UPLOAD,
+    driveSource: MEDIA_SOURCE_UPLOAD,
     driveData: "visual",
     driveMediaKinds: ["image", "video"],
     stage: IC_LORA_STAGE_ALL,
@@ -78,10 +78,10 @@ const normalizeIcLoraDriveSource = (value: unknown): string => {
     const authored = `${value ?? ""}`.trim();
     const compact = authored.replace(/\s+/g, "").toLowerCase();
     if (!compact || compact === "upload") {
-        return IC_LORA_SOURCE_UPLOAD;
+        return MEDIA_SOURCE_UPLOAD;
     }
     if (compact === "incoming" || compact === "stageinput") {
-        return IC_LORA_SOURCE_INCOMING;
+        return MEDIA_SOURCE_INCOMING;
     }
     return canonicalControlNetSource(authored) ?? authored;
 };
@@ -162,7 +162,7 @@ export const normalizeIcLora = (
     const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
     let driveSource = normalizeIcLoraDriveSource(raw.driveSource);
     const driveMedia =
-        driveSource === IC_LORA_SOURCE_UPLOAD &&
+        driveSource === MEDIA_SOURCE_UPLOAD &&
         driveData !== "none" &&
         normalizedDriveMedia &&
         driveMediaKinds.some((kind) =>
@@ -172,7 +172,7 @@ export const normalizeIcLora = (
             : null;
     const stage = normalizeIcLoraStage(raw.stage, stageCount);
     if (driveData === "none") {
-        driveSource = IC_LORA_SOURCE_UPLOAD;
+        driveSource = MEDIA_SOURCE_UPLOAD;
     }
     return {
         id: normalizeOptionalEntityId(raw.id),
@@ -224,7 +224,7 @@ export const normalizeIcLoras = (
 
 export const canonicalizeIcLoraFields = (entry: IcLora): void => {
     if (entry.driveData === "none") {
-        entry.driveSource = IC_LORA_SOURCE_UPLOAD;
+        entry.driveSource = MEDIA_SOURCE_UPLOAD;
         entry.driveMedia = null;
     }
     entry.driveMediaKinds = normalizeIcLoraDriveMediaKinds(

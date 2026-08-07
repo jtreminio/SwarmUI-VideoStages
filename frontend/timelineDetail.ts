@@ -1,5 +1,6 @@
 import { parseBase2EditStageIndex } from "./constants";
-import { REF_SOURCE_REFINER, type Stage } from "./types";
+import { MEDIA_SOURCE_REFINER } from "./generatedMediaSource";
+import type { Stage } from "./types";
 
 export type TimelineUnit = "seconds" | "frames";
 
@@ -115,7 +116,7 @@ export const truncate = (value: string, max = 80): string => {
 export const refSourceLabel = (source: string): string => {
     const value = `${source ?? ""}`.trim();
     if (!value) {
-        return REF_SOURCE_REFINER;
+        return MEDIA_SOURCE_REFINER;
     }
     const editStage = parseBase2EditStageIndex(value);
     if (editStage != null) {

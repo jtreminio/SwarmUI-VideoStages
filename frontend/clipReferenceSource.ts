@@ -3,19 +3,16 @@ import {
     isAceStepFunAudioSource,
 } from "./audioSource";
 import { parseBase2EditStageIndex } from "./constants";
+import { canonicalControlNetSource } from "./controlNetSource";
 import {
     CONTROLNET_SOURCE_OPTIONS,
-    canonicalControlNetSource,
-} from "./controlNetSource";
+    MEDIA_SOURCE_BASE,
+    MEDIA_SOURCE_REFINER,
+    MEDIA_SOURCE_UPLOAD,
+} from "./generatedMediaSource";
 import { buildImageSourceOptions } from "./imageSource";
 import { preserveSelectedOption, resolveSelectValue } from "./selectOption";
-import {
-    type ClipReferenceKind,
-    type ImageSourceOption,
-    REF_SOURCE_BASE,
-    REF_SOURCE_REFINER,
-    REF_SOURCE_UPLOAD,
-} from "./types";
+import type { ClipReferenceKind, ImageSourceOption } from "./types";
 
 export const buildClipReferenceSourceOptions = (
     kind: ClipReferenceKind,
@@ -25,7 +22,7 @@ export const buildClipReferenceSourceOptions = (
         return buildImageSourceOptions(currentValue, true);
     }
     const options: ImageSourceOption[] = [
-        { value: REF_SOURCE_UPLOAD, label: "Upload" },
+        { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
         ...CONTROLNET_SOURCE_OPTIONS.map((source) => ({
             value: source,
             label: source,
@@ -34,7 +31,7 @@ export const buildClipReferenceSourceOptions = (
     if (kind === "audio") {
         options.push(
             ...buildAudioTrackSourceOptions(currentValue).filter(
-                (option) => option.value !== REF_SOURCE_UPLOAD,
+                (option) => option.value !== MEDIA_SOURCE_UPLOAD,
             ),
         );
     }
@@ -48,14 +45,14 @@ export const buildClipReferenceSourceOptions = (
 export const resolveClipReferenceSourceValue = (
     currentValue: string,
     options: ImageSourceOption[],
-): string => resolveSelectValue(currentValue, options, REF_SOURCE_UPLOAD);
+): string => resolveSelectValue(currentValue, options, MEDIA_SOURCE_UPLOAD);
 
 export const clipReferenceSourceSupportsKind = (
     kind: ClipReferenceKind,
     source: string,
 ): boolean => {
     const value = `${source ?? ""}`.trim();
-    if (value === REF_SOURCE_UPLOAD || canonicalControlNetSource(value)) {
+    if (value === MEDIA_SOURCE_UPLOAD || canonicalControlNetSource(value)) {
         return true;
     }
     if (kind === "audio") {
@@ -63,8 +60,8 @@ export const clipReferenceSourceSupportsKind = (
     }
     return (
         kind === "image" &&
-        (value === REF_SOURCE_BASE ||
-            value === REF_SOURCE_REFINER ||
+        (value === MEDIA_SOURCE_BASE ||
+            value === MEDIA_SOURCE_REFINER ||
             parseBase2EditStageIndex(value) !== null)
     );
 };
