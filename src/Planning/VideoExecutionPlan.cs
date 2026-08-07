@@ -32,12 +32,12 @@ internal sealed record RootPlan(
     /// <summary>
     /// Core's text-to-video root produced nothing this timeline may reference or condition, so its
     /// reserved node ids are available for a stage to build under.
-    /// <see cref="StageTakesOverTextToVideoRoot"/> is which stage, if any, takes them.
+    /// <see cref="StageClaimsTextToVideoRoot"/> is which stage, if any, claims them.
     /// </summary>
     public bool IgnoresTextToVideoRoot =>
         HostKind == HostRootKind.TextToVideo && IgnoresHostRootOutput;
 
-    public bool StageTakesOverTextToVideoRoot(StagePlan stage, ClipPlan clip) =>
+    public bool StageClaimsTextToVideoRoot(StagePlan stage, ClipPlan clip) =>
         IgnoresTextToVideoRoot
         && clip.EntryMode == ArchitectureEntryMode.TextToVideo
         && stage.Input == StageInputKind.EmptyLatent

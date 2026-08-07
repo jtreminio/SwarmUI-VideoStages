@@ -5,7 +5,7 @@ namespace VideoStages.Execution.Graph;
 
 /// <summary>
 /// Lets the first generated stage of a text-to-video timeline build on SwarmUI's own root chain
-/// instead of beside it, by taking over the node ids core reserves for its base sampler and decode.
+/// instead of beside it, by claiming the node ids core reserves for its base sampler and decode.
 /// <para>
 /// The stage already loads its model through core's loader — <see cref="WorkflowGenerator.CreateNode(string, Newtonsoft.Json.Linq.JObject, string, bool)"/>'s
 /// dedup cache collapses that onto core's node on its own, as it does for the empty latent and the
@@ -86,7 +86,7 @@ internal sealed class HostRootAdoption(
     private bool TryClaim(ClipPlan clip, StagePlan stage, IReadOnlyCollection<string> ids)
     {
         if (_claimed
-            || !root.StageTakesOverTextToVideoRoot(stage, clip)
+            || !root.StageClaimsTextToVideoRoot(stage, clip)
             || !ids.All(id => generator.HasNode(id) && ownedRootNodeIds.Contains(id))
             // A capture resolves to a node id rather than to a graph edge, so it survives the
             // ownership test above and has to be excluded on its own.

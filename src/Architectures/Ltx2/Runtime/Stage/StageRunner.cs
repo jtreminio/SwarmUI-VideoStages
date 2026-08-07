@@ -60,7 +60,7 @@ internal class StageRunner
 
         ClipPlan clip = clipContext.PlannedClip;
         if (stage.IsPassthrough
-            && !root.StageTakesOverTextToVideoRoot(stage, clip))
+            && !root.StageClaimsTextToVideoRoot(stage, clip))
         {
             RunPassthroughStage(stage, sectionId, clipContext);
             return;
@@ -169,7 +169,7 @@ internal class StageRunner
             bool refinesIncomingLatent = clipContext.Plan.Root.HostKind == HostRootKind.ImageToVideo
                 && !payload.ImageReferenceWasExplicit
                 && (clipContext.PlannedClip.ClipId != 0 || stage.ClipStageIndex != 0);
-            if (!stageContext.TakesOverTextToVideoRoot
+            if (!stageContext.ClaimsTextToVideoRoot
                 && frameRefs.Count == 0
                 && !initVideoFootageIsStageInput
                 && !refinesIncomingLatent)

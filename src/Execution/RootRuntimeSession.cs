@@ -255,7 +255,7 @@ internal sealed class RootRuntimeSession
 
     /// <summary>
     /// The class each owned root node holds right now. Taken before a removal because the class a
-    /// node dies as is not always the class core built it as — an adopted id carries the stage's
+    /// node dies as is not always the class core built it as — a claimed id carries the stage's
     /// node by then.
     /// </summary>
     private Dictionary<string, string> SnapshotRootClasses(WorkflowBridge bridge) =>

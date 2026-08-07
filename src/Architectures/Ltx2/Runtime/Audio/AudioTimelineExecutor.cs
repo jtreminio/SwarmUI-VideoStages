@@ -88,7 +88,7 @@ internal sealed class AudioTimelineExecutor
         RootPlan root = clipContext.Plan.Root;
         int framesPerSecond = clipContext.Plan.FramesPerSecond;
         bool suppressNative = root.UsesStageHandoff
-            && root.StageTakesOverTextToVideoRoot(firstStage, clip);
+            && root.StageClaimsTextToVideoRoot(firstStage, clip);
         WGNodeData selectedBaseAudio = PlannedAudioSourceSelector.Select(
             clip.ClipId,
             clip.Audio.Base,

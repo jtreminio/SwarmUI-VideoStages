@@ -32,13 +32,13 @@ internal sealed class StageContextBuilder(
                 $"stage {stage.StageId} has no input media.");
         JArray priorOutputPath = CopyPath(currentMedia.Path);
         LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
-        bool takesOverTextToVideoRoot = root.StageTakesOverTextToVideoRoot(
+        bool claimsTextToVideoRoot = root.StageClaimsTextToVideoRoot(
             stage,
             clipContext.PlannedClip);
-        LtxPostVideoChain postVideoChain = takesOverTextToVideoRoot
+        LtxPostVideoChain postVideoChain = claimsTextToVideoRoot
             ? null
             : LtxPostVideoChain.TryCapture(g, clipContext, stage);
-        WGNodeData sourceMedia = takesOverTextToVideoRoot
+        WGNodeData sourceMedia = claimsTextToVideoRoot
             ? CloneMedia(g.CurrentMedia)
             : sourceMediaResolver.Resolve(clipContext, stage, sectionId, postVideoChain);
         if (sourceMedia is null)
@@ -52,12 +52,12 @@ internal sealed class StageContextBuilder(
             stage,
             sectionId,
             sourceMedia,
-            takesOverTextToVideoRoot);
+            claimsTextToVideoRoot);
         return new StageContext(
             stage,
             clipContext,
             priorOutputPath,
-            takesOverTextToVideoRoot,
+            claimsTextToVideoRoot,
             postVideoChain,
             sourceMedia,
             genInfo,
@@ -69,7 +69,7 @@ internal sealed class StageContextBuilder(
         StagePlan stage,
         int sectionId,
         WGNodeData sourceMedia,
-        bool takesOverTextToVideoRoot)
+        bool claimsTextToVideoRoot)
     {
         ClipPlan clip = clipContext.PlannedClip;
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
@@ -102,7 +102,7 @@ internal sealed class StageContextBuilder(
                 clipContext,
                 sourceMedia,
                 sectionId,
-                takesOverTextToVideoRoot),
+                claimsTextToVideoRoot),
             VideoCFG = payload.Core.CfgScale,
             VideoFPS = clipContext.Plan.FramesPerSecond,
             Width = stageWidth,
@@ -122,13 +122,13 @@ internal sealed class StageContextBuilder(
         ClipContext clipContext,
         WGNodeData sourceMedia,
         int sectionId,
-        bool takesOverTextToVideoRoot)
+        bool claimsTextToVideoRoot)
     {
         if (clipContext.IncomingContinueHandleFrames > 0)
         {
             return clipContext.GenerationFrames;
         }
-        if (!takesOverTextToVideoRoot && sourceMedia.Frames.HasValue)
+        if (!claimsTextToVideoRoot && sourceMedia.Frames.HasValue)
         {
             return sourceMedia.Frames;
         }

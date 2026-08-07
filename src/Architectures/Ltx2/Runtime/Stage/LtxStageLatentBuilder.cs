@@ -49,7 +49,7 @@ internal sealed class LtxStageLatentBuilder
         JArray controlNetLengthFrames =
             latentAudioFactory.TryResolveControlNetLengthFrames(clip);
 
-        if (stageContext.TakesOverTextToVideoRoot
+        if (stageContext.ClaimsTextToVideoRoot
             || (stageContext.ClipContext.IncomingContinueHandleFrames > 0
                 && !stageContext.ClipContext.ContinueHandleMaterialized))
         {
