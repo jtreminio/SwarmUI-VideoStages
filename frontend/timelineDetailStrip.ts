@@ -131,7 +131,6 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         toggleClipSkip: selectionOperations.toggleClipSkip,
         toggleStageSkip: selectionOperations.toggleStageSkip,
         getBoundBody: () => boundBody,
-        getDockEl: () => dockEl,
         getSettingsMode: () => settingsMode,
         setSettingsMode: (mode) => {
             settingsMode = mode;
