@@ -30,7 +30,7 @@ public static class MediaSource
     /// </summary>
     internal static string RenderGeneratedTypeScript()
     {
-        System.Text.StringBuilder result = new();
+        StringBuilder result = new();
         void Line(string value = "") => result.Append(value).Append('\n');
 
         Line("// Generated from MediaSource.cs. Do not edit by hand.");
@@ -91,7 +91,8 @@ public static class MediaSource
     }
 
     /// <summary>Derived, so the slot count is the only thing that says how many slots there are.
-    /// The named constants above are spellings for readers, not a second list.</summary>
+    /// The named constants above exist because [InlineData] needs a compile-time constant; nothing
+    /// in production spells a slot any way but through here.</summary>
     public static string FormatControlNet(int index) =>
         index >= 0 && index < ControlNetSlotCount
             ? $"{ControlNet} {index + 1}"
@@ -122,8 +123,8 @@ public static class MediaSource
         || TryParseBase2EditIndex(source, out _);
 
     /// <summary>The grammar is exactly digits after the prefix. NumberStyles.None is what makes
-    /// that true: int.TryParse's default allows a sign and surrounding whitespace, which no
-    /// producer emits and the frontend mirror does not accept.</summary>
+    /// that true: int.TryParse's default also allows a sign and surrounding whitespace, which the
+    /// Format methods below never emit and the frontend mirror does not accept.</summary>
     private static bool TryParseNonNegativeIndex(
         string source,
         string prefix,
