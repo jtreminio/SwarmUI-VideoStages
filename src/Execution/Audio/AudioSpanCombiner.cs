@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
@@ -9,7 +10,7 @@ using VideoStages.Planning;
 namespace VideoStages.Execution.Audio;
 
 /// <summary>Combines one clip's base and overlay audio before the cross-clip merge.</summary>
-internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
+internal sealed class AudioSpanCombiner(WorkflowGenerator g)
 {
     private const long SilenceSampleRate = 44100;
     private const long SilenceChannels = 2;
@@ -18,57 +19,57 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
     private const string ConcatDirectionAfter = "after";
 
     /// <summary>
-    /// Returns <paramref name="baseAudio"/> unchanged when no segment materializes and creates a
-    /// silent bed when segments have no base. <paramref name="loadedWindows"/> reports materialized
+    /// Returns <paramref name="baseAudio"/> unchanged when no span materializes and creates a
+    /// silent bed when spans have no base. <paramref name="loadedWindows"/> reports materialized
     /// time windows for generation conditioning.
     /// </summary>
     public WGNodeData Combine(
         int clipId,
-        AudioSegmentPlan segmentPlan,
+        ImmutableArray<AudioSpanPlan> spans,
         WGNodeData baseAudio,
         double clipDurationSeconds,
         out IReadOnlyList<(double Start, double End)> loadedWindows)
     {
         loadedWindows = [];
-        if (segmentPlan.Items.IsDefaultOrEmpty)
+        if (spans.IsDefaultOrEmpty)
         {
             return baseAudio;
         }
 
-        // Materialize the segment sources into node paths before opening the bridge — CreateAudioLoadNode
+        // Materialize the span sources into node paths before opening the bridge — CreateAudioLoadNode
         // writes to g.Workflow directly, and the AceStepFun lookup reads via its own bridge (one shared
-        // parse for all segments).
+        // parse for all spans).
         AudioHandler audioHandler = new(g);
         WorkflowBridge detectBridge = null;
-        List<(AudioSegmentItemPlan Plan, JArray Path)> loaded = [];
-        foreach (AudioSegmentItemPlan segment in segmentPlan.Items)
+        List<(AudioSpanPlan Plan, JArray Path)> loaded = [];
+        foreach (AudioSpanPlan span in spans)
         {
-            if (segment.SourceKind == AudioSourceKind.AceStepFun)
+            if (span.SourceKind == AudioSourceKind.AceStepFun)
             {
                 detectBridge ??= WorkflowBridge.Create(g.Workflow);
-                WGNodeData ace = segment.AceStepFunTrack is int track
+                WGNodeData ace = span.AceStepFunTrack is int track
                     ? audioHandler.DetectAceStepFunAudio(track, detectBridge)
                     : null;
                 if (ace?.Path is JArray acePath)
                 {
-                    loaded.Add((segment, acePath));
+                    loaded.Add((span, acePath));
                 }
                 else
                 {
                     RequestWarnings.Track(
                         g.UserInput,
                         $"VideoStages: clip {clipId} audio track references AceStepFun track "
-                        + $"'{segment.AceStepFunTrack}', which is not present in the workflow; skipping the segment.");
+                        + $"'{span.AceStepFunTrack}', which is not present in the workflow; skipping the span.");
                 }
                 continue;
             }
-            AudioFile file = UploadedMedia.GetAudio(g.UserInput, segment.UploadedMedia);
+            AudioFile file = UploadedMedia.GetAudio(g.UserInput, span.UploadedMedia);
             if (file is null)
             {
                 continue;
             }
             string loadNodeId = g.CreateAudioLoadNode(file, SegmentUploadPlaceholder);
-            loaded.Add((segment, new JArray(loadNodeId, 0)));
+            loaded.Add((span, new JArray(loadNodeId, 0)));
         }
         detectBridge?.Dispose();
         if (loaded.Count == 0)
@@ -86,14 +87,14 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
             accumulator = Silence(bridge, clipDurationSeconds);
         }
 
-        foreach ((AudioSegmentItemPlan segment, JArray path) in loaded)
+        foreach ((AudioSpanPlan span, JArray path) in loaded)
         {
             INodeOutput source = bridge.ResolvePath(path);
             if (source is null)
             {
                 continue;
             }
-            INodeOutput placed = PlaceSegment(bridge, source, segment);
+            INodeOutput placed = PlaceSegment(bridge, source, span);
             accumulator = accumulator is null ? placed : Merge(bridge, accumulator, placed);
         }
 
@@ -145,28 +146,28 @@ internal sealed class AudioSegmentCombiner(WorkflowGenerator g)
     private static INodeOutput PlaceSegment(
         WorkflowBridge bridge,
         INodeOutput source,
-        AudioSegmentItemPlan segment)
+        AudioSpanPlan span)
     {
         // Pad the source up to trim-start + length first: TrimAudioDuration returns the shorter clip
-        // when the source runs out (so the segment's declared window would lock silent bed in the
+        // when the source runs out (so the span's declared window would lock silent bed in the
         // conditioning mask), and it throws outright when the trim start is past the source's end.
         // Padding makes the declared window authoritative: a short source plays, then intended silence.
         SwarmEnsureAudioNode ensure = bridge.AddNode(new SwarmEnsureAudioNode().With(
-            TargetDuration: segment.TrimStartSeconds + segment.LengthSeconds));
+            TargetDuration: span.TrimStartSeconds + span.LengthSeconds));
         ensure.Audio.ConnectToUntyped(source);
 
         TrimAudioDurationNode trim = bridge.AddNode(new TrimAudioDurationNode()).With(
-            StartIndex: segment.TrimStartSeconds,
-            Duration: segment.LengthSeconds);
+            StartIndex: span.TrimStartSeconds,
+            Duration: span.LengthSeconds);
         trim.Audio.ConnectTo(ensure.AUDIO);
-        INodeOutput trimmed = ApplyVolume(bridge, trim.AUDIO, segment.Volume);
+        INodeOutput trimmed = ApplyVolume(bridge, trim.AUDIO, span.Volume);
 
-        if (segment.StartSeconds <= 0)
+        if (span.StartSeconds <= 0)
         {
             return trimmed;
         }
 
-        INodeOutput silence = Silence(bridge, segment.StartSeconds);
+        INodeOutput silence = Silence(bridge, span.StartSeconds);
         AudioConcatNode concat = bridge.AddNode(new AudioConcatNode()).With(Direction: ConcatDirectionAfter);
         concat.Audio1.ConnectToUntyped(silence);
         concat.Audio2.ConnectToUntyped(trimmed);

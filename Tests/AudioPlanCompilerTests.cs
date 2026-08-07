@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 using VideoStages.Planning;
@@ -180,40 +181,40 @@ public class AudioPlanCompilerTests
             source: MediaSource.Upload,
             uploadedAudio: Upload()));
 
-        Assert.Empty(plan.Segments.Items);
+        Assert.Empty(plan.Spans);
     }
 
     [Fact]
     public void Compile_segments_mix_over_a_configured_base_track()
     {
-        AudioSegmentPlan plan = AudioSegmentPlanCompiler.Compile(
+        ImmutableArray<AudioSpanPlan> plan = AudioSpanPlanCompiler.Compile(
             [
                 new(AudioSourceKind.Upload, null, 4, 0, 1,
                     new("data:audio/wav;base64,QUJD", "clip.wav"), 0.4),
                 new(AudioSourceKind.AceStepFun, 3, 1, 0.5, 2, null, 0.7),
             ],
-            Base(hasConfiguredTrack: true)).Plan;
+            Base(hasConfiguredTrack: true)).Spans;
 
-        Assert.Equal([1, 4], plan.Items.Select(item => item.StartSeconds));
-        Assert.Equal(AudioSourceKind.AceStepFun, plan.Items[0].SourceKind);
-        Assert.Equal(3, plan.Items[0].AceStepFunTrack);
-        Assert.Equal(0.7, plan.Items[0].Volume);
-        Assert.Equal(AudioSourceKind.Upload, plan.Items[1].SourceKind);
-        Assert.Equal(0.4, plan.Items[1].Volume);
-        Assert.Equal("data:audio/wav;base64,QUJD", plan.Items[1].UploadedMedia.Data);
-        Assert.Equal("clip.wav", plan.Items[1].UploadedMedia.FileName);
+        Assert.Equal([1, 4], plan.Select(item => item.StartSeconds));
+        Assert.Equal(AudioSourceKind.AceStepFun, plan[0].SourceKind);
+        Assert.Equal(3, plan[0].AceStepFunTrack);
+        Assert.Equal(0.7, plan[0].Volume);
+        Assert.Equal(AudioSourceKind.Upload, plan[1].SourceKind);
+        Assert.Equal(0.4, plan[1].Volume);
+        Assert.Equal("data:audio/wav;base64,QUJD", plan[1].UploadedMedia.Data);
+        Assert.Equal("clip.wav", plan[1].UploadedMedia.FileName);
     }
 
     [Fact]
     public void Compile_segments_without_a_base_use_preserve_windows()
     {
-        AudioSegmentCompilation result = AudioSegmentPlanCompiler.Compile(
+        AudioSpanCompilation result = AudioSpanPlanCompiler.Compile(
             [new(AudioSourceKind.Upload, null, 1, 0, 2,
                 new("data:audio/wav;base64,QUJD", "clip.wav"))],
             Base(hasConfiguredTrack: false));
 
-        Assert.Single(result.Plan.Items);
-        Assert.Contains(result.Diagnostics, d => d.Code == "audio.segments.preserve_windowed_no_base");
+        Assert.Single(result.Spans);
+        Assert.Contains(result.Diagnostics, d => d.Code == "audio.spans.preserve_windowed_no_base");
     }
 
     [Fact]
@@ -246,19 +247,19 @@ public class AudioPlanCompilerTests
     [Fact]
     public void Compile_segments_rejects_invalid_windows_and_sources()
     {
-        AudioSegmentCompilation result =
-            AudioSegmentPlanCompiler.Compile(
+        AudioSpanCompilation result =
+            AudioSpanPlanCompiler.Compile(
                 [
                     new(AudioSourceKind.Upload, null, -1, 0, 1, null),
                     new(AudioSourceKind.Upload, null, 0, 0, 1, null),
                 ],
                 Base(hasConfiguredTrack: false));
 
-        Assert.Empty(result.Plan.Items);
+        Assert.Empty(result.Spans);
         Assert.Equal(
         [
-            "audio.segment.ignored_invalid_window",
-            "audio.segment.ignored_no_source",
+            "audio.span.ignored_invalid_window",
+            "audio.span.ignored_no_source",
         ],
             result.Diagnostics.Select(diagnostic => diagnostic.Code));
     }

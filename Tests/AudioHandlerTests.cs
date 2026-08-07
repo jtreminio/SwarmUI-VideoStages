@@ -363,7 +363,7 @@ public class AudioHandlerTests
             Audio: new(
                 new(AudioSourceKind.AceStepFun, "audio0", 0, true, null),
                 AudioLengthOwner.Timeline,
-                new([]),
+                [],
                 []),
             SavesAudioTrack: true);
 

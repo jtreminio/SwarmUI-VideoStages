@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
@@ -50,7 +51,7 @@ internal sealed class AudioTimelineExecutor
 
         ClipPlan first = plan.Clips[0];
         ApplyControlNetClipLength(first);
-        if (!first.Audio.Segments.Items.IsDefaultOrEmpty)
+        if (!first.Audio.Spans.IsDefaultOrEmpty)
         {
             return;
         }
@@ -114,13 +115,13 @@ internal sealed class AudioTimelineExecutor
             baseAudio,
             handleDuration,
             authoredDuration);
-        AudioSegmentPlan segments = handleDuration > 0
-            ? new([.. clip.Audio.Segments.Items.Select(segment =>
-                segment with { StartSeconds = segment.StartSeconds + handleDuration })])
-            : clip.Audio.Segments;
+        ImmutableArray<AudioSpanPlan> spans = handleDuration > 0
+            ? [.. clip.Audio.Spans.Select(span =>
+                span with { StartSeconds = span.StartSeconds + handleDuration })]
+            : clip.Audio.Spans;
 
         if (baseAudio is null
-            && segments.Items.IsDefaultOrEmpty
+            && spans.IsDefaultOrEmpty
             && boundaryAudioCarry?.NativeLatent?.Path is JArray carryPath
             && _generator.CurrentAudioVae is not null)
         {
@@ -153,7 +154,7 @@ internal sealed class AudioTimelineExecutor
             }
         }
 
-        AudioSegmentCombiner combiner = new(_generator);
+        AudioSpanCombiner combiner = new(_generator);
         WGNodeData baseWithBoundaryCarry = boundaryAudioCarry is null
             ? baseAudio
             : combiner.OverlayOpeningWindow(
@@ -164,14 +165,14 @@ internal sealed class AudioTimelineExecutor
                 generationDuration);
         WGNodeData combinedAudio = combiner.Combine(
             clip.ClipId,
-            segments,
+            spans,
             baseWithBoundaryCarry,
             generationDuration,
-            out IReadOnlyList<(double Start, double End)> segmentWindows);
+            out IReadOnlyList<(double Start, double End)> spanWindows);
         IReadOnlyList<(double Start, double End)> preserveWindows =
             boundaryAudioCarry is null
-                ? segmentWindows
-                : [(0, boundaryAudioCarry.DurationSeconds), .. segmentWindows];
+                ? spanWindows
+                : [(0, boundaryAudioCarry.DurationSeconds), .. spanWindows];
 
         AttachClipAudio(
             runtimeContext,

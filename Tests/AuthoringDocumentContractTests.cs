@@ -232,17 +232,17 @@ public class AuthoringDocumentContractTests
         Assert.Equal(12, stage.RetakeWindow.StartFrame);
         Assert.Equal(0.7, stage.RetakeWindow.Strength);
 
-        TimelineAudioSegmentSpec segment = Assert.Single(spec.TimelineAudioSegments);
-        Assert.Equal("track-0", segment.Id);
-        Assert.Equal("track.wav", segment.Source.FileName);
-        Assert.Equal(1, segment.TimelineStartSeconds);
-        Assert.Equal(3, segment.LengthSeconds);
-        Assert.Equal(0.5, segment.SourceStartSeconds);
-        Assert.Equal(0.75, segment.Volume);
-        Assert.Equal(0, segment.FirstClipId);
-        Assert.Equal(1, segment.LastClipId);
-        Assert.Equal(1, segment.FirstClipOffsetSeconds);
-        Assert.Equal(1, segment.LastClipOffsetSeconds);
+        TimelineAudioSpanSpec span = Assert.Single(spec.TimelineAudioSpans);
+        Assert.Equal("track-0", span.Id);
+        Assert.Equal("track.wav", span.Source.FileName);
+        Assert.Equal(1, span.TimelineStartSeconds);
+        Assert.Equal(3, span.LengthSeconds);
+        Assert.Equal(0.5, span.SourceStartSeconds);
+        Assert.Equal(0.75, span.Volume);
+        Assert.Equal(0, span.FirstClipId);
+        Assert.Equal(1, span.LastClipId);
+        Assert.Equal(1, span.FirstClipOffsetSeconds);
+        Assert.Equal(1, span.LastClipOffsetSeconds);
     }
 
     [Fact]

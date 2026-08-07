@@ -76,11 +76,11 @@ internal static class AudioPlanCompiler
             lengthOwner = AudioLengthOwner.Timeline;
         }
 
-        // Root timeline segments are added after boundary planning.
+        // Root timeline spans are added after boundary planning.
         return new(
             baseSource,
             lengthOwner,
-            new(ImmutableArray<AudioSegmentItemPlan>.Empty),
+            [],
             diagnostics.ToImmutable());
     }
 }

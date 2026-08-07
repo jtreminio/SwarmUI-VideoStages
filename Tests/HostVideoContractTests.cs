@@ -688,7 +688,7 @@ public class HostVideoContractTests
 
         Assert.DoesNotContain(
             Diagnostics(generator),
-            diagnostic => diagnostic.Code == "effective-request.audio-segments-ignored");
+            diagnostic => diagnostic.Code == "effective-request.audio-spans-ignored");
 
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         EmptyAudioNode bed = Assert.Single(bridge.Graph.NodesOfType<EmptyAudioNode>());
@@ -698,7 +698,7 @@ public class HostVideoContractTests
         Assert.Same(bed, mix.Audio1.Connection?.Node);
         Assert.Same(mix, live.PublishedAudio());
         Assert.NotNull(generator.CurrentMedia.AttachedAudio);
-        Assert.Single(generator.GetTimelineSpec().TimelineAudioSegments);
+        Assert.Single(generator.GetTimelineSpec().TimelineAudioSpans);
 
         live.AssertAllLive(StageSampler(bridge, 0), mix);
         AssertShippable(bridge, workflow, live);

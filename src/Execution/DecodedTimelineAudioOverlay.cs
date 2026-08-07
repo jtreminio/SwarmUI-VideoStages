@@ -22,16 +22,16 @@ internal static class DecodedTimelineAudioOverlay
         ArgumentNullException.ThrowIfNull(artifact);
         ArgumentNullException.ThrowIfNull(clip);
         if (clip.Architecture?.ConsumesTimelineAudio != false
-            || clip.Audio.Segments.Items.IsDefaultOrEmpty)
+            || clip.Audio.Spans.IsDefaultOrEmpty)
         {
             return artifact;
         }
         WGNodeData baseAudio = artifact.Audio is null
             ? null
             : new WGNodeData(artifact.Audio.ToPath(), g, WGNodeData.DT_AUDIO, null);
-        WGNodeData combined = new AudioSegmentCombiner(g).Combine(
+        WGNodeData combined = new AudioSpanCombiner(g).Combine(
             clip.ClipId,
-            clip.Audio.Segments,
+            clip.Audio.Spans,
             baseAudio,
             ClipAudioBedDuration.Seconds(clip, artifact.FramesPerSecond, null),
             out _);

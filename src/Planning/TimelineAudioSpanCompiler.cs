@@ -3,17 +3,17 @@ using VideoStages.Authoring;
 
 namespace VideoStages.Planning;
 
-internal sealed record TimelineAudioSegmentCompilation(
+internal sealed record TimelineAudioSpanCompilation(
     IReadOnlyList<ClipPlan> Clips,
     ImmutableArray<PlanDiagnostic> Diagnostics);
 
-internal static class TimelineAudioSegmentPlanCompiler
+internal static class TimelineAudioSpanCompiler
 {
-    internal static TimelineAudioSegmentCompilation Compile(
+    internal static TimelineAudioSpanCompilation Compile(
         int framesPerSecond,
         IReadOnlyList<ClipPlan> clips,
         IReadOnlyList<BoundaryPlan> boundaries,
-        IReadOnlyList<TimelineAudioSegmentSpec> segments)
+        IReadOnlyList<TimelineAudioSpanSpec> spans)
     {
         ArgumentNullException.ThrowIfNull(clips);
         ArgumentNullException.ThrowIfNull(boundaries);
@@ -27,20 +27,20 @@ internal static class TimelineAudioSegmentPlanCompiler
         IReadOnlyDictionary<int, ClipWindow> clipsById = IndexClipWindows(
             clipWindows,
             diagnostics);
-        Dictionary<int, List<AudioSegmentItemPlan>> additions = [];
+        Dictionary<int, List<AudioSpanPlan>> additions = [];
         HashSet<string> seenIds = new(StringComparer.Ordinal);
 
-        foreach (TimelineAudioSegmentSpec segment in segments ?? [])
+        foreach (TimelineAudioSpanSpec span in spans ?? [])
         {
-            if (segment is null
-                || !TryResolveSource(segment, out ResolvedSource source)
-                || ResolveFinalWindow(segment, clipsById) is not { } finalWindow)
+            if (span is null
+                || !TryResolveSource(span, out ResolvedSource source)
+                || ResolveFinalWindow(span, clipsById) is not { } finalWindow)
             {
                 continue;
             }
 
-            string segmentId = segment.Id?.Trim() ?? "";
-            if (segmentId.Length == 0)
+            string spanId = span.Id?.Trim() ?? "";
+            if (spanId.Length == 0)
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Warning,
@@ -48,19 +48,19 @@ internal static class TimelineAudioSegmentPlanCompiler
                     "A timeline audio track with no id was ignored."));
                 continue;
             }
-            if (!seenIds.Add(segmentId))
+            if (!seenIds.Add(spanId))
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Warning,
                     "audio.timeline.track.duplicate_id",
-                    $"Timeline audio track '{segmentId}' is duplicated; only the first is used.",
-                    TrackId: segmentId));
+                    $"Timeline audio track '{spanId}' is duplicated; only the first is used.",
+                    TrackId: spanId));
                 continue;
             }
 
             ProjectSegment(
-                segmentId,
-                segment,
+                spanId,
+                span,
                 source,
                 finalWindow,
                 clipWindows,
@@ -75,38 +75,38 @@ internal static class TimelineAudioSegmentPlanCompiler
 
     private static ClipPlan AppendSegments(
         ClipPlan clip,
-        IReadOnlyDictionary<int, List<AudioSegmentItemPlan>> additions)
+        IReadOnlyDictionary<int, List<AudioSpanPlan>> additions)
     {
-        if (!additions.TryGetValue(clip.ClipId, out List<AudioSegmentItemPlan> projected))
+        if (!additions.TryGetValue(clip.ClipId, out List<AudioSpanPlan> projected))
         {
             return clip;
         }
-        AudioSegmentCompilation compiled =
-            AudioSegmentPlanCompiler.Compile(
-                clip.Audio.Segments.Items.AddRange(projected),
+        AudioSpanCompilation compiled =
+            AudioSpanPlanCompiler.Compile(
+                clip.Audio.Spans.AddRange(projected),
                 clip.Audio.Base);
         return clip with
         {
             Audio = clip.Audio with
             {
-                Segments = compiled.Plan,
+                Spans = compiled.Spans,
                 Diagnostics = clip.Audio.Diagnostics.AddRange(compiled.Diagnostics),
             },
         };
     }
 
     private static void ProjectSegment(
-        string segmentId,
-        TimelineAudioSegmentSpec segment,
+        string spanId,
+        TimelineAudioSpanSpec span,
         ResolvedSource source,
         (double Start, double Length) finalWindow,
         ImmutableArray<ClipWindow> clipWindows,
         ImmutableArray<PlanDiagnostic>.Builder diagnostics,
-        Dictionary<int, List<AudioSegmentItemPlan>> additions)
+        Dictionary<int, List<AudioSpanPlan>> additions)
     {
-        List<(int ClipId, AudioSegmentItemPlan Item)> projected = [];
+        List<(int ClipId, AudioSpanPlan Item)> projected = [];
         bool hasUnresolvedClip = false;
-        double segmentEnd = finalWindow.Start + finalWindow.Length;
+        double spanEnd = finalWindow.Start + finalWindow.Length;
         foreach (ClipWindow clip in clipWindows)
         {
             if (!clip.IsResolved)
@@ -117,7 +117,7 @@ internal static class TimelineAudioSegmentPlanCompiler
 
             double clipStart = clip.TimelineStartSeconds.Value;
             double start = Math.Max(clipStart, finalWindow.Start);
-            double end = Math.Min(clipStart + clip.DurationSeconds.Value, segmentEnd);
+            double end = Math.Min(clipStart + clip.DurationSeconds.Value, spanEnd);
             if (end <= start)
             {
                 continue;
@@ -128,10 +128,10 @@ internal static class TimelineAudioSegmentPlanCompiler
                     source.Kind,
                     source.AceStepFunTrack,
                     start - clipStart,
-                    segment.SourceStartSeconds + (start - finalWindow.Start),
+                    span.SourceStartSeconds + (start - finalWindow.Start),
                     end - start,
                     source.UploadedMedia,
-                    segment.Volume)));
+                    span.Volume)));
         }
 
         if (hasUnresolvedClip)
@@ -139,8 +139,8 @@ internal static class TimelineAudioSegmentPlanCompiler
             diagnostics.Add(new(
                 PlanDiagnosticSeverity.Warning,
                 "audio.timeline.span.unresolved_clip_timing",
-                "A timeline audio segment cannot be projected while any clip timing is unknown.",
-                TrackId: segmentId,
+                "A timeline audio span cannot be projected while any clip timing is unknown.",
+                TrackId: spanId,
                 SpanIndex: 0));
             return;
         }
@@ -150,11 +150,11 @@ internal static class TimelineAudioSegmentPlanCompiler
                 PlanDiagnosticSeverity.Warning,
                 "audio.timeline.span.empty_after_projection",
                 "An audio span does not overlap any resolved final-timeline clip window.",
-                TrackId: segmentId,
+                TrackId: spanId,
                 SpanIndex: 0));
             return;
         }
-        foreach ((int clipId, AudioSegmentItemPlan item) in projected)
+        foreach ((int clipId, AudioSpanPlan item) in projected)
         {
             additions.TryAdd(clipId, []);
             additions[clipId].Add(item);
@@ -162,22 +162,22 @@ internal static class TimelineAudioSegmentPlanCompiler
     }
 
     private static bool TryResolveSource(
-        TimelineAudioSegmentSpec segment,
+        TimelineAudioSpanSpec span,
         out ResolvedSource source)
     {
         if (MediaSource.TryParseAceStepFunIndex(
-                segment.AceStepFunSource,
+                span.AceStepFunSource,
                 out int aceStepFunTrack))
         {
             source = new(AudioSourceKind.AceStepFun, aceStepFunTrack, null);
             return true;
         }
-        if (!string.IsNullOrWhiteSpace(segment.Source?.Data))
+        if (!string.IsNullOrWhiteSpace(span.Source?.Data))
         {
             source = new(
                 AudioSourceKind.Upload,
                 null,
-                segment.Source);
+                span.Source);
             return true;
         }
         source = null;
@@ -185,24 +185,24 @@ internal static class TimelineAudioSegmentPlanCompiler
     }
 
     private static (double Start, double Length)? ResolveFinalWindow(
-        TimelineAudioSegmentSpec segment,
+        TimelineAudioSpanSpec span,
         IReadOnlyDictionary<int, ClipWindow> clipsById)
     {
-        bool hasAnchors = segment.FirstClipId.HasValue
-            && segment.LastClipId.HasValue
-            && segment.FirstClipOffsetSeconds.HasValue
-            && segment.LastClipOffsetSeconds.HasValue;
+        bool hasAnchors = span.FirstClipId.HasValue
+            && span.LastClipId.HasValue
+            && span.FirstClipOffsetSeconds.HasValue
+            && span.LastClipOffsetSeconds.HasValue;
         if (!hasAnchors
-            || !clipsById.TryGetValue(segment.FirstClipId.Value, out ClipWindow first)
-            || !clipsById.TryGetValue(segment.LastClipId.Value, out ClipWindow last)
+            || !clipsById.TryGetValue(span.FirstClipId.Value, out ClipWindow first)
+            || !clipsById.TryGetValue(span.LastClipId.Value, out ClipWindow last)
             || !first.IsResolved
             || !last.IsResolved)
         {
-            return (segment.TimelineStartSeconds, segment.LengthSeconds);
+            return (span.TimelineStartSeconds, span.LengthSeconds);
         }
 
-        double start = first.TimelineTimeAt(segment.FirstClipOffsetSeconds.Value);
-        double length = last.TimelineTimeAt(segment.LastClipOffsetSeconds.Value) - start;
+        double start = first.TimelineTimeAt(span.FirstClipOffsetSeconds.Value);
+        double length = last.TimelineTimeAt(span.LastClipOffsetSeconds.Value) - start;
         return double.IsFinite(start)
             && double.IsFinite(length)
             && start >= 0

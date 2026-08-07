@@ -143,11 +143,11 @@ internal static class VideoExecutionPlanCompiler
                 $"{boundaryBudget.Reason}."));
         }
         // Timeline audio remains architecture-neutral; non-consuming architectures overlay it after decode.
-        TimelineAudioSegmentCompilation audio = TimelineAudioSegmentPlanCompiler.Compile(
+        TimelineAudioSpanCompilation audio = TimelineAudioSpanCompiler.Compile(
             spec.FPS,
             clips,
             resolvedBoundaries,
-            spec.TimelineAudioSegments);
+            spec.TimelineAudioSpans);
         IReadOnlyList<ClipPlan> clipsWithTimelineAudio = audio.Clips;
         foreach (ClipPlan clipPlan in clipsWithTimelineAudio)
         {

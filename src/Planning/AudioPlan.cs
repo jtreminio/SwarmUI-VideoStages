@@ -21,7 +21,7 @@ internal sealed record AudioBaseSourcePlan(
     bool HasConfiguredTrack,
     UploadedMediaSpec UploadedMedia);
 
-internal sealed record AudioSegmentItemPlan(
+internal sealed record AudioSpanPlan(
     AudioSourceKind SourceKind,
     int? AceStepFunTrack,
     double StartSeconds,
@@ -34,8 +34,6 @@ internal sealed record AudioSegmentItemPlan(
 /// A later executor resolves uploads/tracks, reports unavailable runtime sources, and uses these
 /// windows unchanged.
 /// </summary>
-internal sealed record AudioSegmentPlan(ImmutableArray<AudioSegmentItemPlan> Items);
-
 /// <summary>
 /// Pure projection of one <see cref="ClipSpec"/>'s audio policy. This contains no graph paths and
 /// makes every audio ownership decision before workflow construction begins.
@@ -43,5 +41,5 @@ internal sealed record AudioSegmentPlan(ImmutableArray<AudioSegmentItemPlan> Ite
 internal sealed record AudioPlan(
     AudioBaseSourcePlan Base,
     AudioLengthOwner LengthOwner,
-    AudioSegmentPlan Segments,
+    ImmutableArray<AudioSpanPlan> Spans,
     ImmutableArray<PlanDiagnostic> Diagnostics);

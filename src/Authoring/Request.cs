@@ -141,11 +141,11 @@ public sealed record IcLoraSpec(
 );
 
 /// <summary>
-/// One root-authored audio segment positioned on the final multi-clip timeline. Planning projects
+/// One authored span of an audio track, positioned on the final multi-clip timeline. Planning projects
 /// this interval onto every clip it intersects, advancing <see cref="SourceStartSeconds"/> at each
 /// seam so every clip receives the correct source slice.
 /// </summary>
-public sealed record TimelineAudioSegmentSpec(
+public sealed record TimelineAudioSpanSpec(
     string Id,
     UploadedMediaSpec Source,
     string AceStepFunSource,
@@ -225,7 +225,7 @@ public sealed record TimelineSpec(
     bool IsTextToVideo,
     IReadOnlyList<ClipSpec> Clips,
     bool HasConfiguredResolution = true,
-    IReadOnlyList<TimelineAudioSegmentSpec> TimelineAudioSegments = null)
+    IReadOnlyList<TimelineAudioSpanSpec> TimelineAudioSpans = null)
 {
     public LegacyVideoSwapRequestSnapshot LegacyVideoSwap { get; init; } = new();
 }

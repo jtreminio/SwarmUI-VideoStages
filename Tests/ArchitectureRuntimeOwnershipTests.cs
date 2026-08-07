@@ -297,7 +297,7 @@ public class ArchitectureRuntimeOwnershipTests
             Audio: new(
                 new(AudioSourceKind.Disabled, "", null, false, null),
                 AudioLengthOwner.Timeline,
-                new([]),
+                [],
                 []),
             SavesAudioTrack: false)
         {

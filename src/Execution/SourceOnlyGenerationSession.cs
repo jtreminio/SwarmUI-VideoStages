@@ -63,9 +63,9 @@ internal sealed class SourceOnlyGenerationSession(
             clip,
             framesPerSecond,
             initVideoMedia);
-        WGNodeData combinedAudio = new AudioSegmentCombiner(generator).Combine(
+        WGNodeData combinedAudio = new AudioSpanCombiner(generator).Combine(
             clip.ClipId,
-            clip.Audio.Segments,
+            clip.Audio.Spans,
             baseAudio,
             duration,
             out _);

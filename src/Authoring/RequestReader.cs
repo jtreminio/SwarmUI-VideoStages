@@ -112,7 +112,7 @@ internal static class RequestReader
             isTextToVideo,
             clips,
             hasConfiguredResolution,
-            AuthoringTimeline.ReadAudioSegments(
+            AuthoringTimeline.ReadAudioSpans(
                 document.AudioTracks,
                 document.Clips,
                 warn))

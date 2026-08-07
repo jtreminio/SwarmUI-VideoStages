@@ -554,13 +554,13 @@ internal sealed class MiniMaxGenerationSession(
         double duration = plan.FramesPerSecond > 0
             ? frames / (double)plan.FramesPerSecond
             : 0;
-        AudioSegmentCombiner combiner = new(g);
+        AudioSpanCombiner combiner = new(g);
         WGNodeData combinedAudio = combiner.Combine(
             clip.ClipId,
-            clip.Audio.Segments,
+            clip.Audio.Spans,
             selectedAudio,
             duration,
-            out IReadOnlyList<(double Start, double End)> segmentWindows);
+            out IReadOnlyList<(double Start, double End)> spanWindows);
         combinedAudio = combiner.OverlayOpeningWindow(
             combinedAudio,
             _boundaryCarryAudio,
@@ -568,8 +568,8 @@ internal sealed class MiniMaxGenerationSession(
             _boundaryCarryDuration,
             duration);
         preserveWindows = _boundaryCarryAudio is null
-            ? segmentWindows
-            : [(0, _boundaryCarryDuration), .. segmentWindows];
+            ? spanWindows
+            : [(0, _boundaryCarryDuration), .. spanWindows];
         return combinedAudio;
     }
 

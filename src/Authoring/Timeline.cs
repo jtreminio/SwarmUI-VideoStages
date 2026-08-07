@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 namespace VideoStages.Authoring;
 
 /// <summary>
-/// Reads time-based clip media and root audio segments.
+/// Reads time-based clip media and root audio spans.
 /// </summary>
 internal static class AuthoringTimeline
 {
@@ -121,7 +121,7 @@ internal static class AuthoringTimeline
         return new RetakeWindowSpec(startFrame, lengthFrames, strength);
     }
 
-    internal static IReadOnlyList<TimelineAudioSegmentSpec> ReadAudioSegments(
+    internal static IReadOnlyList<TimelineAudioSpanSpec> ReadAudioSpans(
         IReadOnlyList<JObject> tracks,
         IReadOnlyList<JObject> clips,
         Action<string> warn = null)
@@ -136,7 +136,7 @@ internal static class AuthoringTimeline
             }
         }
 
-        List<TimelineAudioSegmentSpec> segments = [];
+        List<TimelineAudioSpanSpec> results = [];
         for (int trackIndex = 0; trackIndex < tracks.Count; trackIndex++)
         {
             JObject track = tracks[trackIndex];
@@ -232,7 +232,7 @@ internal static class AuthoringTimeline
                     && lastClipId.HasValue
                     && firstOffset.HasValue
                     && lastOffset.HasValue;
-                segments.Add(new(
+                results.Add(new(
                     spans.Count == 1 ? trackId : $"{trackId}:{spanIndex}",
                     upload,
                     aceStepSource,
@@ -246,7 +246,7 @@ internal static class AuthoringTimeline
                     completeProjection ? lastOffset : null));
             }
         }
-        return segments;
+        return results;
     }
 
     private static int? ResolveClipId(

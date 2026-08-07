@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
@@ -11,13 +12,13 @@ using Xunit;
 namespace VideoStages.Tests;
 
 [Collection("VideoStagesTests")]
-public class AudioSegmentCombinerTests
+public class AudioSpanCombinerTests
 {
     private static JObject BuildWorkflowWithBaseAudio()
     {
         JObject workflow = [];
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        // Base audio the segments overlay onto.
+        // Base audio the spans overlay onto.
         bridge.AddStub("StubAudio", "203").WithOutputs(WGNodeData.DT_AUDIO);
         return workflow;
     }
@@ -36,7 +37,7 @@ public class AudioSegmentCombinerTests
     private static UploadedMediaSpec Upload(string base64 = "QUJD") =>
         new($"data:audio/wav;base64,{base64}", "seg.wav");
 
-    private static AudioSegmentItemPlan UploadSegment(
+    private static AudioSpanPlan UploadSpan(
         UploadedMediaSpec source,
         double StartSeconds,
         double TrimStartSeconds,
@@ -51,7 +52,7 @@ public class AudioSegmentCombinerTests
             source,
             Volume);
 
-    private static AudioSegmentItemPlan AceSegment(
+    private static AudioSpanPlan AceSpan(
         int track,
         double StartSeconds,
         double TrimStartSeconds,
@@ -64,15 +65,15 @@ public class AudioSegmentCombinerTests
             LengthSeconds,
             UploadedMedia: null);
 
-    private static AudioSegmentPlan SegmentPlan(params AudioSegmentItemPlan[] segments) =>
-        AudioSegmentPlanCompiler.Compile(
-            segments,
+    private static ImmutableArray<AudioSpanPlan> SpanPlan(params AudioSpanPlan[] spans) =>
+        AudioSpanPlanCompiler.Compile(
+            spans,
             new AudioBaseSourcePlan(
                 AudioSourceKind.Native,
                 MediaSource.Native,
                 AceStepFunTrack: null,
                 HasConfiguredTrack: true,
-                UploadedMedia: null)).Plan;
+                UploadedMedia: null)).Spans;
 
     private static int CountClassType(JObject workflow, string classType)
     {
@@ -96,9 +97,9 @@ public class AudioSegmentCombinerTests
         WGNodeData baseAudio = BaseAudio(g);
         int before = workflow.Count;
 
-        WGNodeData result = new AudioSegmentCombiner(g).Combine(
+        WGNodeData result = new AudioSpanCombiner(g).Combine(
             0,
-            SegmentPlan(),
+            SpanPlan(),
             baseAudio,
             clipDurationSeconds: 10.0,
             out _);
@@ -116,27 +117,27 @@ public class AudioSegmentCombinerTests
         WorkflowGenerator g = BuildGenerator(workflow);
         WGNodeData baseAudio = BaseAudio(g);
 
-        WGNodeData result = new AudioSegmentCombiner(g).Combine(
+        WGNodeData result = new AudioSpanCombiner(g).Combine(
             0,
-            SegmentPlan(
-                UploadSegment(
+            SpanPlan(
+                UploadSpan(
                     Upload("QUJD"),
                     StartSeconds: 0.0,
                     TrimStartSeconds: 1.0,
                     LengthSeconds: 3.0,
                     Volume: 0.5),
-                UploadSegment(Upload("WFla"), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
+                UploadSpan(Upload("WFla"), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio,
             clipDurationSeconds: 10.0,
             out _);
 
-        // Each segment: one upload load + one trim. The offset (start > 0) segment adds one silence + concat.
+        // Each span: one upload load + one trim. The offset (start > 0) span adds one silence + concat.
         Assert.Equal(2, CountClassType(workflow, "SwarmLoadAudioB64"));
         Assert.Equal(2, CountClassType(workflow, "TrimAudioDuration"));
         Assert.Equal(1, CountClassType(workflow, "EmptyAudio"));
         Assert.Equal(1, CountClassType(workflow, "AudioConcat"));
         Assert.Equal(1, CountClassType(workflow, "AudioAdjustVolume"));
-        // Base is audio1; each segment is mixed over the running accumulator -> two merges.
+        // Base is audio1; each span is mixed over the running accumulator -> two merges.
         Assert.Equal(2, CountClassType(workflow, "AudioMerge"));
 
         // Result points at the final AudioMerge, additively (merge_method="add").
@@ -146,7 +147,7 @@ public class AudioSegmentCombinerTests
         Assert.Equal("AudioMerge", output.Node.ClassTypeName);
         Assert.Equal("add", workflow[output.Node.Id]?["inputs"]?["merge_method"]?.ToString());
 
-        // AudioConcat only turns silence + the offset segment into one positioned overlay track.
+        // AudioConcat only turns silence + the offset span into one positioned overlay track.
         // That positioned track is then connected to AudioMerge.audio2, never appended to the base.
         AudioConcatNode placement = Assert.Single(
             bridge.Graph.NodesOfType<AudioConcatNode>());
@@ -171,11 +172,11 @@ public class AudioSegmentCombinerTests
         WorkflowGenerator g = BuildGenerator(workflow);
         WGNodeData baseAudio = BaseAudio(g);
 
-        _ = new AudioSegmentCombiner(g).Combine(
+        _ = new AudioSpanCombiner(g).Combine(
             0,
-            SegmentPlan(
-                UploadSegment(Upload("QUJD"), StartSeconds: 0.5, TrimStartSeconds: 0.0, LengthSeconds: 3.0),
-                UploadSegment(Upload("WFla"), StartSeconds: 6.0, TrimStartSeconds: 0.0, LengthSeconds: 2.0)),
+            SpanPlan(
+                UploadSpan(Upload("QUJD"), StartSeconds: 0.5, TrimStartSeconds: 0.0, LengthSeconds: 3.0),
+                UploadSpan(Upload("WFla"), StartSeconds: 6.0, TrimStartSeconds: 0.0, LengthSeconds: 2.0)),
             baseAudio,
             clipDurationSeconds: 10.0,
             out IReadOnlyList<(double Start, double End)> windows);
@@ -189,13 +190,13 @@ public class AudioSegmentCombinerTests
         JObject workflow = BuildWorkflowWithBaseAudio();
         WorkflowGenerator g = BuildGenerator(workflow);
 
-        _ = new AudioSegmentCombiner(g).Combine(
+        _ = new AudioSpanCombiner(g).Combine(
             0,
-            SegmentPlan(
-                UploadSegment(Upload("MDE="), 0, 0, 1, Volume: 0.00001),
-                UploadSegment(Upload("MDI="), 1, 0, 1, Volume: 1),
-                UploadSegment(Upload("MDM="), 2, 0, 1, Volume: 4),
-                UploadSegment(Upload("MDQ="), 3, 0, 1, Volume: 100000)),
+            SpanPlan(
+                UploadSpan(Upload("MDE="), 0, 0, 1, Volume: 0.00001),
+                UploadSpan(Upload("MDI="), 1, 0, 1, Volume: 1),
+                UploadSpan(Upload("MDM="), 2, 0, 1, Volume: 4),
+                UploadSpan(Upload("MDQ="), 3, 0, 1, Volume: 100000)),
             BaseAudio(g),
             clipDurationSeconds: 10,
             out _);
@@ -215,9 +216,9 @@ public class AudioSegmentCombinerTests
         WorkflowGenerator g = BuildGenerator(workflow);
         WGNodeData baseAudio = BaseAudio(g);
 
-        WGNodeData result = new AudioSegmentCombiner(g).Combine(
+        WGNodeData result = new AudioSpanCombiner(g).Combine(
             0,
-            SegmentPlan(AceSegment(
+            SpanPlan(AceSpan(
                 track: 5, StartSeconds: 0.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio,
             clipDurationSeconds: 10.0,
@@ -240,23 +241,23 @@ public class AudioSegmentCombinerTests
         WorkflowGenerator g = BuildGenerator(workflow);
         WGNodeData baseAudio = BaseAudio(g);
 
-        AudioSegmentPlan segmentPlan = new(
-            [new AudioSegmentItemPlan(
+        ImmutableArray<AudioSpanPlan> spanPlan =
+            [new AudioSpanPlan(
                 AudioSourceKind.AceStepFun,
                 AceStepFunTrack: 2,
                 StartSeconds: 2.0,
                 TrimStartSeconds: 0.0,
                 LengthSeconds: 3.0,
-                UploadedMedia: null)]);
-        WGNodeData result = new AudioSegmentCombiner(g).Combine(
+                UploadedMedia: null)];
+        WGNodeData result = new AudioSpanCombiner(g).Combine(
             0,
-            segmentPlan,
+            spanPlan,
             baseAudio,
             clipDurationSeconds: 10.0,
             out _);
 
         Assert.NotNull(result);
-        // No upload load node — the segment reads straight from the decode node, via the length pad.
+        // No upload load node — the span reads straight from the decode node, via the length pad.
         Assert.Equal(0, CountClassType(workflow, "SwarmLoadAudioB64"));
         Assert.Equal(1, CountClassType(workflow, "TrimAudioDuration"));
         Assert.Equal(1, CountClassType(workflow, "AudioMerge"));
@@ -280,9 +281,9 @@ public class AudioSegmentCombinerTests
         WGNodeData baseAudio = BaseAudio(g);
         int before = workflow.Count;
 
-        WGNodeData result = new AudioSegmentCombiner(g).Combine(
+        WGNodeData result = new AudioSpanCombiner(g).Combine(
             0,
-            SegmentPlan(AceSegment(
+            SpanPlan(AceSpan(
                 track: 5, StartSeconds: 0.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio,
             clipDurationSeconds: 10.0,
@@ -298,16 +299,16 @@ public class AudioSegmentCombinerTests
         JObject workflow = [];
         WorkflowGenerator g = BuildGenerator(workflow);
 
-        WGNodeData result = new AudioSegmentCombiner(g).Combine(
+        WGNodeData result = new AudioSpanCombiner(g).Combine(
             0,
-            SegmentPlan(
-                UploadSegment(Upload(), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
+            SpanPlan(
+                UploadSpan(Upload(), StartSeconds: 2.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
             baseAudio: null,
             clipDurationSeconds: 10.0,
             out _);
 
         Assert.NotNull(result);
-        // Silent clip-duration bed + silence for the segment offset = 2 EmptyAudio nodes.
+        // Silent clip-duration bed + silence for the span offset = 2 EmptyAudio nodes.
         Assert.Equal(2, CountClassType(workflow, "EmptyAudio"));
         Assert.Equal(1, CountClassType(workflow, "AudioMerge"));
     }

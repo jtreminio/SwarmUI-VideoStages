@@ -622,7 +622,7 @@ public class VideoExecutionPlanCompilerTests
             },
             GeneratedClip(1, Stage(11)) with { Frames = 9 }) with
         {
-            TimelineAudioSegments =
+            TimelineAudioSpans =
             [
                 new(
                     "score",
@@ -639,12 +639,12 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(8, Assert.Single(plan.Boundaries).OverlapFrames);
         Assert.Equal(
             1 / 24d,
-            Assert.Single(plan.Clips[0].Audio.Segments.Items).LengthSeconds,
+            Assert.Single(plan.Clips[0].Audio.Spans).LengthSeconds,
             8);
     }
 
     [Fact]
-    public void Compile_TimelineAudioSegment_CutsAtEveryClipAndAdvancesSourceOffset()
+    public void Compile_TimelineAudioSpan_CutsAtEveryClipAndAdvancesSourceOffset()
     {
         TimelineSpec spec = Spec(
             false,
@@ -652,7 +652,7 @@ public class VideoExecutionPlanCompilerTests
             GeneratedClip(1, Stage(11)) with { Frames = 49 },
             GeneratedClip(2, Stage(12)) with { Frames = 49 }) with
         {
-            TimelineAudioSegments =
+            TimelineAudioSpans =
             [
                 new(
                     "dialogue",
@@ -667,8 +667,8 @@ public class VideoExecutionPlanCompilerTests
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
 
-        AudioSegmentItemPlan[] projected = plan.Clips
-            .SelectMany(clip => clip.Audio.Segments.Items)
+        AudioSpanPlan[] projected = plan.Clips
+            .SelectMany(clip => clip.Audio.Spans)
             .ToArray();
         double clipSeconds = 49 / 24.0;
         double firstLength = clipSeconds - 1.5;
@@ -694,7 +694,7 @@ public class VideoExecutionPlanCompilerTests
         TimelineSpec spec = Spec(false, GeneratedClip(0, Stage(10))) with
         {
             HasConfiguredResolution = false,
-            TimelineAudioSegments =
+            TimelineAudioSpans =
             [
                 new(
                     "dialogue",
@@ -709,7 +709,7 @@ public class VideoExecutionPlanCompilerTests
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
 
         Assert.False(plan.HasConfiguredResolution);
-        Assert.Single(Assert.Single(plan.Clips).Audio.Segments.Items);
+        Assert.Single(Assert.Single(plan.Clips).Audio.Spans);
     }
 
     [Fact]
@@ -719,7 +719,7 @@ public class VideoExecutionPlanCompilerTests
         ClipSpec host = GeneratedClip(1, Stage(11));
         TimelineSpec spec = Spec(false, ltx, host) with
         {
-            TimelineAudioSegments =
+            TimelineAudioSpans =
             [
                 new(
                     "mixed-overlay",
@@ -763,22 +763,22 @@ public class VideoExecutionPlanCompilerTests
 
         // Audio tracks are model-independent: the generic clip carries its window too, and
         // mixes it after decode instead of during generation.
-        Assert.Single(plan.Clips[0].Audio.Segments.Items);
-        Assert.Single(plan.Clips[1].Audio.Segments.Items);
+        Assert.Single(plan.Clips[0].Audio.Spans);
+        Assert.Single(plan.Clips[1].Audio.Spans);
         Assert.True(plan.Clips[0].Architecture.ConsumesTimelineAudio);
         Assert.False(plan.Clips[1].Architecture.ConsumesTimelineAudio);
         Assert.Empty(plan.Diagnostics);
     }
 
     [Fact]
-    public void Compile_OverlappingTimelineAudioSegments_RemainIndependentPerClip()
+    public void Compile_OverlappingTimelineAudioSpans_RemainIndependentPerClip()
     {
         TimelineSpec spec = Spec(
             false,
             GeneratedClip(0, Stage(10)) with { Frames = 48 },
             GeneratedClip(1, Stage(11)) with { Frames = 48 }) with
         {
-            TimelineAudioSegments =
+            TimelineAudioSpans =
             [
                 new("music", null, "audio0", 0.5, 0, 3, 1),
                 new("voice", null, "audio1", 1, 2, 2.5, 0.5),
@@ -787,14 +787,14 @@ public class VideoExecutionPlanCompilerTests
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
 
-        Assert.Equal(2, plan.Clips[0].Audio.Segments.Items.Length);
-        Assert.Equal(2, plan.Clips[1].Audio.Segments.Items.Length);
+        Assert.Equal(2, plan.Clips[0].Audio.Spans.Length);
+        Assert.Equal(2, plan.Clips[1].Audio.Spans.Length);
         Assert.Equal(
             [0, 1],
-            plan.Clips[0].Audio.Segments.Items.Select(item => item.AceStepFunTrack));
+            plan.Clips[0].Audio.Spans.Select(item => item.AceStepFunTrack));
         Assert.Equal(
             [0, 1],
-            plan.Clips[1].Audio.Segments.Items.Select(item => item.AceStepFunTrack));
+            plan.Clips[1].Audio.Spans.Select(item => item.AceStepFunTrack));
     }
 
     [Fact]
@@ -805,7 +805,7 @@ public class VideoExecutionPlanCompilerTests
             GeneratedClip(0, Stage(10)) with { Frames = 49 },
             GeneratedClip(1, Stage(11)) with { Frames = 49 }) with
         {
-            TimelineAudioSegments =
+            TimelineAudioSpans =
             [
                 new(
                     "seam",
@@ -824,8 +824,8 @@ public class VideoExecutionPlanCompilerTests
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(spec);
 
-        Assert.Empty(plan.Clips[0].Audio.Segments.Items);
-        AudioSegmentItemPlan item = Assert.Single(plan.Clips[1].Audio.Segments.Items);
+        Assert.Empty(plan.Clips[0].Audio.Spans);
+        AudioSpanPlan item = Assert.Single(plan.Clips[1].Audio.Spans);
         Assert.Equal(0, item.StartSeconds);
         Assert.Equal(1, item.LengthSeconds);
     }

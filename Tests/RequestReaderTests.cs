@@ -199,7 +199,7 @@ public class RequestReaderTests
             clipSeconds: 8.0);
 
         Assert.Equal("clip early", tiled[0].Prompt);
-        Assert.Contains(tiled, segment => segment.Prompt == "clip late");
+        Assert.Contains(tiled, span => span.Prompt == "clip late");
         PromptRelaySegmentPlan[] tiledArray = tiled.ToArray();
         Assert.True(
             Array.FindIndex(tiledArray, s => s.Prompt == "clip early")
@@ -1640,7 +1640,7 @@ public class RequestReaderTests
     }
 
     [Fact]
-    public void Read_RootTimelineAudioSegments_PreservesExecutableSourceWindowAndVolume()
+    public void Read_RootTimelineAudioSpans_PreservesExecutableSourceWindowAndVolume()
     {
         JObject span = AudioSpan(
             timelineStartSeconds: 1.5,
@@ -1663,25 +1663,25 @@ public class RequestReaderTests
 
         TimelineSpec parsed = RequestReader.Read(
             BuildGenerator(root.ToString(Formatting.None)));
-        TimelineAudioSegmentSpec segment = Assert.Single(parsed.TimelineAudioSegments);
+        TimelineAudioSpanSpec parsedSpan = Assert.Single(parsed.TimelineAudioSpans);
 
-        Assert.Equal("track-dialogue", segment.Id);
-        Assert.Equal("dialogue.wav", segment.Source.FileName);
-        Assert.Equal(1.5, segment.TimelineStartSeconds);
-        Assert.Equal(2.5, segment.LengthSeconds);
-        Assert.Equal(4, segment.SourceStartSeconds);
-        Assert.Equal(0.75, segment.Volume);
-        Assert.Equal(0, segment.FirstClipId);
-        Assert.Equal(0, segment.LastClipId);
-        Assert.Equal(1.5, segment.FirstClipOffsetSeconds);
-        Assert.Equal(4, segment.LastClipOffsetSeconds);
+        Assert.Equal("track-dialogue", parsedSpan.Id);
+        Assert.Equal("dialogue.wav", parsedSpan.Source.FileName);
+        Assert.Equal(1.5, parsedSpan.TimelineStartSeconds);
+        Assert.Equal(2.5, parsedSpan.LengthSeconds);
+        Assert.Equal(4, parsedSpan.SourceStartSeconds);
+        Assert.Equal(0.75, parsedSpan.Volume);
+        Assert.Equal(0, parsedSpan.FirstClipId);
+        Assert.Equal(0, parsedSpan.LastClipId);
+        Assert.Equal(1.5, parsedSpan.FirstClipOffsetSeconds);
+        Assert.Equal(4, parsedSpan.LastClipOffsetSeconds);
     }
 
     private static JObject MakeAudioTrack(string id, params JObject[] spans) =>
         AudioTrack(id, volume: 0.5, fileName: "score.wav", spans);
 
     [Fact]
-    public void Read_RootTimelineAudioSegments_MultiSpanTrackMatchesSplitSingleSpanLanes()
+    public void Read_RootTimelineAudioSpans_MultiSpanTrackMatchesSplitSingleSpanLanes()
     {
         static TimelineSpec ReadWithTracks(params JObject[] tracks)
         {
@@ -1694,31 +1694,31 @@ public class RequestReaderTests
             return RequestReader.Read(BuildGenerator(root.ToString(Formatting.None)));
         }
 
-        IReadOnlyList<TimelineAudioSegmentSpec> combined = ReadWithTracks(
+        IReadOnlyList<TimelineAudioSpanSpec> combined = ReadWithTracks(
             MakeAudioTrack(
                 "track-multi",
                 AudioSpan(0, 1, 0),
-                AudioSpan(3, 2, 5))).TimelineAudioSegments;
-        IReadOnlyList<TimelineAudioSegmentSpec> split = ReadWithTracks(
+                AudioSpan(3, 2, 5))).TimelineAudioSpans;
+        IReadOnlyList<TimelineAudioSpanSpec> split = ReadWithTracks(
             MakeAudioTrack("track-multi:0", AudioSpan(0, 1, 0)),
-            MakeAudioTrack("track-multi:1", AudioSpan(3, 2, 5))).TimelineAudioSegments;
+            MakeAudioTrack("track-multi:1", AudioSpan(3, 2, 5))).TimelineAudioSpans;
 
         Assert.Equal(2, combined.Count);
         Assert.Equal(
             ["track-multi:0", "track-multi:1"],
-            combined.Select(segment => segment.Id).ToArray());
+            combined.Select(span => span.Id).ToArray());
         Assert.Equal(
-            combined.Select(segment => (
-                segment.Id,
-                segment.TimelineStartSeconds,
-                segment.LengthSeconds,
-                segment.SourceStartSeconds,
-                segment.Volume)).ToArray(),
-            split.Select(segment => (
-                segment.Id,
-                segment.TimelineStartSeconds,
-                segment.LengthSeconds,
-                segment.SourceStartSeconds,
-                segment.Volume)).ToArray());
+            combined.Select(span => (
+                span.Id,
+                span.TimelineStartSeconds,
+                span.LengthSeconds,
+                span.SourceStartSeconds,
+                span.Volume)).ToArray(),
+            split.Select(span => (
+                span.Id,
+                span.TimelineStartSeconds,
+                span.LengthSeconds,
+                span.SourceStartSeconds,
+                span.Volume)).ToArray());
     }
 }

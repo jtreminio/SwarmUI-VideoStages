@@ -25,9 +25,9 @@ internal sealed class UploadedMediaPreflight(T2IParamInput input)
                 diagnostics.Add(Unreadable(videoError, clip.ClipId));
             }
             AddAudioDiagnostic(diagnostics, clip.Audio?.Base?.UploadedMedia, clip.ClipId);
-            foreach (AudioSegmentItemPlan segment in clip.Audio?.Segments?.Items ?? [])
+            foreach (AudioSpanPlan span in clip.Audio?.Spans ?? [])
             {
-                AddAudioDiagnostic(diagnostics, segment.UploadedMedia, clip.ClipId);
+                AddAudioDiagnostic(diagnostics, span.UploadedMedia, clip.ClipId);
             }
         }
         return diagnostics.AsReadOnly();
