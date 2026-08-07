@@ -317,9 +317,9 @@ DocumentJson / RequestReader
     → VideoExecutionPlanContext
 ```
 
-`DocumentJson` requires schema version 6 after applying its only
-bounded migration: a version-5 clip's `architecture` field becomes
-`architectureHint`. `RequestReader` applies prompt overrides and reads clips,
+`DocumentJson` version-checks the authoring document and applies the one
+bounded migration, both pinned in [`ARCHITECTURE.md`](../ARCHITECTURE.md).
+`RequestReader` applies prompt overrides and reads clips,
 authored stages, source media, dimensions, FPS, and timeline audio into
 `TimelineSpec`.
 

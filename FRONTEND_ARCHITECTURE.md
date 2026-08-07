@@ -90,9 +90,9 @@ documentCommands/                    list descriptor table and generic reducer
 documentDiff.ts                      before/after documents → one batch command
 ```
 
-Schema v6 is the exact current contract. Decode has one bounded v5 migration
-that renames clip `architecture` to `architectureHint`; every other version
-surfaces a one-shot notice and loads nothing rather than loading partially.
+Decode accepts the schema versions [`ARCHITECTURE.md`](ARCHITECTURE.md) pins
+and applies the one bounded migration it names; every other version surfaces a
+one-shot notice and loads nothing rather than loading partially.
 
 Every canonical commit reaches `store.dispatch`. Two APIs get there:
 
@@ -423,8 +423,8 @@ backend DTO.
 
 ## Completion rules
 
-- Schema v6 is exact; only the bounded v5 `architecture` → `architectureHint`
-  migration is accepted.
+- Only the schema versions [`ARCHITECTURE.md`](ARCHITECTURE.md) pins are
+  accepted, with the one bounded migration it names.
 - The emitted document is pinned by `Tests/fixtures/authoring-document.json`,
   asserted from both jest and the C# suite.
 - Every clip/stage model choice is catalog-resolved.

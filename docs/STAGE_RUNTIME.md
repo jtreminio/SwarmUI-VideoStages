@@ -39,8 +39,8 @@ Repeated SwarmUI workflow callbacks therefore observe the same immutable plan.
 
 The stages before runtime are:
 
-1. `DocumentJson` accepts authoring schema v6. It has one bounded v5
-   migration that renames the old `architecture` key to `architectureHint`.
+1. `DocumentJson` version-checks the authoring document and applies the one
+   bounded migration, both pinned in [`ARCHITECTURE.md`](../ARCHITECTURE.md).
 2. `RequestReader` reads common document data and prompt-section
    overrides.
 3. `ArchitecturePlanResolver` resolves every authored stage model—including
