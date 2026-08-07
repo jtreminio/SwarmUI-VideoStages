@@ -127,6 +127,12 @@ export interface Retake {
  * stage 0 refines it according to its Control value, later stages
  * refine/upscale it, and a retake window regenerates part of it.
  */
+/**
+ * The video a clip starts from instead of generating. Called "Source Video" everywhere the user
+ * sees it — the wire key, the entry mode and every type say `initVideo`, and that split is
+ * deliberate: bare "source" already means a provenance selector here (`audioSource`,
+ * `driveSource`, `ClipReference.source`), so the code cannot spell it that way.
+ */
 export interface InitVideo {
     data: string;
     fileName: string | null;
