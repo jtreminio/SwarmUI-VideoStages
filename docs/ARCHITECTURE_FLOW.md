@@ -25,14 +25,14 @@ classes whose stock video graph branches have been verified.
 | Production registration | SwarmUI adapter | `VideoStagesExtension.OnInit`, `VideoArchitectureManifest` |
 | Exact model recognition | Backend architecture module | `VideoArchitectureRegistry.TryResolveModel`, `Ltx2ArchitectureModule.TryResolveModel`, `MiniMaxArchitectureModule.TryResolveModel`, `WanArchitectureModule.TryResolveModel`, `HostVideoArchitectureModule.TryResolveModel` |
 | Capabilities and rules | Backend architecture module | `Ltx2ArchitectureModule.Descriptor`, `MiniMaxArchitectureModule.Descriptor`, `WanArchitectureModule.Descriptor`, `HostVideoArchitectureModule.Descriptor`, `NoneArchitecture.Descriptor` |
-| Catalog transport | Common backend + SwarmUI authorization | `VideoStagesApi.VideoStagesGetArchitectureCatalog`, `AuthorizedArchitectureRegistry`, `ArchitectureCatalogSerializer.Serialize` |
+| Catalog transport | Common backend + SwarmUI authorization | `VideoStagesExtension.VideoStagesGetArchitectureCatalog`, `AuthorizedArchitectureRegistry`, `ArchitectureCatalogSerializer.Serialize` |
 | Catalog loading and feature policy | Common frontend | `getArchitectureCatalogSnapshot`, `loadAuthoritativeArchitectureCatalog`, `refreshAuthoritativeArchitectureCatalog`, `parseVideoArchitectureCatalog`, `createCapabilityViewResolver` |
 | Architecture-specific authoring behavior | Frontend architecture-gated helpers | `behaviorRegistry.ts`, `authoringPanels.ts`, architecture ID identity modules |
 | Curated IC-LoRA download route | LTX backend adapter + SwarmUI core | `Ltx2ApiRoutes`, `ModelsAPI.DoModelDownloadWS` |
 | Request reading and product planning | Common backend | `RequestReader`, `ArchitecturePlanResolver`, `VideoExecutionPlanCompiler` |
 | Model-family planning and execution | Selected backend module | `IVideoArchitectureModule.ValidateAndCompileClip`, `IVideoGenerationSession` |
 | Runtime dispatch and timeline merge | Common backend | `VideoArchitectureExecutionHost`, `Timeline.Boundaries` |
-| Final host publication | SwarmUI adapter | `RootRuntimeSession`, `OutputPublisher` |
+| Final host publication | SwarmUI adapter | `RootRuntimeSession` |
 
 The boundary in one sentence:
 
@@ -114,8 +114,8 @@ admits exact stock branches for Hunyuan Video, Hunyuan Video 1.5, Mochi,
 Cosmos 1, Kandinsky 5 Video, LTX Video 1, and non-2.3 LTX Video 2. Cosmos
 Predict2, SVD, component LoRA/VAE checkpoints, Hunyuan 1.5 SR, and unknown
 synthetic video classes remain unresolved.
-`NoneArchitectureModule.TryResolveModel` always returns false; common planning
-assigns `none` only to init-video clips with no active stages.
+No module resolves a model to `none`; common planning assigns `NoneArchitecture`
+only to init-video clips with no active stages.
 
 Backend recognition is the execution authority. A persisted architecture ID
 or frontend classification cannot authorize an unsupported model.
@@ -169,7 +169,7 @@ models[]        = identity + core facts + frame grid
                   + complete effective capabilities + reference positions
 ```
 
-`VideoStagesApi.VideoStagesGetArchitectureCatalog` exposes that projection as
+`VideoStagesExtension.VideoStagesGetArchitectureCatalog` exposes that projection as
 the `VideoStagesGetArchitectureCatalog` API call. The v2 wire deliberately has
 no profile table, extras overlay, duplicate entry-mode alias, or separate
 output-capability alias.
@@ -307,7 +307,7 @@ the prompt carrier. `DocumentJson.IsActive` requires an enabled
 group and non-empty Data JSON.
 
 The first lookup builds and caches one plan per `WorkflowGenerator` through
-`VideoStagesContext`:
+`RequestCaches`:
 
 ```text
 DocumentJson / RequestReader
@@ -321,7 +321,7 @@ DocumentJson / RequestReader
 bounded migration: a version-5 clip's `architecture` field becomes
 `architectureHint`. `RequestReader` applies prompt overrides and reads clips,
 authored stages, source media, dimensions, FPS, and timeline audio into
-`VideoStagesSpec`.
+`TimelineSpec`.
 
 ### B2. Select `ArchitectureId`, project, and compile typed payloads
 
@@ -330,10 +330,10 @@ model, including skipped stages, through the same session-authorized backend
 registry used for catalog projection. A forbidden model is unresolved and
 blocks planning before graph mutation. For a generated
 clip, the first authored stage selects the module and `ArchitectureId`;
-`ValidateClipIdentity` compares persisted hints for diagnostics only, and
+`EffectiveVideoRequestProjection` compares persisted hints for diagnostics only, and
 `ValidateSameArchitecture` requires all authored stages to use the resolved
 architecture. A source-only executable clip receives
-`NoneArchitectureModule`.
+`NoneArchitecture`.
 
 `VideoExecutionPlanCompiler.Compile` is pure and graph-independent. It first
 projects resolved temporal grids into an immutable request copy and reports
@@ -409,7 +409,7 @@ graph.
 `WanSessionProvider.PreflightRequest` checks the few request-global host
 options that need special WAN handling. Legacy request-global video-swap
 values are not preflight errors: plan compilation emits one warning and
-`WanLegacySwapIsolation` clears them only from host generation info, without
+`WanHostHandlers` clears them only from host generation info, without
 editing `T2IParamInput`. High- and low-noise work is expressed as ordinary
 authored stages. WAN first/last-frame conditioning is a bounded family
 enhancement, not a different user-facing model category. When the selected
@@ -671,7 +671,7 @@ compatibility, or architecture payload.
 - installs the final decoded media.
 
 `VideoArchitectureExecutionHost` clears model compatibility from final media and
-publishes through `RootRuntimeSession.PublishTimeline` / `OutputPublisher`.
+publishes through `RootRuntimeSession.PublishTimeline`.
 Publication ends the timeline; no architecture finalization step follows it.
 
 ### Flow B failures
@@ -689,7 +689,7 @@ Publication ends the timeline; no architecture finalization step follows it.
 | Missing provider/session | `VideoArchitectureExecutionHost` |
 | Wrong returned identity or decoded media | Execution-host identity checks / `DecodedClipArtifact.ValidateDecoded` |
 | Invalid cross-architecture non-cut run | `Timeline.Merger` |
-| Unpublishable final media | `RootRuntimeSession` / `OutputPublisher` |
+| Unpublishable final media | `RootRuntimeSession` |
 
 ## Invariants
 

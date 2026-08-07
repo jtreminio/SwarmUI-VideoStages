@@ -24,7 +24,7 @@ hidden authoring document + host request
     → one session per active architecture, selected for each clip
     → DecodedClipArtifact per clip
     → Timeline.Boundaries
-    → OutputPublisher
+    → RootRuntimeSession.PublishTimeline
 ```
 
 There is one common orchestration path. LTX, MiniMax, WAN, generic host video,
@@ -32,9 +32,9 @@ and the source-only `none` path do not receive separate top-level runners.
 
 ## 1. Parse, resolve, project, compile
 
-`VideoStagesContext.GetVideoExecutionPlanContext` is the entry to graph-free
+`RequestCaches.GetVideoExecutionPlanContext` is the entry to graph-free
 planning. Two `ConditionalWeakTable` caches are keyed by the current
-`WorkflowGenerator`: one for `VideoStagesSpec`, one for the compiled plan.
+`WorkflowGenerator`: one for `TimelineSpec`, one for the compiled plan.
 Repeated SwarmUI workflow callbacks therefore observe the same immutable plan.
 
 The stages before runtime are:
@@ -254,7 +254,7 @@ path, but returns the same decoded artifact contract.
 and assembles decoded audio.
 
 `RootRuntimeSession` restores the captured host save set and publishes the final
-artifact through `OutputPublisher`. No architecture session may publish the
+artifact itself. No architecture session may publish the
 whole timeline directly.
 
 ## 8. Failure boundary
@@ -282,7 +282,7 @@ Diagnostics divide responsibility:
 | Architecture dependencies | Active runtime provider during request preparation |
 | Ordinary model-path validity already owned by a supported SwarmUI primitive | SwarmUI core during graph construction |
 | Returned identity and decoded media shape | `VideoArchitectureExecutionHost` |
-| Cross-clip run validity and final publication contract | `Timeline.Boundaries` / `OutputPublisher` |
+| Cross-clip run validity and final publication contract | `Timeline.Boundaries` / `RootRuntimeSession` |
 
 ## 9. Generated binding retention audit
 
