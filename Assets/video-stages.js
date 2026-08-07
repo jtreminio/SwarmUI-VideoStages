@@ -2364,29 +2364,21 @@
       /* @__PURE__ */ new Set()
     );
   }
-  var collectAuthoringEntityIds = (state) => {
-    const ids = [];
-    for (const clip of state.clips) {
-      if (clip.id) ids.push(clip.id);
-      for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
-      for (const ref of clip.frameRefs) if (ref.id) ids.push(ref.id);
-      for (const reference of clip.references) {
-        if (reference.id) ids.push(reference.id);
-      }
-      for (const icLora of clip.icLoras) {
-        if (icLora.id) ids.push(icLora.id);
-      }
-      for (const window2 of clip.promptWindows) {
-        if (window2.id) ids.push(window2.id);
-      }
-      if (clip.retake?.id) ids.push(clip.retake.id);
-    }
-    for (const track of state.audioTracks ?? []) {
-      if (track.id) ids.push(track.id);
-      for (const span of track.spans) if (span.id) ids.push(span.id);
-    }
-    return ids;
+  var ownedIds = (entity) => {
+    const nested = "stages" in entity ? [
+      ...entity.stages,
+      ...entity.frameRefs,
+      ...entity.references ?? [],
+      ...entity.icLoras ?? [],
+      ...entity.promptWindows,
+      ...entity.retake ? [entity.retake] : []
+    ] : "spans" in entity ? entity.spans : [];
+    return [entity.id, ...nested.map((item) => item.id)];
   };
+  var collectAuthoringEntityIds = (state) => [
+    ...state.clips.flatMap(ownedIds),
+    ...(state.audioTracks ?? []).flatMap(ownedIds)
+  ].filter((id) => !!id);
 
   // frontend/clipReferenceAuthoring.ts
   var CLIP_REFERENCE_KIND_INFO = {
@@ -4522,18 +4514,8 @@
   };
   var hasPatch = (patch) => Object.keys(patch).length > 0;
   var allEntityIds = (document2) => [
-    ...document2.clips.flatMap((clip) => [
-      clip.id,
-      ...clip.stages.map((stage) => stage.id),
-      ...clip.frameRefs.map((ref) => ref.id),
-      ...clip.references.map((reference) => reference.id),
-      ...clip.promptWindows.map((window2) => window2.id),
-      ...clip.retake ? [clip.retake.id] : []
-    ]),
-    ...document2.audioTracks.flatMap((track) => [
-      track.id,
-      ...track.spans.map((span) => span.id)
-    ])
+    ...document2.clips.flatMap(ownedIds),
+    ...document2.audioTracks.flatMap(ownedIds)
   ];
   var validateDocumentIds = (document2) => {
     const ids = allEntityIds(document2);
@@ -4944,23 +4926,8 @@
   var clone2 = (value) => structuredClone(value);
   var findClip = (document2, clipId) => document2.clips.find((clip) => clip.id === clipId) ?? null;
   var findTrack = (document2, trackId) => document2.audioTracks.find((track) => track.id === trackId) ?? null;
-  var candidateIds = (entity) => {
-    if ("stages" in entity && "frameRefs" in entity) {
-      return [
-        entity.id,
-        ...entity.stages.map((stage) => stage.id),
-        ...entity.frameRefs.map((ref) => ref.id),
-        ...entity.promptWindows.map((window2) => window2.id),
-        ...entity.retake ? [entity.retake.id] : []
-      ];
-    }
-    if ("spans" in entity) {
-      return [entity.id, ...entity.spans.map((span) => span.id)];
-    }
-    return [entity.id];
-  };
   var invalidNewEntity = (document2, entity) => {
-    const ids = candidateIds(entity);
+    const ids = ownedIds(entity);
     const invalidId = ids.some(
       (id) => typeof id !== "string" || id.trim().length === 0 || id.trim() !== id
     );
@@ -4968,7 +4935,9 @@
     if (new Set(ids).size !== ids.length) {
       return failure(document2, "duplicate-id");
     }
-    const existing = new Set(collectAuthoringEntityIds(document2));
+    const existing = new Set(
+      collectAuthoringEntityIds(document2)
+    );
     return ids.some((id) => existing.has(id)) ? failure(document2, "duplicate-id") : null;
   };
   var addBefore = (items, item, beforeId) => {

@@ -215,28 +215,49 @@ export function ensureAuthoringDocumentIdentity(
     );
 }
 
-export const collectAuthoringEntityIds = (
-    state: VideoStagesConfig,
-): string[] => {
-    const ids: string[] = [];
-    for (const clip of state.clips) {
-        if (clip.id) ids.push(clip.id);
-        for (const stage of clip.stages) if (stage.id) ids.push(stage.id);
-        for (const ref of clip.frameRefs) if (ref.id) ids.push(ref.id);
-        for (const reference of clip.references) {
-            if (reference.id) ids.push(reference.id);
-        }
-        for (const icLora of clip.icLoras) {
-            if (icLora.id) ids.push(icLora.id);
-        }
-        for (const window of clip.promptWindows) {
-            if (window.id) ids.push(window.id);
-        }
-        if (clip.retake?.id) ids.push(clip.retake.id);
-    }
-    for (const track of state.audioTracks ?? []) {
-        if (track.id) ids.push(track.id);
-        for (const span of track.spans) if (span.id) ids.push(span.id);
-    }
-    return ids;
+interface IdCarrier {
+    id?: string;
+}
+
+interface ClipIds extends IdCarrier {
+    stages: readonly IdCarrier[];
+    frameRefs: readonly IdCarrier[];
+    references?: readonly IdCarrier[];
+    icLoras?: readonly IdCarrier[];
+    promptWindows: readonly IdCarrier[];
+    retake?: IdCarrier | null;
+}
+
+interface AudioTrackIds extends IdCarrier {
+    spans: readonly IdCarrier[];
+}
+
+/**
+ * Every id an entity owns, itself first, unfiltered so a caller can still see
+ * an empty one. The document-wide walk and the new-entity collision check both
+ * enumerate through here, so neither can grow a list the other forgets.
+ */
+export const ownedIds = (
+    entity: IdCarrier | ClipIds | AudioTrackIds,
+): (string | undefined)[] => {
+    const nested: readonly IdCarrier[] =
+        "stages" in entity
+            ? [
+                  ...entity.stages,
+                  ...entity.frameRefs,
+                  ...(entity.references ?? []),
+                  ...(entity.icLoras ?? []),
+                  ...entity.promptWindows,
+                  ...(entity.retake ? [entity.retake] : []),
+              ]
+            : "spans" in entity
+              ? entity.spans
+              : [];
+    return [entity.id, ...nested.map((item) => item.id)];
 };
+
+export const collectAuthoringEntityIds = (state: VideoStagesConfig): string[] =>
+    [
+        ...state.clips.flatMap(ownedIds),
+        ...(state.audioTracks ?? []).flatMap(ownedIds),
+    ].filter((id): id is string => !!id);

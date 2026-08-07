@@ -1,4 +1,4 @@
-import { collectAuthoringEntityIds } from "../identity";
+import { collectAuthoringEntityIds, ownedIds } from "../identity";
 import type {
     CanonicalAudioTrack,
     CanonicalAudioTrackSpan,
@@ -34,27 +34,11 @@ type AuthoringEntity =
     | CanonicalAudioTrack
     | CanonicalAudioTrackSpan;
 
-const candidateIds = (entity: AuthoringEntity): string[] => {
-    if ("stages" in entity && "frameRefs" in entity) {
-        return [
-            entity.id,
-            ...entity.stages.map((stage) => stage.id),
-            ...entity.frameRefs.map((ref) => ref.id),
-            ...entity.promptWindows.map((window) => window.id),
-            ...(entity.retake ? [entity.retake.id] : []),
-        ];
-    }
-    if ("spans" in entity) {
-        return [entity.id, ...entity.spans.map((span) => span.id)];
-    }
-    return [entity.id];
-};
-
 export const invalidNewEntity = (
     document: CanonicalVideoStagesConfig,
     entity: AuthoringEntity,
 ): DocumentCommandResult | null => {
-    const ids = candidateIds(entity);
+    const ids = ownedIds(entity);
     const invalidId = ids.some(
         (id) =>
             typeof id !== "string" ||
@@ -65,7 +49,9 @@ export const invalidNewEntity = (
     if (new Set(ids).size !== ids.length) {
         return failure(document, "duplicate-id");
     }
-    const existing = new Set(collectAuthoringEntityIds(document));
+    const existing = new Set<string | undefined>(
+        collectAuthoringEntityIds(document),
+    );
     return ids.some((id) => existing.has(id))
         ? failure(document, "duplicate-id")
         : null;

@@ -21,6 +21,7 @@ import {
     RETAKE_PATCH_KEYS,
     ROOT_PATCH_KEYS,
 } from "./documentCommands/listEntities";
+import { ownedIds } from "./identity";
 import type { CanonicalClip, CanonicalVideoStagesConfig } from "./types";
 
 export type DocumentBatchCommand = Extract<DocumentCommand, { type: "batch" }>;
@@ -101,18 +102,8 @@ const changedPatch = <T extends object, K extends keyof T>(
 const hasPatch = (patch: object): boolean => Object.keys(patch).length > 0;
 
 const allEntityIds = (document: CanonicalVideoStagesConfig): unknown[] => [
-    ...document.clips.flatMap((clip) => [
-        clip.id,
-        ...clip.stages.map((stage) => stage.id),
-        ...clip.frameRefs.map((ref) => ref.id),
-        ...clip.references.map((reference) => reference.id),
-        ...clip.promptWindows.map((window) => window.id),
-        ...(clip.retake ? [clip.retake.id] : []),
-    ]),
-    ...document.audioTracks.flatMap((track) => [
-        track.id,
-        ...track.spans.map((span) => span.id),
-    ]),
+    ...document.clips.flatMap(ownedIds),
+    ...document.audioTracks.flatMap(ownedIds),
 ];
 
 const validateDocumentIds = (document: CanonicalVideoStagesConfig): void => {
