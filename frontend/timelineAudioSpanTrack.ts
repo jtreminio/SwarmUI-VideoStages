@@ -131,8 +131,8 @@ export const createTimelineAudioSpanTrack = (
         edgeSelector: "[data-vst-audio-span-edge]",
         edgeAttr: "data-vst-audio-span-edge",
         laneSelector:
-            ".vst-audio-track-lane[data-vst-audio-span-add]:not([data-clip-idx])",
-        createButtonSelector: ".vst-head-tag-track[data-vst-audio-span-add]",
+            ".vst-audio-track-lane[data-vst-audio-track-add]:not([data-clip-idx])",
+        createButtonSelector: ".vst-head-tag-track[data-vst-audio-track-add]",
         draggingClass: "vst-audio-span-dragging",
         ghostClass: "vst-audio-span-ghost",
         unit: "pct",

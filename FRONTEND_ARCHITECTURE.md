@@ -285,7 +285,7 @@ AudioTrack
     └── source start (the trim)
 ```
 
-There is no clip-local authored audio-segment model any more; timeline tracks
+There is no clip-local authored audio-span model any more; timeline tracks
 replaced it outright at schema v5. New authoring writes exactly one span per
 track — one lane, one window, free to cross clip seams — and the array shape
 survives only for compatibility, normalized into independent lanes on load.

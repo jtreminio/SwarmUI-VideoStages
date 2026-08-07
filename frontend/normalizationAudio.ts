@@ -62,7 +62,7 @@ export const normalizeAudioTrackSpan = (
 /**
  * Splits a multi-span track into one single-span lane per span, which is the
  * shape both the authoring UI and the backend already work in: the backend
- * flattens every span into its own lane with exactly this
+ * flattens every span into its own per-clip span with exactly this
  * `trackId:spanIndex` identity, so the split is projection-preserving. Without
  * it, spans past the first would execute with nothing on screen to edit them.
  */

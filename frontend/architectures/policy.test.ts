@@ -451,7 +451,7 @@ describe("catalog-backed authoring policy", () => {
             "vst-audio-solo-lane",
         );
         expect(
-            body.querySelector(".vst-head-tag-track[data-vst-audio-span-add]"),
+            body.querySelector(".vst-head-tag-track[data-vst-audio-track-add]"),
         ).not.toBeNull();
     });
 

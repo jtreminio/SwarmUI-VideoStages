@@ -7233,7 +7233,7 @@
     }
     return heights;
   };
-  var audioSpanWaveBarHeights = (clipIdx, spanIdx, count) => waveBarHeights(clipIdx * 4099 + spanIdx + 1, count);
+  var audioSpanWaveBarHeights = (trackIdx, count) => waveBarHeights(trackIdx * 4099 + 1, count);
   var clampPxPerSecond = (value) => Number.isFinite(value) ? Math.min(MAX_PX_PER_SECOND, Math.max(MIN_PX_PER_SECOND, value)) : DEFAULT_PX_PER_SECOND;
   var zoomAnchorTime = (offsetX, scrollLeft, pxPerSecond, headerW = TRACK_HEADER_W_PX) => {
     if (pxPerSecond <= 0) {
@@ -7947,8 +7947,8 @@
     itemIdxAttr: null,
     edgeSelector: "[data-vst-audio-span-edge]",
     edgeAttr: "data-vst-audio-span-edge",
-    laneSelector: ".vst-audio-track-lane[data-vst-audio-span-add]:not([data-clip-idx])",
-    createButtonSelector: ".vst-head-tag-track[data-vst-audio-span-add]",
+    laneSelector: ".vst-audio-track-lane[data-vst-audio-track-add]:not([data-clip-idx])",
+    createButtonSelector: ".vst-head-tag-track[data-vst-audio-track-add]",
     draggingClass: "vst-audio-span-dragging",
     ghostClass: "vst-audio-span-ghost",
     unit: "pct",
@@ -16025,7 +16025,7 @@ ${slot}`;
     );
     const labelText = audioTrackName(track, trackIdx);
     const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
-    const waveform = audioSpanWaveBarHeights(trackIdx, trackIdx, 40).map((height) => `<span style="height:${height}%"></span>`).join("");
+    const waveform = audioSpanWaveBarHeights(trackIdx, 40).map((height) => `<span style="height:${height}%"></span>`).join("");
     return renderWindowSpan({
       className: "vst-audio-span",
       extraClassName: `vst-audio-span-tone-${trackIdx % 5}`,
@@ -16047,14 +16047,14 @@ ${slot}`;
       (track, trackIdx) => `<div class="vst-audio-track-lane" data-track-idx="${trackIdx}" style="${place(trackIdx)}">` + renderTimelineAudioSpanBlock(track, trackIdx, totalSeconds) + `</div>`
     );
     lanes.push(
-      `<div class="vst-audio-track-lane vst-audio-track-lane-blank" data-vst-audio-span-add style="${place(tracks.length)}" title="Click or drag to add an audio track spanning the timeline"></div>`
+      `<div class="vst-audio-track-lane vst-audio-track-lane-blank" data-vst-audio-track-add style="${place(tracks.length)}" title="Click or drag to add an audio track spanning the timeline"></div>`
     );
     return lanes.join("");
   };
   var renderAudioTrackRow = (clips, layouts, capabilities, audioTracks = [], pxPerSecond = 1, timelineTotalSeconds) => {
     const clipLane = (clip) => clipAudioLaneVisible(clip, capabilities);
     const clipRow = clips.some(clipLane);
-    const baseSegments = layouts.map((layout) => {
+    const clipBlocks = layouts.map((layout) => {
       const clip = clips[layout.index];
       if (!clip || !clipLane(clip)) {
         return "";
@@ -16089,7 +16089,7 @@ ${slot}`;
       0
     );
     const totalWidthPx = totalSeconds * pxPerSecond;
-    const overlaySegments = renderTimelineAudioSpanLanes(
+    const overlayLanes = renderTimelineAudioSpanLanes(
       audioTracks,
       totalSeconds,
       totalWidthPx
@@ -16103,7 +16103,7 @@ ${slot}`;
           active: !blank,
           muted: blank,
           style: `--vst-audio-lane-idx:${i}`,
-          action: blank ? `data-vst-audio-span-add title="Add an audio track spanning the timeline" aria-label="Add an audio track"` : void 0
+          action: blank ? `data-vst-audio-track-add title="Add an audio track spanning the timeline" aria-label="Add an audio track"` : void 0
         })
       );
     }
@@ -16113,7 +16113,7 @@ ${slot}`;
       "♪",
       "Audio",
       laneTags.join("")
-    ) + `<div class="vst-track-cell vst-audio-cell">${baseSegments}${overlaySegments}</div></div>`;
+    ) + `<div class="vst-track-cell vst-audio-cell">${clipBlocks}${overlayLanes}</div></div>`;
   };
   var REF_EDGE_ALIGN_FRAMES = 3;
   var renderReferencesTrackRow = (clips, layouts, fps, unit, capabilities) => {

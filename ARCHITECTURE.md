@@ -331,11 +331,11 @@ matching preset or model names.
 
 Timeline audio is authored at the document root, not on a clip: a track owns a
 source and one or more spans. The parser flattens those spans into independent
-`TimelineAudioSegmentSpec` values.
+`TimelineAudioSpanSpec` values.
 
-`TimelineAudioSegmentPlanCompiler` partitions each segment across the final
+`TimelineAudioSpanCompiler` partitions each segment across the final
 trimmed clip windows and appends the resulting items to each clip's
-`AudioPlan.Segments`. Source time advances with the final timeline, so continued
+`AudioPlan.Spans`. Source time advances with the final timeline, so continued
 and crossfaded seams do not cause drift. Overlapping segments stay independent
 and mix additively. If any clip timing is unknown, a segment produces no clip
 items, so it is never partially mixed. Clip audio-segment capability is validated

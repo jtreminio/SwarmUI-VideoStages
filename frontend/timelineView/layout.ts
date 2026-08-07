@@ -44,12 +44,11 @@ export const waveBarHeights = (clipIdx: number, count: number): number[] => {
     return heights;
 };
 
-/** Stable per-span waveform seed: unique across practical clip/span indices. */
+/** Stable per-track waveform: the same track always draws the same bars. */
 export const audioSpanWaveBarHeights = (
-    clipIdx: number,
-    spanIdx: number,
+    trackIdx: number,
     count: number,
-): number[] => waveBarHeights(clipIdx * 4099 + spanIdx + 1, count);
+): number[] => waveBarHeights(trackIdx * 4099 + 1, count);
 
 export const clampPxPerSecond = (value: number): number =>
     Number.isFinite(value)

@@ -138,15 +138,12 @@ describe("waveBarHeights", () => {
         expect(waveBarHeights(0, 16)).not.toEqual(waveBarHeights(1, 16));
     });
 
-    it("gives each audio span a deterministic, clip-aware waveform", () => {
-        expect(audioSpanWaveBarHeights(2, 1, 20)).toEqual(
-            audioSpanWaveBarHeights(2, 1, 20),
+    it("gives each audio track a deterministic waveform of its own", () => {
+        expect(audioSpanWaveBarHeights(2, 20)).toEqual(
+            audioSpanWaveBarHeights(2, 20),
         );
-        expect(audioSpanWaveBarHeights(2, 1, 20)).not.toEqual(
-            audioSpanWaveBarHeights(2, 2, 20),
-        );
-        expect(audioSpanWaveBarHeights(2, 1, 20)).not.toEqual(
-            audioSpanWaveBarHeights(3, 1, 20),
+        expect(audioSpanWaveBarHeights(2, 20)).not.toEqual(
+            audioSpanWaveBarHeights(3, 20),
         );
     });
 });
@@ -1277,7 +1274,7 @@ describe("track-head lane tags", () => {
         expect(empty).toContain(">+ Audio<");
         expect(empty).toContain("vst-head-tag-action");
         expect(empty).toContain(
-            'data-vst-audio-span-add title="Add an audio track spanning the timeline" aria-label="Add an audio track" role="button" tabindex="0"',
+            'data-vst-audio-track-add title="Add an audio track spanning the timeline" aria-label="Add an audio track" role="button" tabindex="0"',
         );
 
         const filled = renderAudioTrackRow(

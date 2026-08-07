@@ -48,7 +48,7 @@ const fieldControl = <T extends HTMLElement>(
     return control;
 };
 
-describe("timeline-wide audio segments panel", () => {
+describe("timeline-wide audio spans panel", () => {
     let state: VideoStagesConfig;
     let host: HTMLElement;
     let ctx: DetailStripContext;
@@ -140,7 +140,7 @@ describe("timeline-wide audio segments panel", () => {
         });
     });
 
-    it("renders an uploaded source and deletes the whole segment lane", () => {
+    it("renders an uploaded source and deletes the whole track lane", () => {
         state.audioTracks = [
             {
                 id: "track-upload",
@@ -343,7 +343,7 @@ describe("timeline-wide audio segments panel", () => {
         expect(host.querySelector("input.auto-slider-number")).not.toBeNull();
     });
 
-    it("shows only timeline segments intersecting the selected clip window", () => {
+    it("shows only timeline spans intersecting the selected clip window", () => {
         const track = (
             id: string,
             start: number,

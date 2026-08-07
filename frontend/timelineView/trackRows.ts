@@ -230,7 +230,7 @@ const renderTimelineAudioSpanBlock = (
     );
     const labelText = audioTrackName(track, trackIdx);
     const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
-    const waveform = audioSpanWaveBarHeights(trackIdx, trackIdx, 40)
+    const waveform = audioSpanWaveBarHeights(trackIdx, 40)
         .map((height) => `<span style="height:${height}%"></span>`)
         .join("");
     return renderWindowSpan({
@@ -263,7 +263,7 @@ const renderTimelineAudioSpanLanes = (
             `</div>`,
     );
     lanes.push(
-        `<div class="vst-audio-track-lane vst-audio-track-lane-blank" data-vst-audio-span-add ` +
+        `<div class="vst-audio-track-lane vst-audio-track-lane-blank" data-vst-audio-track-add ` +
             `style="${place(tracks.length)}" title="Click or drag to add an audio track spanning the timeline"></div>`,
     );
     return lanes.join("");
@@ -280,7 +280,7 @@ export const renderAudioTrackRow = (
     const clipLane = (clip: Clip): boolean =>
         clipAudioLaneVisible(clip, capabilities);
     const clipRow = clips.some(clipLane);
-    const baseSegments = layouts
+    const clipBlocks = layouts
         .map((layout) => {
             const clip = clips[layout.index];
             if (!clip || !clipLane(clip)) {
@@ -350,7 +350,7 @@ export const renderAudioTrackRow = (
             0,
         );
     const totalWidthPx = totalSeconds * pxPerSecond;
-    const overlaySegments = renderTimelineAudioSpanLanes(
+    const overlayLanes = renderTimelineAudioSpanLanes(
         audioTracks,
         totalSeconds,
         totalWidthPx,
@@ -368,7 +368,7 @@ export const renderAudioTrackRow = (
                 muted: blank,
                 style: `--vst-audio-lane-idx:${i}`,
                 action: blank
-                    ? `data-vst-audio-span-add title="Add an audio track spanning the timeline" aria-label="Add an audio track"`
+                    ? `data-vst-audio-track-add title="Add an audio track spanning the timeline" aria-label="Add an audio track"`
                     : undefined,
             }),
         );
@@ -384,7 +384,7 @@ export const renderAudioTrackRow = (
             "Audio",
             laneTags.join(""),
         ) +
-        `<div class="vst-track-cell vst-audio-cell">${baseSegments}${overlaySegments}</div>` +
+        `<div class="vst-track-cell vst-audio-cell">${clipBlocks}${overlayLanes}</div>` +
         `</div>`
     );
 };
