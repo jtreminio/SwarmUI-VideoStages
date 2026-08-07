@@ -29,14 +29,15 @@ public class DecisionOwnerRegressionTests
         Workflow = workflow ?? [],
     };
 
+    /// <summary>The splice path reads a config object and the ad-hoc path emits a node; this pins
+    /// that they agree. What the numbers themselves should be is core's call, asserted against core
+    /// in <see cref="Decode_tiling_geometry_matches_core"/>.</summary>
     [Theory]
-    [InlineData(true, false, 512, 32)]
-    [InlineData(false, true, 256, 48)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
     public void Explicit_vae_decode_tiling_uses_one_owner_for_splice_and_adhoc_paths(
         bool setSpatialTile,
-        bool setTemporalTile,
-        int expectedTileSize,
-        int expectedTemporalSize)
+        bool setTemporalTile)
     {
         WorkflowGenerator generator = Generator();
         if (setSpatialTile)
@@ -51,10 +52,6 @@ public class DecisionOwnerRegressionTests
         LtxDecodeConfig config = LtxDecodeConfig.From(generator);
 
         Assert.True(config.UseTiledDecode);
-        Assert.Equal(expectedTileSize, config.TileSize);
-        Assert.Equal(expectedTemporalSize, config.TemporalSize);
-        Assert.Equal(64, config.Overlap);
-        Assert.Equal(4, config.TemporalOverlap);
 
         JObject workflow = [];
         WorkflowGenerator decodeGenerator = Generator(workflow);
@@ -95,18 +92,34 @@ public class DecisionOwnerRegressionTests
     /// <summary>The extension re-types core's LTX-2 tiling geometry because it splices decodes by
     /// id, which core has no API for. Two copies that must agree, so the assertion is against what
     /// core emits today rather than against literals that would keep this green through a core
-    /// change.</summary>
-    [Fact]
-    public void Ltx2_default_decode_uses_core_tiling_geometry()
+    /// change. Both arms are covered: the LTX-2 defaults, and the params a user can set.</summary>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void Decode_tiling_geometry_matches_core(bool setSpatialTile, bool setTemporalTile)
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        void SetTiling(WorkflowGenerator generator)
+        {
+            if (setSpatialTile)
+            {
+                generator.UserInput.Set(T2IParamTypes.VAETileSize, 512);
+            }
+            if (setTemporalTile)
+            {
+                generator.UserInput.Set(T2IParamTypes.VAETemporalTileSize, 48);
+            }
+        }
 
         VAEDecodeTiledNode core = Ltx2TiledDecode(
             models,
+            SetTiling,
             (generator, latent, vae) => latent.DecodeLatents(vae, false));
         VAEDecodeTiledNode extension = Ltx2TiledDecode(
             models,
+            SetTiling,
             (generator, latent, vae) => VaeDecodePreference.AsRawImage(generator, latent, vae));
 
         Assert.Equal(core.TileSize.LiteralAsInt(), extension.TileSize.LiteralAsInt());
@@ -123,10 +136,12 @@ public class DecisionOwnerRegressionTests
     /// produced, so core and the extension can be asked the same question.</summary>
     private static VAEDecodeTiledNode Ltx2TiledDecode(
         TestModelBundle models,
+        Action<WorkflowGenerator> setTiling,
         Func<WorkflowGenerator, WGNodeData, WGNodeData, WGNodeData> decode)
     {
         WorkflowGenerator generator = Generator();
         generator.FinalLoadedModel = models.VideoModel;
+        setTiling(generator);
         JObject workflow = [];
         generator.Workflow = workflow;
         string vaeId;
