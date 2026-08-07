@@ -30,6 +30,7 @@ import {
     createTimelineRetakeTrack,
     type TimelineRetakeTrack,
 } from "./timelineRetakeTrack";
+import { spanGeometry } from "./trackDomUtils";
 import type { Clip, Retake } from "./types";
 
 interface ClipFixture {
@@ -57,10 +58,15 @@ const renderRetake = (body: HTMLElement, clips: ClipFixture[]): void => {
         const widthPx = clip.duration * TIMELINE_PPS;
         let overlay = "";
         if (clip.retake) {
-            const leftPct = (clip.retake.startSeconds / clip.duration) * 100;
-            const widthPct = (clip.retake.lengthSeconds / clip.duration) * 100;
+            // Same projection the real overlay renders through, so an assertion
+            // on the rendered position measures production and not this fixture.
+            const { left, width } = spanGeometry(
+                clip.retake.startSeconds,
+                clip.retake.lengthSeconds,
+                clip.duration,
+            );
             overlay =
-                `<div class="vst-retake" data-vst-retake data-clip-idx="${i}" style="left:${leftPct}%;width:${widthPct}%" role="button" tabindex="0">` +
+                `<div class="vst-retake" data-vst-retake data-clip-idx="${i}" style="left:${left}%;width:${width}%" role="button" tabindex="0">` +
                 `<span class="vst-retake-resize vst-retake-resize-l" data-vst-retake-edge="left"></span>` +
                 `<span class="vst-retake-label"></span>` +
                 `<span class="vst-retake-resize vst-retake-resize-r" data-vst-retake-edge="right"></span>` +
@@ -236,7 +242,7 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
         edge.dispatchEvent(mouse("mousedown", 200));
         document.dispatchEvent(mouse("mouseup", 200));
 
-        // Restored to the rendered start (2s of 10s), not collapsed.
+        // Where spanGeometry puts a 2s start in a 10s clip, not collapsed.
         expect(overlay.style.left).toBe("20%");
         expect(saveSpy).not.toHaveBeenCalled();
     });

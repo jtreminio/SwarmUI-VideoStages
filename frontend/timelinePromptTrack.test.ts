@@ -27,6 +27,7 @@ import {
     createTimelinePromptTrack,
     type TimelinePromptTrack,
 } from "./timelinePromptTrack";
+import { spanGeometry } from "./trackDomUtils";
 import type { Clip, PromptWindow } from "./types";
 
 interface WindowFixture {
@@ -77,14 +78,24 @@ const renderPromptTrack = (body: HTMLElement, clips: ClipFixture[]): void => {
             `<div class="vst-major-seg" data-vst-prompt="major" data-clip-idx="${i}" style="left:${startPx}px;width:${widthPx}px"></div>`,
         );
         const segs = (clip.windows ?? [])
-            .map(
-                (w, j) =>
-                    `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${w.start * TIMELINE_PPS}px;width:${w.duration * TIMELINE_PPS}px">` +
+            .map((w, j) => {
+                // Same projection the real segment renders through, so an
+                // assertion on the rendered position measures production and
+                // not this fixture.
+                const { left, width } = spanGeometry(
+                    w.start,
+                    w.duration,
+                    clip.duration,
+                    { unit: "px", pxPerSecond: TIMELINE_PPS, minWidth: 2 },
+                );
+                return (
+                    `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${j}" style="left:${left}px;width:${width}px">` +
                     `<span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left"></span>` +
                     `<span class="vst-minor-text"></span>` +
                     `<span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right"></span>` +
-                    `</div>`,
-            )
+                    `</div>`
+                );
+            })
             .join("");
         parts.push(
             `<div class="vst-minor-lane" data-vst-prompt-add data-clip-idx="${i}" style="left:${startPx}px;width:${widthPx}px">${segs}</div>`,
@@ -275,7 +286,7 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
         document.dispatchEvent(mouse("mouseup", 200));
         seg.dispatchEvent(mouse("click", 200));
 
-        // Restored to the rendered start, not collapsed to left:0.
+        // Where spanGeometry puts a 4s start at TIMELINE_PPS, not collapsed to 0.
         expect(seg.style.left).toBe(`${4 * TIMELINE_PPS}px`);
         expect(saveSpy).not.toHaveBeenCalled(); // a click opens the editor, it doesn't move/save
     });
