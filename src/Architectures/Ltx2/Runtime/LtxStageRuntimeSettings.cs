@@ -5,6 +5,9 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal static class LtxStageRuntimeSettings
 {
+    // These five mirror core's CompatLtxv2 arm of ImageToVideoGenInfo (WorkflowGenerator.cs ~1595),
+    // which sets them inline with no constant to call. A timeline stage builds its own latent, so it
+    // never runs that arm and has to restate them; change one side and change the other.
     internal const int DefaultFps = 24;
     internal const int DefaultFrameCount = 97;
     internal const double DefaultCfg = 3;
