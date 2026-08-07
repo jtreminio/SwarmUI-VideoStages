@@ -15,9 +15,9 @@ public static class MediaSource
     public const string IncomingLegacy = "Stage Input";
 
     public const string ControlNet = "ControlNet";
-    public const string ControlNetOne = "ControlNet 1";
-    public const string ControlNetTwo = "ControlNet 2";
-    public const string ControlNetThree = "ControlNet 3";
+    public const string ControlNetOne = $"{ControlNet} 1";
+    public const string ControlNetTwo = $"{ControlNet} 2";
+    public const string ControlNetThree = $"{ControlNet} 3";
     public const string AceStepFun = "AceStepFun";
     public const string Base = "Base";
     public const string Refiner = "Refiner";
@@ -90,13 +90,12 @@ public static class MediaSource
         return false;
     }
 
-    public static string FormatControlNet(int index) => index switch
-    {
-        0 => ControlNetOne,
-        1 => ControlNetTwo,
-        2 => ControlNetThree,
-        _ => throw new ArgumentOutOfRangeException(nameof(index)),
-    };
+    /// <summary>Derived, so the slot count is the only thing that says how many slots there are.
+    /// The named constants above are spellings for readers, not a second list.</summary>
+    public static string FormatControlNet(int index) =>
+        index >= 0 && index < ControlNetSlotCount
+            ? $"{ControlNet} {index + 1}"
+            : throw new ArgumentOutOfRangeException(nameof(index));
 
     public static bool TryParseAceStepFunIndex(string source, out int index) =>
         TryParseNonNegativeIndex(source, AceStepFunPrefix, out index);
