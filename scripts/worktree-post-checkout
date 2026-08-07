@@ -7,19 +7,35 @@
 # `git worktree add`, and any worktree an agent harness makes on its own.
 set -euo pipefail
 
+# git fires nothing at all for `worktree remove` or `worktree prune` — measured against 2.51
+# by tracing all 29 hooks. So teardown stays a command (`scripts/worktree rm`) and this hook
+# carries the whole automatic half: creation, self-healing, and the stale-worktree warning.
 PREV_HEAD="$1"
 IS_BRANCH_CHECKOUT="$3"
 
-# Only a brand-new worktree: git passes the null sha as the previous HEAD exactly once,
-# when the worktree is first checked out. An ordinary branch switch has a real sha.
-[ "$PREV_HEAD" = "0000000000000000000000000000000000000000" ] || exit 0
 [ "$IS_BRANCH_CHECKOUT" = "1" ] || exit 0
 
-# git runs the hook inside the new worktree.
+# git runs the hook inside whichever worktree was checked out.
 WORKTREE="$PWD"
 NAME="$(basename "$WORKTREE")"
 MAIN="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
-[ "$WORKTREE" != "$MAIN" ] || exit 0
+
+# Null previous HEAD means git has just created this worktree. Only then is relocating it
+# safe: after that someone may be standing in the directory, and moving it out from under a
+# running agent is worse than the build failure it would fix.
+IS_NEW_WORKTREE=0
+[ "$PREV_HEAD" != "0000000000000000000000000000000000000000" ] || IS_NEW_WORKTREE=1
+
+# A checkout in the main checkout is the one moment worth counting siblings: SwarmUI loads
+# every subdirectory of src/Extensions at startup, so each leftover double-loads it.
+if [ "$WORKTREE" = "$MAIN" ]; then
+    stale="$(git worktree list --porcelain | sed -n "s|^worktree $MAIN-||p" | tr '\n' ' ')"
+    [ -z "$stale" ] || cat >&2 <<EOF
+note: worktrees still checked out beside this one: $stale
+      each double-loads the extension on the next SwarmUI restart — scripts/worktree rm <name>
+EOF
+    exit 0
+fi
 
 # A worktree anywhere else cannot build: SwarmUI-VideoStages.csproj imports
 # ../../SwarmUI.extension.props and references ../../SwarmUI.csproj, Tests references
@@ -29,6 +45,14 @@ MAIN="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)"
 # directory under src/Extensions and its ../.. is SwarmUI's src/. The other direction — real
 # directory elsewhere, symlink here — fails MSB4019 looking for "/SwarmUI.extension.props".
 if [ ! -f "$WORKTREE/../../SwarmUI.extension.props" ]; then
+    if [ "$IS_NEW_WORKTREE" = 0 ]; then
+        cat >&2 <<EOF
+note: this worktree cannot build where it is, and it is too late to move it safely.
+      $WORKTREE
+      Harvest what is here, then re-provision: cd $MAIN && scripts/worktree add <name>
+EOF
+        exit 0
+    fi
     DEST="$MAIN-$NAME"
     if [ -e "$DEST" ]; then
         echo "cannot relocate $NAME: $DEST already exists" >&2
@@ -81,7 +105,10 @@ fi
 # dotnet honours Directory.Build.rsp for every project in the graph, including core's
 # SwarmUI.csproj — a props file cannot reach core, so it would keep building into the shared
 # src/bin|obj and collide with concurrent worktrees.
-printf -- '-p:UseArtifactsOutput=true\n-p:ArtifactsPath=%s\n' \
+[ -f "$WORKTREE/Directory.Build.rsp" ] || printf -- '-p:UseArtifactsOutput=true\n-p:ArtifactsPath=%s\n' \
     "/tmp/swarmui-msbuild/wt-${NAME#"$(basename "$MAIN")-"}" > "$WORKTREE/Directory.Build.rsp"
 
-echo "provisioned $NAME — ./run-tests will work here"
+# Quiet on an ordinary branch switch, where this only repairs what is missing. A worktree made
+# before this hook existed gets provisioned the first time anyone checks out in it.
+[ "$IS_NEW_WORKTREE" = 1 ] && echo "provisioned $NAME — ./run-tests will work here"
+exit 0
