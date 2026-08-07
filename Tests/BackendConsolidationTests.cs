@@ -272,15 +272,7 @@ public class BackendConsolidationTests
         FrameRefs: [],
         Stages: [Stage(id)]);
 
-    private static StageSpec Stage(int id) => new(
-        Id: id,
-        Control: 1,
-        Upscale: 1,
-        UpscaleMethod: "",
-        Model: "unit-test-model",
-        Steps: 8,
-        CfgScale: 1,
-        Sampler: "euler",
-        Scheduler: "normal",
-        ImageReference: "Generated");
+    private static StageSpec Stage(int id) =>
+        SpecFixtures.Stage(
+            id, model: "unit-test-model", upscaleMethod: "", steps: 8, cfgScale: 1);
 }

@@ -111,15 +111,6 @@ public class RootPlanTests
         InitVideo = new InitVideoSpec("data:video/mp4;base64,QUJD", "source.mp4", 0)
     };
 
-    private static StageSpec Stage(int id) => new(
-        id,
-        1,
-        1,
-        "pixel-lanczos",
-        "ltx-2",
-        8,
-        1,
-        "euler",
-        "normal",
-        "Generated");
+    private static StageSpec Stage(int id) =>
+        SpecFixtures.Stage(id, steps: 8, cfgScale: 1);
 }

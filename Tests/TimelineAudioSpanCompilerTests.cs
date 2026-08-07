@@ -253,7 +253,7 @@ public class TimelineAudioSpanCompilerTests
             false,
             null,
             [],
-            [new(id, 1, 1, "pixel-lanczos", "ltx-2", 8, 1, "euler", "normal", "Generated")],
+            [SpecFixtures.Stage(id, steps: 8, cfgScale: 1)],
             BoundaryOut: boundary,
             BoundaryOutOverlap: overlap);
 }

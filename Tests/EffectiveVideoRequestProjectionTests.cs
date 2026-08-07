@@ -841,20 +841,18 @@ public sealed class EffectiveVideoRequestTests
         double upscale = 1,
         string upscaleMethod = "pixel-lanczos",
         string model = "wan-model") =>
-        new(
+        SpecFixtures.Stage(
             id,
-            Control: id == 0 ? 1 : 0.5,
-            Upscale: upscale,
-            UpscaleMethod: upscaleMethod,
-            Model: model,
-            Steps: 10,
-            CfgScale: 4,
-            Sampler: "euler",
-            Scheduler: "normal",
-            ImageReference: id == 0 ? "Generated" : "PreviousStage",
-            ClipStageIndex: id,
-            ClipStageRawIndex: rawIndex,
-            IcLoraStrengths: []);
+            model: model,
+            control: id == 0 ? 1 : 0.5,
+            upscale: upscale,
+            upscaleMethod: upscaleMethod,
+            steps: 10,
+            cfgScale: 4,
+            imageReference: id == 0 ? "Generated" : "PreviousStage",
+            clipStageIndex: id,
+            clipStageRawIndex: rawIndex,
+            icLoraStrengths: []);
 
     private static ClipSpec Clip(params StageSpec[] stages) =>
         new(

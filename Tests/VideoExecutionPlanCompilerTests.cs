@@ -29,8 +29,7 @@ public class VideoExecutionPlanCompilerTests
     [Fact]
     public void Compile_ClipWithNoSourceAndNoStages_IsDroppedWithAWarning()
     {
-        ClipSpec inactive = new(
-            1, 49, MediaSource.Native, [], false, false, false, false, null, [], []);
+        ClipSpec inactive = SpecFixtures.Clip(1, []);
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(
             Spec(false, GeneratedClip(0, Stage(10)), inactive));
@@ -873,11 +872,10 @@ public class VideoExecutionPlanCompilerTests
         new(512, 512, 24, isTextToVideo, clips);
 
     private static ClipSpec GeneratedClip(int id, params StageSpec[] stages) =>
-        new(id, 49, MediaSource.Native, [], false, false, false, false, null, [], stages);
+        SpecFixtures.Clip(id, stages);
 
     private static ClipSpec InitVideoClip(int id) =>
-        new(id, 49, MediaSource.Native, [], false, false, false, false, null, [], [],
-            InitVideo: new InitVideoSpec("data", "source.mp4", 0));
+        SpecFixtures.SourcedClip(id, []);
 
     private static StageSpec Stage(
         int id,
@@ -886,9 +884,12 @@ public class VideoExecutionPlanCompilerTests
         string upscaleMethod = "pixel-lanczos",
         RetakeWindowSpec retake = null,
         IReadOnlyList<LoraRef> loras = null) =>
-        new(id, control, upscale, upscaleMethod, "ltx-2", 12, 4.5, "euler", "normal", "Generated",
-            ClipStageIndex: id - 10,
-            ClipStageRawIndex: id - 10,
-            Loras: loras,
-            RetakeWindow: retake);
+        SpecFixtures.Stage(
+            id,
+            control: control,
+            upscale: upscale,
+            upscaleMethod: upscaleMethod,
+            clipStageIndex: id - 10,
+            loras: loras,
+            retakeWindow: retake);
 }

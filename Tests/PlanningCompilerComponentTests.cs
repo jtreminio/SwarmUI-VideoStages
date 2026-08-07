@@ -691,16 +691,18 @@ public class PlanningCompilerComponentTests
     }
 
     private static ClipSpec GeneratedClip(int id, params StageSpec[] stages) =>
-        new(id, 49, MediaSource.Native, [], false, false, false, false, null, [], stages);
+        SpecFixtures.Clip(id, stages);
 
     private static ClipSpec InitVideoClip(int id, params StageSpec[] stages) =>
         new(id, 49, MediaSource.Native, [], false, false, false, false, null, [], stages,
             InitVideo: new InitVideoSpec("data:video/mp4;base64,QQ==", "source.mp4", 1.5));
 
     private static StageSpec Stage(int id, double control = 1, int? rawIndex = null) =>
-        new(id, control, 1, "pixel-lanczos", "ltx-2", 12, 4.5, "euler", "normal", "Generated",
-            ClipStageIndex: id - 10,
-            ClipStageRawIndex: rawIndex ?? id - 10);
+        SpecFixtures.Stage(
+            id,
+            control: control,
+            clipStageIndex: id - 10,
+            clipStageRawIndex: rawIndex ?? id - 10);
 
     private static ClipPlanCompilationContext Context(
         IArchitectureClipPayload clipPayload,

@@ -1546,7 +1546,7 @@ public class WanArchitectureTests
         };
 
     private static StageSpec Stage(int id, string model) =>
-        new(id, 1, 1, "pixel-lanczos", model, 12, 4.5, "euler", "normal", "Generated");
+        SpecFixtures.Stage(id, model);
 
     private sealed class WanCatalogRegistry : IVideoArchitectureRegistry
     {

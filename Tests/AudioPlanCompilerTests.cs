@@ -22,19 +22,8 @@ public class AudioPlanCompilerTests
             icLoras.PrimaryControlNetSourceIndex);
     }
 
-    private static StageSpec Stage(int index) => new(
-        Id: index,
-        Control: 1.0,
-        Upscale: 1.0,
-        UpscaleMethod: "pixel-lanczos",
-        Model: "ltx-2",
-        Steps: 8,
-        CfgScale: 1.0,
-        Sampler: "euler",
-        Scheduler: "normal",
-        ImageReference: "Generated",
-        ClipStageIndex: index,
-        ClipStageRawIndex: index);
+    private static StageSpec Stage(int index) =>
+        SpecFixtures.Stage(index, steps: 8, cfgScale: 1, clipStageIndex: index);
 
     private static UploadedMediaSpec Upload(string data = "data:audio/wav;base64,QUJD") =>
         new(data, "clip.wav");

@@ -88,7 +88,5 @@ public class BoundaryPolicyOwnershipTests
     }
 
     private static StageSpec Stage(int id) =>
-        new(id, 1, 1, "pixel-lanczos", "ltx-2", 12, 4.5, "euler", "normal", "Generated",
-            ClipStageIndex: id - 10,
-            ClipStageRawIndex: id - 10);
+        SpecFixtures.Stage(id, clipStageIndex: id - 10);
 }

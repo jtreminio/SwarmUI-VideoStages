@@ -645,17 +645,7 @@ public class IcLoraDrivePlanTests
         FrameRefs: [],
         Stages: stages ?? [Stage(0)]);
 
-    private static StageSpec Stage(int index) => new(
-        Id: index,
-        Control: 1,
-        Upscale: 1,
-        UpscaleMethod: "pixel-lanczos",
-        Model: "ltx-2.3",
-        Steps: 8,
-        CfgScale: 1,
-        Sampler: "euler",
-        Scheduler: "normal",
-        ImageReference: "Generated",
-        ClipStageIndex: index,
-        ClipStageRawIndex: index);
+    private static StageSpec Stage(int index) =>
+        SpecFixtures.Stage(
+            index, model: "ltx-2.3", steps: 8, cfgScale: 1, clipStageIndex: index);
 }
