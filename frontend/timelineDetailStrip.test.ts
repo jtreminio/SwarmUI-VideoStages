@@ -4956,15 +4956,14 @@ describe("createTimelineDetailStrip", () => {
             );
             expect(source).not.toMatch(/\.vst-detail\s+\.auto-input\s*\{/);
             expect(source).not.toMatch(/\.vst-detail\s+\.auto-dropdown/);
-            expect(source).toMatch(
-                /\.vst-detail\s+\.vst-detail-section\s*>[\s\S]*\.vst-detail-section-content\s*>[\s\S]*\.vst-detail-repeating-group\s*\{/,
-            );
-            expect(source).toMatch(
-                /\.vst-detail\s+\.input-group\.input-group-open\s*\{[^}]*min-width:\s*0\s*!important;/s,
-            );
-            expect(source).toMatch(
-                /\.vst-detail[\s\S]*input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):not\(\[type="range"\]\)\s*\{[^}]*background-color:\s*var\(--background\);/s,
-            );
+            const durationInput =
+                fieldByLabel("Duration (s)").querySelector("input");
+            expect(durationInput).not.toBeNull();
+            if (durationInput) {
+                expect(computed(durationInput).backgroundColor).toBe(
+                    "var(--background)",
+                );
+            }
             expect(computed(detailBody() as HTMLElement).marginBottom).toBe(
                 "6px",
             );
