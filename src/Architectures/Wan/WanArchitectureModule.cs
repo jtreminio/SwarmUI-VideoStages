@@ -83,8 +83,8 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             modelClassId,
             compatClassId,
             SupportsHostEndFrame(compatClassId)
-                ? [ReferencePosition.First, ReferencePosition.Last]
-                : [ReferencePosition.First],
+                ? [FrameReferencePosition.First, FrameReferencePosition.Last]
+                : [FrameReferencePosition.First],
             model.ModelClass.CompatClass.LorasTargetTextEnc);
         return true;
     }

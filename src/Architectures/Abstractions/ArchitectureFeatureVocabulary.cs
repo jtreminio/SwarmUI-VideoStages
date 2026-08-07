@@ -71,11 +71,11 @@ internal static class ArchitectureFeatureVocabulary
         _ => throw new ArgumentOutOfRangeException(nameof(mode)),
     };
 
-    internal static string WireName(ReferencePosition position) => position switch
+    internal static string WireName(FrameReferencePosition position) => position switch
     {
-        ReferencePosition.First => "first",
-        ReferencePosition.Last => "last",
-        ReferencePosition.Any => "any",
+        FrameReferencePosition.First => "first",
+        FrameReferencePosition.Last => "last",
+        FrameReferencePosition.Any => "any",
         _ => throw new ArgumentOutOfRangeException(nameof(position)),
     };
 
@@ -133,10 +133,10 @@ internal static class ArchitectureFeatureVocabulary
             "CONTINUE_MODES",
             [.. Enum.GetValues<ContinueBoundaryMode>().Select(WireName)]);
         Line();
-        Line("/** Every reference position the serialized catalog can carry, in declaration order. */");
+        Line("/** Every frame reference position the catalog can carry, in declaration order. */");
         StringList(
-            "REFERENCE_POSITIONS",
-            [.. Enum.GetValues<ReferencePosition>().Select(WireName)]);
+            "FRAME_REFERENCE_POSITIONS",
+            [.. Enum.GetValues<FrameReferencePosition>().Select(WireName)]);
 
         // Biome keeps a const array on one line while it fits its 80-column width.
         void StringList(string name, IReadOnlyList<string> values)

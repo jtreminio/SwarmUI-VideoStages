@@ -24,7 +24,7 @@ import {
 import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
 import type {
     ArchitectureModelCatalog,
-    ReferencePosition,
+    FrameReferencePosition,
 } from "./architectures/types";
 import { createGestureRouter } from "./gestureRouter";
 import { setVideoStagesHostBridgeForTests } from "./host";
@@ -110,7 +110,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     const setup = (
         fixtures: ClipFixture[],
         fps?: number,
-        referencePositions: ReferencePosition[] = ["any"],
+        referencePositions: FrameReferencePosition[] = ["any"],
     ): HTMLElement => {
         mountPrompt(fixtures, fps);
         const body = mountTimelineBody();

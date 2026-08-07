@@ -75,7 +75,7 @@ internal static class ArchitectureCatalogSerializer
         ["enhancements"] = new JObject
         {
             ["referencePositions"] = new JArray(
-                (model.ReferencePositions ?? [])
+                (model.FrameReferencePositions ?? [])
                     .Select(ArchitectureFeatureVocabulary.WireName)),
         },
     };

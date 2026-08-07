@@ -88,7 +88,7 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
             Descriptor,
             model.ModelClass.ID,
             model.ModelClass.CompatClass.ID,
-            [ReferencePosition.Any],
+            [FrameReferencePosition.Any],
             model.ModelClass.CompatClass.LorasTargetTextEnc);
         return true;
     }

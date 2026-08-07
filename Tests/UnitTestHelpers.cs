@@ -18,7 +18,7 @@ internal static class TestResolvedVideoModel
         VideoArchitectureDescriptor architecture,
         string modelClassId = null,
         string compatibilityClassId = null,
-        IReadOnlyList<ReferencePosition> referencePositions = null,
+        IReadOnlyList<FrameReferencePosition> referencePositions = null,
         bool lorasTargetTextEncoder = true) =>
         new(
             modelName,

@@ -1,10 +1,10 @@
 import { activeStageCount } from "../clipSemantics";
 import type { Clip } from "../types";
 import { modelCatalogEntry } from "./catalog";
-import type { ArchitectureModelCatalog, ReferencePosition } from "./types";
+import type { ArchitectureModelCatalog, FrameReferencePosition } from "./types";
 
 export interface ClipReferenceEndpointPolicy {
-    positions: ReferencePosition[];
+    positions: FrameReferencePosition[];
     available: boolean;
     bounded: boolean;
     supportsFirst: boolean;
@@ -43,7 +43,7 @@ export const referenceEndpointPolicy = (
     }
     const supportsFirst = firstPositions.includes("first");
     const supportsLast = lastPositions.includes("last");
-    const positions: ReferencePosition[] = [
+    const positions: FrameReferencePosition[] = [
         ...(supportsFirst ? (["first"] as const) : []),
         ...(supportsLast ? (["last"] as const) : []),
     ];

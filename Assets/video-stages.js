@@ -472,7 +472,7 @@
     "conditional"
   ];
   var CONTINUE_MODES = ["overlap", "reference"];
-  var REFERENCE_POSITIONS = ["first", "last", "any"];
+  var FRAME_REFERENCE_POSITIONS = ["first", "last", "any"];
 
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
@@ -799,8 +799,8 @@
   var isTrimmedNonEmpty = (value) => typeof value === "string" && value.length > 0 && value === value.trim();
   var isUniqueStringArray = (value) => Array.isArray(value) && value.every((entry) => isTrimmedNonEmpty(entry)) && new Set(value).size === value.length;
   var isEntryModeArray = (value) => isUniqueStringArray(value) && value.every((entry) => ENTRY_MODES.includes(entry));
-  var isReferencePositionArray = (value) => isUniqueStringArray(value) && value.every(
-    (entry) => REFERENCE_POSITIONS.includes(entry)
+  var isFrameReferencePositionArray = (value) => isUniqueStringArray(value) && value.every(
+    (entry) => FRAME_REFERENCE_POSITIONS.includes(entry)
   );
   var hasExactKeys = (value, expected) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
   var isCapabilitySupport = (value) => typeof value === "string" && RULE_SUPPORTS.includes(value);
@@ -904,7 +904,7 @@
         "frameGridOrigin",
         "capabilities",
         "enhancements"
-      ]) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !Number.isSafeInteger(raw.frameGridOrigin) || Number(raw.frameGridOrigin) < 1 || Number(raw.frameGridOrigin) > Number(raw.frameGrid) || !isCapabilities(raw.capabilities) || !isRecord(raw.enhancements) || !hasExactKeys(raw.enhancements, ["referencePositions"]) || !isReferencePositionArray(raw.enhancements.referencePositions)) {
+      ]) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !Number.isSafeInteger(raw.frameGridOrigin) || Number(raw.frameGridOrigin) < 1 || Number(raw.frameGridOrigin) > Number(raw.frameGrid) || !isCapabilities(raw.capabilities) || !isRecord(raw.enhancements) || !hasExactKeys(raw.enhancements, ["referencePositions"]) || !isFrameReferencePositionArray(raw.enhancements.referencePositions)) {
         return null;
       }
       if (modelNames.has(raw.modelName)) {

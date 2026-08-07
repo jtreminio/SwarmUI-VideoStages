@@ -84,7 +84,7 @@ internal enum ContinueBoundaryMode
 }
 
 /// <summary>The frame positions a model's native image-conditioning path accepts.</summary>
-internal enum ReferencePosition
+internal enum FrameReferencePosition
 {
     First,
     Last,
@@ -249,7 +249,7 @@ internal sealed record ResolvedVideoModel(
     VideoArchitectureDescriptor Architecture,
     string ModelClassId,
     string CompatibilityClassId,
-    IReadOnlyList<ReferencePosition> ReferencePositions,
+    IReadOnlyList<FrameReferencePosition> FrameReferencePositions,
     bool LorasTargetTextEncoder)
 {
     public ArchitectureId ArchitectureId => Architecture.Id;
