@@ -113,3 +113,56 @@ export const firstSavedClips = <T>(spy: {
 export const lastSavedClips = <T>(spy: {
     mock: { calls: [T, ...unknown[]][] };
 }): T => spy.mock.calls[spy.mock.calls.length - 1][0];
+
+/** Pixels per second every timeline-track test mounts at. */
+export const TIMELINE_PPS = 44;
+
+/** The timeline body a track attaches to, at {@link TIMELINE_PPS}. */
+export const mountTimelineBody = (pxPerSecond = TIMELINE_PPS): HTMLElement => {
+    const body = document.createElement("div");
+    body.id = "videostages-timeline-body";
+    body.dataset.vstPps = String(pxPerSecond);
+    document.body.appendChild(body);
+    return body;
+};
+
+/** The one element matching `selector`, or a throw naming what was missing. */
+export const requireEl = (root: ParentNode, selector: string): HTMLElement => {
+    const found = root.querySelector<HTMLElement>(selector);
+    if (!found) {
+        throw new Error(`not found: ${selector}`);
+    }
+    return found;
+};
+
+/** jsdom lays nothing out, so a gesture test has to state the geometry it drags over. */
+export const stubRect = (
+    el: HTMLElement,
+    rect: { left: number; width: number; top?: number; height?: number },
+): void => {
+    const { left, width, top = 0, height = 24 } = rect;
+    el.getBoundingClientRect = (() => ({
+        left,
+        width,
+        top,
+        height,
+        right: left + width,
+        bottom: top + height,
+        x: left,
+        y: top,
+        toJSON: () => ({}),
+    })) as HTMLElement["getBoundingClientRect"];
+};
+
+export const mouse = (
+    type: string,
+    clientX: number,
+    options: { clientY?: number; shiftKey?: boolean } = {},
+): MouseEvent =>
+    new MouseEvent(type, {
+        bubbles: true,
+        clientX,
+        clientY: options.clientY ?? 56,
+        button: 0,
+        shiftKey: options.shiftKey ?? false,
+    });

@@ -6,10 +6,15 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { storedClip } from "./__test_helpers__/clipFixtures";
 import {
     firstSavedClips,
     mountPromptBox,
+    mountTimelineBody,
     mountVideoStagesData,
+    mouse,
+    requireEl,
+    TIMELINE_PPS,
 } from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence/repository";
@@ -26,27 +31,16 @@ import {
 } from "./timelineRetakeTrack";
 import type { Clip, Retake } from "./types";
 
-const PPS = 44;
-
 interface ClipFixture {
     duration: number;
     retake?: Retake;
 }
 
-const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
-    duration: clip.duration,
-    stages: [{}],
-    frameRefs: [],
-    ...(clip.retake ? { retake: clip.retake } : {}),
-});
-
-const makeBody = (): HTMLElement => {
-    const body = document.createElement("div");
-    body.id = "videostages-timeline-body";
-    body.dataset.vstPps = String(PPS);
-    document.body.appendChild(body);
-    return body;
-};
+const clipRecord = (clip: ClipFixture): Record<string, unknown> =>
+    storedClip({
+        duration: clip.duration,
+        ...(clip.retake ? { retake: clip.retake } : {}),
+    });
 
 // Minimal region + retake lane (the real markup's shape: the retake window
 // lives in a per-clip lane BELOW the region) with the data-* hooks the module
@@ -55,8 +49,8 @@ const renderRetake = (body: HTMLElement, clips: ClipFixture[]): void => {
     let cursor = 0;
     const parts: string[] = [];
     clips.forEach((clip, i) => {
-        const startPx = cursor * PPS;
-        const widthPx = clip.duration * PPS;
+        const startPx = cursor * TIMELINE_PPS;
+        const widthPx = clip.duration * TIMELINE_PPS;
         let overlay = "";
         if (clip.retake) {
             const leftPct = (clip.retake.startSeconds / clip.duration) * 100;
@@ -81,7 +75,7 @@ const renderRetake = (body: HTMLElement, clips: ClipFixture[]): void => {
     // jsdom does no layout — stub each lane's rect from its clip offset.
     cursor = 0;
     clips.forEach((clip, i) => {
-        const left = cursor * PPS;
+        const left = cursor * TIMELINE_PPS;
         const lane = body.querySelector<HTMLElement>(
             `.vst-retake-lane[data-clip-idx="${i}"]`,
         );
@@ -89,8 +83,8 @@ const renderRetake = (body: HTMLElement, clips: ClipFixture[]): void => {
             lane.getBoundingClientRect = (() =>
                 ({
                     left,
-                    width: clip.duration * PPS,
-                    right: left + clip.duration * PPS,
+                    width: clip.duration * TIMELINE_PPS,
+                    right: left + clip.duration * TIMELINE_PPS,
                     top: 100,
                     bottom: 120,
                     height: 20,
@@ -102,23 +96,6 @@ const renderRetake = (body: HTMLElement, clips: ClipFixture[]): void => {
         cursor += clip.duration;
     });
 };
-
-const el = (body: HTMLElement, selector: string): HTMLElement => {
-    const found = body.querySelector<HTMLElement>(selector);
-    if (!found) {
-        throw new Error(`not found: ${selector}`);
-    }
-    return found;
-};
-
-const mouse = (type: string, clientX: number, shiftKey = false): MouseEvent =>
-    new MouseEvent(type, {
-        bubbles: true,
-        clientX,
-        clientY: 20,
-        button: 0,
-        shiftKey,
-    });
 
 const savedRetake = (
     spy: jest.SpiedFunction<typeof persistence.saveClips>,
@@ -153,7 +130,7 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
     const setup = (clips: ClipFixture[]): HTMLElement => {
         mountVideoStagesData({ clips: clips.map(clipRecord) });
         mountPromptBox("");
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRetake(body, clips);
         track = createTimelineRetakeTrack();
         router = createGestureRouter();
@@ -164,10 +141,10 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     it("clicking the overlay selects the retake without saving", () => {
         const body = setup([{ duration: 10, retake: RETAKE }]);
-        const overlay = el(body, ".vst-retake[data-clip-idx='0']");
-        overlay.dispatchEvent(mouse("mousedown", 200));
-        document.dispatchEvent(mouse("mouseup", 200));
-        overlay.dispatchEvent(mouse("click", 200));
+        const overlay = requireEl(body, ".vst-retake[data-clip-idx='0']");
+        overlay.dispatchEvent(mouse("mousedown", 200, { clientY: 20 }));
+        document.dispatchEvent(mouse("mouseup", 200, { clientY: 20 }));
+        overlay.dispatchEvent(mouse("click", 200, { clientY: 20 }));
 
         expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
         expect(saveSpy).not.toHaveBeenCalled();
@@ -175,8 +152,10 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     it("shift+click on the overlay deletes the retake", () => {
         const body = setup([{ duration: 10, retake: RETAKE }]);
-        const overlay = el(body, ".vst-retake[data-clip-idx='0']");
-        overlay.dispatchEvent(mouse("click", 200, true));
+        const overlay = requireEl(body, ".vst-retake[data-clip-idx='0']");
+        overlay.dispatchEvent(
+            mouse("click", 200, { clientY: 20, shiftKey: true }),
+        );
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
         expect(savedRetake(saveSpy)).toBeNull();
@@ -184,10 +163,14 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     it("dragging the overlay body moves the retake in time", () => {
         const body = setup([{ duration: 10, retake: RETAKE }]);
-        const overlay = el(body, ".vst-retake[data-clip-idx='0']");
-        overlay.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 100 + 2 * PPS));
-        document.dispatchEvent(mouse("mouseup", 100 + 2 * PPS));
+        const overlay = requireEl(body, ".vst-retake[data-clip-idx='0']");
+        overlay.dispatchEvent(mouse("mousedown", 100, { clientY: 20 }));
+        document.dispatchEvent(
+            mouse("mousemove", 100 + 2 * TIMELINE_PPS, { clientY: 20 }),
+        );
+        document.dispatchEvent(
+            mouse("mouseup", 100 + 2 * TIMELINE_PPS, { clientY: 20 }),
+        );
 
         const retake = savedRetake(saveSpy);
         expect(retake?.startSeconds).toBeCloseTo(4, 5);
@@ -198,10 +181,14 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     it("moving past the clip end clamps start so the window stays inside", () => {
         const body = setup([{ duration: 10, retake: RETAKE }]);
-        const overlay = el(body, ".vst-retake[data-clip-idx='0']");
-        overlay.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 100 + 20 * PPS));
-        document.dispatchEvent(mouse("mouseup", 100 + 20 * PPS));
+        const overlay = requireEl(body, ".vst-retake[data-clip-idx='0']");
+        overlay.dispatchEvent(mouse("mousedown", 100, { clientY: 20 }));
+        document.dispatchEvent(
+            mouse("mousemove", 100 + 20 * TIMELINE_PPS, { clientY: 20 }),
+        );
+        document.dispatchEvent(
+            mouse("mouseup", 100 + 20 * TIMELINE_PPS, { clientY: 20 }),
+        );
 
         const retake = savedRetake(saveSpy);
         expect(retake?.startSeconds).toBeCloseTo(7, 5);
@@ -210,10 +197,14 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     it("snaps a moved window edge to the clip edge, unless Snap is off", () => {
         let body = setup([{ duration: 10, retake: RETAKE }]);
-        let overlay = el(body, ".vst-retake[data-clip-idx='0']");
-        overlay.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 100 + 4.9 * PPS));
-        document.dispatchEvent(mouse("mouseup", 100 + 4.9 * PPS));
+        let overlay = requireEl(body, ".vst-retake[data-clip-idx='0']");
+        overlay.dispatchEvent(mouse("mousedown", 100, { clientY: 20 }));
+        document.dispatchEvent(
+            mouse("mousemove", 100 + 4.9 * TIMELINE_PPS, { clientY: 20 }),
+        );
+        document.dispatchEvent(
+            mouse("mouseup", 100 + 4.9 * TIMELINE_PPS, { clientY: 20 }),
+        );
         expect(savedRetake(saveSpy)?.startSeconds).toBe(7);
 
         track?.dispose();
@@ -224,19 +215,27 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
         saveSpy.mockClear();
         setTimelineAuthoringSetting("snap", false);
         body = setup([{ duration: 10, retake: RETAKE }]);
-        overlay = el(body, ".vst-retake[data-clip-idx='0']");
-        overlay.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 100 + 4.9 * PPS));
-        document.dispatchEvent(mouse("mouseup", 100 + 4.9 * PPS));
+        overlay = requireEl(body, ".vst-retake[data-clip-idx='0']");
+        overlay.dispatchEvent(mouse("mousedown", 100, { clientY: 20 }));
+        document.dispatchEvent(
+            mouse("mousemove", 100 + 4.9 * TIMELINE_PPS, { clientY: 20 }),
+        );
+        document.dispatchEvent(
+            mouse("mouseup", 100 + 4.9 * TIMELINE_PPS, { clientY: 20 }),
+        );
         expect(savedRetake(saveSpy)?.startSeconds).toBe(6.9);
     });
 
     it("resizing the right edge changes length and keeps start", () => {
         const body = setup([{ duration: 10, retake: RETAKE }]);
-        const edge = el(body, ".vst-retake-resize-r");
-        edge.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 100 + 2 * PPS));
-        document.dispatchEvent(mouse("mouseup", 100 + 2 * PPS));
+        const edge = requireEl(body, ".vst-retake-resize-r");
+        edge.dispatchEvent(mouse("mousedown", 100, { clientY: 20 }));
+        document.dispatchEvent(
+            mouse("mousemove", 100 + 2 * TIMELINE_PPS, { clientY: 20 }),
+        );
+        document.dispatchEvent(
+            mouse("mouseup", 100 + 2 * TIMELINE_PPS, { clientY: 20 }),
+        );
 
         const retake = savedRetake(saveSpy);
         expect(retake?.startSeconds).toBeCloseTo(2, 5);
@@ -245,10 +244,14 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     it("resizing the left edge changes start and keeps the end fixed", () => {
         const body = setup([{ duration: 10, retake: RETAKE }]);
-        const edge = el(body, ".vst-retake-resize-l");
-        edge.dispatchEvent(mouse("mousedown", 100));
-        document.dispatchEvent(mouse("mousemove", 100 + 1 * PPS));
-        document.dispatchEvent(mouse("mouseup", 100 + 1 * PPS));
+        const edge = requireEl(body, ".vst-retake-resize-l");
+        edge.dispatchEvent(mouse("mousedown", 100, { clientY: 20 }));
+        document.dispatchEvent(
+            mouse("mousemove", 100 + 1 * TIMELINE_PPS, { clientY: 20 }),
+        );
+        document.dispatchEvent(
+            mouse("mouseup", 100 + 1 * TIMELINE_PPS, { clientY: 20 }),
+        );
 
         const retake = savedRetake(saveSpy);
         // start 2 -> 3; end stays at 5, so length 5 - 3 = 2.
@@ -258,11 +261,11 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     it("a no-op click on an edge does not move the overlay or save", () => {
         const body = setup([{ duration: 10, retake: RETAKE }]);
-        const overlay = el(body, ".vst-retake[data-clip-idx='0']");
+        const overlay = requireEl(body, ".vst-retake[data-clip-idx='0']");
         const before = overlay.style.left;
-        const edge = el(body, ".vst-retake-resize-r");
-        edge.dispatchEvent(mouse("mousedown", 200));
-        document.dispatchEvent(mouse("mouseup", 200));
+        const edge = requireEl(body, ".vst-retake-resize-r");
+        edge.dispatchEvent(mouse("mousedown", 200, { clientY: 20 }));
+        document.dispatchEvent(mouse("mouseup", 200, { clientY: 20 }));
 
         expect(overlay.style.left).toBe(before);
         expect(saveSpy).not.toHaveBeenCalled();
@@ -270,7 +273,7 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     it("Enter on the overlay selects the retake", () => {
         const body = setup([{ duration: 10, retake: RETAKE }]);
-        const overlay = el(body, ".vst-retake[data-clip-idx='0']");
+        const overlay = requireEl(body, ".vst-retake[data-clip-idx='0']");
         overlay.dispatchEvent(
             new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
         );
@@ -284,8 +287,8 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
         const seen: unknown[] = [];
         const stop = subscribeSelection((selection) => seen.push(selection));
         try {
-            el(body, ".vst-retake[data-clip-idx='0']").dispatchEvent(
-                mouse("click", 3 * PPS),
+            requireEl(body, ".vst-retake[data-clip-idx='0']").dispatchEvent(
+                mouse("click", 3 * TIMELINE_PPS, { clientY: 20 }),
             );
             expect(seen).toEqual([{ kind: "retake", clipIdx: 0 }]);
         } finally {
@@ -297,9 +300,13 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     it("clicking the empty lane adds a default-length retake and selects it", () => {
         const body = setup([{ duration: 10 }]);
-        const lane = el(body, ".vst-retake-lane[data-clip-idx='0']");
-        lane.dispatchEvent(mouse("mousedown", 3 * PPS)); // t = 3s
-        document.dispatchEvent(mouse("mouseup", 3 * PPS));
+        const lane = requireEl(body, ".vst-retake-lane[data-clip-idx='0']");
+        lane.dispatchEvent(
+            mouse("mousedown", 3 * TIMELINE_PPS, { clientY: 20 }),
+        ); // t = 3s
+        document.dispatchEvent(
+            mouse("mouseup", 3 * TIMELINE_PPS, { clientY: 20 }),
+        );
 
         expect(saveSpy).toHaveBeenCalledTimes(1);
         const retake = savedRetake(saveSpy);
@@ -311,10 +318,16 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     it("click-dragging on the empty lane adds a retake sized to the drag", () => {
         const body = setup([{ duration: 10 }]);
-        const lane = el(body, ".vst-retake-lane[data-clip-idx='0']");
-        lane.dispatchEvent(mouse("mousedown", 2 * PPS));
-        document.dispatchEvent(mouse("mousemove", 7 * PPS));
-        document.dispatchEvent(mouse("mouseup", 7 * PPS));
+        const lane = requireEl(body, ".vst-retake-lane[data-clip-idx='0']");
+        lane.dispatchEvent(
+            mouse("mousedown", 2 * TIMELINE_PPS, { clientY: 20 }),
+        );
+        document.dispatchEvent(
+            mouse("mousemove", 7 * TIMELINE_PPS, { clientY: 20 }),
+        );
+        document.dispatchEvent(
+            mouse("mouseup", 7 * TIMELINE_PPS, { clientY: 20 }),
+        );
 
         const retake = savedRetake(saveSpy);
         expect(retake?.startSeconds).toBeCloseTo(2, 5);
@@ -323,12 +336,16 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
 
     it("a lane press does nothing when the clip already has a retake", () => {
         const body = setup([{ duration: 10, retake: RETAKE }]);
-        const lane = el(body, ".vst-retake-lane[data-clip-idx='0']");
+        const lane = requireEl(body, ".vst-retake-lane[data-clip-idx='0']");
         expect(lane.hasAttribute("data-vst-retake-add")).toBe(false);
         expect(lane.hasAttribute("data-vst-retake-full")).toBe(true);
         // Press the lane OUTSIDE the existing window (retake spans [2,5]).
-        lane.dispatchEvent(mouse("mousedown", 8 * PPS));
-        document.dispatchEvent(mouse("mouseup", 8 * PPS));
+        lane.dispatchEvent(
+            mouse("mousedown", 8 * TIMELINE_PPS, { clientY: 20 }),
+        );
+        document.dispatchEvent(
+            mouse("mouseup", 8 * TIMELINE_PPS, { clientY: 20 }),
+        );
 
         expect(saveSpy).not.toHaveBeenCalled();
     });

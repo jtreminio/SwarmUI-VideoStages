@@ -108,3 +108,17 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     stages: [minimalStage()],
     ...overrides,
 });
+
+/**
+ * The persisted wire record for a clip — the shape `storageTypes.ts` owns, not a normalized
+ * {@link Clip}. Track tests feed this to the renderer so normalization fills the rest.
+ */
+export const storedClip = (
+    overrides: Record<string, unknown> = {},
+): Record<string, unknown> => ({
+    duration: 2,
+    stages: [{}],
+    frameRefs: [],
+    promptWindows: [],
+    ...overrides,
+});

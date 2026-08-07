@@ -9,8 +9,10 @@ import {
 import {
     firstSavedClips,
     mountPromptBox,
+    mountTimelineBody,
     mountVideoFps,
     mountVideoStagesData,
+    mouse,
 } from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence/repository";
@@ -92,14 +94,6 @@ const durationClips = (durations: number[]): Array<Record<string, unknown>> =>
         }),
     );
 
-const makeBody = (): HTMLElement => {
-    const body = document.createElement("div");
-    body.id = "videostages-timeline-body";
-    body.dataset.vstPps = "44";
-    document.body.appendChild(body);
-    return body;
-};
-
 const renderRegions = (body: HTMLElement, count: number): void => {
     body.innerHTML = Array.from(
         { length: count },
@@ -144,19 +138,6 @@ const stubRegionRects = (body: HTMLElement): void => {
     }
 };
 
-const mouse = (
-    type: string,
-    clientX: number,
-    opts: { shiftKey?: boolean } = {},
-): MouseEvent =>
-    new MouseEvent(type, {
-        bubbles: true,
-        clientX,
-        clientY: 90,
-        button: 0,
-        shiftKey: opts.shiftKey ?? false,
-    });
-
 describe("createTimelineLinking selection + write gestures (DOM)", () => {
     let linking: TimelineLinking | null = null;
     let router: GestureRouter | null = null;
@@ -177,7 +158,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
     it("clicking a region selects it (single-selection, no write)", () => {
         clipsSection(durationClips([1, 2, 3]));
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRegions(body, 3);
         const saveSpy = jest.spyOn(persistence, "saveClips");
 
@@ -203,7 +184,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
     it("re-applies the selection highlight after a re-render and clears a removed selection", () => {
         clipsSection(durationClips([1, 2, 3]));
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRegions(body, 3);
 
         linking = createTimelineLinking();
@@ -232,7 +213,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
     it("the skip button commits one document command without selecting the region", () => {
         clipsSection(durationClips([1, 2]));
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRegions(body, 2);
         const saveSpy = jest.spyOn(persistence, "saveClips");
         const beforeRevision = persistence.getTimelineStore().revision();
@@ -258,7 +239,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
     it("does not skip or shift-delete the first clip", () => {
         clipsSection(durationClips([1, 2]));
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRegions(body, 2);
         const saveSpy = jest.spyOn(persistence, "saveClips");
 
@@ -281,7 +262,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
     it("shift+click removes the clip via saveClips", () => {
         clipsSection(durationClips([1, 2, 3]));
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRegions(body, 3);
         const saveSpy = jest.spyOn(persistence, "saveClips");
 
@@ -302,7 +283,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
     it("dragging region 0 past region 1 persists the reordered clips and keeps the moved clip selected", () => {
         clipsSection(durationClips([1, 2, 3]));
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRegions(body, 3);
         stubRegionRects(body);
         const saveSpy = jest.spyOn(persistence, "saveClips");
@@ -329,7 +310,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
     it("a plain click (no movement) selects the region and does NOT write", () => {
         clipsSection(durationClips([1, 2, 3]));
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRegions(body, 3);
         stubRegionRects(body);
         const saveSpy = jest.spyOn(persistence, "saveClips");
@@ -354,7 +335,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
     it("edge-dragging a region's right border changes only that clip's duration via one saveClips", () => {
         clipsSection(durationClips([2, 2]));
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRegions(body, 2);
         stubRegionRects(body);
         const saveSpy = jest.spyOn(persistence, "saveClips");
@@ -379,7 +360,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
 
     it("restores the clip's allocated half-join when resizing its unique region", () => {
         clipsSection(durationClips([3, 3]));
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRegions(body, 2);
         stubRegionRects(body);
         region(body, 0).dataset.vstJoinTrimSeconds = "0.5";
@@ -410,7 +391,7 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
             ],
             16,
         );
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRegions(body, 1);
         stubRegionRects(body);
         const saveSpy = jest.spyOn(persistence, "saveClips");

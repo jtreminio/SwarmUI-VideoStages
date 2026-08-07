@@ -7,7 +7,12 @@ import {
     jest,
 } from "@jest/globals";
 import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
-import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import { storedClip } from "./__test_helpers__/clipFixtures";
+import {
+    mountPromptBox,
+    mountVideoStagesData,
+    TIMELINE_PPS,
+} from "./__test_helpers__/dom";
 import { boundaryWindowConstraints } from "./architectures/boundaryConstraints";
 import { boundaryPlanForClips } from "./boundaryPlan";
 import * as persistence from "./persistence/repository";
@@ -20,7 +25,6 @@ import { computeRegionLayout } from "./timelineView/layout";
 import { renderBoundarySeams } from "./timelineView/regionRenderer";
 import type { BoundaryOut, Clip } from "./types";
 
-const PPS = 44;
 const ltxBoundaryConstraints = (
     _clip: Clip,
     _index: number,
@@ -35,13 +39,11 @@ interface ClipFixture {
     boundaryOut?: BoundaryOut;
 }
 
-const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
-    duration: clip.duration,
-    boundaryOut: clip.boundaryOut ?? "cut",
-    stages: [{}],
-    frameRefs: [],
-    promptWindows: [],
-});
+const clipRecord = (clip: ClipFixture): Record<string, unknown> =>
+    storedClip({
+        duration: clip.duration,
+        boundaryOut: clip.boundaryOut ?? "cut",
+    });
 
 const clipFor = (boundaryOut: BoundaryOut, duration = 2): Clip =>
     ({ duration, boundaryOut, stages: [], frameRefs: [] }) as unknown as Clip;
@@ -155,7 +157,9 @@ describe("timeline boundary selection wiring", () => {
         body.id = "videostages-timeline-body";
         document.body.appendChild(body);
         const clips = persistence.getClips();
-        const layouts = computeRegionLayout(clips, { pxPerSecond: PPS });
+        const layouts = computeRegionLayout(clips, {
+            pxPerSecond: TIMELINE_PPS,
+        });
         body.innerHTML = renderBoundarySeams(clips, layouts);
         track = createTimelineSelectionTracks();
         track.attach(body);

@@ -16,8 +16,10 @@ import {
     lastSavedClips,
     mountPromptBox,
     mountSelect,
+    mountTimelineBody,
     mountVideoFps,
     mountVideoStagesData,
+    TIMELINE_PPS,
 } from "./__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
 import type { ArchitectureModelCatalog } from "./architectures/types";
@@ -39,8 +41,6 @@ import { renderTimeline } from "./timelineView";
 import { computeRegionLayout } from "./timelineView/layout";
 import { renderReferencesTrackRow } from "./timelineView/trackRows";
 import type { Clip } from "./types";
-
-const PPS = 44;
 
 interface RefFixture {
     source?: string;
@@ -73,16 +73,8 @@ const mountPrompt = (clips: ClipFixture[], fps?: number): void => {
     mountVideoStagesData({ clips: clips.map(clipRecord) });
 };
 
-const makeBody = (): HTMLElement => {
-    const body = document.createElement("div");
-    body.id = "videostages-timeline-body";
-    body.dataset.vstPps = String(PPS);
-    document.body.appendChild(body);
-    return body;
-};
-
 const renderRefs = (body: HTMLElement, clips: Clip[]): void => {
-    const layouts = computeRegionLayout(clips, { pxPerSecond: PPS });
+    const layouts = computeRegionLayout(clips, { pxPerSecond: TIMELINE_PPS });
     body.innerHTML = renderReferencesTrackRow(clips, layouts, 24, "seconds");
 };
 
@@ -118,7 +110,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         referencePositions: string[] = ["any"],
     ): HTMLElement => {
         mountPrompt(fixtures, fps);
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderRefs(body, persistence.getClips());
         authoringCatalog = testArchitectureCatalog();
         for (const entry of authoringCatalog.entries) {
@@ -525,8 +517,10 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
     it("drags the on-clip arrow together with the thumbnail", () => {
         mountPrompt([{ duration: 5, frameRefs: [{ frame: 1 }] }]);
-        const body = makeBody();
-        renderTimeline(body, persistence.getClips(), { pxPerSecond: PPS });
+        const body = mountTimelineBody();
+        renderTimeline(body, persistence.getClips(), {
+            pxPerSecond: TIMELINE_PPS,
+        });
         const catalog = testArchitectureCatalog();
         for (const entry of catalog.entries) {
             entry.enhancements = { referencePositions: ["any"] };

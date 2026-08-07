@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
-import { mountPromptBox, mountVideoStagesData } from "./__test_helpers__/dom";
+import {
+    mountPromptBox,
+    mountTimelineBody,
+    mountVideoStagesData,
+    TIMELINE_PPS,
+} from "./__test_helpers__/dom";
 import { getClips } from "./persistence/repository";
 import { getSelection, resetSelectionForTests } from "./selection";
 import {
@@ -9,8 +14,6 @@ import {
 import { computeRegionLayout } from "./timelineView/layout";
 import { renderAudioTrackRow } from "./timelineView/trackRows";
 import type { Clip } from "./types";
-
-const PPS = 44;
 
 interface ClipFixture {
     duration: number;
@@ -30,16 +33,8 @@ const mountPrompt = (clips: ClipFixture[]): void => {
     mountVideoStagesData({ clips: clips.map(clipRecord) });
 };
 
-const makeBody = (): HTMLElement => {
-    const body = document.createElement("div");
-    body.id = "videostages-timeline-body";
-    body.dataset.vstPps = String(PPS);
-    document.body.appendChild(body);
-    return body;
-};
-
 const renderAudio = (body: HTMLElement, clips: Clip[]): void => {
-    const layouts = computeRegionLayout(clips, { pxPerSecond: PPS });
+    const layouts = computeRegionLayout(clips, { pxPerSecond: TIMELINE_PPS });
     body.innerHTML = renderAudioTrackRow(clips, layouts);
 };
 
@@ -59,7 +54,7 @@ describe("timeline audio selection wiring", () => {
 
     const setup = (fixtures: ClipFixture[]): HTMLElement => {
         mountPrompt(fixtures);
-        const body = makeBody();
+        const body = mountTimelineBody();
         renderAudio(body, getClips());
         track = createTimelineSelectionTracks();
         track.attach(body);
@@ -97,7 +92,9 @@ describe("renderAudioTrackRow (timeline audio lanes)", () => {
             clips: [{ duration: 5, stages: [{}], frameRefs: [] }],
         });
         const clips = getClips();
-        const layouts = computeRegionLayout(clips, { pxPerSecond: PPS });
+        const layouts = computeRegionLayout(clips, {
+            pxPerSecond: TIMELINE_PPS,
+        });
         const host = document.createElement("div");
         host.innerHTML = renderAudioTrackRow(clips, layouts);
         expect(host.querySelectorAll(".vst-audio-span")).toHaveLength(0);
