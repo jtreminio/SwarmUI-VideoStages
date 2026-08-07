@@ -15,8 +15,10 @@ internal static class PlanDiagnosticReporter
                 diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error)
         ];
 
-    /// <summary>Fails the generation closed when any diagnostic is blocking.</summary>
-    /// <param name="context">The failing phase (plan compilation, timeline merge), not a stage.</param>
+    /// <summary>
+    /// Fails the generation closed when any diagnostic is blocking. <c>context</c> is the failing
+    /// phase (plan compilation, timeline merge), not a timeline stage.
+    /// </summary>
     internal static void ThrowIfBlocking(
         IEnumerable<PlanDiagnostic> diagnostics,
         string context)
