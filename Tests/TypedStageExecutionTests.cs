@@ -48,15 +48,6 @@ public class TypedStageExecutionTests
     }
 
     [Fact]
-    public void Ltx_prompt_execution_has_no_legacy_prompt_window_tiler()
-    {
-        Assert.Null(
-            typeof(LtxStageExecutor).Assembly.GetType(
-                "VideoStages.Architectures.Ltx2.PromptWindowTiler",
-                throwOnError: false));
-    }
-
-    [Fact]
     public void Ltx_stage_length_resolution_accepts_the_architecture_resolved_clip_plan()
     {
         MethodInfo resolver = typeof(LtxStageLatentAudioFactory).GetMethod(

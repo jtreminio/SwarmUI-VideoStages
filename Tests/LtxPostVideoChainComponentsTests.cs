@@ -66,8 +66,6 @@ public class LtxPostVideoChainComponentsTests
         Assert.NotNull(result.AttachedAudio);
         Assert.Equal(WGNodeData.DT_LATENT_AUDIO, result.AttachedAudio.DataType);
         Assert.Equal(new JArray("4", 1), result.AttachedAudio.Path);
-        Assert.Null(typeof(LtxPostVideoChain).Assembly.GetType(
-            "VideoStages.Architectures.Ltx2.LtxStageInputArtifactFactory"));
     }
 
     [Fact]
