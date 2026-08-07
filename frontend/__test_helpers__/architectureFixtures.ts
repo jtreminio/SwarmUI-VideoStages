@@ -223,6 +223,50 @@ export const testWanModelEntry = (): ArchitectureModelEntry => ({
     entryModes: ["text-to-video", "image-to-video", "init-video"],
 });
 
+/** Mirrors `HostVideoArchitectureModule.Descriptor`. */
+export const testHostVideoArchitecture = (): ArchitectureCatalogEntryDto => ({
+    id: "host-video",
+    label: "Host Video",
+    capabilities: testArchitectureCapabilities({
+        features: [],
+        entryModes: ["text-to-video", "image-to-video", "init-video"],
+        audioSourceKinds: ["Disabled"],
+    }),
+    boundaryRules: {
+        cut: {
+            support: "supported",
+            code: "host-video.boundary.cut",
+            reason: "Decoded host videos can be joined with a hard cut.",
+            constraints: null,
+        },
+        continue: {
+            support: "unsupported",
+            code: "host-video.boundary.continue.unsupported",
+            reason: "This architecture has no continuity path.",
+            constraints: null,
+        },
+        crossfade: {
+            support: "unsupported",
+            code: "host-video.boundary.crossfade.unsupported",
+            reason: "This architecture has no decoded transition path.",
+            constraints: null,
+        },
+    },
+});
+
+/** A stock-host model the host-video baseline picked up, with no grid to trust. */
+export const testHostVideoModelEntry = (): ArchitectureModelEntry => ({
+    value: "host-video.safetensors",
+    label: "Host Video",
+    architectureId: "host-video",
+    modelProfileId: "host-video",
+    modelClassId: "host-video",
+    compatibilityClassId: "host-video",
+    frameGrid: 1,
+    frameGridOrigin: 1,
+    entryModes: ["text-to-video", "image-to-video", "init-video"],
+});
+
 export const fakeArchitectureCatalog = (
     architectureId: VideoArchitectureId = "test-video",
 ): ArchitectureModelCatalog => ({
@@ -297,6 +341,14 @@ export const testCombinedCatalogWithWan = (): ArchitectureModelCatalog => {
     models.entries.push(testWanModelEntry());
     return models;
 };
+
+export const testCombinedCatalogWithHostVideo =
+    (): ArchitectureModelCatalog => {
+        const models = testCombinedCatalog();
+        models.architectures.push(testHostVideoArchitecture());
+        models.entries.push(testHostVideoModelEntry());
+        return models;
+    };
 
 export const testRootDefaults = (
     modelCatalog: ArchitectureModelCatalog = testArchitectureCatalog(),

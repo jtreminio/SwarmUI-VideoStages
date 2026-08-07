@@ -2,6 +2,7 @@ import { describe, expect, it } from "@jest/globals";
 import {
     testArchitectureCatalog,
     testCombinedCatalog,
+    testCombinedCatalogWithHostVideo,
     testCombinedCatalogWithWan,
 } from "../__test_helpers__/architectureFixtures";
 import {
@@ -22,28 +23,6 @@ const architectureDiagnosticsFor = (
     catalog: ArchitectureModelCatalog,
 ) =>
     deriveArchitectureDiagnostics(clips, createCapabilityViewResolver(catalog));
-
-const hostVideoCatalog = (): ArchitectureModelCatalog => {
-    const models = testCombinedCatalog();
-    const template = models.architectures.find((entry) => entry.id === "ltx2");
-    if (!template) throw new Error("missing architecture template");
-    const host = structuredClone(template);
-    host.id = "host-video";
-    host.label = "Host Video";
-    host.capabilities.features = [];
-    host.capabilities.audioSourceKinds = ["Disabled"];
-    models.architectures.push(host);
-    models.entries.push({
-        value: "host-video.safetensors",
-        label: "Host Video",
-        architectureId: "host-video",
-        modelProfileId: "host-video",
-        modelClassId: "host-video",
-        compatibilityClassId: "host-video",
-        entryModes: ["text-to-video", "image-to-video", "init-video"],
-    });
-    return models;
-};
 
 describe("architecture diagnostics", () => {
     it("reports one precise model error when Stage 0 is unresolved", () => {
@@ -186,7 +165,7 @@ describe("architecture diagnostics", () => {
 
         const matching = architectureDiagnosticsFor(
             [clip],
-            hostVideoCatalog(),
+            testCombinedCatalogWithHostVideo(),
         ).filter(({ code }) => code.startsWith("architecture.unsupported."));
 
         expect(matching.length).toBeGreaterThan(0);
@@ -197,7 +176,7 @@ describe("architecture diagnostics", () => {
     });
 
     it("uses per-feature backend dispositions without architecture-name switches", () => {
-        const models = hostVideoCatalog();
+        const models = testCombinedCatalogWithHostVideo();
         const host = models.architectures.find(
             (entry) => entry.id === "host-video",
         );
@@ -286,10 +265,40 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            architectureDiagnosticsFor([clip], hostVideoCatalog()).find(
-                ({ code }) => code === "architecture.unsupported.upscale",
-            )?.severity,
+            architectureDiagnosticsFor(
+                [clip],
+                testCombinedCatalogWithHostVideo(),
+            ).find(({ code }) => code === "architecture.unsupported.upscale")
+                ?.severity,
         ).toBe("error");
+    });
+
+    it("warns that two host-video clips can only be joined with a cut", () => {
+        const hostStage = () =>
+            minimalStage({
+                model: "host-video.safetensors",
+                modelProfileId: "host-video",
+            });
+        const clips = [
+            minimalClip({
+                architectureHint: "host-video",
+                modelProfileId: "host-video",
+                boundaryOut: "continue",
+                stages: [hostStage()],
+            }),
+            minimalClip({
+                architectureHint: "host-video",
+                modelProfileId: "host-video",
+                stages: [hostStage()],
+            }),
+        ];
+
+        expect(
+            architectureDiagnosticsFor(
+                clips,
+                testCombinedCatalogWithHostVideo(),
+            ).map(({ code }) => code),
+        ).toContain("architecture.boundary-unsupported");
     });
 
     it("checks skipped authored stages and preserves the invalid document", () => {
