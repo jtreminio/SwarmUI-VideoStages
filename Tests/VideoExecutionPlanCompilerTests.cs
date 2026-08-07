@@ -99,9 +99,10 @@ public class VideoExecutionPlanCompilerTests
 
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, clip));
 
+        // The code crosses to the frontend, so the shared fixture owns its spelling.
         Assert.Contains(
             plan.Diagnostics,
-            diagnostic => diagnostic.Code == "retake-source-required"
+            diagnostic => diagnostic.Code == PlanDiagnosticCodes.RetakeSourceRequired
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
         Assert.Null(Assert.Single(Assert.Single(plan.Clips).Stages).RequireLtx2Payload().Retake);
         Assert.DoesNotContain(

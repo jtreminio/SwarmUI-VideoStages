@@ -12,7 +12,8 @@ import type { ClipCapabilityView } from "./types";
 
 /**
  * Retake re-diffuses a window of existing footage, so a clip with no init video has nothing to
- * retake. The code is the one the backend plan reports for the same condition.
+ * retake. The code mirrors the backend plan diagnostic for the same condition; the shared
+ * plan-diagnostic-codes fixture pins the two spellings together.
  */
 export const RETAKE_SOURCE_RULE = {
     code: "retake-source-required",
