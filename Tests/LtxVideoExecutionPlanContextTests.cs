@@ -178,7 +178,7 @@ public class VideoExecutionPlanContextTests
 
         Assert.Single(generator.GetTimelineSpec().Clips);
         Assert.True(generator.UserInput.TryGet(T2IParamTypes.VideoModel, out T2IModel hostModel));
-        Assert.True(Ltx2ArchitectureModule.IsLtxV2VideoModel(hostModel));
+        Assert.True(Ltx2ArchitectureModule.IsLtx23VideoModel(hostModel));
 
         VideoExecutionPlanContext context = generator.GetVideoExecutionPlanContext()
             ?? throw new InvalidOperationException("Expected a init-video-only plan context.");
