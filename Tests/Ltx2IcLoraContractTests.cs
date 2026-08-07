@@ -89,8 +89,32 @@ public class Ltx2IcLoraContractTests
         return null;
     }
 
+    /// <summary>The underscored name is the arm production tries first; only the legacy dotted
+    /// fallback below had coverage, so deleting that arm left the suite green.</summary>
     [Fact]
-    public async Task Auto_ic_lora_resolves_the_presets_downloaded_weights()
+    public async Task Auto_ic_lora_resolves_the_presets_current_weight_name()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        fixture.InstallModel(
+            "LoRA", "LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-deblur-0_9.safetensors");
+
+        JObject entry = MakeIcLora(IcLoraWeights.AutoModelToken, driveMediaData: DriveVideo);
+        entry["preset"] = "deblur";
+
+        JObject workflow = await fixture.GenerateAsync(
+            MakeDocument(IcLoraClip([fixture.Stage()], entry)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        LTXICLoRALoaderModelOnlyNode loader = Assert.Single(
+            bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+        Assert.Equal(
+            "LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-deblur-0_9.safetensors",
+            loader.LoraName.LiteralAsString());
+    }
+
+    /// <summary>The dotted name predates the `.`→`_` rename; production still falls back to it.</summary>
+    [Fact]
+    public async Task Auto_ic_lora_falls_back_to_the_legacy_weight_name()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         fixture.InstallModel("LoRA", "LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors");
