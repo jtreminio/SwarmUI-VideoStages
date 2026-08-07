@@ -3,8 +3,7 @@ using VideoStages.Authoring;
 namespace VideoStages.Planning;
 
 /// <summary>
-/// The narrow bit of host state required to plan root ownership. It holds only immutable facts;
-/// runtime media and graph nodes remain outside the plan compiler.
+/// Host state required to plan root ownership.
 /// </summary>
 internal sealed record RootEnvironment(
     HostRootKind HostKind,

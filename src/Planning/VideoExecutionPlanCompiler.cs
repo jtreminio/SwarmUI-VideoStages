@@ -7,8 +7,7 @@ using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 
 /// <summary>
-/// Compiles a parsed specification into a deterministic plan without inspecting or mutating the
-/// host workflow. Architecture assignments must be resolved for the request before compilation.
+/// Compiles a spec into a deterministic plan without inspecting or mutating the host workflow.
 /// </summary>
 internal static class VideoExecutionPlanCompiler
 {

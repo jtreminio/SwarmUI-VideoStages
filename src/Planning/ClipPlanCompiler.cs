@@ -4,7 +4,6 @@ using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 
-/// <summary>Compiles one executable clip and its ordered stage chain.</summary>
 internal static class ClipPlanCompiler
 {
     internal static ClipPlan Compile(ClipSpec clip, ClipPlanCompilationContext context)

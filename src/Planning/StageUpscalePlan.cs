@@ -2,7 +2,6 @@ using VideoStages.Authoring;
 
 namespace VideoStages.Planning;
 
-/// <summary>The normalized upscale instruction authored for a stage.</summary>
 internal enum StageUpscaleMode
 {
     None,
@@ -13,6 +12,7 @@ internal enum StageUpscaleMode
     Unsupported,
 }
 
+/// <summary>The normalized upscale instruction authored for a stage.</summary>
 internal sealed record StageUpscalePlan(
     StageUpscaleMode Mode,
     double Factor,
@@ -20,8 +20,7 @@ internal sealed record StageUpscalePlan(
     string MethodName);
 
 /// <summary>
-/// Classifies the persisted upscale method once, before architecture-specific validation and
-/// execution decide which modes they support.
+/// Classifies the persisted upscale method; architectures decide which modes they support.
 /// </summary>
 internal static class StageUpscalePlanCompiler
 {
@@ -51,7 +50,7 @@ internal static class StageUpscalePlanCompiler
         return StageUpscaleMode.Unsupported;
     }
 
-    /// <summary>The mode a stage actually authored: a factor of 1 upscales nothing.</summary>
+    /// <summary>A factor of 1 upscales nothing, whatever method is persisted.</summary>
     internal static StageUpscaleMode Mode(StageSpec stage)
     {
         ArgumentNullException.ThrowIfNull(stage);

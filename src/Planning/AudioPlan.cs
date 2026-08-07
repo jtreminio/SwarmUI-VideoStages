@@ -31,12 +31,9 @@ internal sealed record AudioSpanPlan(
     double Volume = 1);
 
 /// <summary>
-/// A later executor resolves uploads/tracks, reports unavailable runtime sources, and uses these
+/// One <see cref="ClipSpec"/>'s compiled audio policy; every ownership decision is final here.
+/// A later executor resolves the span sources, reports the ones it cannot load, and uses the
 /// windows unchanged.
-/// </summary>
-/// <summary>
-/// Pure projection of one <see cref="ClipSpec"/>'s audio policy. This contains no graph paths and
-/// makes every audio ownership decision before workflow construction begins.
 /// </summary>
 internal sealed record AudioPlan(
     AudioBaseSourcePlan Base,

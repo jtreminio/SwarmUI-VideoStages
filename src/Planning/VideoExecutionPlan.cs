@@ -74,7 +74,6 @@ internal sealed record InitVideoPlan(
     int TargetHeight,
     int TargetFramesPerSecond);
 
-/// <summary>An architecture-neutral stage dispatch instruction.</summary>
 internal sealed record StagePlan(
     int StageId,
     int ClipStageIndex,

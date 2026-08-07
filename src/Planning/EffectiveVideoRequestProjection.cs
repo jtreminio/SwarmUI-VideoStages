@@ -4,7 +4,6 @@ using VideoStages.Authoring;
 
 namespace VideoStages.Planning;
 
-/// <summary>Post-resolution request values and projection diagnostics.</summary>
 internal sealed record EffectiveVideoRequest(
     TimelineSpec Spec,
     IReadOnlyList<PlanDiagnostic> Diagnostics);

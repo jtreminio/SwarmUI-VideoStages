@@ -4,8 +4,8 @@ using VideoStages.Authoring;
 namespace VideoStages.Planning;
 
 /// <summary>
-/// Decides which authored stage settings actually execute. A setting the architecture does not
-/// declare is dropped, and a stage left with nothing to sample is a passthrough.
+/// A stage with nothing left to sample is a passthrough; a setting the architecture does not
+/// declare does not count as something to sample.
 /// </summary>
 internal static class StagePassthroughPolicy
 {

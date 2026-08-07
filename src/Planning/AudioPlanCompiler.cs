@@ -3,9 +3,6 @@ using VideoStages.Authoring;
 
 namespace VideoStages.Planning;
 
-/// <summary>
-/// Compiles immutable audio policy without resolving runtime workflow artifacts.
-/// </summary>
 internal static class AudioPlanCompiler
 {
     private const string UnknownSourceCode = "audio.source.unknown";

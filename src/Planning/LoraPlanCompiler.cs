@@ -3,7 +3,7 @@ using VideoStages.Authoring;
 
 namespace VideoStages.Planning;
 
-/// <summary>Orders clip and stage LoRAs for one stage.</summary>
+/// <summary>Clip LoRAs before stage LoRAs; a stage's LoraWeights override clip weights by position.</summary>
 internal static class LoraPlanCompiler
 {
     internal static ImmutableArray<LoraPlan> Compile(

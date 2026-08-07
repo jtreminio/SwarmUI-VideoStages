@@ -2,7 +2,10 @@ using System.Collections.Immutable;
 
 namespace VideoStages.Planning;
 
-/// <summary>Orders projected audio span windows and reports their base-track requirement.</summary>
+/// <summary>
+/// Drops unusable span windows, orders the rest by start time, and warns when they have no base
+/// track to mix over.
+/// </summary>
 internal static class AudioSpanPlanCompiler
 {
     private const string SpansWithoutBase = "audio.spans.preserve_windowed_no_base";

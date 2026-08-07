@@ -4,7 +4,6 @@ using VideoStages.Authoring;
 
 namespace VideoStages.Planning;
 
-/// <summary>Normalizes authored boundaries and reports deterministic fallbacks.</summary>
 internal static class BoundaryPlanCompiler
 {
     internal static BoundaryPlanningResult Compile(

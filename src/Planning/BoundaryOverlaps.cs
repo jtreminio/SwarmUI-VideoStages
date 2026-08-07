@@ -3,8 +3,8 @@ using VideoStages.Architectures.Abstractions;
 namespace VideoStages.Planning;
 
 /// <summary>
-/// One typed boundary-budget resolution. Planning may shrink authored windows to fit known clip
-/// lengths. Runtime either validates that exact result or explicitly degrades it to cuts.
+/// Planning may shrink authored windows to fit known clip lengths. Runtime either validates that
+/// exact result or explicitly degrades it to cuts.
 /// </summary>
 internal sealed record BoundaryBudgetResolution(
     IReadOnlyList<BoundaryPlan> Boundaries,

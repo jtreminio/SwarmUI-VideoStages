@@ -37,7 +37,6 @@ internal static class AudioSourceKindPolicy
         && CanDriveClipDuration(AudioSource.Read(clip.AudioSource).Kind);
 }
 
-/// <summary>A parsed authored audio-source string.</summary>
 internal sealed record AudioSourceSelection(
     AudioSourceKind Kind,
     string Raw,
