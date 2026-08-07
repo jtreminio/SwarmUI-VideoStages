@@ -3,7 +3,7 @@ import type { Clip } from "../types";
 import { modelCatalogEntry } from "./catalog";
 import type { ArchitectureModelCatalog, FrameReferencePosition } from "./types";
 
-export interface ClipReferenceEndpointPolicy {
+export interface FrameReferenceEndpointPolicy {
     positions: FrameReferencePosition[];
     available: boolean;
     bounded: boolean;
@@ -19,7 +19,7 @@ export interface ClipReferenceEndpointPolicy {
 export const referenceEndpointPolicy = (
     clip: Clip,
     catalog: ArchitectureModelCatalog,
-): ClipReferenceEndpointPolicy => {
+): FrameReferenceEndpointPolicy => {
     const activeStages = clip.stages.slice(0, activeStageCount(clip));
     const firstPositions =
         modelCatalogEntry(catalog, activeStages[0]?.model)?.enhancements
@@ -57,7 +57,7 @@ export const referenceEndpointPolicy = (
 };
 
 export const boundedReferencePositionHelp = (
-    policy: ClipReferenceEndpointPolicy,
+    policy: FrameReferenceEndpointPolicy,
 ): string | undefined => {
     if (!policy.available) {
         return "This clip does not accept frame-reference endpoints.";
@@ -75,7 +75,7 @@ export const boundedReferencePositionHelp = (
 };
 
 export const boundedReferenceToggleHelp = (
-    policy: ClipReferenceEndpointPolicy,
+    policy: FrameReferenceEndpointPolicy,
 ): string | undefined => {
     if (!policy.available) {
         return "This clip does not publish a supported frame-reference endpoint.";

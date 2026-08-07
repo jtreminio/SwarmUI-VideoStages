@@ -1,5 +1,5 @@
 import {
-    type ClipReferenceEndpointPolicy,
+    type FrameReferenceEndpointPolicy,
     referenceEndpointPolicy,
 } from "./architectures/referenceEndpoints";
 import { resolvedClipFrameGrid } from "./architectures/temporalGrid";
@@ -62,7 +62,7 @@ interface RefDragState {
 
 interface ReferenceDragPolicy {
     supported: boolean;
-    endpoints: ClipReferenceEndpointPolicy;
+    endpoints: FrameReferenceEndpointPolicy;
     frameGrid: FrameGridSpec;
     frameMax: number;
 }
@@ -81,7 +81,7 @@ export const createTimelineReferencesTrack = (
     const referenceEndpoints = (
         clip: ReturnType<typeof getClips>[number],
         authoring = getAuthoring(),
-    ): ClipReferenceEndpointPolicy =>
+    ): FrameReferenceEndpointPolicy =>
         referenceEndpointPolicy(clip, authoring.defaults.modelCatalog);
     const resolveDragPolicy = (
         clip: ReturnType<typeof getClips>[number],
