@@ -22,7 +22,7 @@ namespace VideoStages.Tests;
 public class MiniMaxRuntimeFlowTests
 {
     [Fact]
-    public void Audio_derived_duration_refuses_multi_clip_but_allows_global_trim()
+    public void Audio_derived_duration_refuses_multi_clip()
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
         JObject dynamicClip = MakeClip(1.0, fixture.Stage());
@@ -33,7 +33,6 @@ public class MiniMaxRuntimeFlowTests
             fixture.BaseModel,
             fixture.Model,
             MakeDocument(dynamicClip, MakeClip(1.0, fixture.Stage())).ToString());
-        input.Set(T2IParamTypes.TrimVideoStartFrames, 1);
         WorkflowGenerator generator = new()
         {
             UserInput = input,

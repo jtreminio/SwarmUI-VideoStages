@@ -448,7 +448,7 @@ public class ArchitectureFoundationTests
     }
 
     /// <summary>The lora list here is <c>FakeModule</c>'s own output, so this pins the
-    /// pass-through, not lora planning — that is covered by PlanningCompilerComponentTests.</summary>
+    /// pass-through, not lora planning — that is covered by <see cref="PlanningCompilerComponentTests"/>.</summary>
     [Fact]
     public void Common_projection_passes_the_module_stage_payload_through_to_Core()
     {
