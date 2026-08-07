@@ -395,7 +395,7 @@ Blocking `PlanDiagnostic` values are thrown by
 
 ### B3. Preflight before VideoStages graph mutation
 
-`Runner.PreflightRequest` is the first registered VideoStages workflow phase.
+`PrepareRequest` is the first registered VideoStages workflow phase.
 It is the only caller of `VideoExecutionPlanContext.PrepareRequest`, which
 constructs one `VideoArchitectureExecutionHost` and invokes each active runtime
 provider with graph-free `ArchitectureRequestPreflightContext`. Every later
@@ -424,7 +424,7 @@ The full prepared-state machine and exact eight-step priority table are in
 
 ### B4. Host phases prepare selected architecture state
 
-Each later `Runner` callback invokes its matching lifecycle method on
+Each later phase invokes its own lifecycle method on
 `VideoExecutionPlanContext`. The context enforces prepared state and sticky failure,
 then its execution host performs the graph work. ControlNet and reference capture visit every
 active provider. Root capture and restoration are common host work, while audio-mask sizing
@@ -457,8 +457,8 @@ control-signal, and uploaded-drive caches.
 
 ### B5. Dispatch a clip by architecture
 
-`Runner.RunConfiguredStages` enters `VideoExecutionPlanContext`, which guards the
-call and marks completion after `VideoArchitectureExecutionHost` returns.
+`VideoExecutionPlanContext.RunConfiguredStages` guards the call and marks
+completion after `VideoArchitectureExecutionHost` returns.
 
 The execution host captures the host root, resolves audio, creates one session for
 each active architecture provider, and creates `ArchitectureClipRuntimeContext`

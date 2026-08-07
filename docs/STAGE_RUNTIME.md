@@ -80,10 +80,10 @@ Prepared ─────────────────→ Failed
 - `Failed`: the first failure is captured with `ExceptionDispatchInfo`; later
   callbacks rethrow the same failure.
 
-`Runner.PreflightRequest` is the only method allowed to call
-`PrepareRequest`. Later Runner callbacks enter named lifecycle methods on the
-context, while alternate host callbacks call `ExecutePrepared`. Neither path
-prepares lazily after core has begun graph construction.
+The registered preflight phase is the only caller of `PrepareRequest`. Later
+phases enter their own lifecycle methods on the context, while alternate host
+callbacks call `ExecutePrepared`. Neither path prepares lazily after core has
+begun graph construction.
 
 Preparation constructs one `VideoArchitectureExecutionHost`, resolves only
 providers used by active clip architectures, and runs:
@@ -100,16 +100,24 @@ timeline and clip state belongs to the session it creates.
 
 `VideoStagesExtension.OnInit` registers these VideoStages steps:
 
-| Priority | Entry point | Scope/purpose |
+Each is a `VideoExecutionPlanContext` method wrapped by `WorkflowPhase.Guarded`,
+which keeps the step inert on a request VideoStages is not driving. Numeric
+priorities live in `Constants.WorkflowStepPriority`.
+
+| Priority | Context method | Scope/purpose |
 | ---: | --- | --- |
-| -6 | `Runner.PreflightRequest` | compile/prepare once; no VideoStages graph mutation |
-| -5.9 | `CaptureCoreVideoControlNetPreprocessors` | common capture once, then all active architecture providers |
-| -4.2 | `CaptureBase` | all active providers may snapshot base reference facts |
-| 5.89 | `CaptureRefiner` | all active providers may snapshot refiner facts |
-| 10.95 | `CapturePreCoreVideoMedia` | common snapshot when a generated stage owns an interceptable root |
-| 11.05 | `DropCoreImageToVideoOutput` | common restore and discarded-core cleanup for that root |
-| 11.4 | `ApplyRootAudioMaskDimensions` | root-owner architecture only |
-| 11.5 | `RunConfiguredStages` | common timeline execution and publication |
+| -6 | `PrepareRequest` | reads the compiled plan and backend features; must stay non-mutating |
+| -5.9 | `CaptureControlNetPreprocessors` | reads core's ControlNet graph; captures raw image/audio/apply facts, then fans out to every active architecture provider |
+| -4.2 | `CaptureBaseReference` | all active providers may snapshot base reference facts |
+| 5.89 | `CaptureRefinerReference` | all active providers may snapshot refiner facts |
+| 10.95 | `CapturePreCoreMedia` | snapshots eligible generated-root media/VAE in memory when a generated stage owns an interceptable root |
+| 11.05 | `DropCoreOutput` | restores that root from the snapshot and prunes core's video pass |
+| 11.4 | `ApplyRootAudioMaskDimensions` | root-owner architecture only; resizes audio SolidMask nodes to root dims |
+| 11.5 | `RunConfiguredStages` | reads architecture references and the phase-2 captures; executes the planned sessions and publishes |
+
+`PrepareRequest` is the only place a request may be rejected for a missing
+dependency: every later phase mutates the host graph, so a failure past it
+leaves the user with a broken workflow.
 
 SwarmUI core image-to-video is expected around priority 11. The extension
 discovers that step at startup and disables unsafe handoff when it is missing
