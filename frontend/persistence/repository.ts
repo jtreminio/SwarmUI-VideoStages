@@ -1,8 +1,14 @@
-import { captureAuthoringTransactionSnapshot } from "../authoringSnapshot";
+import {
+    type AuthoringTransactionSnapshot,
+    captureAuthoringTransactionSnapshot,
+} from "../authoringSnapshot";
 import { assignMissingHues } from "../clipColor";
 import { ROOT_DIMENSION_STEP } from "../constants";
 import { videoStagesDebugLog } from "../debugLog";
-import type { DocumentCommand } from "../documentCommands";
+import type {
+    DocumentCommand,
+    DocumentCommandContext,
+} from "../documentCommands";
 import { diffDocuments } from "../documentDiff";
 import { snapExplicitDocumentDimensions } from "../documentDimensionSnap";
 import { getVideoStagesHostBridge } from "../host";
@@ -32,6 +38,13 @@ export interface SaveStateOptions {
 }
 
 export type DispatchDocumentCommandOptions = SaveStateOptions;
+
+const commandContextFor = (
+    transaction: AuthoringTransactionSnapshot,
+): DocumentCommandContext => ({
+    architectureCatalog: transaction.defaults.modelCatalog,
+    generatedEntryMode: transaction.generatedEntryMode,
+});
 
 const store = createTimelineStore(timelineCarrierAdapter);
 
@@ -67,6 +80,7 @@ const saveRequestedState = (
     snapshot = store.getSnapshot(),
 ): void => {
     const transaction = captureAuthoringTransactionSnapshot();
+    const commandContext = commandContextFor(transaction);
     const requested = structuredClone(requestedInput);
     ensureAuthoringDocumentIdentity(requested);
     assignMissingHues(requested.clips);
@@ -81,10 +95,7 @@ const saveRequestedState = (
 
     const diffCommand = (() => {
         try {
-            return diffDocuments(before, requested, {
-                architectureCatalog: transaction.defaults.modelCatalog,
-                generatedEntryMode: transaction.generatedEntryMode,
-            });
+            return diffDocuments(before, requested, commandContext);
         } catch (error) {
             return throwSaveFailure("diff", error);
         }
@@ -109,10 +120,7 @@ const saveRequestedState = (
         willNotifyDom,
         options?.expectedRevision ?? snapshot.revision,
         options?.valueOnly ? "value-only" : undefined,
-        {
-            architectureCatalog: transaction.defaults.modelCatalog,
-            generatedEntryMode: transaction.generatedEntryMode,
-        },
+        commandContext,
     );
     if (!result.applied) {
         throwSaveFailure("dispatch", result.failure ?? "unknown failure");
@@ -151,10 +159,7 @@ export const dispatchDocumentCommand = (
         willNotifyDom,
         options?.expectedRevision,
         options?.valueOnly ? "value-only" : undefined,
-        {
-            architectureCatalog: transaction.defaults.modelCatalog,
-            generatedEntryMode: transaction.generatedEntryMode,
-        },
+        commandContextFor(transaction),
     );
     videoStagesDebugLog("persistence", "dispatchDocumentCommand", {
         command: command.type,

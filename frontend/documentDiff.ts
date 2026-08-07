@@ -9,14 +9,14 @@ import {
     reconcileClipArchitectureIdentity,
 } from "./architectures/clipIdentity";
 import { planArchitectureConversion } from "./architectures/conversion/plan";
-import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
 import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
+import type { ArchitectureRetargetPlan } from "./architectures/types";
 import type {
-    ArchitectureModelCatalog,
-    ArchitectureRetargetPlan,
-} from "./architectures/types";
-import type { CommandFailure, DocumentCommand } from "./documentCommands";
+    CommandFailure,
+    DocumentCommand,
+    DocumentCommandContext,
+} from "./documentCommands";
 import {
     LIST_ENTITIES,
     type ListEntityDescriptor,
@@ -50,11 +50,6 @@ interface CommandPhases {
     adds: DocumentCommand[];
     moves: DocumentCommand[];
     patches: DocumentCommand[];
-}
-
-export interface DocumentDiffContext {
-    architectureCatalog: ArchitectureModelCatalog | null;
-    generatedEntryMode?: GeneratedEntryMode;
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -254,7 +249,7 @@ const diffStages = (
     before: CanonicalClip,
     after: CanonicalClip,
     phases: CommandPhases,
-    context: DocumentDiffContext,
+    context: DocumentCommandContext,
 ): void =>
     diffList(
         LIST_ENTITIES.stage,
@@ -332,7 +327,7 @@ const diffClipChildren = (
     before: CanonicalClip,
     after: CanonicalClip,
     phases: CommandPhases,
-    context: DocumentDiffContext,
+    context: DocumentCommandContext,
 ): void => {
     diffStages(before, after, phases, context);
     diffList(LIST_ENTITIES.ref, after.id, before, after, phases);
@@ -350,7 +345,7 @@ const clipDiffBase = (
     previous: CanonicalClip,
     next: CanonicalClip,
     phases: CommandPhases,
-    context: DocumentDiffContext,
+    context: DocumentCommandContext,
 ): CanonicalClip => {
     const changesEffectiveIdentity =
         previous.architectureHint !== next.architectureHint ||
@@ -518,7 +513,7 @@ const diffClips = (
     before: CanonicalVideoStagesConfig,
     after: CanonicalVideoStagesConfig,
     phases: CommandPhases,
-    context: DocumentDiffContext,
+    context: DocumentCommandContext,
 ): void =>
     diffList(
         LIST_ENTITIES.clip,
@@ -557,7 +552,7 @@ const diffAudioTracks = (
 export const diffDocuments = (
     before: CanonicalVideoStagesConfig,
     after: CanonicalVideoStagesConfig,
-    context: DocumentDiffContext = { architectureCatalog: null },
+    context: DocumentCommandContext = { architectureCatalog: null },
 ): DocumentBatchCommand => {
     validateDocumentIds(before);
     validateDocumentIds(after);

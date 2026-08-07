@@ -5844,6 +5844,10 @@
   var dataCarrierNeedsCanonicalIdRepair = () => storedDocumentNeedsCanonicalIdRepair(readDataParam2());
 
   // frontend/persistence/repository.ts
+  var commandContextFor = (transaction) => ({
+    architectureCatalog: transaction.defaults.modelCatalog,
+    generatedEntryMode: transaction.generatedEntryMode
+  });
   var store = createTimelineStore(timelineCarrierAdapter);
   var getTimelineStore = () => store;
   var getState = () => store.getState();
@@ -5859,6 +5863,7 @@
   };
   var saveRequestedState = (requestedInput, options, snapshot = store.getSnapshot()) => {
     const transaction = captureAuthoringTransactionSnapshot();
+    const commandContext = commandContextFor(transaction);
     const requested = structuredClone(requestedInput);
     ensureAuthoringDocumentIdentity(requested);
     assignMissingHues(requested.clips);
@@ -5871,10 +5876,7 @@
     assignMissingHues(before.clips);
     const diffCommand = (() => {
       try {
-        return diffDocuments(before, requested, {
-          architectureCatalog: transaction.defaults.modelCatalog,
-          generatedEntryMode: transaction.generatedEntryMode
-        });
+        return diffDocuments(before, requested, commandContext);
       } catch (error) {
         return throwSaveFailure("diff", error);
       }
@@ -5895,10 +5897,7 @@
       willNotifyDom,
       options?.expectedRevision ?? snapshot.revision,
       options?.valueOnly ? "value-only" : void 0,
-      {
-        architectureCatalog: transaction.defaults.modelCatalog,
-        generatedEntryMode: transaction.generatedEntryMode
-      }
+      commandContext
     );
     if (!result.applied) {
       throwSaveFailure("dispatch", result.failure ?? "unknown failure");
@@ -5926,10 +5925,7 @@
       willNotifyDom,
       options?.expectedRevision,
       options?.valueOnly ? "value-only" : void 0,
-      {
-        architectureCatalog: transaction.defaults.modelCatalog,
-        generatedEntryMode: transaction.generatedEntryMode
-      }
+      commandContextFor(transaction)
     );
     videoStagesDebugLog("persistence", "dispatchDocumentCommand", {
       command: command.type,
