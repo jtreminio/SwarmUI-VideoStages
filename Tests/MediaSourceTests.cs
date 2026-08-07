@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -110,15 +109,8 @@ public class MediaSourceTests
     [Fact]
     public void Generated_typescript_media_source_names_are_current()
     {
-        string committedPath = Path.GetFullPath(
-            Path.Combine(TestSourceDirectory(), "..", "frontend", "generatedMediaSource.ts"));
-
         Assert.Equal(
             MediaSource.RenderGeneratedTypeScript(),
-            File.ReadAllText(committedPath));
+            RepoFiles.ReadFrontend("generatedMediaSource.ts"));
     }
-
-    private static string TestSourceDirectory(
-        [CallerFilePath] string sourcePath = "") =>
-        Path.GetDirectoryName(sourcePath)!;
 }

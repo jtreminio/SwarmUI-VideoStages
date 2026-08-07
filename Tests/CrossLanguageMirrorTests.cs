@@ -18,19 +18,11 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class CrossLanguageMirrorTests
 {
-    private static JArray LoadFixture(string name, [CallerFilePath] string caller = "")
-    {
-        string path = Path.Combine(Path.GetDirectoryName(caller)!, "fixtures", name);
-        return JArray.Parse(File.ReadAllText(path));
-    }
+    private static JArray LoadFixture(string name) =>
+        JArray.Parse(RepoFiles.ReadFixture(name));
 
-    private static JObject LoadObjectFixture(
-        string name,
-        [CallerFilePath] string caller = "")
-    {
-        string path = Path.Combine(Path.GetDirectoryName(caller)!, "fixtures", name);
-        return JObject.Parse(File.ReadAllText(path));
-    }
+    private static JObject LoadObjectFixture(string name) =>
+        JObject.Parse(RepoFiles.ReadFixture(name));
 
     [Fact]
     public void UpscaleMethodClassification_MatchesSharedFixture()

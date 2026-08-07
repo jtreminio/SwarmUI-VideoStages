@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using Xunit;
@@ -34,17 +33,8 @@ public class ArchitectureFeatureVocabularyTests
     [Fact]
     public void Generated_typescript_feature_vocabulary_is_current()
     {
-        string committedPath = Path.GetFullPath(
-            Path.Combine(TestSourceDirectory(), "..", "frontend", "architectures",
-                "generatedFeatures.ts"));
-        string committed = File.ReadAllText(committedPath);
-
         Assert.Equal(
             ArchitectureFeatureVocabulary.RenderGeneratedTypeScript(),
-            committed);
+            RepoFiles.ReadFrontend("architectures/generatedFeatures.ts"));
     }
-
-    private static string TestSourceDirectory(
-        [CallerFilePath] string sourcePath = "") =>
-        Path.GetDirectoryName(sourcePath)!;
 }

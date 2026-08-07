@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using VideoStages.Architectures.Ltx2;
 using Xunit;
 
@@ -10,16 +9,8 @@ public class IcLoraWeightsTests
     [Fact]
     public void Generated_typescript_auto_model_tokens_are_current()
     {
-        string committedPath = Path.GetFullPath(
-            Path.Combine(TestSourceDirectory(), "..", "frontend", "architectures", "ltx2",
-                "generatedIcLora.ts"));
-
         Assert.Equal(
             IcLoraWeights.RenderGeneratedTypeScript(),
-            File.ReadAllText(committedPath));
+            RepoFiles.ReadFrontend("architectures/ltx2/generatedIcLora.ts"));
     }
-
-    private static string TestSourceDirectory(
-        [CallerFilePath] string sourcePath = "") =>
-        Path.GetDirectoryName(sourcePath)!;
 }

@@ -78,8 +78,7 @@ public class PhaseADriftRegressionTests
     [Fact]
     public void Frontend_ic_lora_strength_bounds_match_the_backend()
     {
-        string source = File.ReadAllText(Path.GetFullPath(
-            Path.Combine(TestSourceDirectory(), "..", "frontend", "icLoraAuthoring.ts")));
+        string source = RepoFiles.ReadFrontend("icLoraAuthoring.ts");
 
         Assert.Contains(
             $"export const IC_LORA_STRENGTH_MIN = {Loras.IcLoraStrengthMin};",
@@ -88,8 +87,4 @@ public class PhaseADriftRegressionTests
             $"export const IC_LORA_STRENGTH_MAX = {Loras.IcLoraStrengthMax};",
             source);
     }
-
-    private static string TestSourceDirectory(
-        [CallerFilePath] string sourcePath = "") =>
-        Path.GetDirectoryName(sourcePath)!;
 }

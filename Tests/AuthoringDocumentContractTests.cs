@@ -62,10 +62,8 @@ public class AuthoringDocumentContractTests
         "clips[].stages[].imageReference",
     ];
 
-    private static string FixturePath([CallerFilePath] string caller = "") =>
-        Path.Combine(Path.GetDirectoryName(caller)!, "fixtures", "authoring-document.json");
-
-    private static string FixtureJson() => File.ReadAllText(FixturePath());
+    private static string FixtureJson() =>
+        RepoFiles.ReadFixture("authoring-document.json");
 
     private static string NormalizePath(string path) =>
         Regex.Replace(path, @"\[\d+\]", "[]");

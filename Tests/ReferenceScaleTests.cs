@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using VideoStages.Authoring;
 using Xunit;
 
@@ -23,15 +22,8 @@ public class ReferenceScaleTests
     [Fact]
     public void Generated_typescript_reference_scales_are_current()
     {
-        string committedPath = Path.GetFullPath(
-            Path.Combine(TestSourceDirectory(), "..", "frontend", "generatedReferenceScale.ts"));
-
         Assert.Equal(
             ReferenceScale.RenderGeneratedTypeScript(),
-            File.ReadAllText(committedPath));
+            RepoFiles.ReadFrontend("generatedReferenceScale.ts"));
     }
-
-    private static string TestSourceDirectory(
-        [CallerFilePath] string sourcePath = "") =>
-        Path.GetDirectoryName(sourcePath)!;
 }
