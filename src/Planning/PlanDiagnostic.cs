@@ -8,10 +8,8 @@ internal enum PlanDiagnosticSeverity
 }
 
 /// <summary>
-/// The one diagnostic record every VideoStages planner emits. <see cref="Code"/> is intentionally
-/// machine-friendly for plan snapshots and tests; <see cref="Message"/> is what the user reads.
-/// The identity fields are all optional: a diagnostic names whichever of clip, stage, audio track,
-/// or track span it actually knows about.
+/// <see cref="Code"/> is the stable identifier tests match on; <see cref="Message"/> is what the
+/// user reads. A diagnostic sets whichever identity fields it knows.
 /// </summary>
 internal sealed record PlanDiagnostic(
     PlanDiagnosticSeverity Severity,
@@ -20,5 +18,4 @@ internal sealed record PlanDiagnostic(
     int? ClipId = null,
     int? StageId = null,
     int? RawStageIndex = null,
-    string TrackId = null,
-    int? SpanIndex = null);
+    string TrackId = null);

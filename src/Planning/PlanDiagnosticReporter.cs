@@ -48,10 +48,6 @@ internal static class PlanDiagnosticReporter
         {
             identity.Add($"audio track '{diagnostic.TrackId}'");
         }
-        if (diagnostic.SpanIndex is int spanIndex)
-        {
-            identity.Add($"span {spanIndex}");
-        }
         string suffix = identity.Count == 0 ? "" : $" ({string.Join(", ", identity)})";
         return $"VideoStages: {diagnostic.Message}{suffix}";
     }

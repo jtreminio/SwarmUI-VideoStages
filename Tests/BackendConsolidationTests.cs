@@ -99,8 +99,7 @@ public class BackendConsolidationTests
                     "span pending",
                     ClipId: 2,
                     StageId: 5,
-                    TrackId: "bed",
-                    SpanIndex: 0),
+                    TrackId: "bed"),
             ],
             warnings.Add,
             _ => { },
@@ -109,7 +108,7 @@ public class BackendConsolidationTests
         Assert.Equal(
             [
                 "VideoStages: same (clip 1)",
-                "VideoStages: span pending (clip 2, stage 5, audio track 'bed', span 0)",
+                "VideoStages: span pending (clip 2, stage 5, audio track 'bed')",
             ],
             warnings);
     }

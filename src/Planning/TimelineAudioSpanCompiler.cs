@@ -140,8 +140,7 @@ internal static class TimelineAudioSpanCompiler
                 PlanDiagnosticSeverity.Warning,
                 "audio.timeline.span.unresolved_clip_timing",
                 "A timeline audio span cannot be projected while any clip timing is unknown.",
-                TrackId: spanId,
-                SpanIndex: 0));
+                TrackId: spanId));
             return;
         }
         if (projected.Count == 0)
@@ -150,8 +149,7 @@ internal static class TimelineAudioSpanCompiler
                 PlanDiagnosticSeverity.Warning,
                 "audio.timeline.span.empty_after_projection",
                 "An audio span does not overlap any resolved final-timeline clip window.",
-                TrackId: spanId,
-                SpanIndex: 0));
+                TrackId: spanId));
             return;
         }
         foreach ((int clipId, AudioSpanPlan item) in projected)
