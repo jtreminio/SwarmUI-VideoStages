@@ -803,7 +803,8 @@
     (entry) => REFERENCE_POSITIONS.includes(entry)
   );
   var hasExactKeys = (value, expected) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
-  var isRuleDecision = (value) => isRecord(value) && hasExactKeys(value, ["support", "code", "reason", "constraints"]) && typeof value.support === "string" && RULE_SUPPORTS.includes(value.support) && isTrimmedNonEmpty(value.code) && isTrimmedNonEmpty(value.reason) && (value.constraints === null || isRecord(value.constraints) && value.support !== "unsupported");
+  var isCapabilitySupport = (value) => typeof value === "string" && RULE_SUPPORTS.includes(value);
+  var isRuleDecision = (value) => isRecord(value) && hasExactKeys(value, ["support", "code", "reason", "constraints"]) && isCapabilitySupport(value.support) && isTrimmedNonEmpty(value.code) && isTrimmedNonEmpty(value.reason) && (value.constraints === null || isRecord(value.constraints) && value.support !== "unsupported");
   var isBoundaryRule = (value) => {
     if (!isRuleDecision(value)) {
       return false;

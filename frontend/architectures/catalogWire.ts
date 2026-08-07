@@ -9,6 +9,7 @@ import type {
     ArchitectureCapabilities,
     ArchitectureCatalogEntryDto,
     CapabilityRuleDecision,
+    CapabilitySupport,
     VideoArchitectureCatalogDto,
 } from "./types";
 
@@ -42,11 +43,14 @@ const hasExactKeys = (
     Object.keys(value).length === expected.length &&
     expected.every((key) => Object.hasOwn(value, key));
 
+const isCapabilitySupport = (value: unknown): value is CapabilitySupport =>
+    typeof value === "string" &&
+    (RULE_SUPPORTS as readonly string[]).includes(value);
+
 const isRuleDecision = (value: unknown): value is CapabilityRuleDecision =>
     isRecord(value) &&
     hasExactKeys(value, ["support", "code", "reason", "constraints"]) &&
-    typeof value.support === "string" &&
-    (RULE_SUPPORTS as readonly string[]).includes(value.support) &&
+    isCapabilitySupport(value.support) &&
     isTrimmedNonEmpty(value.code) &&
     isTrimmedNonEmpty(value.reason) &&
     (value.constraints === null ||
