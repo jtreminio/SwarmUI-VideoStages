@@ -277,12 +277,17 @@ describe("architecture diagnostics", () => {
                 }),
             ]),
         );
-        // The label is C#-owned. A hardcoded copy here drifted once already.
+        // Pinning the whole sentence, not just the label: a re-hardcoded copy of
+        // the current label would still satisfy a `toContain` against the map.
         expect(
             matching.find(
                 ({ code }) => code === "architecture.unsupported.prompt-relay",
             )?.message,
-        ).toContain(ARCHITECTURE_FEATURE_LABELS.promptRelay);
+        ).toBe(
+            `Clip 0 has ${ARCHITECTURE_FEATURE_LABELS.promptRelay} saved, ` +
+                "but its architecture cannot use it. Generation will ignore it " +
+                "and keep the authored setting.",
+        );
     });
 
     it("keeps an unclassifiable WAN upscale blocking", () => {

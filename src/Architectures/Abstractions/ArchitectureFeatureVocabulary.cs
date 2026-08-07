@@ -15,7 +15,7 @@ internal static class ArchitectureFeatureVocabulary
 {
     internal static IReadOnlyList<ArchitectureFeatureVocabularyEntry> Features { get; } =
     [
-        new(ArchitectureFeature.PromptRelay, "promptRelay", "Relay prompts"),
+        new(ArchitectureFeature.PromptRelay, "promptRelay", "Prompt relay"),
         new(ArchitectureFeature.FrameReferences, "frameReferences", "Frame references"),
         new(ArchitectureFeature.ClipReferences, "clipReferences", "Clip references"),
         new(ArchitectureFeature.ReferenceFraming, "referenceFraming", "Reference framing"),

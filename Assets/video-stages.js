@@ -448,7 +448,7 @@
 
   // frontend/architectures/generatedFeatures.ts
   var ARCHITECTURE_FEATURE_LABELS = {
-    promptRelay: "Relay prompts",
+    promptRelay: "Prompt relay",
     frameReferences: "Frame references",
     clipReferences: "Clip references",
     referenceFraming: "Reference framing",
@@ -6130,42 +6130,39 @@
         diagnostics.push(
           issue(
             `architecture.unsupported.${key}`,
-            effectiveSeverity === "warning" ? `${label} is saved on Clip ${clipIdx}, but its architecture cannot use it. Generation will ignore it and keep the authored setting.` : `${label} is persisted on Clip ${clipIdx}, but its architecture does not support it. Remove it or explicitly convert the clip.`,
+            effectiveSeverity === "warning" ? `Clip ${clipIdx} has ${label} saved, but its architecture cannot use it. Generation will ignore it and keep the authored setting.` : `Clip ${clipIdx} has ${label} persisted, but its architecture does not support it. Remove it or explicitly convert the clip.`,
             clipIdx,
             effectiveSeverity
           )
         );
       }
     };
-    unsupported(
+    const unsupportedFeature = (active, feature, severity) => unsupported(
+      active,
+      feature.replace(/[A-Z]/g, (upper) => `-${upper.toLowerCase()}`),
+      ARCHITECTURE_FEATURE_LABELS[feature],
+      severity
+    );
+    unsupportedFeature(
       !supports("frameReferences") && clip.frameRefs.length > 0,
-      "frame-references",
-      ARCHITECTURE_FEATURE_LABELS.frameReferences
+      "frameReferences"
     );
-    unsupported(
+    unsupportedFeature(
       !supports("clipReferences") && clip.references.length > 0,
-      "clip-references",
-      ARCHITECTURE_FEATURE_LABELS.clipReferences
+      "clipReferences"
     );
-    unsupported(
+    unsupportedFeature(
       !supports("referenceFraming") && clip.refFraming !== "crop",
-      "reference-framing",
-      ARCHITECTURE_FEATURE_LABELS.referenceFraming
+      "referenceFraming"
     );
-    unsupported(
+    unsupportedFeature(
       !supports("icLora") && clip.icLoras.length > 0,
-      "ic-lora",
-      ARCHITECTURE_FEATURE_LABELS.icLora
+      "icLora"
     );
-    unsupported(
-      !supports("retake") && clip.retake !== null,
-      "retake",
-      ARCHITECTURE_FEATURE_LABELS.retake
-    );
-    unsupported(
+    unsupportedFeature(!supports("retake") && clip.retake !== null, "retake");
+    unsupportedFeature(
       !supports("promptRelay") && clip.promptWindows.length > 0,
-      "prompt-relay",
-      ARCHITECTURE_FEATURE_LABELS.promptRelay
+      "promptRelay"
     );
     const activeUpscaleModes = clip.stages.filter((stage) => stage.upscale !== 1).map((stage) => upscaleModeForMethod(stage.upscaleMethod));
     if (activeUpscaleModes.includes("unsupported")) {
@@ -6177,15 +6174,13 @@
         )
       );
     }
-    unsupported(
+    unsupportedFeature(
       !supports("latentUpscale") && activeUpscaleModes.includes("latent"),
-      "latent-upscale",
-      ARCHITECTURE_FEATURE_LABELS.latentUpscale
+      "latentUpscale"
     );
-    unsupported(
+    unsupportedFeature(
       !supports("latentModelUpscale") && activeUpscaleModes.includes("latent-model"),
-      "latent-model-upscale",
-      ARCHITECTURE_FEATURE_LABELS.latentModelUpscale
+      "latentModelUpscale"
     );
     const sourceKind = audioSourceKind(clip.audioSource);
     const clipAudioCapabilitySupported = supportsClipAudio(
@@ -6196,15 +6191,13 @@
       capabilities.audioSourceKinds,
       clip.audioSource
     );
-    unsupported(
+    unsupportedFeature(
       !supports("audioReuse") && clip.reuseAudio,
-      "audio-reuse",
-      ARCHITECTURE_FEATURE_LABELS.audioReuse
+      "audioReuse"
     );
-    unsupported(
+    unsupportedFeature(
       !supports("audioDerivedDuration") && clip.clipLengthFromAudio,
-      "audio-derived-duration",
-      ARCHITECTURE_FEATURE_LABELS.audioDerivedDuration
+      "audioDerivedDuration"
     );
     const supportsControlSignalDerivedDuration = supports("icLora");
     unsupported(

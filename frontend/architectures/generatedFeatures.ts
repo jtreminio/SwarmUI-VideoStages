@@ -1,7 +1,7 @@
 // Generated from ArchitectureFeatureVocabulary.cs. Do not edit by hand.
 
 export const ARCHITECTURE_FEATURE_LABELS = {
-    promptRelay: "Relay prompts",
+    promptRelay: "Prompt relay",
     frameReferences: "Frame references",
     clipReferences: "Clip references",
     referenceFraming: "Reference framing",
