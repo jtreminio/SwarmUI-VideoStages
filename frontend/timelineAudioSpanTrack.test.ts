@@ -130,15 +130,9 @@ describe("timeline-wide audio span gestures", () => {
         const body = setupGlobal();
         const segment = requireEl(body, '.vst-audio-span[data-track-idx="0"]');
 
-        segment.dispatchEvent(
-            mouse("mousedown", 2 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mousemove", 3.5 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mouseup", 3.5 * TIMELINE_PPS, { clientY: 12 }),
-        );
+        segment.dispatchEvent(mouse("mousedown", 2 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mousemove", 3.5 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mouseup", 3.5 * TIMELINE_PPS));
 
         const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks?.[0].spans[0]).toMatchObject({
@@ -153,15 +147,9 @@ describe("timeline-wide audio span gestures", () => {
         const body = setupGlobal(true, true);
         const segment = requireEl(body, '.vst-audio-span[data-track-idx="0"]');
 
-        segment.dispatchEvent(
-            mouse("mousedown", 2 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mousemove", 5 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mouseup", 5 * TIMELINE_PPS, { clientY: 12 }),
-        );
+        segment.dispatchEvent(mouse("mousedown", 2 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mousemove", 5 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mouseup", 5 * TIMELINE_PPS));
 
         const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks?.[0].spans[0].timelineStartSeconds).toBe(3.1);
@@ -198,15 +186,9 @@ describe("timeline-wide audio span gestures", () => {
         track.attach(body, router);
 
         const lower = requireEl(body, '.vst-audio-span[data-track-idx="1"]');
-        lower.dispatchEvent(
-            mouse("mousedown", 1 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mousemove", 2.1 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mouseup", 2.1 * TIMELINE_PPS, { clientY: 12 }),
-        );
+        lower.dispatchEvent(mouse("mousedown", 1 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mousemove", 2.1 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mouseup", 2.1 * TIMELINE_PPS));
 
         const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks?.[1].spans[0].timelineStartSeconds).toBe(2);
@@ -217,7 +199,7 @@ describe("timeline-wide audio span gestures", () => {
         const segment = requireEl(body, '.vst-audio-span[data-track-idx="0"]');
 
         segment.dispatchEvent(
-            mouse("click", 2 * TIMELINE_PPS, { clientY: 12, shiftKey: true }),
+            mouse("click", 2 * TIMELINE_PPS, { shiftKey: true }),
         );
 
         const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
@@ -252,7 +234,7 @@ describe("timeline-wide audio span gestures", () => {
         track.attach(body, router);
 
         requireEl(body, '.vst-audio-span[data-track-idx="1"]').dispatchEvent(
-            mouse("click", 10, { clientY: 12, shiftKey: true }),
+            mouse("click", 10, { shiftKey: true }),
         );
 
         const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
@@ -266,11 +248,9 @@ describe("timeline-wide audio span gestures", () => {
         const left = requireEl(body, '[data-vst-audio-span-edge="left"]');
 
         // The segment starts at 2s with a 1s trim, so its source began at 1s.
-        left.dispatchEvent(
-            mouse("mousedown", 2 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(mouse("mousemove", 0, { clientY: 12 }));
-        document.dispatchEvent(mouse("mouseup", 0, { clientY: 12 }));
+        left.dispatchEvent(mouse("mousedown", 2 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mousemove", 0));
+        document.dispatchEvent(mouse("mouseup", 0));
 
         const span = (saveSpy.mock.calls[0][0] as AuthoringDocument)
             .audioTracks?.[0].spans[0];
@@ -284,15 +264,9 @@ describe("timeline-wide audio span gestures", () => {
     it("falls back to clip edges and bypasses snapping when disabled", () => {
         let body = setupGlobal();
         let segment = requireEl(body, '.vst-audio-span[data-track-idx="0"]');
-        segment.dispatchEvent(
-            mouse("mousedown", 2 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mousemove", 3.1 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mouseup", 3.1 * TIMELINE_PPS, { clientY: 12 }),
-        );
+        segment.dispatchEvent(mouse("mousedown", 2 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mousemove", 3.1 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mouseup", 3.1 * TIMELINE_PPS));
         expect(
             (saveSpy.mock.calls[0][0] as AuthoringDocument).audioTracks?.[0]
                 .spans[0].timelineStartSeconds,
@@ -307,15 +281,9 @@ describe("timeline-wide audio span gestures", () => {
         setTimelineAuthoringSetting("snap", false);
         body = setupGlobal();
         segment = requireEl(body, '.vst-audio-span[data-track-idx="0"]');
-        segment.dispatchEvent(
-            mouse("mousedown", 2 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mousemove", 3.1 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mouseup", 3.1 * TIMELINE_PPS, { clientY: 12 }),
-        );
+        segment.dispatchEvent(mouse("mousedown", 2 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mousemove", 3.1 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mouseup", 3.1 * TIMELINE_PPS));
         expect(
             (saveSpy.mock.calls[0][0] as AuthoringDocument).audioTracks?.[0]
                 .spans[0].timelineStartSeconds,
@@ -326,15 +294,9 @@ describe("timeline-wide audio span gestures", () => {
         const body = setupGlobal();
         const left = requireEl(body, '[data-vst-audio-span-edge="left"]');
 
-        left.dispatchEvent(
-            mouse("mousedown", 2 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mousemove", 3 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mouseup", 3 * TIMELINE_PPS, { clientY: 12 }),
-        );
+        left.dispatchEvent(mouse("mousedown", 2 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mousemove", 3 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mouseup", 3 * TIMELINE_PPS));
 
         const span = (saveSpy.mock.calls[0][0] as AuthoringDocument)
             .audioTracks?.[0].spans[0];
@@ -349,12 +311,8 @@ describe("timeline-wide audio span gestures", () => {
         const body = setupGlobal(false);
         const lane = requireEl(body, "[data-vst-audio-track-add]");
 
-        lane.dispatchEvent(
-            mouse("mousedown", 4 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mouseup", 4 * TIMELINE_PPS, { clientY: 12 }),
-        );
+        lane.dispatchEvent(mouse("mousedown", 4 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mouseup", 4 * TIMELINE_PPS));
 
         const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks).toHaveLength(1);
@@ -410,15 +368,9 @@ describe("timeline-wide audio span gestures", () => {
         const body = setupGlobal(false);
         const lane = requireEl(body, "[data-vst-audio-track-add]");
 
-        lane.dispatchEvent(
-            mouse("mousedown", 2 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mousemove", 5 * TIMELINE_PPS, { clientY: 12 }),
-        );
-        document.dispatchEvent(
-            mouse("mouseup", 5 * TIMELINE_PPS, { clientY: 12 }),
-        );
+        lane.dispatchEvent(mouse("mousedown", 2 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mousemove", 5 * TIMELINE_PPS));
+        document.dispatchEvent(mouse("mouseup", 5 * TIMELINE_PPS));
 
         const saved = saveSpy.mock.calls[0][0] as AuthoringDocument;
         expect(saved.audioTracks?.[0].spans[0]).toMatchObject({

@@ -135,19 +135,15 @@ export const requireEl = (root: ParentNode, selector: string): HTMLElement => {
     return found;
 };
 
-/**
- * A gesture event. `clientY` picks which lane the router hits, so a track test states the row it
- * means; the default is the clip-region row.
- */
+/** Tracks claim a press by event target, never by coordinate, so only clientX matters. */
 export const mouse = (
     type: string,
     clientX: number,
-    options: { clientY?: number; shiftKey?: boolean } = {},
+    options: { shiftKey?: boolean } = {},
 ): MouseEvent =>
     new MouseEvent(type, {
         bubbles: true,
         clientX,
-        clientY: options.clientY ?? 56,
         button: 0,
         shiftKey: options.shiftKey ?? false,
     });
