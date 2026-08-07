@@ -55,6 +55,8 @@ If `./run-tests` fails with “No such file or directory”, you are in the wron
 
 Provision one with `scripts/worktree add <name>`, tear it down with `scripts/worktree rm <name>`. `<name>` is the suffix only — letters, digits and dashes — and always lands at `SwarmUI-VideoStages-<name>` next to the main checkout. Both subcommands only run from the main checkout — if you are working inside a worktree, ask whoever provisioned it to add or remove one for you. Never `git worktree add` by hand: the worktree has to sit at `src/Extensions/<dir>` for the project imports to resolve, and it needs `node_modules` plus a `Directory.Build.rsp` that neither git nor `npm` will put there — without them `./run-tests` cannot run at all.
 
+`rm` deletes the branch too, once every commit on it is already in HEAD — by patch id, so a branch harvested with `cherry-pick` still counts. If anything on it is nowhere else it keeps the branch and says how many commits that is. `add` refuses a name whose branch already exists, because a worktree that silently starts with someone else's commits applied is work an agent cannot see; pass `--resume` when continuing it is what you meant.
+
 # SwarmUI core is king
 
 Use core's own code wherever it can do the job. Build on the node core already made instead of a parallel one beside it: call `g.CreateNode`, `g.CreateKSampler`, `g.CreateModelLoader`, `g.CreateConditioning`, `g.CreateImageToVideo` and their siblings rather than hand-assembling the same graph. Taking core's output and adjusting it afterwards beats forking it — reconciling a small difference is cheap, a snowflake implementation is not.
