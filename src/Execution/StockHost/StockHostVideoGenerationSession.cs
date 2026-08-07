@@ -6,6 +6,7 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Wan;
+using VideoStages.Authoring;
 using VideoStages.Execution.Graph;
 using VideoStages.Execution.Parameters;
 using VideoStages.Planning;
@@ -340,12 +341,8 @@ internal sealed class StockHostVideoGenerationSession(
             combined = null;
             return false;
         }
-        string firstVideo = string.IsNullOrWhiteSpace(firstRegion.VideoPrompt)
-            ? firstRegion.GlobalPrompt
-            : firstRegion.VideoPrompt;
-        string secondVideo = string.IsNullOrWhiteSpace(secondRegion.VideoPrompt)
-            ? secondRegion.GlobalPrompt
-            : secondRegion.VideoPrompt;
+        string firstVideo = PromptText.SelectVideoOrGlobalPrompt(firstRegion);
+        string secondVideo = PromptText.SelectVideoOrGlobalPrompt(secondRegion);
         if (string.IsNullOrWhiteSpace(firstVideo)
             != string.IsNullOrWhiteSpace(secondVideo))
         {

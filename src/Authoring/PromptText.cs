@@ -185,13 +185,14 @@ internal static class PromptText
     /// <c>WorkflowGenerator.CreateConditioning</c>'s <c>isVideo</c> arm: the video section when it
     /// has text, the global section otherwise. The extension bypasses that call, so it owes the
     /// rule one owner here rather than one per caller.</summary>
-    internal static string SelectVideoOrGlobalPrompt(string prompt)
+    internal static string SelectVideoOrGlobalPrompt(string prompt) =>
+        string.IsNullOrWhiteSpace(prompt)
+            ? ""
+            : SelectVideoOrGlobalPrompt(new PromptRegion(prompt));
+
+    /// <summary>For a caller that already parsed the prompt for something else.</summary>
+    internal static string SelectVideoOrGlobalPrompt(PromptRegion regionalizer)
     {
-        if (string.IsNullOrWhiteSpace(prompt))
-        {
-            return "";
-        }
-        PromptRegion regionalizer = new(prompt);
         string video = regionalizer.VideoPrompt.Trim();
         return video.Length > 0 ? video : regionalizer.GlobalPrompt.Trim();
     }

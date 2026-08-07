@@ -239,6 +239,44 @@ public class WanNoiseContinuationWorkflowTests
     }
 
     /// <summary>
+    /// Composing the pair goes through the same video-else-global rule as every other prompt in
+    /// the request, so a stage that authors a <c>&lt;video&gt;</c> section conditions on that
+    /// section rather than on its global text.
+    /// </summary>
+    [Fact]
+    public async Task A_continuation_composes_each_stage_from_its_video_section()
+    {
+        using WanWorkflowFixture fixture = WanWorkflowFixture.CreateNoisePair(withBaseModel: true);
+        JObject document = MakeDocument(MakeClip(
+            MakeStage(fixture.Model.Name, "Generated", control: 1, steps: 8),
+            MakeStage(
+                fixture.LowNoiseModel.Name, "PreviousStage", control: 0.5, steps: 8)));
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            document,
+            // No per-stage tags: PromptRegion hoists a `<video>` section to the top level, so a
+            // `<videoclip[N,M]>` section can never contain one. An untagged prompt is what reaches
+            // the composer with its video section still attached.
+            post => post["prompt"] = "global-text<video>video-text");
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmKSamplerNode high = StageSampler(bridge, 0);
+        SwarmKSamplerNode low = StageSampler(bridge, 1);
+        // One sampling run, so the continuation held rather than falling back to two passes.
+        Assert.Same(high, low.LatentImage.Connection?.Node);
+        Assert.Equal(
+            "video-text",
+            ConditioningText(high.Positive.Connection?.Node, negative: false));
+        Assert.Equal(
+            "video-text",
+            ConditioningText(low.Positive.Connection?.Node, negative: false));
+
+        live.AssertAllLive(high, low);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
     /// The continuation composes both stages' prompts into one <c>&lt;video&gt;/&lt;videoswap&gt;</c>
     /// pair, which cannot express "one half has text and the other does not". Rather than silently
     /// dropping a prompt, planning abandons the continuation: two ordinary passes joined by a
