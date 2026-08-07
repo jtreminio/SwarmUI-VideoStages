@@ -185,18 +185,6 @@ export const buildOptionSelect = (
     return select;
 };
 
-export const buildSelect = (
-    values: string[],
-    labels: string[],
-    selected: string,
-    onChange: (value: string) => void,
-): HTMLSelectElement =>
-    buildOptionSelect(
-        values.map((value, i) => ({ value, label: labels[i] ?? value })),
-        selected,
-        onChange,
-    );
-
 export const buildNumber = (
     value: number,
     min: number,
