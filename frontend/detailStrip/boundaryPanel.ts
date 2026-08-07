@@ -86,7 +86,7 @@ export const buildBoundaryBody = (
     });
     fields.appendChild(
         buildField(
-            `Join · Clip ${leftClipIdx} → ${seam === null ? "end" : seam.rightIdx}`,
+            "Join",
             select,
             undefined,
             "How this clip joins the next one. Cut: hard concatenation. " +

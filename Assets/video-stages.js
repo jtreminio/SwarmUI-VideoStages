@@ -10106,7 +10106,7 @@
     });
     fields.appendChild(
       buildField(
-        `Join · Clip ${leftClipIdx} → ${seam === null ? "end" : seam.rightIdx}`,
+        "Join",
         select2,
         void 0,
         "How this clip joins the next one. Cut: hard concatenation. Continue: the next clip is generated from this clip's last frames so motion carries through. Crossfade: the overlap is dissolved pixel-by-pixel."
