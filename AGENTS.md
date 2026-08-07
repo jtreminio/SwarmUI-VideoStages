@@ -52,6 +52,10 @@ Directions the recent history has been going. Keep going that way:
 - **Match the runtime instead of reimplementing it.** When planning predicts something execution decides, call the same code; don't hand-roll a parallel copy.
 - **Prefer a declared capability over a hard-coded family check.** Ask the descriptor what an architecture can do; don't compare its id.
 - **Generate and drift-test cross-boundary vocabulary.** C# owns it; hand-written mirrors are a defect.
+- **See every test fail before you trust it.** Break the code a new or changed test guards, watch
+  it go red, restore. A test that has never failed is not evidence. Before deleting a test, prove
+  by the same method that its coverage exists elsewhere — a claim that it does is not proof, and
+  has been wrong.
 - **Keep the build and the test output quiet.** No warnings, no noise.
 - **One item, one commit, one short imperative subject.** No body, no trailers.
 - **Backing a change out is fine** when it did not earn its place.
