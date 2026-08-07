@@ -7,18 +7,6 @@ namespace VideoStages.Planning;
 internal static class StaticGeneratedFrameGrid
 {
     /// <summary>
-    /// Whether a positive static generated pixel-frame request is exactly representable on the
-    /// architecture grid. <paramref name="gridOrigin"/> is the smallest frame count the grid can
-    /// express, so counts are <c>k * frameGrid + gridOrigin</c>.
-    /// </summary>
-    internal static bool IsAligned(int requestedPixelFrames, int frameGrid, int gridOrigin = 1)
-    {
-        ValidateGrid(frameGrid, gridOrigin);
-        return requestedPixelFrames >= gridOrigin
-            && (requestedPixelFrames - gridOrigin) % frameGrid == 0;
-    }
-
-    /// <summary>
     /// Snaps a static generated pixel-frame request down to the nearest grid count; a request below
     /// <paramref name="gridOrigin"/> returns the origin.
     /// </summary>

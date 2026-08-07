@@ -66,24 +66,6 @@ public class StaticGeneratedFrameGridTests
     }
 
     [Theory]
-    [InlineData(0, 4, false)]
-    [InlineData(1, 4, true)]
-    [InlineData(4, 4, false)]
-    [InlineData(5, 4, true)]
-    [InlineData(13, 4, true)]
-    [InlineData(16, 4, false)]
-    [InlineData(17, 4, true)]
-    [InlineData(1, 1, true)]
-    [InlineData(2, 1, true)]
-    public void Alignment_predicate_uses_first_frame_as_grid_origin(
-        int requested,
-        int grid,
-        bool expected)
-    {
-        Assert.Equal(expected, StaticGeneratedFrameGrid.IsAligned(requested, grid));
-    }
-
-    [Theory]
     [InlineData(0)]
     [InlineData(-1)]
     public void Grid_must_be_positive(int grid)
@@ -94,7 +76,5 @@ public class StaticGeneratedFrameGridTests
             () => StaticGeneratedFrameGrid.SnapUp(16, grid));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => StaticGeneratedFrameGrid.CompatibleGrid([4, grid]));
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => StaticGeneratedFrameGrid.IsAligned(16, grid));
     }
 }
