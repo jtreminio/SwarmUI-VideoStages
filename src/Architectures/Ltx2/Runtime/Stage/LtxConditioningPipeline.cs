@@ -65,17 +65,10 @@ internal sealed class LtxConditioningPipeline(
                 continue;
             }
 
-            JArray preprocessed = ResolvePreprocessedGuidePath(frameRef.Image.Path, stageLatent);
-            string imgToVideoNode = CreateLtxvImgToVideoInplaceNode(
-                genInfo.Vae.Path,
-                preprocessed,
-                stageLatent.Path,
-                frameRef.Strength,
-                bypass: false);
-            stageLatent = stageLatent.WithPath(
-                [imgToVideoNode, 0],
-                WGNodeData.DT_LATENT_VIDEO,
-                genInfo.Model.Compat);
+            stageLatent = MergeGuideIntoLatent(
+                stageLatent,
+                frameRef.Image.Path,
+                frameRef.Strength);
         }
 
         return this;
@@ -91,17 +84,7 @@ internal sealed class LtxConditioningPipeline(
             return this;
         }
 
-        JArray preprocessedGuidePath = ResolvePreprocessedGuidePath(guideMedia.Path, stageLatent);
-        string imgToVideoNode = CreateLtxvImgToVideoInplaceNode(
-            genInfo.Vae.Path,
-            preprocessedGuidePath,
-            stageLatent.Path,
-            guideMergeStrength,
-            bypass: false);
-        g.CurrentMedia = stageLatent.WithPath(
-            [imgToVideoNode, 0],
-            WGNodeData.DT_LATENT_VIDEO,
-            genInfo.Model.Compat);
+        g.CurrentMedia = MergeGuideIntoLatent(stageLatent, guideMedia.Path, guideMergeStrength);
         return this;
     }
 
@@ -113,19 +96,10 @@ internal sealed class LtxConditioningPipeline(
             return this;
         }
 
-        JArray preprocessed = ResolvePreprocessedGuidePath(
+        g.CurrentMedia = MergeGuideIntoLatent(
+            g.CurrentMedia,
             stageFrame.ContinuityAnchor.Path,
-            g.CurrentMedia);
-        string imgToVideoNode = CreateLtxvImgToVideoInplaceNode(
-            genInfo.Vae.Path,
-            preprocessed,
-            g.CurrentMedia.Path,
-            strength: 1.0,
-            bypass: false);
-        g.CurrentMedia = g.CurrentMedia.WithPath(
-            [imgToVideoNode, 0],
-            WGNodeData.DT_LATENT_VIDEO,
-            genInfo.Model.Compat);
+            strength: 1.0);
         return this;
     }
 
@@ -206,20 +180,32 @@ internal sealed class LtxConditioningPipeline(
         return upscaled;
     }
 
+    /// <summary>
+    /// Merges a guide image into <paramref name="target"/>'s own latent frames, leaving the rest of
+    /// the latent — and any retake noise mask over it — untouched.
+    /// </summary>
+    private WGNodeData MergeGuideIntoLatent(
+        WGNodeData target,
+        JArray guideImagePath,
+        double strength)
+    {
+        JArray preprocessed = ResolvePreprocessedGuidePath(guideImagePath, target);
+        string nodeId = CreateLtxvImgToVideoInplaceNode(preprocessed, target.Path, strength);
+        return target.WithPath([nodeId, 0], WGNodeData.DT_LATENT_VIDEO, genInfo.Model.Compat);
+    }
+
     private string CreateLtxvImgToVideoInplaceNode(
-        JToken vaePath,
         JArray preprocessedImagePath,
         JArray latentPath,
-        double strength,
-        bool bypass)
+        double strength)
     {
         using WorkflowBridge bridge = BridgeSync.For(g);
         LTXVImgToVideoInplaceNode node = bridge.AddNode(new LTXVImgToVideoInplaceNode().With(
             Strength: strength,
-            Bypass: bypass));
-        if (vaePath is JArray vaeArr)
+            Bypass: false));
+        if (genInfo.Vae.Path is JArray vaePath)
         {
-            node.Vae.ConnectFromPath(bridge, vaeArr);
+            node.Vae.ConnectFromPath(bridge, vaePath);
         }
         node.Image.ConnectFromPath(bridge, preprocessedImagePath);
         node.LatentInput.ConnectFromPath(bridge, latentPath);
