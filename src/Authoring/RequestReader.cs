@@ -570,7 +570,7 @@ internal static class RequestReader
         }
         if (StringUtils.Equals(compact, MediaSource.PreviousStage))
         {
-            return stageIndex == 0 ? defaultReference : MediaSource.PreviousStage;
+            return defaultReference;
         }
         if (MediaSource.TryParseExplicitStageIndex(compact, out int explicitStage))
         {
