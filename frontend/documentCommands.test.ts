@@ -1565,7 +1565,6 @@ describe("reduceDocumentCommand", () => {
                     architectureId: "test-video",
                     modelProfileId: "test-profile",
                     model: "test-video.safetensors",
-                    // This forged capability set deliberately over-claims support.
                 },
             },
             { architectureCatalog: catalogWithFake(fake) },

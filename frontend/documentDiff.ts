@@ -12,7 +12,10 @@ import { planArchitectureConversion } from "./architectures/conversion/plan";
 import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
 import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
 import { forceCrossArchitectureCutsForConversion } from "./architectures/policy/boundaryPolicy";
-import type { ArchitectureModelCatalog } from "./architectures/types";
+import type {
+    ArchitectureModelCatalog,
+    ArchitectureRetargetPlan,
+} from "./architectures/types";
 import type { CommandFailure, DocumentCommand } from "./documentCommands";
 import {
     LIST_ENTITIES,
@@ -434,14 +437,10 @@ const clipDiffBase = (
     ) {
         throw new DocumentDiffError("architecture-invariant");
     }
-    const target = {
+    const target: ArchitectureRetargetPlan = {
         architectureId: targetEntry.architectureId,
         modelProfileId: targetEntry.modelProfileId,
         model: targetEntry.value,
-        capabilities: clone(
-            targetEntry.capabilities ?? targetDescriptor.capabilities,
-        ),
-        entryModes: clone(targetEntry.entryModes),
     };
     // Root input and active-stage topology determine whether the target model
     // can enter the clip. Apply those non-identity edits before conversion so

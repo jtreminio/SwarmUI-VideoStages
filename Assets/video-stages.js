@@ -318,7 +318,12 @@
       applySkipSuffix(items, firstSkipped, true);
     }
   };
-  var activeStageCount = (clip) => activePrefix(clip.stages).length;
+  var activeStageCount = (clip) => {
+    const firstSkipped = clip.stages.findIndex(
+      (stage) => stage.skipped === true
+    );
+    return firstSkipped < 0 ? clip.stages.length : firstSkipped;
+  };
   var isExecutableClip = (clip) => !clip.skipped && (clip.initVideo !== null || activeStageCount(clip) > 0);
   var executableClipIndexes = (clips) => activePrefix(clips).flatMap(
     (clip, index) => isExecutableClip(clip) ? [index] : []
@@ -4717,11 +4722,7 @@
     const target = {
       architectureId: targetEntry.architectureId,
       modelProfileId: targetEntry.modelProfileId,
-      model: targetEntry.value,
-      capabilities: clone(
-        targetEntry.capabilities ?? targetDescriptor.capabilities
-      ),
-      entryModes: clone(targetEntry.entryModes)
+      model: targetEntry.value
     };
     const conversionSource = clone(previous);
     if (!deepEqual(previous.initVideo, next.initVideo)) {
@@ -12056,7 +12057,7 @@ ${slot}`;
       const supportsFirst = endpointPolicy.supportsFirst;
       const supportsLast = endpointPolicy.supportsLast;
       const currentPositionSupported = ref.fromEnd ? supportsLast : supportsFirst;
-      const editableFrameMax = boundedPositions ? REF_FRAME_MIN : frameMax;
+      const editableFrameMax = endpointPolicy.available && !endpointPolicy.bounded ? frameMax : REF_FRAME_MIN;
       const frameInput = buildNumber(
         ref.frame,
         REF_FRAME_MIN,

@@ -38,8 +38,12 @@ export const sealSkipSuffix = <T extends Skippable>(items: T[]): void => {
     }
 };
 
-export const activeStageCount = (clip: Pick<Clip, "stages">): number =>
-    activePrefix(clip.stages).length;
+export const activeStageCount = (clip: Pick<Clip, "stages">): number => {
+    const firstSkipped = clip.stages.findIndex(
+        (stage) => stage.skipped === true,
+    );
+    return firstSkipped < 0 ? clip.stages.length : firstSkipped;
+};
 
 export const isExecutableClip = (clip: Clip): boolean =>
     !clip.skipped && (clip.initVideo !== null || activeStageCount(clip) > 0);

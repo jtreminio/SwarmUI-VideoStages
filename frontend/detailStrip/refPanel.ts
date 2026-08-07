@@ -143,7 +143,10 @@ export const buildRefSection = (
         const currentPositionSupported = ref.fromEnd
             ? supportsLast
             : supportsFirst;
-        const editableFrameMax = boundedPositions ? REF_FRAME_MIN : frameMax;
+        const editableFrameMax =
+            endpointPolicy.available && !endpointPolicy.bounded
+                ? frameMax
+                : REF_FRAME_MIN;
         const frameInput = buildNumber(
             ref.frame,
             REF_FRAME_MIN,
