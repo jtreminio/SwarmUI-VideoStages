@@ -184,8 +184,8 @@ decision(feature)                     → supported, reason, rule
 authoringState(feature, hasPersisted) → the above plus visible, enabled
 ```
 
-`clipStageViews.architectureFeatureSupport` is the sole capability-support
-predicate. Diagnostics and architecture conversion keep their distinct purposes
+`policy/featureValues.architectureFeatureSupport` is the sole
+capability-support predicate. Diagnostics and architecture conversion keep their distinct purposes
 but share that one decision, so a conversion cannot keep a setting the
 diagnostics call unsupported. All five conditional rules reach `decision()`.
 
@@ -201,8 +201,9 @@ The feature vocabulary is `initVideo`, `frameReferences`, `clipReferences`,
 same views.
 
 Two related gates use their own shapes rather than `decision()`: clip entry
-material, through `architectureSupportsClipStart`; and clip-length ownership,
-through plain source predicates.
+material, through the catalog's per-model `entryModes` list
+(`entryModesForModel`, read by `swarmInputs.getRootGeneratedEntryMode`); and
+clip-length ownership, through plain source predicates.
 
 Boundaries use `BoundaryCapabilityView`. Its `effective(requested)` is the sole
 authority on join validity and honours both support and constraints, so a
@@ -362,9 +363,9 @@ selection, all guarded by revision staleness and flushed before teardown or
 page exit.
 
 `selection.selectionAfterRemoval` is the one delete-then-reselect policy,
-including the IC-LoRA drive reconciliation. `applyClipSkip` / `applyStageSkip`
-own the skip mutation and both of its reconciliations, and `skipVocabulary`
-states the glyphs and wording once. `applySelectionHighlight` is the only writer
+including the IC-LoRA drive reconciliation. The `clip.toggle-skip` /
+`stage.toggle-skip` commands own the skip mutation and both of its
+reconciliations, and `skipVocabulary` states the glyphs and wording once. `applySelectionHighlight` is the only writer
 of the selected-region class.
 
 ### Widget vocabulary
