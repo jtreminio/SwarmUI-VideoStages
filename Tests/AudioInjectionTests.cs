@@ -12,8 +12,8 @@ using VideoStages.Architectures.Ltx2.Runtime.Audio;
 namespace VideoStages.Tests;
 
 /// <summary>
-/// What is left of the stub-harness audio suite: one direct-API handoff check and the seconds
-/// rounding the timeline cannot produce. The graph contracts live in
+/// Audio behaviour that generated graphs cannot reach: the injector's replace path, the direct-API
+/// handoff, and the seconds rounding. The graph contracts live in
 /// <see cref="Ltx2AudioContractTests"/>.
 /// </summary>
 [Collection("VideoStagesTests")]
@@ -85,8 +85,8 @@ public class AudioInjectionTests
         };
     }
 
-    /// <summary>The concat selection this drives had no coverage: breaking
-    /// <c>LtxAudioInjector</c>'s finder left the whole suite green.</summary>
+    /// <summary>No generated-graph test reaches <c>TryInject</c> past its empty-concat guard, so
+    /// this stub harness is the only thing that exercises the injector at all.</summary>
     [Fact]
     public void Injection_replaces_the_model_supplied_empty_audio_latent()
     {

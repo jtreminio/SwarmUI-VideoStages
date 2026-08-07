@@ -89,8 +89,7 @@ public class Ltx2IcLoraContractTests
         return null;
     }
 
-    /// <summary>The underscored name is the arm production tries first; only the legacy dotted
-    /// fallback below had coverage, so deleting that arm left the suite green.</summary>
+    /// <summary>The underscored name is the arm production tries first.</summary>
     [Fact]
     public async Task Auto_ic_lora_resolves_the_presets_current_weight_name()
     {
@@ -934,12 +933,11 @@ public class Ltx2IcLoraContractTests
             bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
         Assert.Same(encode, refTokens.AudioLatent.Connection?.Node);
 
-        // The node counts above are satisfied by a stage-0-only application; this is what makes
-        // "all stages" observable.
+        // The node counts above are satisfied by a stage-0-only application.
         SwarmKSamplerNode[] stages = [StageSampler(bridge, 0), StageSampler(bridge, 1)];
         Assert.All(
             stages,
-            stage => Assert.True(ReachesUpstream(bridge, stage.Positive.Connection?.Node, refTokens.Id)));
+            stage => Assert.Same(refTokens, stage.Positive.Connection?.Node));
         Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
 
         live.AssertAllLive([refTokens, upload, encode, .. stages]);
