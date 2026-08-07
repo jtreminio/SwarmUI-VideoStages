@@ -9720,7 +9720,7 @@
       base.appendChild(controlLengthStatus);
     }
     const saveRow = buildCheckbox(
-      "Save Audio Track",
+      "Save audio separately",
       clip.saveAudioTrack === true && isAce,
       (value) => {
         commitAudio((c) => {
@@ -9729,7 +9729,7 @@
       },
       {
         disabled: !isAce,
-        help: "Export the generated audio as a separate track alongside the video. Only available for generated (AceStep) audio."
+        help: "Export the generated audio as its own output alongside the video. Only available for generated (AceStep) audio."
       }
     );
     base.appendChild(saveRow);

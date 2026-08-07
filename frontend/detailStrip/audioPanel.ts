@@ -258,8 +258,10 @@ export const buildAudioBody = (
         base.appendChild(controlLengthStatus);
     }
 
+    // "Audio track" is the timeline's own entity, edited in its own panel. This is a per-clip
+    // output flag, so it borrows the wording its diagnostic already uses instead.
     const saveRow = buildCheckbox(
-        "Save Audio Track",
+        "Save audio separately",
         clip.saveAudioTrack === true && isAce,
         (value) => {
             commitAudio((c) => {
@@ -269,7 +271,7 @@ export const buildAudioBody = (
         {
             disabled: !isAce,
             help:
-                "Export the generated audio as a separate track alongside the " +
+                "Export the generated audio as its own output alongside the " +
                 "video. Only available for generated (AceStep) audio.",
         },
     );
