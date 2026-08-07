@@ -211,11 +211,11 @@ internal static class RequestReader
                 clipObject,
                 "boundaryOutCarryAudio",
                 false),
-            BoundaryOutReferenceScale: NormalizeReferenceScale(
+            BoundaryOutReferenceScale: ReferenceScale.Normalize(
                 DocumentJson.GetOptionalDouble(
                     clipObject,
                     "boundaryOutReferenceScale",
-                    1,
+                    ReferenceScale.Full,
                     location,
                     context.Warn)),
             BoundaryOutReferenceIncludeSoundtrack: DocumentJson.GetOptionalBool(
@@ -235,8 +235,6 @@ internal static class RequestReader
             AuthoredStages = ProjectAuthoredStages(rawStages),
         };
 
-        static double NormalizeReferenceScale(double scale) =>
-            scale is 0.5 or 0.25 ? scale : 1;
     }
 
     private static List<StageSpec> ReadStages(

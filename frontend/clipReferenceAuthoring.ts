@@ -1,3 +1,7 @@
+import {
+    REFERENCE_SCALE_FULL,
+    REFERENCE_SCALES,
+} from "./generatedReferenceScale";
 import type { ClipReference, ClipReferenceKind } from "./types";
 import { REF_SOURCE_UPLOAD } from "./types";
 
@@ -31,22 +35,27 @@ export const CLIP_REFERENCE_KIND_INFO = {
 
 export const CLIP_REFERENCE_KINDS = ["image", "video", "audio"] as const;
 
+const CLIP_REFERENCE_SCALE_LABELS: Record<number, string> = {
+    1: "Full",
+    0.5: "Half",
+    0.25: "Quarter",
+};
+
 /**
  * How much of a video reference's resolution to keep. The model fits every
  * reference video onto its own 32-aligned canvas, so a smaller input simply
  * costs fewer reference tokens — which are re-encoded on every sampling step.
  */
-export const CLIP_REFERENCE_SCALES = [
-    { value: 1, label: "Full" },
-    { value: 0.5, label: "Half" },
-    { value: 0.25, label: "Quarter" },
-] as const;
+export const CLIP_REFERENCE_SCALES = REFERENCE_SCALES.map((value) => ({
+    value,
+    label: CLIP_REFERENCE_SCALE_LABELS[value] ?? `${value}`,
+}));
 
 export const normalizeClipReferenceScale = (value: unknown): number => {
     const numeric = Number(value);
-    return CLIP_REFERENCE_SCALES.some((scale) => scale.value === numeric)
+    return REFERENCE_SCALES.some((scale) => scale === numeric)
         ? numeric
-        : 1;
+        : REFERENCE_SCALE_FULL;
 };
 
 export const normalizeClipReferenceKind = (

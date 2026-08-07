@@ -44,7 +44,7 @@ internal static class ClipReferences
             double scale = DocumentJson.GetOptionalDouble(
                 raw[index],
                 "mediaScale",
-                1,
+                ReferenceScale.Full,
                 $"Clip {clipIndex} reference {index}",
                 warn);
             references.Add(new ClipReferenceSpec(
@@ -52,7 +52,7 @@ internal static class ClipReferences
                 source.Trim(),
                 media,
                 DocumentJson.GetOptionalBool(raw[index], "includeSoundtrack", false),
-                scale is 0.5 or 0.25 ? scale : 1));
+                ReferenceScale.Normalize(scale)));
         }
         return references;
     }

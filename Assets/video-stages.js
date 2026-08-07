@@ -2381,6 +2381,10 @@
   var MEDIA_SOURCE_CONTROLNET = "ControlNet";
   var MEDIA_SOURCE_ACE_STEP_FUN = "AceStepFun";
 
+  // frontend/generatedReferenceScale.ts
+  var REFERENCE_SCALE_FULL = 1;
+  var REFERENCE_SCALES = [1, 0.5, 0.25];
+
   // frontend/clipReferenceAuthoring.ts
   var CLIP_REFERENCE_KIND_INFO = {
     image: {
@@ -2403,14 +2407,18 @@
     }
   };
   var CLIP_REFERENCE_KINDS = ["image", "video", "audio"];
-  var CLIP_REFERENCE_SCALES = [
-    { value: 1, label: "Full" },
-    { value: 0.5, label: "Half" },
-    { value: 0.25, label: "Quarter" }
-  ];
+  var CLIP_REFERENCE_SCALE_LABELS = {
+    1: "Full",
+    0.5: "Half",
+    0.25: "Quarter"
+  };
+  var CLIP_REFERENCE_SCALES = REFERENCE_SCALES.map((value) => ({
+    value,
+    label: CLIP_REFERENCE_SCALE_LABELS[value] ?? `${value}`
+  }));
   var normalizeClipReferenceScale = (value) => {
     const numeric = Number(value);
-    return CLIP_REFERENCE_SCALES.some((scale) => scale.value === numeric) ? numeric : 1;
+    return REFERENCE_SCALES.some((scale) => scale === numeric) ? numeric : REFERENCE_SCALE_FULL;
   };
   var normalizeClipReferenceKind = (value) => {
     const raw = `${value ?? ""}`.trim().toLowerCase();
