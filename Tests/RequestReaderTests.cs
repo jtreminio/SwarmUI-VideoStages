@@ -517,18 +517,21 @@ public class RequestReaderTests
     }
 
     [Fact]
-    public void ReadClips_LegacyControlNetPromptOverrides_AreIgnored()
+    public void ReadClips_LegacyControlNetPromptOverrides_AreRejectedWithAWarning()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         string json = JsonConvert.SerializeObject(new JArray(clip));
+        T2IParamInput input = BuildGenerator(
+            json,
+            "<videoclip[0,controlnetlora]:legacy-lora> "
+            + "<videoclip[0,controlnetsource]:ControlNet 2>");
 
-        ClipSpec parsed = Assert.Single(RequestReader.Read(
-            BuildGenerator(
-                json,
-                "<videoclip[0,controlnetlora]:legacy-lora> "
-                + "<videoclip[0,controlnetsource]:ControlNet 2>")).Clips);
+        ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips);
 
         Assert.Empty(parsed.IcLoras);
+        List<string> warnings = TypedWorkflowAssertions.RequestWarnings(input);
+        Assert.Contains(warnings, warning => warning.Contains("controlnetlora"));
+        Assert.Contains(warnings, warning => warning.Contains("controlnetsource"));
     }
 
     [Fact]
