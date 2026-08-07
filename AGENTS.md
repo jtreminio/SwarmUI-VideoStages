@@ -13,12 +13,25 @@ You are explicitly required to run unit tests for this extension when your chang
 **See every test fail before you trust it.** Break the code a new or changed test guards, watch it
 go red, restore. A test that has never failed is not evidence. Before deleting a test, prove by the
 same method that its coverage exists elsewhere — a claim that it does is not proof, and has been
-wrong. Read the `Test Suites:` line too: a suite that fails to compile still prints a plausible
-`Tests:` count.
+wrong, in both directions: a reviewer's reasoned argument that coverage exists is not proof either.
+Measure it.
+
+Restore from a copy, not `git checkout --`: on an uncommitted file that reverts your own work, and
+every result after it is noise. Confirm the mutation actually applied — a pattern that silently
+missed leaves you reading a green run as evidence.
+
+Read the `Test Suites:` line, not just `Tests:` — a suite that fails to compile still prints a
+plausible `Tests:` count, and a mutation that breaks the build looks like a passing run. `run-tests`
+is `dotnet test && npm run test`, so a C# build failure means the jest half never ran at all.
+
+Drift tests over generated artifacts count as red-able: the artifact drifting from its generator
+*is* the break, and the way to see it fail is to change the generator.
 
 A test that cannot be made red by breaking production code is not exempt — it is the thing this
-rule is aimed at. Negative reflection guards ("no method named X exists") only fail when someone
-adds the name back, which review already catches; delete them rather than keep them as decoration.
+rule is aimed at. Negative reflection guards — no member named X, no parameter or property of
+type Y — only fail when someone puts it back, which review catches. Delete them rather than keep
+them as decoration. This is the one case where the coverage proof above does not apply: they guard
+nothing, so there is no coverage to relocate.
 
 ## Where `run-tests` is (working directory matters)
 

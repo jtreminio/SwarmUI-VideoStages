@@ -4,7 +4,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 using VideoStages.Execution;
 using VideoStages.Execution.StockHost;
@@ -42,49 +41,6 @@ public class StageRunnerCollaboratorTests
             typeof(StagePlan),
             typeof(int),
             typeof(LtxPostVideoChain));
-        Type[] collaboratorTypes =
-        [
-            typeof(PlannedStagePromptResolver),
-            typeof(StageContextBuilder),
-            typeof(StageSourceMediaResolver),
-        ];
-        Assert.DoesNotContain(
-            collaboratorTypes.SelectMany(type => type.GetMethods(
-                System.Reflection.BindingFlags.Instance
-                | System.Reflection.BindingFlags.Public
-                | System.Reflection.BindingFlags.NonPublic
-                | System.Reflection.BindingFlags.DeclaredOnly)),
-            method => method.GetParameters().Any(parameter =>
-                parameter.ParameterType == typeof(ClipSpec)
-                || parameter.ParameterType == typeof(StageSpec)));
-        Assert.DoesNotContain(
-            typeof(StageRunner).GetMethods(
-                System.Reflection.BindingFlags.Instance
-                | System.Reflection.BindingFlags.Public
-                | System.Reflection.BindingFlags.NonPublic
-                | System.Reflection.BindingFlags.DeclaredOnly),
-            method => method.GetParameters().Any(parameter =>
-                parameter.ParameterType == typeof(ClipSpec)));
-    }
-
-    [Fact]
-    public void Execution_contexts_do_not_reintroduce_authored_specs()
-    {
-        Type[] executionContextTypes =
-        [
-            typeof(ArchitectureClipRuntimeContext),
-            typeof(ClipContext),
-        ];
-        Assert.DoesNotContain(
-            executionContextTypes.SelectMany(type => type.GetProperties()),
-            property => property.PropertyType == typeof(ClipSpec)
-                || property.PropertyType == typeof(StageSpec));
-        Assert.DoesNotContain(
-            executionContextTypes
-                .SelectMany(type => type.GetConstructors())
-                .SelectMany(constructor => constructor.GetParameters()),
-            parameter => parameter.ParameterType == typeof(ClipSpec)
-                || parameter.ParameterType == typeof(StageSpec));
     }
 
     [Fact]
