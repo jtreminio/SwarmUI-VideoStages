@@ -105,8 +105,7 @@ public class Ltx2BoundaryContractTests
         WorkflowBridge bridge,
         string tailNodeId) =>
         [.. bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>()
-            .Where(node => TailGuideScales(node, tailNodeId) is not null)
-            .OrderBy(node => int.Parse(node.Id))];
+            .Where(node => TailGuideScales(node, tailNodeId) is not null)];
 
     /// <summary>Ordered geometry of every slice the timeline merge consumes.</summary>
     private static List<(int Index, int Length)> MergeSlices(WorkflowBridge bridge) =>
@@ -330,8 +329,9 @@ public class Ltx2BoundaryContractTests
         List<LTXVImgToVideoInplaceNode> anchors = TailAnchors(bridge, tail.Id);
         Assert.Equal(2, anchors.Count);
         Assert.All(anchors, anchor => Assert.Equal(1.0, anchor.Strength.LiteralAsDouble()));
-        Assert.Equal([(512, 512)], TailGuideScales(anchors[0], tail.Id));
-        Assert.Equal([(1024, 1024)], TailGuideScales(anchors[1], tail.Id));
+        // One anchor per stage resolution; which allocation order they land in is not the contract.
+        Assert.Single(anchors, anchor => TailGuideScales(anchor, tail.Id) is [(512, 512)]);
+        Assert.Single(anchors, anchor => TailGuideScales(anchor, tail.Id) is [(1024, 1024)]);
 
         // Re-anchoring is invisible to the merge: the published slice geometry is unchanged.
         Assert.Equal(ContinueMergeSlices, MergeSlices(bridge));
