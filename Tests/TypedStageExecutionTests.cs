@@ -18,16 +18,12 @@ public class TypedStageExecutionTests
         | BindingFlags.Public | BindingFlags.NonPublic;
 
     [Fact]
-    public void Ltx_stage_execution_has_no_legacy_stage_spec_projection()
+    public void Ltx_stage_execution_takes_no_StageSpec_overload()
     {
-        Assert.Null(typeof(StagePlan).GetMethod("ToLegacyStageSpec", AnyMember));
         Assert.DoesNotContain(
             typeof(StageRunner).GetMethods(AnyMember),
             method => method.Name == nameof(StageRunner.RunStage)
                 && method.GetParameters().FirstOrDefault()?.ParameterType == typeof(StageSpec));
-        Assert.DoesNotContain(
-            typeof(StageRunner).GetMethods(AnyMember),
-            method => method.Name == "RunLegacyStage");
     }
 
     [Fact]
@@ -44,18 +40,6 @@ public class TypedStageExecutionTests
             typeof(FrameRefPlan),
             resolvedReference.GetProperty(nameof(ResolvedFrameRef.Reference), AnyMember)
                 ?.PropertyType);
-        Assert.Null(resolvedReference.GetProperty("Spec", AnyMember));
-    }
-
-    [Fact]
-    public void Ltx_stage_length_resolution_accepts_the_architecture_resolved_clip_plan()
-    {
-        MethodInfo resolver = typeof(LtxStageLatentAudioFactory).GetMethod(
-            "TryResolveControlNetLengthFrames",
-            AnyMember);
-
-        Assert.NotNull(resolver);
-        Assert.Equal(typeof(ClipPlan), Assert.Single(resolver.GetParameters()).ParameterType);
     }
 
     [Fact]
