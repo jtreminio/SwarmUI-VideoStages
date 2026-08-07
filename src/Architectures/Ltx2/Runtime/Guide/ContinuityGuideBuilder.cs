@@ -5,7 +5,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 /// <summary>
 /// Builds the opening guide frames for a planned continue boundary. The guide keeps the previous

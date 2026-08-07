@@ -9,7 +9,7 @@ using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 using VideoStages.Architectures.Ltx2.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 /// <summary>Applies LTX IC-LoRA guide nodes after drive media and control signals are resolved.</summary>
 internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)

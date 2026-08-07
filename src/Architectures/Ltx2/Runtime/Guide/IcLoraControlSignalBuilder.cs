@@ -5,7 +5,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Execution.Graph;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 internal sealed class IcLoraControlSignalBuilder(WorkflowGenerator g)
 {

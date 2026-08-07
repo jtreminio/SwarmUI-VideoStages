@@ -5,8 +5,10 @@ using VideoStages.Execution;
 using VideoStages.Planning;
 
 using VideoStages.Architectures.Ltx2.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Chain;
+using VideoStages.Architectures.Ltx2.Runtime.Audio;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 /// <summary>Builds the source graph and per-stage context the LTX stage executor consumes.</summary>
 internal sealed class StageContextBuilder(

@@ -4,8 +4,10 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Guide;
+using VideoStages.Architectures.Ltx2.Runtime.Audio;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 /// <summary>Builds every requested boundary input or degrades the whole boundary to a cut.</summary>
 internal sealed class BoundaryHandoffResolver(

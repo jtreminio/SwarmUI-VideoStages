@@ -5,6 +5,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Authoring;
 using Xunit;
+using VideoStages.Architectures.Ltx2.Runtime;
 
 namespace VideoStages.Tests;
 

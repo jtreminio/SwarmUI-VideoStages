@@ -2,8 +2,9 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Execution;
 using VideoStages.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Chain;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 /// <summary>
 /// Resolves the decoded pixel media a stage runs against, upscaling it when the plan asks for a

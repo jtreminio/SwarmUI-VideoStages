@@ -8,7 +8,7 @@ using SwarmUI.Utils;
 using VideoStages.Generated;
 using VideoStages.Architectures.Ltx2.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
 {

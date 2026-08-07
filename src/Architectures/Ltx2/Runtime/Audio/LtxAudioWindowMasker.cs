@@ -8,8 +8,9 @@ using VideoStages.Generated;
 using VideoStages.Planning;
 
 using VideoStages.Architectures.Ltx2.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Stage;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Audio;
 
 /// <summary>
 /// Applies the retake window to both channels of an AV latent. Mask value 1.0 regenerates content;

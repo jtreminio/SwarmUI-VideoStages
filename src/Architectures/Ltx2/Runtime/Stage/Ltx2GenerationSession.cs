@@ -3,8 +3,10 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution;
 using VideoStages.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Audio;
+using VideoStages.Architectures.Ltx2.Runtime.Guide;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 internal sealed class Ltx2GenerationSession(
     WorkflowGenerator g,

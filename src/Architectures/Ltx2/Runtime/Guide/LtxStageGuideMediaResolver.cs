@@ -4,8 +4,9 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Architectures.Ltx2.Runtime.Chain;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 /// <summary>Resolves LTX stage references across post-video-chain and latent boundaries.</summary>
 internal sealed class LtxStageGuideMediaResolver(WorkflowGenerator g)

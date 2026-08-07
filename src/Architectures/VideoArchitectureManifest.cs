@@ -5,6 +5,7 @@ using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
 using VideoStages.Execution;
+using VideoStages.Architectures.Ltx2.Runtime;
 
 namespace VideoStages.Architectures;
 

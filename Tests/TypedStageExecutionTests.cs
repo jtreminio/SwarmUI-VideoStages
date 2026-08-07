@@ -2,6 +2,9 @@ using System.Reflection;
 using VideoStages.Authoring;
 using VideoStages.Planning;
 using Xunit;
+using VideoStages.Architectures.Ltx2.Runtime.Audio;
+using VideoStages.Architectures.Ltx2.Runtime.Guide;
+using VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 namespace VideoStages.Tests;
 

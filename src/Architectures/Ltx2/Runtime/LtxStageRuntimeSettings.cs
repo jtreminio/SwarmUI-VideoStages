@@ -1,7 +1,7 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime;
 
 internal static class LtxStageRuntimeSettings
 {

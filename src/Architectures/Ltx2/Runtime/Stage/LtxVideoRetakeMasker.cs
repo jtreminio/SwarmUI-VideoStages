@@ -8,7 +8,7 @@ using VideoStages.Authoring;
 using VideoStages.Generated;
 using VideoStages.Architectures.Ltx2.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 /// <summary>
 /// Builds the "retake" sub-graph: attaches a per-latent-frame noise mask to a VAE-encoded base-video

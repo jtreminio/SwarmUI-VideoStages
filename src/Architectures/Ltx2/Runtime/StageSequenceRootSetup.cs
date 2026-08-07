@@ -3,7 +3,7 @@ using VideoStages.Execution.Audio;
 using VideoStages.Execution;
 using VideoStages.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime;
 
 internal sealed class StageSequenceRootSetup(
     WorkflowGenerator g,

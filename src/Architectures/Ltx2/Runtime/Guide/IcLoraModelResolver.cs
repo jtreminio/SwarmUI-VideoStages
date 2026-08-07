@@ -2,7 +2,7 @@ using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Ltx2.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 internal sealed record ResolvedIcLoraModel(IcLoraPlan Plan, T2IModel Model);
 

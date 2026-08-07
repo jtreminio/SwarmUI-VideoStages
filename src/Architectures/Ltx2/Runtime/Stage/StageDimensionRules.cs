@@ -4,7 +4,7 @@ using VideoStages.Planning;
 
 using VideoStages.Architectures.Ltx2.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 internal static class StageDimensionRules
 {

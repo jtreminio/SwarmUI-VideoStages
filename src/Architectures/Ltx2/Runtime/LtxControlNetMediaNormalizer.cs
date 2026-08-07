@@ -5,7 +5,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Execution.Graph;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime;
 
 /// <summary>
 /// Builds LTX ControlNet inputs from immutable host captures. The host apply input is rewired only

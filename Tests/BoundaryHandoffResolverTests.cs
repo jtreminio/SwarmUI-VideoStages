@@ -7,6 +7,9 @@ using VideoStages.Architectures.Ltx2;
 using VideoStages.Authoring;
 using VideoStages.Planning;
 using Xunit;
+using VideoStages.Architectures.Ltx2.Runtime;
+using VideoStages.Architectures.Ltx2.Runtime.Stage;
+using VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 namespace VideoStages.Tests;
 

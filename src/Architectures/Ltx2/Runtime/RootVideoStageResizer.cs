@@ -5,7 +5,7 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime;
 
 internal sealed class RootVideoStageResizer(WorkflowGenerator g)
 {

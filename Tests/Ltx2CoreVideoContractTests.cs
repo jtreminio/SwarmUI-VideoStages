@@ -10,6 +10,7 @@ using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
+using VideoStages.Architectures.Ltx2.Runtime;
 
 namespace VideoStages.Tests;
 

@@ -7,7 +7,7 @@ using VideoStages.Authoring;
 using VideoStages.Execution.Graph;
 using VideoStages.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 internal sealed record ResolvedIcLoraDrive(
     JArray Images,

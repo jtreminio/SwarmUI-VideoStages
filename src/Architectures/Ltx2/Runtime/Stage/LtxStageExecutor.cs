@@ -3,8 +3,10 @@ using ComfyTyped.Families;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Execution.Graph;
+using VideoStages.Architectures.Ltx2.Runtime.Chain;
+using VideoStages.Architectures.Ltx2.Runtime.Guide;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 internal sealed record ResolvedFrameRef(
     WGNodeData Image,

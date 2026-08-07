@@ -9,6 +9,7 @@ using VideoStages.Authoring;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.TypedWorkflowAssertions;
+using VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 namespace VideoStages.Tests;
 

@@ -8,6 +8,8 @@ using VideoStages.Authoring;
 using VideoStages.Execution.Audio;
 using VideoStages.Planning;
 using Xunit;
+using VideoStages.Architectures.Ltx2.Runtime.Audio;
+using VideoStages.Architectures.Ltx2.Runtime;
 
 namespace VideoStages.Tests;
 

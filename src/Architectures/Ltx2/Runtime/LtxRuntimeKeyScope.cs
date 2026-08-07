@@ -1,4 +1,4 @@
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime;
 
 internal static class LtxRuntimeKeyScope
 {

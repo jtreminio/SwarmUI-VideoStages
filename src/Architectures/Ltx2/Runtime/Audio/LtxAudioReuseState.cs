@@ -5,7 +5,7 @@ using VideoStages.Planning;
 
 using VideoStages.Architectures.Ltx2.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Audio;
 
 internal static class LtxAudioReuseState
 {

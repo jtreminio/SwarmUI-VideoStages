@@ -2,8 +2,9 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Execution.Graph;
 using VideoStages.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Chain;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 internal sealed class StageContext
 {

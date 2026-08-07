@@ -3,8 +3,9 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Architectures.Ltx2.Runtime.Audio;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 internal sealed class LtxStageSampler(WorkflowGenerator g)
 {

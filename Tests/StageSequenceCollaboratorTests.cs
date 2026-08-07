@@ -9,6 +9,8 @@ using VideoStages.Execution;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
+using VideoStages.Architectures.Ltx2.Runtime;
+using VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 namespace VideoStages.Tests;
 

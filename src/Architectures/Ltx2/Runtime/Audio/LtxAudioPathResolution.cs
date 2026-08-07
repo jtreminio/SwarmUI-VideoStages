@@ -2,7 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Audio;
 
 internal static class LtxAudioPathResolution
 {

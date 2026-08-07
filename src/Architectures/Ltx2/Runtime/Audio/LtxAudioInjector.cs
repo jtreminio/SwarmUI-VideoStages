@@ -7,8 +7,9 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Execution.Audio;
 using VideoStages.Execution.Graph;
 using VideoStages.Generated;
+using VideoStages.Architectures.Ltx2.Runtime.Stage;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Audio;
 
 internal sealed class LtxAudioInjector(
     WorkflowGenerator g,

@@ -5,8 +5,9 @@ using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Guide;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 internal sealed class LtxConditioningPipeline(
         WorkflowGenerator g,

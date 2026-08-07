@@ -3,7 +3,7 @@ using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 internal sealed class StageGuideReferenceState(
     WorkflowGenerator g,

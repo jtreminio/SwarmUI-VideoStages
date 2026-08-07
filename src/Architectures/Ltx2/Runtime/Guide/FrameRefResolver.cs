@@ -5,8 +5,10 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Chain;
+using VideoStages.Architectures.Ltx2.Runtime.Stage;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 internal sealed class FrameRefResolver(
     WorkflowGenerator g,

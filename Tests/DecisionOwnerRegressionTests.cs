@@ -11,6 +11,8 @@ using VideoStages.Execution.Audio;
 using VideoStages.Execution.Graph;
 using VideoStages.Planning;
 using Xunit;
+using VideoStages.Architectures.Ltx2.Runtime;
+using VideoStages.Architectures.Ltx2.Runtime.Chain;
 
 namespace VideoStages.Tests;
 

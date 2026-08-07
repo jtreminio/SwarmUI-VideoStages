@@ -9,8 +9,9 @@ using VideoStages.Authoring;
 using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 using VideoStages.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Stage;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
 {

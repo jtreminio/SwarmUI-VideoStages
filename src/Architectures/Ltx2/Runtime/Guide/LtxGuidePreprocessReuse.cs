@@ -6,7 +6,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 internal sealed class LtxGuidePreprocessReuse(
     WorkflowGenerator g,

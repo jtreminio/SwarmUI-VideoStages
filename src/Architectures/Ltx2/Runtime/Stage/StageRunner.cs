@@ -6,8 +6,11 @@ using VideoStages.Execution;
 using VideoStages.Planning;
 
 using VideoStages.Architectures.Ltx2.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Chain;
+using VideoStages.Architectures.Ltx2.Runtime.Guide;
+using VideoStages.Architectures.Ltx2.Runtime.Audio;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 internal class StageRunner
 {

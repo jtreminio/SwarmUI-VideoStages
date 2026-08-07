@@ -1,8 +1,9 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Audio;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime;
 
 internal sealed class ClipContext
 {

@@ -6,6 +6,8 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Ltx2;
 using Xunit;
+using VideoStages.Architectures.Ltx2.Runtime.Audio;
+using VideoStages.Architectures.Ltx2.Runtime.Chain;
 
 namespace VideoStages.Tests;
 

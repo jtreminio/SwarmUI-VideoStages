@@ -3,6 +3,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Authoring;
 using VideoStages.Planning;
 using Xunit;
+using VideoStages.Architectures.Ltx2.Runtime;
 
 namespace VideoStages.Tests;
 

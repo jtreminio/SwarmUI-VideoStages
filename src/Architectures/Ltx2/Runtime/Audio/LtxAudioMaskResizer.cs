@@ -2,7 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using SwarmUI.Builtin_ComfyUIBackend;
 
-namespace VideoStages.Architectures.Ltx2;
+namespace VideoStages.Architectures.Ltx2.Runtime.Audio;
 
 internal sealed class LtxAudioMaskResizer(
     WorkflowGenerator g,
