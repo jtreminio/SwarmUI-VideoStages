@@ -87,5 +87,4 @@ internal static class ArchitectureCatalogSerializer
         AudioSourceKind.AceStepFun => MediaSource.AceStepFun,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
-
 }

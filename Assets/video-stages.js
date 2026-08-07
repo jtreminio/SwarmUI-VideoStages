@@ -5918,7 +5918,6 @@
   };
   var saveState = (state, options) => saveRequestedState(state, options);
   var dispatchDocumentCommand = (command, options) => {
-    const transaction = captureAuthoringTransactionSnapshot();
     const willNotifyDom = options?.notifyDomChange !== false;
     const result = store.dispatch(
       command,
@@ -5926,7 +5925,7 @@
       willNotifyDom,
       options?.expectedRevision,
       options?.valueOnly ? "value-only" : void 0,
-      commandContextFor(transaction)
+      commandContextFor(captureAuthoringTransactionSnapshot())
     );
     videoStagesDebugLog("persistence", "dispatchDocumentCommand", {
       command: command.type,

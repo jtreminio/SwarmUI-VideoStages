@@ -151,7 +151,6 @@ export const dispatchDocumentCommand = (
     command: DocumentCommand,
     options?: DispatchDocumentCommandOptions,
 ): TimelineDispatchResult => {
-    const transaction = captureAuthoringTransactionSnapshot();
     const willNotifyDom = options?.notifyDomChange !== false;
     const result = store.dispatch(
         command,
@@ -159,7 +158,7 @@ export const dispatchDocumentCommand = (
         willNotifyDom,
         options?.expectedRevision,
         options?.valueOnly ? "value-only" : undefined,
-        commandContextFor(transaction),
+        commandContextFor(captureAuthoringTransactionSnapshot()),
     );
     videoStagesDebugLog("persistence", "dispatchDocumentCommand", {
         command: command.type,
