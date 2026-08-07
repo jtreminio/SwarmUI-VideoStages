@@ -72,7 +72,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         WGNodeData sample;
         using (WorkflowBridge bridge = BridgeSync.For(g))
         {
-            sample = ResolveDriveAudio(bridge, entry, incomingMedia);
+            sample = ResolveDriveAudio(bridge, clip.ClipId, entry, incomingMedia);
         }
         if (sample is null)
         {
@@ -105,6 +105,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
 
     internal WGNodeData ResolveDriveAudio(
         WorkflowBridge bridge,
+        int clipId,
         IcLoraPlan entry,
         WGNodeData incomingMedia)
     {
@@ -151,7 +152,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
                     g.UserInput,
                     media.Data,
                     media.FileName,
-                    "IC-LoRA drive video").AsBase64));
+                    IcLoraDriveDescriptor.Video(clipId)).AsBase64));
         GetVideoComponentsNode components = bridge.AddNode(new GetVideoComponentsNode());
         components.Video.ConnectToUntyped(load.VIDEO);
         return components.Audio.ToWGNodeData(g, WGNodeData.DT_AUDIO);

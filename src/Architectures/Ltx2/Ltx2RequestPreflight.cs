@@ -56,7 +56,9 @@ internal static class Ltx2RequestPreflight
                 }
                 // Runtime resolves every uploaded drive through UploadedMedia, whose Get* entry
                 // points treat an unreadable payload as a bug, so each kind is checked here first.
-                // A drive with no payload at all is left alone: runtime warns and skips the guide.
+                // The plan compiler already drops an Upload drive with no payload
+                // (ltx2.ic-lora.drive-media-missing); a DriveData.None entry still carries a null
+                // Upload, so the filter is a null guard.
                 foreach (IcLoraPlan icLora in icLoras.Where(
                     entry => entry.Drive.Source == IcLoraMediaSourceKind.Upload
                         && !string.IsNullOrWhiteSpace(entry.Drive.Upload?.Data)))
@@ -68,9 +70,9 @@ internal static class Ltx2RequestPreflight
                         IcLoraDriveMediaKind.Audio => media.AudioDiagnostic(
                             data, fileName, clip.ClipId, stage.StageId),
                         IcLoraDriveMediaKind.Image => media.ImageDiagnostic(
-                            data, fileName, "IC-LoRA drive image", clip.ClipId, stage.StageId),
+                            data, fileName, IcLoraDriveDescriptor.Image(clip.ClipId), clip.ClipId, stage.StageId),
                         IcLoraDriveMediaKind.Video => media.VideoDiagnostic(
-                            data, fileName, "IC-LoRA drive video", clip.ClipId, stage.StageId),
+                            data, fileName, IcLoraDriveDescriptor.Video(clip.ClipId), clip.ClipId, stage.StageId),
                         _ => null,
                     };
                     if (unreadable is not null)

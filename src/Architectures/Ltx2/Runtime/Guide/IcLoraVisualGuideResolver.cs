@@ -117,7 +117,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                         g.UserInput,
                         entry.Drive.Upload.Data,
                         entry.Drive.Upload.FileName,
-                        "IC-LoRA drive image").AsBase64));
+                        IcLoraDriveDescriptor.Image(clipId)).AsBase64));
             path = WorkflowBridge.ToPath(loadImage.IMAGE);
         }
         else if (entry.Drive.MediaKind == IcLoraDriveMediaKind.Video)
@@ -128,7 +128,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
                         g.UserInput,
                         entry.Drive.Upload.Data,
                         entry.Drive.Upload.FileName,
-                        "IC-LoRA drive video").AsBase64));
+                        IcLoraDriveDescriptor.Video(clipId)).AsBase64));
             GetVideoComponentsNode components =
                 bridge.AddNode(new GetVideoComponentsNode());
             components.Video.ConnectToUntyped(load.VIDEO);

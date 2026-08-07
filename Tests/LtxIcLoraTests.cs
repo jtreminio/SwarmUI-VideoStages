@@ -106,6 +106,7 @@ public sealed class LtxIcLoraTests
 
         WGNodeData resolved = new IcLoraAudioReferenceApplicator(generator).ResolveDriveAudio(
             bridge,
+            clipId: 0,
             plan,
             incoming.GetOutput(0).ToWGNodeData(generator, WGNodeData.DT_VIDEO));
 
@@ -162,6 +163,7 @@ public sealed class LtxIcLoraTests
         Assert.Throws<InvalidOperationException>(() =>
             new IcLoraAudioReferenceApplicator(generator).ResolveDriveAudio(
                 bridge,
+                clipId: 0,
                 plan,
                 incomingMedia: null));
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
