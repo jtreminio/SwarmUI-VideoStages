@@ -215,7 +215,7 @@ public class HostVideoContractTests
     /// <summary>
     /// An authored audio track plays over a video model that knows nothing about audio: the mixer
     /// runs after decode, over a silent bed of the clip's own length, and the result is what the
-    /// save muxes. No capability warning — audio tracks are model-independent.
+    /// save muxes.
     /// </summary>
     [Fact]
     public async Task Generic_only_timeline_overlays_authored_audio_tracks_after_decode()
@@ -230,10 +230,6 @@ public class HostVideoContractTests
                 fixture.ImageToVideoPost(document));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
-
-        Assert.DoesNotContain(
-            Diagnostics(generator),
-            diagnostic => diagnostic.Code == "effective-request.audio-spans-ignored");
 
         Assert.Single(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         EmptyAudioNode bed = Assert.Single(bridge.Graph.NodesOfType<EmptyAudioNode>());

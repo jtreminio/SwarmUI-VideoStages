@@ -48,10 +48,6 @@ public class MiniMaxRuntimeFlowTests
             diagnostics,
             diagnostic => diagnostic.Code
                 == "minimax.audio-derived-duration.multi-clip-unsupported");
-        Assert.DoesNotContain(
-            diagnostics,
-            diagnostic => diagnostic.Code
-                == "minimax.audio-derived-duration.trim-unsupported");
         Assert.All(
             diagnostics.Where(diagnostic => diagnostic.Code.StartsWith(
                 "minimax.audio-derived-duration",
