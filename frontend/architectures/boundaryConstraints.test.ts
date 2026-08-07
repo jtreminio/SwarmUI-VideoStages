@@ -6,6 +6,25 @@ import {
 } from "./boundaryConstraints";
 
 describe("catalog boundary constraints", () => {
+    it.each([
+        ["reference", "reference"],
+        ["overlap", "overlap"],
+        [undefined, "overlap"],
+        ["", "overlap"],
+        ["Reference", "overlap"],
+        [7, "overlap"],
+        [{}, "overlap"],
+    ])("resolves continueMode %p to %p", (authored, expected) => {
+        expect(
+            boundaryWindowConstraints({
+                support: "conditional",
+                code: "future.boundary.continue",
+                reason: "Continue rule.",
+                constraints: { continueMode: authored },
+            }).continueMode,
+        ).toBe(expected);
+    });
+
     it("drives choices and normalization from a future architecture's grid", () => {
         const constraints = boundaryWindowConstraints({
             support: "conditional",

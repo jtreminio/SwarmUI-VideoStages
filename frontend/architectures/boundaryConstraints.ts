@@ -1,7 +1,7 @@
 import { CONTINUE_MODES } from "./generatedFeatures";
 import type { CapabilityRuleDecision } from "./types";
 
-export type ContinueMode = (typeof CONTINUE_MODES)[number];
+type ContinueMode = (typeof CONTINUE_MODES)[number];
 
 export interface BoundaryWindowConstraints {
     frameStep: number;
