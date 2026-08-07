@@ -10,11 +10,9 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class TypedStageExecutionTests
 {
-    /// <summary>Every type here is internal, so the default public-only lookup would let a legacy
-    /// member come back as private/internal without tripping a single guard below.</summary>
+    /// <summary>The probed members are all instance, and a mix of public and internal.</summary>
     private const BindingFlags AnyMember =
-        BindingFlags.Instance | BindingFlags.Static
-        | BindingFlags.Public | BindingFlags.NonPublic;
+        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
     [Fact]
     public void Ltx_reference_resolution_and_conditioning_keep_the_typed_reference_plan()

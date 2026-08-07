@@ -805,7 +805,7 @@ public class Ltx2IcLoraContractTests
             refTokens.AudioLatent.Connection?.Node);
         Assert.Same(driveComponents, encode.Audio.Connection?.Node);
         Assert.Equal(1, encode.Audio.Connection?.SlotIndex);
-        Assert.True(ReachesUpstream(bridge, StageSampler(bridge, 0), refTokens.Id));
+        Assert.Same(refTokens, StageSampler(bridge, 0).Positive.Connection?.Node);
 
         live.AssertAllLive(driveLoad, driveComponents, refTokens, encode);
         AssertShippable(bridge, workflow, live);
@@ -841,7 +841,7 @@ public class Ltx2IcLoraContractTests
         Assert.True(ReachesUpstream(bridge, refTokens.AudioLatent.Connection?.Node, driveAudio.Id));
 
         SwarmKSamplerNode sampler = StageSampler(bridge, 0);
-        Assert.True(ReachesUpstream(bridge, sampler.Positive.Connection?.Node, refTokens.Id));
+        Assert.Same(refTokens, sampler.Positive.Connection?.Node);
 
         live.AssertAllLive(driveAudio, refTokens, sampler);
         AssertShippable(bridge, workflow, live);
@@ -878,7 +878,7 @@ public class Ltx2IcLoraContractTests
         SwarmKSamplerNode scoped = StageSampler(bridge, 1);
         Assert.False(ReachesUpstream(bridge, unscoped, refTokens.Id));
         Assert.False(ReachesUpstream(bridge, unscoped, loader.Id));
-        Assert.True(ReachesUpstream(bridge, scoped.Positive.Connection?.Node, refTokens.Id));
+        Assert.Same(refTokens, scoped.Positive.Connection?.Node);
         Assert.Same(loader, scoped.Model.Connection?.Node);
 
         live.AssertAllLive(loader, refTokens, unscoped, scoped);
@@ -913,7 +913,10 @@ public class Ltx2IcLoraContractTests
             bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
         Assert.Same(encode, refTokens.AudioLatent.Connection?.Node);
 
-        // The node counts above are satisfied by a stage-0-only application.
+        // The node counts above are satisfied by a stage-0-only application. Identity, not
+        // reachability: two samplers reaching the node proves nothing about reuse, since a
+        // refining stage reaches its predecessor's branch through the latent. A clip that also
+        // carried an audio window would legitimately interpose the window masker here.
         SwarmKSamplerNode[] stages = [StageSampler(bridge, 0), StageSampler(bridge, 1)];
         Assert.All(
             stages,
