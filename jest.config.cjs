@@ -15,7 +15,8 @@ module.exports = {
     ],
     coverageDirectory: "<rootDir>/coverage",
     coverageReporters: ["json", "json-summary", "text-summary"],
-    reporters: ["summary"],
+    // "summary" prints counts only — no reason for a failure, not even a plain bad assertion.
+    reporters: process.env.JEST_VERBOSE ? ["default"] : ["summary"],
     setupFiles: ["<rootDir>/scripts/jest.setup.js"],
     setupFilesAfterEnv: ["<rootDir>/scripts/jest.setupAfterEnv.js"],
     testEnvironment: "jsdom",
