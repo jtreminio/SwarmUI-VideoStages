@@ -6183,7 +6183,7 @@
       diagnostics.push(
         issue(
           "architecture.unsupported.upscale",
-          `Stage upscaling is persisted on Clip ${clipIdx}, but its upscale method is not a known method. Remove it or choose a known method.`,
+          `Clip ${clipIdx} has stage upscaling saved, but its upscale method is not a known method. Remove it or choose a known method.`,
           clipIdx
         )
       );
@@ -6220,7 +6220,7 @@
       "Control-signal-derived clip duration"
     );
     unsupported(
-      !selectedAudioSourceSupported && (sourceKind !== "Native" || clip.uploadedAudio !== null),
+      !selectedAudioSourceSupported && (sourceKind !== AUDIO_SOURCE_NATIVE || clip.uploadedAudio !== null),
       "audio-source",
       `Audio source '${sourceKind}'`,
       clipAudioCapabilitySupported ? "error" : void 0
