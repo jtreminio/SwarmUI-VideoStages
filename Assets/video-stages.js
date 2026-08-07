@@ -6144,32 +6144,32 @@
     unsupported(
       !supports("frameReferences") && clip.frameRefs.length > 0,
       "frame-references",
-      "Frame references"
+      ARCHITECTURE_FEATURE_LABELS.frameReferences
     );
     unsupported(
       !supports("clipReferences") && clip.references.length > 0,
       "clip-references",
-      "Clip references"
+      ARCHITECTURE_FEATURE_LABELS.clipReferences
     );
     unsupported(
       !supports("referenceFraming") && clip.refFraming !== "crop",
       "reference-framing",
-      "Reference framing"
+      ARCHITECTURE_FEATURE_LABELS.referenceFraming
     );
     unsupported(
       !supports("icLora") && clip.icLoras.length > 0,
       "ic-lora",
-      "IC-LoRA"
+      ARCHITECTURE_FEATURE_LABELS.icLora
     );
     unsupported(
       !supports("retake") && clip.retake !== null,
       "retake",
-      "Retake"
+      ARCHITECTURE_FEATURE_LABELS.retake
     );
     unsupported(
       !supports("promptRelay") && clip.promptWindows.length > 0,
       "prompt-relay",
-      "Prompt relay"
+      ARCHITECTURE_FEATURE_LABELS.promptRelay
     );
     const activeUpscaleModes = clip.stages.filter((stage) => stage.upscale !== 1).map((stage) => upscaleModeForMethod(stage.upscaleMethod));
     if (activeUpscaleModes.includes("unsupported")) {
@@ -6184,12 +6184,12 @@
     unsupported(
       !supports("latentUpscale") && activeUpscaleModes.includes("latent"),
       "latent-upscale",
-      "Latent interpolation upscaling"
+      ARCHITECTURE_FEATURE_LABELS.latentUpscale
     );
     unsupported(
       !supports("latentModelUpscale") && activeUpscaleModes.includes("latent-model"),
       "latent-model-upscale",
-      "Latent-model upscaling"
+      ARCHITECTURE_FEATURE_LABELS.latentModelUpscale
     );
     const sourceKind = audioSourceKind(clip.audioSource);
     const clipAudioCapabilitySupported = supportsClipAudio(
@@ -6203,12 +6203,12 @@
     unsupported(
       !supports("audioReuse") && clip.reuseAudio,
       "audio-reuse",
-      "Captured stage audio reuse"
+      ARCHITECTURE_FEATURE_LABELS.audioReuse
     );
     unsupported(
       !supports("audioDerivedDuration") && clip.clipLengthFromAudio,
       "audio-derived-duration",
-      "Audio-derived clip duration"
+      ARCHITECTURE_FEATURE_LABELS.audioDerivedDuration
     );
     const supportsControlSignalDerivedDuration = supports("icLora");
     unsupported(

@@ -13,6 +13,7 @@ import {
 } from "../__test_helpers__/clipFixtures";
 import type { Clip } from "../types";
 import { deriveArchitectureDiagnostics } from "./diagnostics";
+import { ARCHITECTURE_FEATURE_LABELS } from "./generatedFeatures";
 import { createCapabilityViewResolver } from "./policy";
 import type { ArchitectureModelCatalog } from "./types";
 
@@ -276,6 +277,12 @@ describe("architecture diagnostics", () => {
                 }),
             ]),
         );
+        // The label is C#-owned. A hardcoded copy here drifted once already.
+        expect(
+            matching.find(
+                ({ code }) => code === "architecture.unsupported.prompt-relay",
+            )?.message,
+        ).toContain(ARCHITECTURE_FEATURE_LABELS.promptRelay);
     });
 
     it("keeps an unclassifiable WAN upscale blocking", () => {
