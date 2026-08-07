@@ -18,18 +18,23 @@ public class PhaseADriftRegressionTests
     public void Ltx_custom_nodes_all_require_the_ltxvideo_feature()
     {
         _ = WorkflowTestHarness.VideoStagesSteps();
-        string[] nodeClasses =
-        [
-            LTXVSetAudioRefTokensNode.ClassType,
-            LTXVSetVideoLatentNoiseMasksNode.ClassType,
-            LTXVSetAudioVideoMaskByTimeNode.ClassType,
-        ];
 
-        Assert.All(
-            nodeClasses,
-            nodeClass => Assert.Equal(
-                Ltx2HostIntegration.FeatureFlag,
-                ComfyUIBackendExtension.NodeToFeatureMap[nodeClass]));
+        // Set equality, not a spot check: a node registered without the flag, or a new
+        // registration missing from this list, both fail.
+        Assert.Equal(
+            [
+                LTXAddVideoICLoRAGuideNode.ClassType,
+                LTXAddVideoICLoRAGuideAdvancedNode.ClassType,
+                LTXICLoRALoaderModelOnlyNode.ClassType,
+                LTXVSetAudioRefTokensNode.ClassType,
+                LTXVSetAudioVideoMaskByTimeNode.ClassType,
+                LTXVSetVideoLatentNoiseMasksNode.ClassType,
+            ],
+            ComfyUIBackendExtension.NodeToFeatureMap
+                .Where(entry => entry.Value == Ltx2HostIntegration.FeatureFlag)
+                .Select(entry => entry.Key)
+                .OrderBy(nodeClass => nodeClass, StringComparer.Ordinal)
+                .ToArray());
     }
 
     [Fact]
