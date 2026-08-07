@@ -10,6 +10,8 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
+/// <summary>Where a stage's positive conditioning is asserted by identity, it holds because no clip
+/// here authors a retake: LtxAudioWindowMasker would legitimately interpose its window node.</summary>
 [Collection("VideoStagesTests")]
 public class Ltx2IcLoraContractTests
 {
@@ -915,8 +917,7 @@ public class Ltx2IcLoraContractTests
 
         // The node counts above are satisfied by a stage-0-only application. Identity, not
         // reachability: two samplers reaching the node proves nothing about reuse, since a
-        // refining stage reaches its predecessor's branch through the latent. A clip that also
-        // carried an audio window would legitimately interpose the window masker here.
+        // refining stage reaches its predecessor's branch through the latent.
         SwarmKSamplerNode[] stages = [StageSampler(bridge, 0), StageSampler(bridge, 1)];
         Assert.All(
             stages,
