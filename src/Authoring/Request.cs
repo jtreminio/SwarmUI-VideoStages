@@ -20,8 +20,7 @@ public sealed record RetakeWindowSpec(
 {
     /// <summary>
     /// Clamps a start/length pixel-frame window to <c>[0, limitFrames]</c> and returns the resulting
-    /// <c>[Start, End)</c> span; a non-positive length collapses to an empty span at Start. Shared by the
-    /// audio and video retake maskers so both windows describe the same frames.
+    /// <c>[Start, End)</c> span; a non-positive length collapses to an empty span at Start.
     /// </summary>
     public static (int Start, int End) ClampFrameWindow(int startFrame, int lengthFrames, int limitFrames)
     {
