@@ -21,9 +21,22 @@ every result after it is noise. Take the copy immediately before each mutation �
 earlier in the session restores the same way. Confirm the mutation actually applied — a pattern that
 silently missed leaves you reading a green run as evidence.
 
-Read the `Test Suites:` line, not just `Tests:` — a suite that fails to compile still prints a
-plausible `Tests:` count, and a mutation that breaks the build looks like a passing run. `run-tests`
-is `dotnet test && npm run test`, so a C# build failure means the jest half never ran at all.
+A mutation that breaks compilation is not a red test, and `Test Suites:` cannot tell you which you
+got — both print `1 failed`. The `Tests:` line is the tell:
+
+| | `Test Suites:` | `Tests:` |
+|---|---|---|
+| the test genuinely failed | `1 failed, 1 total` | `1 failed, 1 total` |
+| the suite failed to compile | `1 failed, 1 total` | `0 total` |
+
+Over a whole run the compile break hides completely — `Test Suites: 1 failed, 67 passed` sits beside
+`Tests: 1183 passed, 1183 total`, no failure on the `Tests:` line at all, only a total that quietly
+dropped. A real red carries a non-zero *failed* count there and does not shrink the total.
+`run-tests` is `dotnet test && npm run test`, so a C# build failure means jest never ran at all.
+
+Failure detail is suppressed by default, for a plain failed assertion as much as for a compile
+break: run `JEST_VERBOSE=1 npm run test` to see why. Passing `--reporters=default` works too, but the
+flag is variadic — put it after any file path or it swallows the path as a second reporter.
 
 Drift tests over generated artifacts count as red-able: the artifact drifting from its generator
 *is* the break, and the way to see it fail is to change the generator.
