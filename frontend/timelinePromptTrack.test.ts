@@ -275,14 +275,12 @@ describe("createTimelinePromptTrack (DOM gestures)", () => {
             { duration: 10, windows: [{ start: 4, duration: 2 }] },
         ]);
         const seg = requireEl(body, ".vst-minor-seg[data-window-idx='0']");
-        const before = seg.style.left;
         seg.dispatchEvent(mouse("mousedown", 200));
         document.dispatchEvent(mouse("mouseup", 200));
         seg.dispatchEvent(mouse("click", 200));
 
-        // The segment must not have collapsed to left:0 — its inline left is preserved.
-        expect(seg.style.left).toBe(before);
-        expect(seg.style.left).not.toBe("");
+        // Restored to the rendered start, not collapsed to left:0.
+        expect(seg.style.left).toBe(`${4 * TIMELINE_PPS}px`);
         expect(saveSpy).not.toHaveBeenCalled(); // a click opens the editor, it doesn't move/save
     });
 

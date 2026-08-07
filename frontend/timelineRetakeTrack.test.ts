@@ -236,12 +236,12 @@ describe("createTimelineRetakeTrack (DOM gestures)", () => {
     it("a no-op click on an edge does not move the overlay or save", () => {
         const body = setup([{ duration: 10, retake: RETAKE }]);
         const overlay = requireEl(body, ".vst-retake[data-clip-idx='0']");
-        const before = overlay.style.left;
         const edge = requireEl(body, ".vst-retake-resize-r");
         edge.dispatchEvent(mouse("mousedown", 200));
         document.dispatchEvent(mouse("mouseup", 200));
 
-        expect(overlay.style.left).toBe(before);
+        // Restored to the rendered start (2s of 10s), not collapsed.
+        expect(overlay.style.left).toBe("20%");
         expect(saveSpy).not.toHaveBeenCalled();
     });
 
