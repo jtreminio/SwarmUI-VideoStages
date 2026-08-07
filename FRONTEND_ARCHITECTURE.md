@@ -187,7 +187,8 @@ authoringState(feature, hasPersisted) → the above plus visible, enabled
 `policy/featureValues.architectureFeatureSupport` is the sole
 capability-support predicate. Diagnostics and architecture conversion keep their distinct purposes
 but share that one decision, so a conversion cannot keep a setting the
-diagnostics call unsupported. All five conditional rules reach `decision()`.
+diagnostics call unsupported. A feature decision is supported or not; only a
+boundary rule can be conditional, and `BoundaryCapabilityView` below owns that.
 
 Supported values are authorable. Unsupported values that are absent are hidden
 or disabled. Persisted unsupported values stay visible and disabled with an
@@ -211,9 +212,9 @@ persisted continue into a init-video clip, a clip with no active stage, or a cli
 with a first-frame reference is reported rather than silently degraded.
 
 Diagnostics are a second evaluator over the same catalog rules
-(`authoringDiagnostics.ts` → `architectures/diagnostics.ts`,
-`conditionalRules.ts`). Shared rule codes and reasons keep the panel notices and
-the timeline error summary saying the same thing.
+(`authoringDiagnostics.ts` → `architectures/diagnostics.ts`). Shared rule codes
+and reasons keep the panel notices and the timeline error summary saying the
+same thing.
 
 ## Clip architecture conversion
 
