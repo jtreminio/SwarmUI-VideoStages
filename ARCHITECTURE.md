@@ -56,7 +56,7 @@ first staged clip whose `ClipPlan.EntryMode` is not init-video. `EntryMode` is
 the sole compiled clip-entry decision; init-video clips also carry their source
 plan. Init-video clips consume their own media and never claim the host root. The
 ControlNet preprocessor capture is architecture-neutral and therefore runs for
-every active architecture, including the source-only adapter, guarded so a
+every active architecture, including the source-only provider, guarded so a
 mixed timeline captures once.
 
 See [`docs/STAGE_RUNTIME.md`](docs/STAGE_RUNTIME.md) for exact priorities,

@@ -14,7 +14,7 @@ namespace VideoStages.Tests;
 /// cannot reach, because the route flattens every blocking diagnostic into a single message string
 /// and this asserts the codes and severities behind it.
 /// <para>
-/// It still drives the adapter directly, but off the checked-in <c>minimax-h3</c> checkpoint rather
+/// It still drives the provider directly, but off the checked-in <c>minimax-h3</c> checkpoint rather
 /// than a hand-forged model class, so "this model resolves to MiniMax" is not circular.
 /// </para>
 /// </summary>

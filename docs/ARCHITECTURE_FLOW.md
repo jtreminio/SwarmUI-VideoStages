@@ -406,7 +406,7 @@ has begun.
 ComfyUI-LTXVideo nodes/features and resolvable IC-LoRA weights. Blocking
 diagnostics stop the request before later VideoStages host phases mutate the
 graph.
-`WanExecutionAdapter.PreflightRequest` checks the few request-global host
+`WanSessionProvider.PreflightRequest` checks the few request-global host
 options that need special WAN handling. Legacy request-global video-swap
 values are not preflight errors: plan compilation emits one warning and
 `WanLegacySwapIsolation` clears them only from host generation info, without
@@ -433,14 +433,14 @@ visits only the provider selected by `ArchitectureRootOwnerResolver`.
 For the ControlNet preprocessor phase,
 `VideoArchitectureExecutionHost` invokes common
 `ControlNetCoreMediaCapture` once to capture raw host media. It then fans out
-to active architecture providers. `Ltx2ExecutionAdapter` derives its private
+to active architecture providers. `Ltx2SessionProvider` derives its private
 multiple-of-64 branch from that capture through `LtxControlNetMediaNormalizer`,
 never from the current shared apply input, so the result does not depend on which
 architectures ran before it. The compiled root plan controls whether the shared apply input is
 wrapped down to one frame, so it happens only when LTX owns the host root; the source-only path
 retains the raw capture.
 LTX also handles base/refiner references and root audio-mask sizing.
-`MiniMaxExecutionAdapter` captures the same base/refiner host reference points.
+`MiniMaxSessionProvider` captures the same base/refiner host reference points.
 `VideoArchitectureExecutionHost` captures resolvable root media, optional VAE
 state, and the pre-core node set when a generated stage owns the root and the
 root plan permits interception. It restores that state and prunes the discarded core video pass.
@@ -481,7 +481,7 @@ and audio sources.
 
 ### B6a. LTX graph execution
 
-`Ltx2ExecutionAdapter.CreateSession` prepares private LTX root state when LTX
+`Ltx2SessionProvider.CreateSession` prepares private LTX root state when LTX
 owns it and returns the LTX timeline session. Common orchestration depends only
 on the provider/session contracts.
 
@@ -511,7 +511,7 @@ The `none` path uses `SourceOnlyGenerationSession` and
 
 ### B6b. MiniMax H3 graph execution
 
-`MiniMaxExecutionAdapter` creates `MiniMaxGenerationSession`, which delegates
+`MiniMaxSessionProvider` creates `MiniMaxGenerationSession`, which delegates
 the common host-style stage lifecycle to the shared runner:
 
 ```text
@@ -540,7 +540,7 @@ text.
 
 ### B6c. WAN on the shared stock-host runtime
 
-`WanExecutionAdapter` creates `StockHostVideoGenerationSession` directly. The
+`WanSessionProvider` creates `StockHostVideoGenerationSession` directly. The
 session snapshots the host root media and VAE when timeline execution begins.
 `StockHostVideoGenerationSession` prepares each hard-cut clip independently and
 uses `VideoStageRunner` for common iteration, scope restoration,
@@ -682,7 +682,7 @@ Publication ends the timeline; no architecture finalization step follows it.
 | Unknown model/profile, mixed clip architecture, forged identity | `ArchitecturePlanResolver` diagnostics |
 | Unsupported entry mode or feature | `ArchitectureCapabilityValidator` diagnostics |
 | Invalid LTX option | LTX clip/plan compiler diagnostics |
-| Invalid Wan option or unsupported host video parameter | Wan compiler / `WanExecutionAdapter.PreflightRequest` |
+| Invalid Wan option or unsupported host video parameter | Wan compiler / `WanSessionProvider.PreflightRequest` |
 | Invalid common geometry, boundary, or audio plan | Common compiler diagnostics |
 | Missing IC-LoRA dependencies | `Ltx2RequestPreflight` before later VideoStages mutation |
 | Missing or corrupt host root handoff | `VideoArchitectureExecutionHost` |

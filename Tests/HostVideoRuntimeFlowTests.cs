@@ -49,15 +49,15 @@ public class HostVideoRuntimeFlowTests
         };
         VideoExecutionPlan plan = generator.RequireVideoExecutionPlanContext().Plan;
 
-        HostVideoSessionProvider adapter = new(generator);
-        Assert.Empty(adapter.PreflightRequest(new(
+        HostVideoSessionProvider provider = new(generator);
+        Assert.Empty(provider.PreflightRequest(new(
             plan,
             Ltx2ArchitectureModule.ArchitectureId)));
         // The positive control for the line above. Video2VideoCreativity is set, so the fallback's
         // warning is live in this request — an empty list under a specialized root owner is the
         // guard doing its job, not a dead emitter.
         Assert.Contains(
-            adapter.PreflightRequest(new(plan, HostVideoArchitectureModule.ArchitectureId)),
+            provider.PreflightRequest(new(plan, HostVideoArchitectureModule.ArchitectureId)),
             diagnostic => diagnostic.Code == "host-video.creativity.ignored");
         // Compile-time codes only: PreflightRequest's output never reaches the plan, so this pins
         // that the later generic clip also drew no host-video.stage-control.* error.
