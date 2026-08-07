@@ -4,9 +4,9 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
-using VideoStages.Generated;
 using VideoStages.Architectures.Ltx2.Planning;
+using VideoStages.Authoring;
+using VideoStages.Generated;
 
 namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
@@ -31,8 +31,8 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
         int height = sourceMedia.Height ?? g.UserInput.GetImageHeight();
         int steps = genInfo.Steps;
         double guidance = g.UserInput.Get(T2IParamTypes.FluxGuidanceScale, -1);
-        string positivePrompt = ExtractVideoConditioningPrompt(genInfo.Prompt);
-        string negativePrompt = ExtractVideoConditioningPrompt(genInfo.NegativePrompt);
+        string positivePrompt = PromptText.SelectVideoOrGlobalPrompt(genInfo.Prompt);
+        string negativePrompt = PromptText.SelectVideoOrGlobalPrompt(genInfo.NegativePrompt);
 
         using WorkflowBridge bridge = BridgeSync.For(g);
         INodeOutput clipOutput = bridge.ResolvePath(clip.Path);
@@ -162,15 +162,5 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
             : bridge.AddNode(encode, nodeId);
         node.Clip.TryConnectToUntyped(clipOutput);
         return node;
-    }
-
-    private static string ExtractVideoConditioningPrompt(string prompt)
-    {
-        PromptRegion regionalizer = new(prompt ?? "");
-        if (!string.IsNullOrWhiteSpace(regionalizer.VideoPrompt))
-        {
-            return regionalizer.VideoPrompt.Trim();
-        }
-        return regionalizer.GlobalPrompt.Trim();
     }
 }

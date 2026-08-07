@@ -73,8 +73,7 @@ internal static class PromptText
             }
         }
 
-        string videoText = GetVideoPromptText(prompt);
-        return !string.IsNullOrWhiteSpace(videoText) ? videoText : GetGlobalPromptText(prompt);
+        return SelectVideoOrGlobalPrompt(prompt);
     }
 
     public static string SelectMatchingSections(
@@ -182,11 +181,20 @@ internal static class PromptText
         return cleaned.ToString();
     }
 
-    private static string GetGlobalPromptText(string prompt) =>
-        string.IsNullOrWhiteSpace(prompt) ? "" : new PromptRegion(prompt).GlobalPrompt.Trim();
-
-    private static string GetVideoPromptText(string prompt) =>
-        string.IsNullOrWhiteSpace(prompt) ? "" : new PromptRegion(prompt).VideoPrompt.Trim();
+    /// <summary>Core's rule for which section a video model conditions on, in
+    /// <c>WorkflowGenerator.CreateConditioning</c>'s <c>isVideo</c> arm: the video section when it
+    /// has text, the global section otherwise. The extension bypasses that call, so it owes the
+    /// rule one owner here rather than one per caller.</summary>
+    internal static string SelectVideoOrGlobalPrompt(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            return "";
+        }
+        PromptRegion regionalizer = new(prompt);
+        string video = regionalizer.VideoPrompt.Trim();
+        return video.Length > 0 ? video : regionalizer.GlobalPrompt.Trim();
+    }
 
     private static string CanonicalizeBrackets(
         string prompt,
