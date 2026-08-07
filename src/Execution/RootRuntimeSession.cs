@@ -16,6 +16,13 @@ internal sealed class RootRuntimeSession
     private readonly bool _publishAudio;
     private readonly Dictionary<string, string> _displacedRootRemovals = [];
 
+    /// <summary>The one node id the backend reports as the request's result; every other id under
+    /// 100, and everything from 50000 up, it reports as an intermediate.</summary>
+    private const string CoreFinalOutputNodeId = "9";
+
+    /// <summary>Where core itself puts a base image save when a video follows it.</summary>
+    private const string CoreSupersededImageSaveNodeId = "30";
+
     private RootRuntimeSession(
         WorkflowGenerator generator,
         RootPlan rootPlan,
@@ -67,10 +74,9 @@ internal sealed class RootRuntimeSession
 
     /// <summary>
     /// Every host-root node publishing this timeline deleted, by id and by the class it held when
-    /// it died — empty when every node the host built is one a stage took over. Records the
-    /// shortfall rather than the work: the cleanup is a safety net, and this is how far it was
-    /// stretched. Counts the stale-audio prune too, which runs before the cleanup and removes root
-    /// nodes of its own; leaving it out would report a clean sweep over an unclean one.
+    /// it died — empty when every node the host built is one a stage took over. Counts the
+    /// stale-audio prune too, which runs before the cleanup and removes root nodes of its own;
+    /// leaving it out would report a clean sweep over an unclean one.
     /// </summary>
     public IReadOnlyDictionary<string, string> DisplacedRootRemovals => _displacedRootRemovals;
 
@@ -145,10 +151,8 @@ internal sealed class RootRuntimeSession
         if (hostSaves.Count == 0)
         {
             WGNodeData vae = artifact.Vae?.ToWGNodeData(_generator) ?? _generator.CurrentVae;
-            media.SaveOutput(
-                vae,
-                _generator.CurrentAudioVae,
-                StableNodeIds.Id(_generator, StableNodeIds.FinalSave));
+            DemoteCoreBaseImageSave(bridge);
+            media.SaveOutput(vae, _generator.CurrentAudioVae, CoreFinalOutputNodeId);
             return true;
         }
 
@@ -189,6 +193,35 @@ internal sealed class RootRuntimeSession
         return true;
     }
 
+    /// <summary>
+    /// Core chooses between the two ids by whether a <c>videomodel</c> was requested, and a
+    /// timeline never sets one — its models live per-stage — so core leaves the base image sitting
+    /// on the result id. Publishing there overwrites whatever holds it, so the image has to move
+    /// first or it is destroyed rather than demoted.
+    /// </summary>
+    private void DemoteCoreBaseImageSave(WorkflowBridge bridge)
+    {
+        if (bridge.Graph.GetNode(CoreFinalOutputNodeId) is not ComfyNode occupant)
+        {
+            return;
+        }
+        // Both classes because SaveOutput picks between them on the backend's feature flags.
+        if (occupant is not (SwarmSaveImageWSNode or SaveImageNode))
+        {
+            throw Invariant.Failure(
+                $"core's final output node holds '{occupant.ClassTypeName}' rather than an "
+                    + "image save.");
+        }
+        if (bridge.Graph.GetNode(CoreSupersededImageSaveNodeId) is not null)
+        {
+            throw Invariant.Failure(
+                $"node {CoreSupersededImageSaveNodeId} is occupied, so demoting core's base image "
+                    + "save would destroy it.");
+        }
+        VideoGraphHelpers.RemoveNode(_generator, bridge, CoreFinalOutputNodeId);
+        bridge.AddNode(occupant, CoreSupersededImageSaveNodeId);
+    }
+
     private WGNodeData ResolvePublishedAudio(WGNodeData attachedAudio)
     {
         if (attachedAudio?.DataType == WGNodeData.DT_LATENT_AUDIO
@@ -221,9 +254,9 @@ internal sealed class RootRuntimeSession
     }
 
     /// <summary>
-    /// The class each owned root node holds right now. Taken before a removal because a removed
-    /// node is gone from the workflow, and because the class a node dies as is not always the class
-    /// core built it as — an adopted id carries the stage's node by then.
+    /// The class each owned root node holds right now. Taken before a removal because the class a
+    /// node dies as is not always the class core built it as — an adopted id carries the stage's
+    /// node by then.
     /// </summary>
     private Dictionary<string, string> SnapshotRootClasses(WorkflowBridge bridge) =>
         _capturedRootComponentIds

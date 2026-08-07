@@ -394,6 +394,39 @@ public class TimelineOutputContractTests
     }
 
     /// <summary>
+    /// With an image base model there is no root animation save to retarget, so the timeline
+    /// publishes at core's result id and moves core's base image onto the id core uses for a
+    /// superseded image. Both halves matter: publishing overwrites, so a timeline that skipped the
+    /// move would ship the video having silently destroyed the still.
+    /// </summary>
+    [Fact]
+    public async Task An_image_base_model_publishes_the_video_over_cores_final_output()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+
+        // No videomodel: the timeline's stages drive the video, which is the whole reason core
+        // numbers its base image as the result. Requesting one instead makes core do its own
+        // demotion and this asserts nothing.
+        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+            fixture.Post(
+                MakeDocument(MakeClip(1.0, fixture.Stage(steps: 8))),
+                post => post["model"] = fixture.BaseModel.Name));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Equal("9", live.FinalVideoSave().Id);
+        List<SwarmSaveImageWSNode> baseImages =
+            [.. bridge.Graph.NodesOfType<SwarmSaveImageWSNode>()];
+        Assert.True(
+            baseImages.Count == 1,
+            $"Expected core's base image save to survive, found {baseImages.Count}: publishing at "
+                + "core's final-output id overwrites whatever already holds it.");
+        Assert.Equal("30", baseImages[0].Id);
+
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
     /// The text-to-video shape, where the timeline displaces core's video root entirely and the
     /// root's own save is the only one in the graph: it is retargeted onto whatever the timeline
     /// ends up publishing. There is no core base-image save here to carry the request, so a

@@ -10,9 +10,6 @@ internal static class StableNodeIds
     /// <summary>The one merged-timeline save emitted before frame interpolation.</summary>
     internal const int PreInterpolationSave = 52900;
 
-    /// <summary>The one fallback final save node.</summary>
-    internal const int FinalSave = 52200;
-
     /// <summary>
     /// Root and clip audio injection. Fixed sub-slots plus a per-clip preserve-window block
     /// starting at slot 400.
