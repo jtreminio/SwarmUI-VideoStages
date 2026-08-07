@@ -32,13 +32,6 @@ public class CrossLanguageMirrorTests
         return JObject.Parse(File.ReadAllText(path));
     }
 
-    private static WorkflowGenerator BareGenerator() => new()
-    {
-        UserInput = new T2IParamInput(null),
-        Features = [],
-        Workflow = new JObject(),
-    };
-
     [Fact]
     public void UpscaleMethodClassification_MatchesSharedFixture()
     {
@@ -130,7 +123,8 @@ public class CrossLanguageMirrorTests
     [Fact]
     public void CrossfadePlan_MatchesSharedFixture()
     {
-        WorkflowGenerator g = BareGenerator();
+        List<(string Name, string Overlaps, bool Fallback)> actual = [];
+        List<(string Name, string Overlaps, bool Fallback)> expected = [];
         foreach (JObject c in LoadFixture("crossfade-plan-cases.json").OfType<JObject>())
         {
             string name = c.Value<string>("name");
@@ -139,18 +133,6 @@ public class CrossLanguageMirrorTests
             int[] boundaryOverlaps = [.. c.Value<JArray>("boundaryOverlaps").Select(o => (int)o)];
             int[] expectedOverlaps = [.. c.Value<JArray>("expectedOverlaps").Select(o => (int)o)];
             bool expectedFallback = c.Value<bool>("expectedFallback");
-
-            List<WGNodeData> clips = [];
-            for (int i = 0; i < frames.Length; i++)
-            {
-                clips.Add(new WGNodeData(new JArray($"{10 + i}", 0), g, WGNodeData.DT_VIDEO, T2IModelClassSorter.CompatLtxv2)
-                {
-                    Width = 512,
-                    Height = 512,
-                    Frames = frames[i],
-                    FPS = new JValue(24),
-                });
-            }
 
             BoundaryBudgetResolution resolution = BoundaryPlanFixture.Resolve(
                 [.. frames.Select(frame => (int?)frame)],
@@ -168,10 +150,11 @@ public class CrossLanguageMirrorTests
                 boundary => boundary.EffectiveJoin == BoundaryJoinType.Cut)
                 && anyRequested;
 
-            Assert.Equal(expectedOverlaps, actualOverlaps);
-            Assert.Equal(expectedFallback, actualFallback);
-            _ = name;
+            actual.Add((name, string.Join(",", actualOverlaps), actualFallback));
+            expected.Add((name, string.Join(",", expectedOverlaps), expectedFallback));
         }
+
+        Assert.Equal(expected, actual);
     }
 
     [Fact]
