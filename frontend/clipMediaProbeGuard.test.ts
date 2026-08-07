@@ -14,12 +14,7 @@ describe("clip media probe operation guard", () => {
     const begin = (clipId: string, slot = INIT_VIDEO_PROBE_SLOT) =>
         beginClipMediaProbe(clipId, slot, revision);
 
-    it.each([
-        "clip reorder",
-        "clip deletion",
-        "clip replacement",
-        "unrelated document edit",
-    ])("rejects after a revision change caused by %s", () => {
+    it("rejects after any document revision change", () => {
         expect(begin("clip-a").claim(revision + 1)).toBe(false);
     });
 
