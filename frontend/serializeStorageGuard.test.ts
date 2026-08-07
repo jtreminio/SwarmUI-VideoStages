@@ -46,15 +46,14 @@ const getRootDefaults = (): RootDefaults => ({
     cfgScaleStep: 0.5,
 });
 
-const getDefaultStageModel = (modelValues: string[]): string =>
-    modelValues[0] ?? "";
+const testStageModel = getRootDefaults().modelValues[0] ?? "";
 
 /** normalizeClip on a JSON-cloned raw record, mirroring the persistence parse. */
 const normalize = (raw: unknown): Clip =>
     normalizeClip(
         JSON.parse(JSON.stringify(raw)) as Record<string, unknown>,
         getRootDefaults(),
-        getDefaultStageModel(getRootDefaults().modelValues),
+        testStageModel,
     );
 
 const store = (clip: Clip): StoredClip => serializeClipsForStorage([clip])[0];

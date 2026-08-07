@@ -16480,18 +16480,7 @@ ${slot}`;
           prev.boundaryOutReferenceIncludeSoundtrack = prevJoin.boundaryOutReferenceIncludeSoundtrack;
           prev.boundaryOutOverlap = prevJoin.boundaryOutOverlap;
         }
-        clips.push(
-          buildDefaultClip(
-            defaults,
-            getDefaultStageModel(
-              defaults.modelValues,
-              void 0,
-              defaults.modelCatalog
-            ),
-            false,
-            prev
-          )
-        );
+        clips.push(buildDefaultClip(defaults, defaultModel, false, prev));
         saveClips(clips, { origin: "timeline" });
         setSelection({
           kind: "clip",

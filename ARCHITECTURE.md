@@ -357,7 +357,7 @@ after projection, because before it there is nothing clip-scoped to validate.
   trim that cannot be applied and an upload blob the sanitizer cannot strip are
   errors, not warnings.
 - At most one architecture owns the host root.
-- `OutputPublisher` is the only writer of the captured host save set. Nothing
+- `RootRuntimeSession` is the only writer of the captured host save set. Nothing
   else may re-target it.
 - `VideoGraphHelpers` provides common `NodeHelpers` accessors/codecs and is the
   sole owner of invalidation caused by graph-node removal. It recognizes the
