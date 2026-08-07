@@ -4983,6 +4983,19 @@ describe("createTimelineDetailStrip", () => {
                     "var(--background)",
                 );
             }
+            // Only text-like inputs take the dock's opaque background; the
+            // theme's specialized checkbox/radio/range rendering is spared.
+            const specialized = Array.from(
+                document.querySelectorAll<HTMLInputElement>(
+                    '.vst-detail input[type="checkbox"], .vst-detail input[type="radio"], .vst-detail input[type="range"]',
+                ),
+            );
+            expect(specialized.length).toBeGreaterThanOrEqual(2);
+            for (const input of specialized) {
+                expect(computed(input).backgroundColor).not.toBe(
+                    "var(--background)",
+                );
+            }
             expect(computed(detailBody() as HTMLElement).marginBottom).toBe(
                 "6px",
             );
