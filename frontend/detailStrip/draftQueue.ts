@@ -24,7 +24,7 @@ export interface StructuralCommand {
     selection: TimelineSelection | "render" | null;
 }
 
-type StructuralOutcome =
+export type StructuralOutcome =
     | TimelineSelection
     | "render"
     | null

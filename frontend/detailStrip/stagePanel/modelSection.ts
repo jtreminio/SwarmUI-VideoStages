@@ -9,13 +9,11 @@ import {
     buildOptionSelect,
     type OptionSpec,
 } from "../../detailWidgets";
-import {
-    dispatchDocumentCommand,
-    getTimelineStore,
-} from "../../persistence/repository";
+import type { Clip } from "../../types";
 import type { StagePanelBindings } from "./types";
 
 export const appendStageModelSection = ({
+    context,
     clip,
     clipIdx,
     stageIdx,
@@ -114,48 +112,40 @@ export const appendStageModelSection = ({
                 }
                 // The conversion applies straight away: it is one undoable
                 // change, and what it drops is reported by the diagnostics.
-                const converting = getTimelineStore().getSnapshot();
-                const convertingClipId =
-                    converting.state.clips[clipIdx]?.id ?? null;
-                const converted = convertingClipId
-                    ? dispatchDocumentCommand(
-                          {
-                              type: "clip.convert-architecture",
-                              clipId: convertingClipId,
-                              target: plan,
-                          },
-                          {
-                              expectedRevision: converting.revision,
-                              origin: "detail-strip",
-                          },
-                      ).applied
-                    : false;
-                if (!converted) modelSelect.value = stage.model;
+                context.structuralCommit((clips: Clip[]) => {
+                    const clipId = clips[clipIdx]?.id;
+                    if (!clipId) {
+                        modelSelect.value = stage.model;
+                        return null;
+                    }
+                    return {
+                        command: {
+                            type: "clip.convert-architecture",
+                            clipId,
+                            target: plan,
+                        },
+                        selection: "render",
+                    };
+                });
                 return;
             }
-            const snapshot = getTimelineStore().getSnapshot();
-            const clipId = snapshot.state.clips[clipIdx]?.id;
-            const stageId = snapshot.state.clips[clipIdx]?.stages[stageIdx]?.id;
-            if (!clipId || !stageId) {
-                modelSelect.value = stage.model;
-                return;
-            }
-            const result = dispatchDocumentCommand(
-                {
-                    type: "stage.retarget-model",
-                    clipId,
-                    stageId,
-                    target: plan,
-                },
-                {
-                    expectedRevision: snapshot.revision,
-                    origin: "detail-strip",
-                },
-            );
-            if (!result.applied) {
-                modelSelect.value = stage.model;
-                return;
-            }
+            context.structuralCommit((clips: Clip[]) => {
+                const clipId = clips[clipIdx]?.id;
+                const stageId = clips[clipIdx]?.stages[stageIdx]?.id;
+                if (!clipId || !stageId) {
+                    modelSelect.value = stage.model;
+                    return null;
+                }
+                return {
+                    command: {
+                        type: "stage.retarget-model",
+                        clipId,
+                        stageId,
+                        target: plan,
+                    },
+                    selection: "render",
+                };
+            });
         },
     );
     const modelField = buildField("Model", modelSelect);

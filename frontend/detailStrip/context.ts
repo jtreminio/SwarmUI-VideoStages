@@ -1,5 +1,6 @@
 import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
-import type { Clip, TimelineSelection, VideoStagesConfig } from "../types";
+import type { Clip, VideoStagesConfig } from "../types";
+import type { StructuralOutcome } from "./draftQueue";
 
 export interface ClampedNumberOpts {
     key: string;
@@ -27,7 +28,7 @@ export interface DetailStripContext {
     ): void;
     buildClampedNumber(opts: ClampedNumberOpts): HTMLInputElement;
     structuralCommit(
-        apply: (clips: Clip[]) => TimelineSelection | "render" | null,
+        apply: (clips: Clip[]) => StructuralOutcome,
         opts?: { rebuildAfterSelect?: boolean },
     ): void;
     render(): void;

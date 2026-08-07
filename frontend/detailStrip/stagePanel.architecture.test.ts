@@ -30,8 +30,10 @@ import {
     saveState,
 } from "../persistence/repository";
 import { createTimelineHistory } from "../timelineHistory";
+import type { Clip } from "../types";
 import { buildClipLorasSection } from "./clipLorasPanel";
 import type { DetailStripContext } from "./context";
+import type { StructuralOutcome } from "./draftQueue";
 import { buildStageParamsColumn } from "./stagePanel";
 
 const catalog = (): ArchitectureModelCatalog => {
@@ -86,7 +88,16 @@ const context = (
     debouncedCommit: jest.fn(),
     debouncedCommitState: jest.fn(),
     buildClampedNumber: () => document.createElement("input"),
-    structuralCommit: jest.fn(),
+    structuralCommit: (apply: (clips: Clip[]) => StructuralOutcome) => {
+        const snapshot = getTimelineStore().getSnapshot();
+        const outcome = apply(structuredClone(snapshot.state.clips) as Clip[]);
+        if (outcome && typeof outcome === "object" && "command" in outcome) {
+            persistence.dispatchDocumentCommand(outcome.command, {
+                origin: "detail-strip",
+                expectedRevision: snapshot.revision,
+            });
+        }
+    },
     render: jest.fn(),
     addRefEntry: jest.fn(),
     deleteRefEntry: jest.fn(),
