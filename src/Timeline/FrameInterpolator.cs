@@ -113,7 +113,7 @@ internal sealed class FrameInterpolator(WorkflowGenerator g)
             media.ToWGNodeData(g).SaveOutput(
                 artifact.Vae?.ToWGNodeData(g) ?? g.CurrentVae,
                 g.CurrentAudioVae,
-                StableNodeIds.Id(g, StableNodeIds.PreInterpolationSave));
+                g.GetStableDynamicID(StableNodeIds.PreInterpolationSave, 0));
         }
         JArray interpolated = g.DoInterpolation(
             WorkflowBridge.ToPath(videoOutput),

@@ -1,7 +1,10 @@
-using SwarmUI.Builtin_ComfyUIBackend;
-
 namespace VideoStages.Execution.Graph;
 
+/// <summary>
+/// Reserved id blocks this extension hands to <c>GetStableDynamicID</c>, which offsets them by
+/// 1000 and probes upward for a free id. One table so blocks claimed by different subsystems
+/// cannot silently overlap.
+/// </summary>
 internal static class StableNodeIds
 {
     /// <summary>Per-stage intermediate save nodes, offset by stage ordinal.</summary>
@@ -18,10 +21,4 @@ internal static class StableNodeIds
 
     /// <summary>Per-stage audio/video window mask nodes, offset by stage ordinal.</summary>
     internal const int AudioWindowMask = 52800;
-
-    internal static string Id(WorkflowGenerator g, int baseId, int slot = 0)
-    {
-        ArgumentNullException.ThrowIfNull(g);
-        return g.GetStableDynamicID(baseId + slot, 0);
-    }
 }

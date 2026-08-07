@@ -46,7 +46,7 @@ internal sealed class LtxAudioInjector(
             JToken lengthFramesAudioSource = LtxAudioPathResolution.ResolveLengthToFramesAudioSource(
                 bridge,
                 audio.Path,
-                StableNodeIds.Id(g, StableNodeIds.AudioInjection, AudioInjectionEnsureFallbackSlot));
+                g.GetStableDynamicID(StableNodeIds.AudioInjection, AudioInjectionEnsureFallbackSlot));
             SwarmAudioLengthToFramesNode lengthToFrames = CreateLengthToFramesNode(
                 bridge,
                 lengthFramesAudioSource,
@@ -124,7 +124,7 @@ internal sealed class LtxAudioInjector(
         SwarmAudioLengthToFramesNode node = new SwarmAudioLengthToFramesNode().With(
             FrameRate: fps);
         node.AudioInput.TryConnectFromPath(bridge, audioPath as JArray);
-        bridge.AddNode(node, StableNodeIds.Id(g, StableNodeIds.AudioInjection, 100));
+        bridge.AddNode(node, g.GetStableDynamicID(StableNodeIds.AudioInjection, 100));
         return node;
     }
 
@@ -167,12 +167,12 @@ internal sealed class LtxAudioInjector(
             Value: 0.0,
             Width: width,
             Height: height);
-        bridge.AddNode(solidMask, StableNodeIds.Id(g, StableNodeIds.AudioInjection, 200));
+        bridge.AddNode(solidMask, g.GetStableDynamicID(StableNodeIds.AudioInjection, 200));
 
         SetLatentNoiseMaskNode setMask = new SetLatentNoiseMaskNode().With(
             Mask: solidMask.MASK);
         setMask.Samples.TryConnectFromPath(bridge, encodedAudioPath);
-        bridge.AddNode(setMask, StableNodeIds.Id(g, StableNodeIds.AudioInjection, 300));
+        bridge.AddNode(setMask, g.GetStableDynamicID(StableNodeIds.AudioInjection, 300));
         return setMask;
     }
 

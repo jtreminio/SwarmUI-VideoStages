@@ -63,7 +63,7 @@ internal static class AudioPreserveWindowBuilder
         }
         bridge.AddNode(
             node,
-            StableNodeIds.Id(g, StableNodeIds.AudioInjection, 400 + stableIdSlot));
+            g.GetStableDynamicID(StableNodeIds.AudioInjection, 400 + stableIdSlot));
         return node;
     }
 

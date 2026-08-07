@@ -134,7 +134,7 @@ internal sealed class StageHostExecutionScope : IDisposable
         media.SaveOutput(
             vae,
             _generator.CurrentAudioVae,
-            StableNodeIds.Id(_generator, StableNodeIds.IntermediateStageSave, stage.StageId));
+            _generator.GetStableDynamicID(StableNodeIds.IntermediateStageSave, stage.StageId));
     }
 
     public void Dispose()

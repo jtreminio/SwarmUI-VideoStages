@@ -91,7 +91,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
                 // a preserved base.
                 MaskInitValueVideo: 0.0,
                 MaskInitValueAudio: 0.0),
-            StableNodeIds.Id(g, StableNodeIds.AudioWindowMask, stageContext.Stage.StageId));
+            g.GetStableDynamicID(StableNodeIds.AudioWindowMask, stageContext.Stage.StageId));
         mask.AvLatentInput.ConnectFromPath(bridge, mediaPath);
         mask.Model.ConnectFromPath(bridge, genInfo.Model.Path);
         mask.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
