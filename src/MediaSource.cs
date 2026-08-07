@@ -1,7 +1,8 @@
 namespace VideoStages;
 
-/// <summary>Persisted media-source names and indexed source syntax shared by authoring, planning,
-/// and runtime resolution.</summary>
+/// <summary>Every persisted spelling an authored document can name a source by — audio tracks,
+/// host images, and stage references — with the indexed syntax that parses and formats them.
+/// Shared by authoring, planning, and runtime resolution.</summary>
 public static class MediaSource
 {
     public const string Upload = "Upload";
