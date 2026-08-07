@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -9,7 +8,7 @@ public sealed class ValidationBoundaryInvariantTests
     [Fact]
     public void User_facing_exceptions_exist_only_at_request_and_plan_boundaries()
     {
-        string sourceRoot = Path.GetFullPath(Path.Combine(TestDirectory(), "..", "src"));
+        string sourceRoot = RepoFiles.SourceRoot;
         HashSet<string> allowed =
         [
             Path.Combine(sourceRoot, "Authoring", "DocumentJson.cs"),
@@ -30,7 +29,7 @@ public sealed class ValidationBoundaryInvariantTests
     [Fact]
     public void Internal_failures_use_the_invariant_exception_factory()
     {
-        string sourceRoot = Path.GetFullPath(Path.Combine(TestDirectory(), "..", "src"));
+        string sourceRoot = RepoFiles.SourceRoot;
         string factoryPath = Path.Combine(sourceRoot, "Invariant.cs");
         string[] offenders = Directory
             .EnumerateFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
@@ -43,7 +42,4 @@ public sealed class ValidationBoundaryInvariantTests
 
         Assert.Empty(offenders);
     }
-
-    private static string TestDirectory([CallerFilePath] string caller = "") =>
-        Path.GetDirectoryName(caller)!;
 }

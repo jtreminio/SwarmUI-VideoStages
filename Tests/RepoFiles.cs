@@ -6,15 +6,12 @@ namespace VideoStages.Tests;
 /// located from this file's own compile-time path rather than from the working directory.</summary>
 internal static class RepoFiles
 {
-    /// <summary>Reads a file under <c>frontend/</c>, named with forward slashes.</summary>
-    internal static string ReadFrontend(string relativePath) =>
-        File.ReadAllText(Path.Combine(
-            TestsDirectory(),
-            "..",
-            "frontend",
-            relativePath.Replace('/', Path.DirectorySeparatorChar)));
+    internal static string SourceRoot { get; } =
+        Path.GetFullPath(Path.Combine(TestsDirectory(), "..", "src"));
 
-    /// <summary>Reads a file under <c>Tests/fixtures/</c>.</summary>
+    internal static string ReadFrontend(string relativePath) =>
+        File.ReadAllText(Path.Combine(TestsDirectory(), "..", "frontend", relativePath));
+
     internal static string ReadFixture(string name) =>
         File.ReadAllText(Path.Combine(TestsDirectory(), "fixtures", name));
 
