@@ -15,60 +15,60 @@ internal static class LoraPlanCompiler
             ImmutableArray.CreateBuilder<LoraPlan>();
         if (stage.LoraWeights is null)
         {
-            AppendDirectDefinitions(plans, clip.Loras, target);
+            AppendWithOwnWeights(plans, clip.Loras, target);
         }
         else
         {
-            AppendClipDefinitions(plans, clip.Loras, stage.LoraWeights);
+            AppendWithStageWeights(plans, clip.Loras, stage.LoraWeights);
         }
-        AppendDirectDefinitions(plans, stage.Loras, target);
+        AppendWithOwnWeights(plans, stage.Loras, target);
         return plans.ToImmutable();
     }
 
-    private static void AppendClipDefinitions(
+    private static void AppendWithStageWeights(
         ImmutableArray<LoraPlan>.Builder plans,
-        IReadOnlyList<LoraRef> entries,
+        IReadOnlyList<LoraRef> loras,
         IReadOnlyList<double> weights)
     {
-        if (entries is null)
+        if (loras is null)
         {
             return;
         }
-        for (int index = 0; index < entries.Count; index++)
+        for (int index = 0; index < loras.Count; index++)
         {
-            LoraRef entry = entries[index];
+            LoraRef lora = loras[index];
             double weight = index < (weights?.Count ?? 0)
                 ? weights[index]
-                : entry.Weight;
+                : lora.Weight;
             if (weight == 0)
             {
                 continue;
             }
             plans.Add(new LoraPlan(
-                entry.Name,
+                lora.Name,
                 weight,
-                entry.TencWeight ?? weight));
+                lora.TencWeight ?? weight));
         }
     }
 
-    private static void AppendDirectDefinitions(
+    private static void AppendWithOwnWeights(
         ImmutableArray<LoraPlan>.Builder plans,
-        IReadOnlyList<LoraRef> entries,
+        IReadOnlyList<LoraRef> loras,
         LoraTarget target)
     {
-        foreach (LoraRef entry in entries ?? [])
+        foreach (LoraRef lora in loras ?? [])
         {
-            double textEncoderWeight = entry.TencWeight ?? entry.Weight;
+            double textEncoderWeight = lora.TencWeight ?? lora.Weight;
             bool effective = target == LoraTarget.ModelOnly
-                ? entry.Weight != 0
-                : entry.Weight != 0 || textEncoderWeight != 0;
+                ? lora.Weight != 0
+                : lora.Weight != 0 || textEncoderWeight != 0;
             if (!effective)
             {
                 continue;
             }
             plans.Add(new LoraPlan(
-                entry.Name,
-                entry.Weight,
+                lora.Name,
+                lora.Weight,
                 textEncoderWeight));
         }
     }
