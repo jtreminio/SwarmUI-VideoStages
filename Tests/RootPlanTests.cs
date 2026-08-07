@@ -21,7 +21,7 @@ public class RootPlanTests
         Assert.False(root.InterceptsHostCore);
         Assert.False(root.UsesStageHandoff);
         Assert.False(root.DropsTextToVideoRootDonor);
-        Assert.False(root.TakesOverTextToVideoRoot);
+        Assert.False(root.IgnoresTextToVideoRoot);
     }
 
     [Fact]

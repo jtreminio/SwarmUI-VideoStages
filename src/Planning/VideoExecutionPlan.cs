@@ -31,15 +31,15 @@ internal sealed record RootPlan(
     bool DropsTextToVideoRootDonor)
 {
     /// <summary>
-    /// Stage 0 builds on core's text-to-video root chain instead of beside it, claiming the node
-    /// ids core reserved. Cleanup then sweeps only what no stage ended up sampling.
-    /// <see cref="StageTakesOverTextToVideoRoot"/> answers which stage does the claiming.
+    /// Core's text-to-video root produced nothing this timeline may reference or condition, so its
+    /// reserved node ids are available for a stage to build under.
+    /// <see cref="StageTakesOverTextToVideoRoot"/> is which stage, if any, takes them.
     /// </summary>
-    public bool TakesOverTextToVideoRoot =>
+    public bool IgnoresTextToVideoRoot =>
         HostKind == HostRootKind.TextToVideo && IgnoresHostRootOutput;
 
     public bool StageTakesOverTextToVideoRoot(StagePlan stage, ClipPlan clip) =>
-        TakesOverTextToVideoRoot
+        IgnoresTextToVideoRoot
         && clip.EntryMode == ArchitectureEntryMode.TextToVideo
         && stage.Input == StageInputKind.EmptyLatent
         && stage.ClipStageIndex == 0;

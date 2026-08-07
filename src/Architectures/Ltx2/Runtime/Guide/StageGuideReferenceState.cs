@@ -34,11 +34,11 @@ internal sealed class StageGuideReferenceState(
             StageGuideReferenceKind.Refiner => WarnIfMissing(
                 store.Refiner,
                 "VideoStages: ImageReference 'Refiner' requested, but no refiner reference exists."),
-            // Under a discarded text root there is deliberately no host generation to reference,
+            // When a stage takes over core's text root there is deliberately no host generation to reference,
             // and every stage's ImageReference is rewritten to Generated on such a request — so a
             // miss here is the intended state for the whole timeline, not something to report.
             StageGuideReferenceKind.Generated => _previousStageRef
-                ?? (root.TakesOverTextToVideoRoot
+                ?? (root.IgnoresTextToVideoRoot
                     ? null
                     : WarnIfMissing(
                         store.Generated,

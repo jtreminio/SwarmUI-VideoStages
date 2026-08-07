@@ -193,7 +193,7 @@ public class BackendConsolidationTests
     [InlineData("nonsense", (int)AudioSourceKind.Unknown)]
     public void One_parser_owns_the_audio_source_vocabulary(string raw, int expected)
     {
-        Assert.Equal((AudioSourceKind)expected, AudioSource.Read(raw).Kind);
+        Assert.Equal((AudioSourceKind)expected, AudioSource.Parse(raw).Kind);
     }
 
     [Fact]

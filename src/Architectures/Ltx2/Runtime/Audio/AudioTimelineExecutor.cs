@@ -238,8 +238,8 @@ internal sealed class AudioTimelineExecutor
         bool overlaysOverNoBase = preserveWindows.Count > 0
             && baseAudio is null
             && duration > 0;
-        // Do not inject conditioning into a host root this clip replaces.
-        bool takesOverHostChain = root.TakesOverTextToVideoRoot;
+        // Nothing may condition core's text-to-video root; a stage builds under its nodes.
+        bool takesOverHostChain = root.IgnoresTextToVideoRoot;
         bool overlaysConditionRootGeneration = hasGenerationStage
             && runtimeContext.ClipIndex == 0
             && overlaysOverNoBase

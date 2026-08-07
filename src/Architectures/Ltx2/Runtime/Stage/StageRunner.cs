@@ -166,7 +166,7 @@ internal class StageRunner
             bool refinesIncomingLatent = clipContext.Plan.Root.HostKind == HostRootKind.ImageToVideo
                 && !payload.ImageReferenceWasExplicit
                 && (clipContext.PlannedClip.ClipId != 0 || stage.ClipStageIndex != 0);
-            if (!stageFrame.TakesOverTextToVideoRoot
+            if (!stageFrame.IgnoresTextToVideoRoot
                 && clipRefs.Count == 0
                 && !initVideoFootageIsStageInput
                 && !refinesIncomingLatent)

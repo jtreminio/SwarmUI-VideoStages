@@ -36,7 +36,7 @@ internal sealed class Ltx2ExecutionAdapter(WorkflowGenerator generator) :
     // Capturing reserves a host node for the request, so capture only references the plan can use.
     private void CaptureIfReferenced(VideoExecutionPlan plan, StageRefStore.StageKind kind)
     {
-        if (plan.Root.TakesOverTextToVideoRoot)
+        if (plan.Root.IgnoresTextToVideoRoot)
         {
             return;
         }

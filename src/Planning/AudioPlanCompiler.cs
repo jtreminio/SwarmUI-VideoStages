@@ -17,7 +17,7 @@ internal static class AudioPlanCompiler
 
         ImmutableArray<PlanDiagnostic>.Builder diagnostics =
             ImmutableArray.CreateBuilder<PlanDiagnostic>();
-        AudioSourceSelection selection = AudioSource.Read(clip.AudioSource);
+        AudioSource selection = AudioSource.Parse(clip.AudioSource);
         AudioSourceKind sourceKind = selection.Kind;
         bool hasConfiguredTrack;
         if (sourceKind == AudioSourceKind.Unknown)

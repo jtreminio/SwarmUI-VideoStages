@@ -108,7 +108,7 @@ internal static class ArchitectureCapabilityValidator
             "captured stage audio reuse");
 
         AudioSourceKind authoredAudioKind =
-            AudioSource.Read(clip.AudioSource).Kind;
+            AudioSource.Parse(clip.AudioSource).Kind;
         if (authoredAudioKind != AudioSourceKind.Unknown
             && !descriptor.AudioSourceKinds.Contains(authoredAudioKind)
             && !(authoredAudioKind == AudioSourceKind.Native
@@ -203,7 +203,7 @@ internal static class ArchitectureCapabilityValidator
         {
             return;
         }
-        AudioSourceKind kind = AudioSource.Read(clip.AudioSource).Kind;
+        AudioSourceKind kind = AudioSource.Parse(clip.AudioSource).Kind;
         if (kind == AudioSourceKind.Unknown
             || AudioSourceKindPolicy.CanDriveClipDuration(kind))
         {

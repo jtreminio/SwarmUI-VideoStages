@@ -303,7 +303,7 @@ metadata never inherits the first clip's model compatibility.
 ## Audio ownership
 
 `AudioSourceKind` is the one vocabulary for "where does this audio come from",
-and `AudioSourceParser` is the one parser for authored source strings. Clip
+and `AudioSource.Parse` is the one reader for authored source strings. Clip
 base audio, projected segments, timeline tracks, and architecture capability
 declarations all name sources with the same enum, and an unparsable source
 blocks rather than falling through to native audio.

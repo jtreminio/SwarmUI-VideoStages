@@ -11,7 +11,6 @@ internal enum AudioSourceKind
     Unknown,
 
     Disabled,
-
     Native,
     Upload,
     ControlNet,
@@ -32,19 +31,17 @@ internal static class AudioSourceKindPolicy
     /// Whether the clip's authored audio-derived length is usable. A request against a source that
     /// cannot supply one is warned about by the capability pass and normalized away here.
     /// </summary>
-    internal static bool WantsAudioDerivedLength(ClipSpec clip) =>
+    internal static bool CanUseAudioDerivedLength(ClipSpec clip) =>
         clip.ClipLengthFromAudio
-        && CanDriveClipDuration(AudioSource.Read(clip.AudioSource).Kind);
+        && CanDriveClipDuration(AudioSource.Parse(clip.AudioSource).Kind);
 }
 
-internal sealed record AudioSourceSelection(
+internal sealed record AudioSource(
     AudioSourceKind Kind,
     string Raw,
-    int? AceStepFunTrack);
-
-internal static class AudioSource
+    int? AceStepFunTrack)
 {
-    internal static AudioSourceSelection Read(string raw)
+    internal static AudioSource Parse(string raw)
     {
         string trimmed = (raw ?? MediaSource.Native).Trim();
         if (trimmed.Length == 0 || StringUtils.Equals(trimmed, MediaSource.Native))

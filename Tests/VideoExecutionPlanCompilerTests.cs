@@ -515,7 +515,7 @@ public class VideoExecutionPlanCompilerTests
         Assert.False(plan.Root.UsesGeneratedClipDonor);
         Assert.False(plan.Root.UsesStageHandoff);
         Assert.False(plan.Root.DropsTextToVideoRootDonor);
-        Assert.False(plan.Root.TakesOverTextToVideoRoot);
+        Assert.False(plan.Root.IgnoresTextToVideoRoot);
         Assert.Contains(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "duplicate-clip-id"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
