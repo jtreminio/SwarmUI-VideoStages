@@ -12,9 +12,8 @@ internal sealed record BoundaryBudgetResolution(
     string Reason);
 
 /// <summary>
-/// Owns frame-budget reconciliation for typed timeline boundaries: planning fits authored windows
-/// to known clip lengths, and runtime revalidates that same result against decoded clips,
-/// degrading only what no longer fits.
+/// Owns frame-budget reconciliation for typed timeline boundaries, at plan time against authored
+/// lengths and at runtime against real ones.
 /// </summary>
 internal static class BoundaryOverlaps
 {

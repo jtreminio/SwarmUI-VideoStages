@@ -15,7 +15,7 @@ internal static class StagePassthroughPolicy
         descriptor?.Features.HasFlag(feature) == true;
 
     /// <summary>
-    /// True when the stage's latent upscale runs. Every other upscale mode resizes decoded media
+    /// True when a latent upscale mode actually runs. Every other mode resizes decoded media
     /// instead, so it never brings the sampler back.
     /// </summary>
     internal static bool RunsLatentUpscale(

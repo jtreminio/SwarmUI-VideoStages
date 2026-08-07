@@ -89,6 +89,7 @@ internal static class WanClipPlanCompiler
                     previousModel.CompatibilityClassId,
                     resolved.CompatibilityClassId,
                     StringComparison.Ordinal);
+            // Wan pins the model-only target for every compat class, not per resolved model.
             ImmutableArray<LoraPlan> loras =
                 LoraPlanCompiler.Compile(
                     clip,

@@ -30,13 +30,10 @@ internal static class LoraPlanCompiler
         IReadOnlyList<LoraRef> loras,
         IReadOnlyList<double> weights)
     {
-        if (loras is null)
+        IReadOnlyList<LoraRef> source = loras ?? [];
+        for (int index = 0; index < source.Count; index++)
         {
-            return;
-        }
-        for (int index = 0; index < loras.Count; index++)
-        {
-            LoraRef lora = loras[index];
+            LoraRef lora = source[index];
             double weight = index < (weights?.Count ?? 0)
                 ? weights[index]
                 : lora.Weight;
