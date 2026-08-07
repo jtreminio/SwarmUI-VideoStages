@@ -30,8 +30,6 @@ const fixturePath = path.resolve(
 const fixture = (): Record<string, unknown> =>
     JSON.parse(fs.readFileSync(fixturePath, "utf8"));
 
-const testStageModel = (): string => getDefaultStageModel(getRootDefaults());
-
 /**
  * One complete authoring document: every field the codec persists is set to a
  * non-default value so the fixture exercises the whole contract surface.
@@ -279,7 +277,7 @@ describe("authoring document contract fixture", () => {
                 fps: 24,
             },
             getRootDefaults(),
-            testStageModel(),
+            getDefaultStageModel(getRootDefaults()),
         );
         expect(decoded).not.toBeNull();
         if (!decoded) {

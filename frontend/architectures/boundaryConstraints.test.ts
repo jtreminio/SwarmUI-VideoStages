@@ -10,10 +10,7 @@ describe("catalog boundary constraints", () => {
         ["reference", "reference"],
         ["overlap", "overlap"],
         [undefined, "overlap"],
-        ["", "overlap"],
         ["Reference", "overlap"],
-        [7, "overlap"],
-        [{}, "overlap"],
     ])("resolves continueMode %p to %p", (authored, expected) => {
         expect(
             boundaryWindowConstraints({

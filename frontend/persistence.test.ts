@@ -58,8 +58,6 @@ const dataInput = (): HTMLTextAreaElement =>
 const promptEl = (): HTMLTextAreaElement =>
     document.getElementById("input_prompt") as HTMLTextAreaElement;
 
-const testStageModel = (): string => getDefaultStageModel(getRootDefaults());
-
 describe("persistence", () => {
     beforeEach(async () => {
         const catalog = testArchitectureCatalog();
@@ -92,7 +90,7 @@ describe("persistence", () => {
                     fps: 24,
                 },
                 getRootDefaults(),
-                testStageModel(),
+                getDefaultStageModel(getRootDefaults()),
             );
 
         it.each([
