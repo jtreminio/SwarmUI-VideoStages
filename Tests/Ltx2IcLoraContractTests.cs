@@ -926,19 +926,23 @@ public class Ltx2IcLoraContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
-        IReadOnlyList<LTXVSetAudioRefTokensNode> refTokens =
-            [.. bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>()];
-        Assert.Single(refTokens);
+        LTXVSetAudioRefTokensNode refTokens = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
         SwarmLoadAudioB64Node upload = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
         LTXVAudioVAEEncodeNode encode = Assert.Single(
             bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+        Assert.Same(encode, refTokens.AudioLatent.Connection?.Node);
+
+        // The node counts above are satisfied by a stage-0-only application; this is what makes
+        // "all stages" observable.
+        SwarmKSamplerNode[] stages = [StageSampler(bridge, 0), StageSampler(bridge, 1)];
         Assert.All(
-            refTokens,
-            tokens => Assert.Same(encode, tokens.AudioLatent.Connection?.Node));
+            stages,
+            stage => Assert.True(ReachesUpstream(bridge, stage.Positive.Connection?.Node, refTokens.Id)));
         Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
 
-        live.AssertAllLive([.. refTokens, upload, encode]);
+        live.AssertAllLive([refTokens, upload, encode, .. stages]);
         AssertShippable(bridge, workflow, live);
     }
 
