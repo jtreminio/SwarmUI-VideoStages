@@ -54,26 +54,10 @@ internal sealed class StageUpscaleGraphBuilder(WorkflowGenerator g)
 
         (int targetWidth, int targetHeight) =
             StageDimensionRules.ResolveUpscaled(stage, width, height);
-        WGNodeData upscaleSource = ResolveSourceMedia(source, postVideoChain, width, height);
-        if (upscale.Mode == StageUpscaleMode.Pixel)
+        if (upscale.Mode is StageUpscaleMode.Pixel or StageUpscaleMode.Model)
         {
             WGNodeData scaled = new StageUpscaleGraph(g).Apply(
-                upscaleSource,
-                targetWidth,
-                targetHeight,
-                upscale.Mode,
-                upscale.MethodName);
-            return PublishUpscaledMedia(
-                scaled,
-                dimensions,
-                targetWidth,
-                targetHeight);
-        }
-
-        if (upscale.Mode == StageUpscaleMode.Model)
-        {
-            WGNodeData scaled = new StageUpscaleGraph(g).Apply(
-                upscaleSource,
+                ResolveSourceMedia(source, postVideoChain, width, height),
                 targetWidth,
                 targetHeight,
                 upscale.Mode,
