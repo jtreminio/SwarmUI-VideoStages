@@ -32,8 +32,7 @@ describe("architecture conversion policy", () => {
         const conversion = planArchitectureConversion(clip, target, fake);
         expect(conversion).not.toBeNull();
 
-        expect(conversion?.removals ?? []).toEqual([]);
-        expect(conversion?.clip).toMatchObject({
+        expect(conversion).toMatchObject({
             frameRefs: clip.frameRefs,
             refFraming: "fit-green",
             loras: clip.loras,
@@ -67,7 +66,7 @@ describe("architecture conversion policy", () => {
             },
             catalog,
         );
-        expect(conversion?.clip.initVideo).toEqual(source.initVideo);
+        expect(conversion?.initVideo).toEqual(source.initVideo);
         expect(source).toEqual(before);
     });
 
@@ -92,10 +91,9 @@ describe("architecture conversion policy", () => {
             catalog,
         );
 
-        expect(conversion?.clip.loras).toEqual(source.loras);
-        expect(conversion?.clip.stages[0].loraWeights).toEqual([1, 0.4]);
-        expect(conversion?.clip.stages[1].loraWeights).toEqual([0.7, 0]);
-        expect(conversion?.removals).toEqual([]);
+        expect(conversion?.loras).toEqual(source.loras);
+        expect(conversion?.stages[0].loraWeights).toEqual([1, 0.4]);
+        expect(conversion?.stages[1].loraWeights).toEqual([0.7, 0]);
         expect(source.stages[0].loraWeights).toEqual([1, 0.4]);
     });
 
@@ -124,7 +122,7 @@ describe("architecture conversion policy", () => {
         expect(conversion).not.toBeNull();
 
         const before = JSON.stringify(source);
-        const after = JSON.stringify(conversion?.clip);
+        const after = JSON.stringify(conversion);
         let carrier = before;
         const history = createTimelineHistory({
             read: () => carrier,

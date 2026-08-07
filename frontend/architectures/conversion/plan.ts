@@ -5,16 +5,6 @@ import type {
     ArchitectureRetargetPlan,
 } from "../types";
 
-export interface ArchitectureConversionPlan {
-    /** The complete converted clip; the source clip is never mutated. */
-    clip: Clip;
-    /** User-facing summary produced from the same decisions as `clip`. */
-    removals: string[];
-    /** Stable IDs removed by the conversion, for selection invalidation. */
-    removedEntityIds: string[];
-    selectionAffected: boolean;
-}
-
 type ResolvedArchitectureRetarget = ArchitectureRetargetPlan;
 
 /**
@@ -55,17 +45,12 @@ export const resolveArchitectureRetarget = (
     };
 };
 
-/**
- * Plans and applies one architecture conversion on a private clone.
- *
- * Preview and reducer both consume this function, so the confirmation summary
- * cannot drift from the actual atomic mutation.
- */
+/** Retargets every stage onto the resolved model, on a private clone. */
 export const planArchitectureConversion = (
     source: Clip,
     requested: ArchitectureRetargetPlan,
     catalog: ArchitectureModelCatalog | null,
-): ArchitectureConversionPlan | null => {
+): Clip | null => {
     const target = resolveArchitectureRetarget(requested, catalog);
     if (!target) {
         return null;
@@ -78,10 +63,5 @@ export const planArchitectureConversion = (
         stage.model = target.model;
         stage.modelProfileId = target.modelProfileId;
     }
-    return {
-        clip,
-        removals: [],
-        removedEntityIds: [],
-        selectionAffected: false,
-    };
+    return clip;
 };

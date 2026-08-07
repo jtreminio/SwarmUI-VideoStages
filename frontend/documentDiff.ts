@@ -512,7 +512,7 @@ const clipDiffBase = (
         throw new DocumentDiffError("architecture-invariant");
     }
 
-    const convertedBase = baselinePlan.clip as CanonicalClip;
+    const convertedBase = baselinePlan as CanonicalClip;
     if (!reconcileClipArchitectureIdentity(convertedBase, catalog)) {
         throw new DocumentDiffError("architecture-invariant");
     }

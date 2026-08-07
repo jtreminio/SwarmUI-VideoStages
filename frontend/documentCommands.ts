@@ -180,7 +180,7 @@ export const reduceDocumentCommand = (
             if (!conversion) {
                 return failure(document, "invalid-architecture-conversion");
             }
-            const converted = conversion.clip as CanonicalClip;
+            const converted = conversion as CanonicalClip;
             if (
                 !reconcileClipArchitectureIdentity(
                     converted,

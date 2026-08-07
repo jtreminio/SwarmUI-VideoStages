@@ -52,8 +52,7 @@ describe("nondestructive architecture conversion", () => {
         );
 
         expect(conversion).not.toBeNull();
-        expect(conversion?.removals).toEqual([]);
-        expect(conversion?.clip).toMatchObject({
+        expect(conversion).toMatchObject({
             frameRefs: before.frameRefs,
             promptWindows: before.promptWindows,
             reuseAudio: true,
@@ -61,7 +60,7 @@ describe("nondestructive architecture conversion", () => {
             loras: before.loras,
             icLoras: before.icLoras,
         });
-        expect(conversion?.clip.stages[0]).toMatchObject({
+        expect(conversion?.stages[0]).toMatchObject({
             model: "test-video.safetensors",
             modelProfileId: "test-profile",
             loraWeights: [0.7],

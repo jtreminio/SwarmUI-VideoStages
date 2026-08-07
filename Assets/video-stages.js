@@ -4326,12 +4326,7 @@
       stage.model = target.model;
       stage.modelProfileId = target.modelProfileId;
     }
-    return {
-      clip,
-      removals: [],
-      removedEntityIds: [],
-      selectionAffected: false
-    };
+    return clip;
   };
 
   // frontend/documentCommands/listEntities.ts
@@ -4804,7 +4799,7 @@
     if (!reconcileClipArchitectureIdentity(cleanedRequested, catalog) || !deepEqual(cleanedRequested, next)) {
       throw new DocumentDiffError("architecture-invariant");
     }
-    const convertedBase = baselinePlan.clip;
+    const convertedBase = baselinePlan;
     if (!reconcileClipArchitectureIdentity(convertedBase, catalog)) {
       throw new DocumentDiffError("architecture-invariant");
     }
@@ -5203,7 +5198,7 @@
         if (!conversion) {
           return failure(document2, "invalid-architecture-conversion");
         }
-        const converted = conversion.clip;
+        const converted = conversion;
         if (!reconcileClipArchitectureIdentity(
           converted,
           context.architectureCatalog

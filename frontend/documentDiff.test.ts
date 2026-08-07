@@ -390,7 +390,7 @@ describe("diffDocuments", () => {
         );
         if (!planned) throw new Error("expected valid conversion plan");
         const after = structuredClone(before);
-        after.clips[0] = planned.clip as CanonicalClip;
+        after.clips[0] = planned as CanonicalClip;
         after.clips[0].stages[1].model = "test-video-alt.safetensors";
         after.clips[0].stages[1].modelProfileId = "test-alt";
 
@@ -594,7 +594,7 @@ describe("diffDocuments", () => {
         );
         if (!planned) throw new Error("expected valid conversion plan");
         const after = structuredClone(before);
-        after.clips[0] = planned.clip as CanonicalClip;
+        after.clips[0] = planned as CanonicalClip;
 
         expect(() => diffDocuments(before, after)).toThrow(
             new DocumentDiffError("architecture-invariant"),
@@ -629,7 +629,7 @@ describe("diffDocuments", () => {
         );
         if (!planned) throw new Error("expected valid conversion plan");
         const after = structuredClone(before);
-        after.clips[0] = planned.clip as CanonicalClip;
+        after.clips[0] = planned as CanonicalClip;
         expect(reconcileClipArchitectureIdentity(after.clips[0], catalog)).toBe(
             true,
         );
@@ -665,7 +665,7 @@ describe("diffDocuments", () => {
         );
         if (!planned) throw new Error("expected valid conversion plan");
         const after = structuredClone(before);
-        after.clips[0] = planned.clip as CanonicalClip;
+        after.clips[0] = planned as CanonicalClip;
 
         expect(() =>
             diffDocuments(before, after, { architectureCatalog: catalog }),
@@ -686,7 +686,7 @@ describe("diffDocuments", () => {
                 catalog,
             );
             if (!planned) throw new Error("expected valid conversion plan");
-            after.clips[index] = planned.clip as CanonicalClip;
+            after.clips[index] = planned as CanonicalClip;
         }
 
         const command = diffDocuments(before, after, {
