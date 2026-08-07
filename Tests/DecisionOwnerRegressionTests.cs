@@ -92,22 +92,41 @@ public class DecisionOwnerRegressionTests
         Assert.Equal(latentId, tiled.Samples.Connection?.Node.Id);
     }
 
+    /// <summary>The extension re-types core's LTX-2 tiling geometry because it splices decodes by
+    /// id, which core has no API for. Two copies that must agree, so the assertion is against what
+    /// core emits today rather than against literals that would keep this green through a core
+    /// change.</summary>
     [Fact]
     public void Ltx2_default_decode_uses_core_tiling_geometry()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+
+        VAEDecodeTiledNode core = Ltx2TiledDecode(
+            models,
+            (generator, latent, vae) => latent.DecodeLatents(vae, false));
+        VAEDecodeTiledNode extension = Ltx2TiledDecode(
+            models,
+            (generator, latent, vae) => VaeDecodePreference.AsRawImage(generator, latent, vae));
+
+        Assert.Equal(core.TileSize.LiteralAsInt(), extension.TileSize.LiteralAsInt());
+        Assert.Equal(core.Overlap.LiteralAsInt(), extension.Overlap.LiteralAsInt());
+        Assert.Equal(
+            core.TemporalSize.LiteralAsInt(),
+            extension.TemporalSize.LiteralAsInt());
+        Assert.Equal(
+            core.TemporalOverlap.LiteralAsInt(),
+            extension.TemporalOverlap.LiteralAsInt());
+    }
+
+    /// <summary>Decodes one stub LTX-2 video latent the given way and returns the tiled node it
+    /// produced, so core and the extension can be asked the same question.</summary>
+    private static VAEDecodeTiledNode Ltx2TiledDecode(
+        TestModelBundle models,
+        Func<WorkflowGenerator, WGNodeData, WGNodeData, WGNodeData> decode)
+    {
         WorkflowGenerator generator = Generator();
         generator.FinalLoadedModel = models.VideoModel;
-
-        LtxDecodeConfig config = LtxDecodeConfig.From(generator);
-
-        Assert.True(config.UseTiledDecode);
-        Assert.Equal(2048, config.TileSize);
-        Assert.Equal(256, config.Overlap);
-        Assert.Equal(64, config.TemporalSize);
-        Assert.Equal(16, config.TemporalOverlap);
-
         JObject workflow = [];
         generator.Workflow = workflow;
         string vaeId;
@@ -123,15 +142,10 @@ public class DecisionOwnerRegressionTests
         WGNodeData latent = new(
             new JArray(latentId, 0), generator, WGNodeData.DT_LATENT_VIDEO, null);
 
-        _ = VaeDecodePreference.AsRawImage(generator, latent, vae);
+        _ = decode(generator, latent, vae);
 
         using WorkflowBridge decoded = WorkflowBridge.Create(generator.Workflow);
-        VAEDecodeTiledNode tiled = Assert.Single(
-            decoded.Graph.NodesOfType<VAEDecodeTiledNode>());
-        Assert.Equal(2048, tiled.TileSize.LiteralAsInt());
-        Assert.Equal(256, tiled.Overlap.LiteralAsInt());
-        Assert.Equal(64, tiled.TemporalSize.LiteralAsInt());
-        Assert.Equal(16, tiled.TemporalOverlap.LiteralAsInt());
+        return Assert.Single(decoded.Graph.NodesOfType<VAEDecodeTiledNode>());
     }
 
     [Fact]
