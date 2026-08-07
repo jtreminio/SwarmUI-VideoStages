@@ -49,6 +49,14 @@ public static class MediaSource
 
     private const string AceStepFunPrefix = "audio";
     private const string Base2EditPrefix = "edit";
+    private const string ExplicitStagePrefix = "Stage";
+
+    /// <summary>True when the source names one of the host workflow's own images rather than a
+    /// timeline stage.</summary>
+    public static bool IsHostStageSource(string source) =>
+        StringUtils.Equals(source, Base)
+        || StringUtils.Equals(source, Refiner)
+        || TryParseBase2EditIndex(source, out _);
 
     public static bool TryParseControlNetIndex(string source, out int index)
     {
@@ -81,6 +89,12 @@ public static class MediaSource
 
     public static string FormatBase2Edit(int index) =>
         FormatNonNegativeIndex(Base2EditPrefix, index);
+
+    public static bool TryParseExplicitStageIndex(string source, out int index) =>
+        TryParseNonNegativeIndex(source, ExplicitStagePrefix, out index);
+
+    public static string FormatExplicitStageIndex(int index) =>
+        FormatNonNegativeIndex(ExplicitStagePrefix, index);
 
     private static bool TryParseNonNegativeIndex(
         string source,

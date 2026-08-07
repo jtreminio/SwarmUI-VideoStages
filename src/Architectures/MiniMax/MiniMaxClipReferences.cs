@@ -33,7 +33,7 @@ internal static class MiniMaxClipReferences
         {
             bool uploaded = StringUtils.Equals(reference.Source, MediaSource.Upload);
             bool hostCapture = reference.Kind == ClipReferenceKind.Image
-                && ImageReferenceSyntax.IsHostStageSource(reference.Source);
+                && MediaSource.IsHostStageSource(reference.Source);
             bool controlNet = MediaSource.TryParseControlNetIndex(reference.Source, out _);
             bool aceStepFun = reference.Kind == ClipReferenceKind.Audio
                 && MediaSource.TryParseAceStepFunIndex(reference.Source, out _);

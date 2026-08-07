@@ -1,5 +1,3 @@
-using VideoStages.Authoring;
-
 namespace VideoStages.Architectures.Abstractions;
 
 [Flags]
@@ -68,7 +66,7 @@ internal readonly record struct StageGuideReferencePolicy
         {
             return new(StageGuideReferenceKind.PreviousStage, null);
         }
-        if (ImageReferenceSyntax.TryParseExplicitStageIndex(raw, out int stageIndex))
+        if (MediaSource.TryParseExplicitStageIndex(raw, out int stageIndex))
         {
             return new(StageGuideReferenceKind.ExplicitStage, stageIndex);
         }

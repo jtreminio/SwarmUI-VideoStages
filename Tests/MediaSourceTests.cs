@@ -51,6 +51,31 @@ public class MediaSourceTests
     }
 
     [Theory]
+    [InlineData("Stage0", 0)]
+    [InlineData(" stage 12 ", 12)]
+    [InlineData("STAGE 2", 2)]
+    [InlineData("Stage00", 0)]
+    public void Explicit_stage_source_round_trips(string source, int expectedIndex)
+    {
+        Assert.True(MediaSource.TryParseExplicitStageIndex(source, out int index));
+        Assert.Equal(expectedIndex, index);
+        Assert.Equal($"Stage{expectedIndex}", MediaSource.FormatExplicitStageIndex(index));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Stage")]
+    [InlineData("Stage-1")]
+    [InlineData("Stageabc")]
+    [InlineData("Staging")]
+    public void Invalid_explicit_stage_source_is_rejected(string source)
+    {
+        Assert.False(MediaSource.TryParseExplicitStageIndex(source, out int index));
+        Assert.Equal(-1, index);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("audio")]
@@ -79,6 +104,7 @@ public class MediaSourceTests
         Assert.Throws<ArgumentOutOfRangeException>(() => MediaSource.FormatControlNet(-1));
         Assert.Throws<ArgumentOutOfRangeException>(() => MediaSource.FormatAceStepFun(-1));
         Assert.Throws<ArgumentOutOfRangeException>(() => MediaSource.FormatBase2Edit(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MediaSource.FormatExplicitStageIndex(-1));
     }
 
     [Fact]

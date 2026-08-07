@@ -572,11 +572,11 @@ internal static class RequestReader
         {
             return stageIndex == 0 ? defaultReference : MediaSource.PreviousStage;
         }
-        if (ImageReferenceSyntax.TryParseExplicitStageIndex(compact, out int explicitStage))
+        if (MediaSource.TryParseExplicitStageIndex(compact, out int explicitStage))
         {
             if (explicitStage < stageIndex)
             {
-                return ImageReferenceSyntax.FormatExplicitStageIndex(explicitStage);
+                return MediaSource.FormatExplicitStageIndex(explicitStage);
             }
             DocumentJson.Warn(
                 warn,
