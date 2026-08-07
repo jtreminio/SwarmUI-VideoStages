@@ -19,6 +19,7 @@ import {
     mountTimelineBody,
     mountVideoFps,
     mountVideoStagesData,
+    stubRect,
     TIMELINE_PPS,
 } from "./__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
@@ -156,18 +157,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         if (!lane) {
             throw new Error(`ref lane not found: clip ${clipIdx}`);
         }
-        lane.getBoundingClientRect = (() =>
-            ({
-                left,
-                width,
-                right: left + width,
-                top: 0,
-                bottom: 40,
-                height: 40,
-                x: left,
-                y: 0,
-                toJSON: () => ({}),
-            }) as DOMRect) as HTMLElement["getBoundingClientRect"];
+        stubRect(lane, left, width);
     };
 
     const dragThumb = (

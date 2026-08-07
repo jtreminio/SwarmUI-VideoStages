@@ -13,6 +13,7 @@ import {
     mountVideoStagesData,
     mouse,
     requireEl,
+    stubRect,
     TIMELINE_PPS,
 } from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
@@ -91,26 +92,13 @@ const renderPromptTrack = (body: HTMLElement, clips: ClipFixture[]): void => {
         `<div class="vst-track-row vst-track-prompt"><div class="vst-track-cell vst-prompt-cell">` +
         parts.join("") +
         `</div></div>`;
-    // jsdom does no layout — stub each lane's rect from its clip offset.
     cursor = 0;
     clips.forEach((clip, i) => {
-        const left = cursor * TIMELINE_PPS;
         const lane = body.querySelector<HTMLElement>(
             `.vst-minor-lane[data-clip-idx="${i}"]`,
         );
         if (lane) {
-            lane.getBoundingClientRect = (() =>
-                ({
-                    left,
-                    width: clip.duration * TIMELINE_PPS,
-                    right: left + clip.duration * TIMELINE_PPS,
-                    top: 40,
-                    bottom: 72,
-                    height: 32,
-                    x: left,
-                    y: 40,
-                    toJSON: () => ({}),
-                }) as DOMRect) as HTMLElement["getBoundingClientRect"];
+            stubRect(lane, cursor * TIMELINE_PPS, clip.duration * TIMELINE_PPS);
         }
         cursor += clip.duration;
     });

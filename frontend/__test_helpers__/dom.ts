@@ -126,6 +126,29 @@ export const mountTimelineBody = (pxPerSecond = TIMELINE_PPS): HTMLElement => {
     return body;
 };
 
+/**
+ * jsdom does no layout, so a track that measures a lane or region sees all zeros.
+ * Track code reads only `left` and `width`; the rest is filler to satisfy DOMRect.
+ */
+export const stubRect = (
+    el: HTMLElement,
+    left: number,
+    width: number,
+): void => {
+    el.getBoundingClientRect = (() =>
+        ({
+            left,
+            width,
+            right: left + width,
+            top: 0,
+            bottom: 0,
+            height: 0,
+            x: left,
+            y: 0,
+            toJSON: () => ({}),
+        }) as DOMRect) as HTMLElement["getBoundingClientRect"];
+};
+
 /** The one element matching `selector`, or a throw naming what was missing. */
 export const requireEl = (root: ParentNode, selector: string): HTMLElement => {
     const found = root.querySelector<HTMLElement>(selector);

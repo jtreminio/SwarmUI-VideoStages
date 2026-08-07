@@ -12,6 +12,7 @@ import {
     mountVideoStagesData,
     mouse,
     requireEl,
+    stubRect,
     TIMELINE_PPS,
 } from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
@@ -88,18 +89,7 @@ describe("timeline-wide audio span gestures", () => {
             `</div>`;
         const lane = body.querySelector<HTMLElement>(".vst-audio-track-lane");
         if (lane) {
-            lane.getBoundingClientRect = (() =>
-                ({
-                    left: 0,
-                    width: duration * TIMELINE_PPS,
-                    right: duration * TIMELINE_PPS,
-                    top: 0,
-                    bottom: 20,
-                    height: 20,
-                    x: 0,
-                    y: 0,
-                    toJSON: () => ({}),
-                }) as DOMRect) as HTMLElement["getBoundingClientRect"];
+            stubRect(lane, 0, duration * TIMELINE_PPS);
         }
         track = createTimelineAudioSpanTrack();
         router = createGestureRouter();

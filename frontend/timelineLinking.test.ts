@@ -13,6 +13,7 @@ import {
     mountVideoFps,
     mountVideoStagesData,
     mouse,
+    stubRect,
 } from "./__test_helpers__/dom";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
 import * as persistence from "./persistence/repository";
@@ -116,25 +117,12 @@ const region = (body: HTMLElement, idx: number): HTMLElement => {
     return el;
 };
 
-// jsdom does no layout, so hand each region a fixed 100px-wide rect at index*100.
+/** Each region a fixed 100px wide at index*100. */
 const stubRegionRects = (body: HTMLElement): void => {
     for (const el of body.querySelectorAll<HTMLElement>(
         ".vst-region[data-clip-idx]",
     )) {
-        const idx = Number(el.getAttribute("data-clip-idx"));
-        const left = idx * 100;
-        el.getBoundingClientRect = (() =>
-            ({
-                left,
-                width: 100,
-                right: left + 100,
-                top: 0,
-                bottom: 182,
-                height: 182,
-                x: left,
-                y: 0,
-                toJSON: () => ({}),
-            }) as DOMRect) as HTMLElement["getBoundingClientRect"];
+        stubRect(el, Number(el.getAttribute("data-clip-idx")) * 100, 100);
     }
 };
 
