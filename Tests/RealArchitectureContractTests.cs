@@ -173,7 +173,7 @@ public class RealArchitectureContractTests
                 TotalStageCount: 1,
                 FirstStageOrdinal: 0,
                 EntryMode: ArchitectureEntryMode.ImageToVideo,
-                Architecture: assignment,
+                Assignment: assignment,
                 ArchitectureCompilation: architectureCompilation));
         Assert.Same(
             compiledEntry.Value,

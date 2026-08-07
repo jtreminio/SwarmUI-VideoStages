@@ -31,8 +31,7 @@ internal static class EffectiveVideoRequestProjection
             clips,
             clip => clip.InitVideo is null
                 && clip.Stages is { Count: > 0 });
-        bool rootCanForceTextToVideoGeneration =
-            hostKind == HostRootKind.TextToVideo;
+        bool hostRootIsTextToVideo = hostKind == HostRootKind.TextToVideo;
         List<PlanDiagnostic> diagnostics = [];
         for (int timelineIndex = 0; timelineIndex < clips.Length; timelineIndex++)
         {
@@ -51,7 +50,7 @@ internal static class EffectiveVideoRequestProjection
             clips[timelineIndex] = ProjectResolvedTemporalGrid(
                 clip,
                 assignment,
-                rootCanForceTextToVideoGeneration
+                hostRootIsTextToVideo
                     && timelineIndex == rootTimelineIndex,
                 diagnostics);
         }
@@ -142,7 +141,7 @@ internal static class EffectiveVideoRequestProjection
     private static ClipSpec ProjectResolvedTemporalGrid(
         ClipSpec clip,
         ClipArchitectureAssignment assignment,
-        bool forceRootStageGeneration,
+        bool countRootStageGrid,
         ICollection<PlanDiagnostic> diagnostics)
     {
         // Runtime-derived lengths skip grid snapping only when the architecture supports them.
@@ -164,7 +163,7 @@ internal static class EffectiveVideoRequestProjection
             !StagePassthroughPolicy.IsPassthrough(
                 stage,
                 assignment.Architecture)
-            || (forceRootStageGeneration && stage.ClipStageIndex == 0)))
+            || (countRootStageGrid && stage.ClipStageIndex == 0)))
         {
             if (!assignment.StageModels.TryGetValue(
                     stage.ClipStageRawIndex,

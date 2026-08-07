@@ -33,19 +33,19 @@ internal static class BoundaryPlanCompiler
         {
             ClipSpec authoredFrom = authoredClips[i];
             ClipPlan from = clips[i];
-            BoundaryJoinType effectiveRequested = ParseJoinType(authoredFrom.BoundaryOut);
+            BoundaryJoinType requested = ParseJoinType(authoredFrom.BoundaryOut);
             ClipSpec authoredTo = authoredClips[i + 1];
             ClipPlan to = clips[i + 1];
             BoundaryFallbackReason fallback = BoundaryFallbackReason.None;
             bool fallbackReported = false;
-            BoundaryJoinType effective = effectiveRequested;
+            BoundaryJoinType effective = requested;
             bool targetHasGenerationStage = to.Stages.Any(stage => !stage.IsPassthrough);
             bool targetHasDerivedDuration =
                 to.Audio.LengthOwner != AudioLengthOwner.Timeline;
             RuleDecision modePolicy = from.Architecture?.BoundaryPolicy
-                ?.Rules.GetValueOrDefault(effectiveRequested);
+                ?.Rules.GetValueOrDefault(requested);
             BoundaryRuleConstraints constraints = modePolicy?.Constraints;
-            if (effectiveRequested != BoundaryJoinType.Cut
+            if (requested != BoundaryJoinType.Cut
                 && from.Architecture is not null
                 && to.Architecture is not null
                 && from.Architecture.Id != to.Architecture.Id)
@@ -61,7 +61,7 @@ internal static class BoundaryPlanCompiler
                     authoredFrom.Id));
                 fallbackReported = true;
             }
-            else if (effectiveRequested != BoundaryJoinType.Cut
+            else if (requested != BoundaryJoinType.Cut
                 && modePolicy is { Support: RuleSupport.Unsupported })
             {
                 effective = BoundaryJoinType.Cut;
@@ -73,19 +73,19 @@ internal static class BoundaryPlanCompiler
                     authoredFrom.Id));
                 fallbackReported = true;
             }
-            else if (effectiveRequested != BoundaryJoinType.Cut
+            else if (requested != BoundaryJoinType.Cut
                 && EvaluateTarget(constraints, authoredTo, to) is { } targetFallback)
             {
                 effective = BoundaryJoinType.Cut;
                 fallback = targetFallback;
             }
-            else if (effectiveRequested == BoundaryJoinType.Continue
+            else if (requested == BoundaryJoinType.Continue
                 && !targetHasGenerationStage)
             {
                 effective = BoundaryJoinType.Cut;
                 fallback = BoundaryFallbackReason.TargetHasNoStage;
             }
-            else if (effectiveRequested == BoundaryJoinType.Continue
+            else if (requested == BoundaryJoinType.Continue
                 && targetHasDerivedDuration)
             {
                 effective = BoundaryJoinType.Cut;

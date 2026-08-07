@@ -26,7 +26,7 @@ internal static class ClipPlanCompiler
         {
             StageSpec stage = clip.Stages[i];
             ResolvedVideoModel resolvedModel = null;
-            context.Architecture?.StageModels.TryGetValue(stage.ClipStageRawIndex, out resolvedModel);
+            context.Assignment?.StageModels.TryGetValue(stage.ClipStageRawIndex, out resolvedModel);
             stages.Add(new StagePlan(
                 stage.Id,
                 stage.ClipStageIndex,
@@ -34,7 +34,7 @@ internal static class ClipPlanCompiler
                 ResolveStageInput(context.EntryMode, i),
                 StagePassthroughPolicy.IsPassthrough(
                     stage,
-                    context.Architecture?.Architecture),
+                    context.Assignment?.Architecture),
                 architectureCompilation?.StagePayloads[stage.ClipStageRawIndex],
                 context.FirstStageOrdinal + i < context.TotalStageCount - 1)
             {
@@ -51,7 +51,7 @@ internal static class ClipPlanCompiler
             audio,
             clip.SaveAudioTrack)
         {
-            Architecture = context.Architecture?.Architecture,
+            Architecture = context.Assignment?.Architecture,
             ArchitecturePayload = architectureCompilation?.Payload,
         };
     }
@@ -100,7 +100,7 @@ internal static class ClipPlanCompiler
         }
 
         ArchitectureId clipArchitectureId = compilation.Payload.ArchitectureId;
-        ArchitectureId? assignedArchitectureId = context.Architecture?.Architecture.Id;
+        ArchitectureId? assignedArchitectureId = context.Assignment?.Architecture.Id;
         if (assignedArchitectureId.HasValue
             && clipArchitectureId != assignedArchitectureId.Value)
         {
@@ -131,5 +131,5 @@ internal sealed record ClipPlanCompilationContext(
     int TotalStageCount,
     int FirstStageOrdinal,
     ArchitectureEntryMode EntryMode,
-    ClipArchitectureAssignment Architecture = null,
+    ClipArchitectureAssignment Assignment = null,
     ArchitectureClipCompilation ArchitectureCompilation = null);

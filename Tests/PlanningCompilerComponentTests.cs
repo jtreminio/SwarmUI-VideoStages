@@ -713,7 +713,7 @@ public class PlanningCompilerComponentTests
             TotalStageCount: 1,
             FirstStageOrdinal: 0,
             EntryMode: ArchitectureEntryMode.ImageToVideo,
-            Architecture: architecture,
+            Assignment: architecture,
             ArchitectureCompilation: new(clipPayload, stagePayloads, []));
 
     private sealed record TestClipPayload(
