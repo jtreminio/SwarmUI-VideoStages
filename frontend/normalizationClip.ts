@@ -11,7 +11,7 @@ import {
 import { architectureDescriptor } from "./architectures/catalogQueries";
 import { normalizeClipArchitecture } from "./architectures/identity";
 import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
-import { AUDIO_SOURCE_NATIVE } from "./audioSource";
+import { AUDIO_SOURCE_NATIVE, canonicalAudioSource } from "./audioSource";
 import { normalizeStoredHue, UNASSIGNED_HUE } from "./clipColor";
 import { normalizeClipReferenceScale } from "./clipReferenceAuthoring";
 import { sealSkipSuffix } from "./clipSemantics";
@@ -248,7 +248,7 @@ export const normalizeClip = (
     }
     sealSkipSuffix(stages);
     const retake = normalizeRetake(rawClip.retake, duration);
-    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
+    const audioSource = canonicalAudioSource(rawAudioSource);
     const refFrameMax = getKnownReferenceFrameMax(
         defaults,
         {

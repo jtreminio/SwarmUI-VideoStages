@@ -225,6 +225,23 @@ describe("normalization", () => {
         expect(clip.refFraming).toBe(expected);
     });
 
+    it.each([
+        ["upload", "Upload"],
+        ["CONTROLNET", "ControlNet"],
+        ["  native  ", "Native"],
+        ["", "Native"],
+        // An indexed ref carries a track number, not a kind, so it keeps its spelling.
+        ["audio3", "audio3"],
+        ["future-source", "future-source"],
+    ])("normalizeClip heals the audio source %p to the backend spelling %p", (raw, expected) => {
+        const clip = normalizeClip(
+            { stages: [{ model: "ltx" }], audioSource: raw },
+            moduleRootDefaults(),
+            testStageModel,
+        );
+        expect(clip.audioSource).toBe(expected);
+    });
+
     it("normalizeClip ignores a noncanonical PascalCase boundary key", () => {
         const clip = normalizeClip(
             { stages: [{ model: "ltx" }], BoundaryOut: "continue" },

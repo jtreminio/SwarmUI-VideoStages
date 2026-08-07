@@ -37,20 +37,30 @@ const LITERAL_AUDIO_SOURCES = [
 ];
 
 /**
- * Mirrors AudioSource.Parse, which compares through StringUtils.Equals — so a
- * differently-cased spelling names the same kind here as it does on the backend.
- * An unrecognized value is passed through, standing in for AudioSourceKind.Unknown.
+ * The document's own source string, cased the way the backend spells it. The backend compares
+ * through StringUtils.Equals, so a differently-cased spelling names the same source there;
+ * normalization heals it here so every exact compare downstream — option lookup, the audio
+ * panel's Upload check — agrees with the capability layer. An indexed AceStepFun ref keeps its
+ * authored spelling: it carries a track number, not a kind.
  */
-export const audioSourceKind = (source: string): string => {
-    const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
-    if (isAceStepFunAudioSource(normalized)) {
-        return AUDIO_SOURCE_ACE_STEP_FUN;
+export const canonicalAudioSource = (source: string): string => {
+    const normalized = `${source ?? ""}`.trim();
+    if (!normalized) {
+        return AUDIO_SOURCE_NATIVE;
     }
     return (
         LITERAL_AUDIO_SOURCES.find((kind) =>
             equalsMediaSource(kind, normalized),
         ) ?? normalized
     );
+};
+
+/** Mirrors AudioSource.Parse: an unrecognized value stands in for AudioSourceKind.Unknown. */
+export const audioSourceKind = (source: string): string => {
+    const canonical = canonicalAudioSource(source);
+    return isAceStepFunAudioSource(canonical)
+        ? AUDIO_SOURCE_ACE_STEP_FUN
+        : canonical;
 };
 
 export const isAllowedAudioSource = (

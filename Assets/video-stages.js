@@ -556,14 +556,18 @@
     AUDIO_SOURCE_UPLOAD,
     AUDIO_SOURCE_CONTROLNET
   ];
-  var audioSourceKind = (source) => {
-    const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
-    if (isAceStepFunAudioSource(normalized)) {
-      return AUDIO_SOURCE_ACE_STEP_FUN;
+  var canonicalAudioSource = (source) => {
+    const normalized = `${source ?? ""}`.trim();
+    if (!normalized) {
+      return AUDIO_SOURCE_NATIVE;
     }
     return LITERAL_AUDIO_SOURCES.find(
       (kind) => equalsMediaSource(kind, normalized)
     ) ?? normalized;
+  };
+  var audioSourceKind = (source) => {
+    const canonical = canonicalAudioSource(source);
+    return isAceStepFunAudioSource(canonical) ? AUDIO_SOURCE_ACE_STEP_FUN : canonical;
   };
   var isAllowedAudioSource = (allowedKinds, source) => {
     const kind = audioSourceKind(source);
@@ -3765,7 +3769,7 @@
     }
     sealSkipSuffix(stages);
     const retake = normalizeRetake(rawClip.retake, duration);
-    const audioSource = rawAudioSource.trim() || AUDIO_SOURCE_NATIVE;
+    const audioSource = canonicalAudioSource(rawAudioSource);
     const refFrameMax = getKnownReferenceFrameMax(
       defaults,
       {
