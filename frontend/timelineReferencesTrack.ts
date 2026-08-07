@@ -1,4 +1,7 @@
-import { referenceEndpointPolicy } from "./architectures/referenceEndpoints";
+import {
+    type ClipReferenceEndpointPolicy,
+    referenceEndpointPolicy,
+} from "./architectures/referenceEndpoints";
 import { resolvedClipFrameGrid } from "./architectures/temporalGrid";
 import type { AuthoringTransactionSnapshot } from "./authoringSnapshot";
 import { clamp, REF_FRAME_MIN } from "./constants";
@@ -59,7 +62,7 @@ interface RefDragState {
 
 interface ReferenceDragPolicy {
     supported: boolean;
-    positions: string[];
+    endpoints: ClipReferenceEndpointPolicy;
     frameGrid: FrameGridSpec;
     frameMax: number;
 }
@@ -75,19 +78,18 @@ export const createTimelineReferencesTrack = (
     ) =>
         authoring.capabilities.forClip(clip).decision("frameReferences")
             .supported;
-    const referencePositions = (
+    const referenceEndpoints = (
         clip: ReturnType<typeof getClips>[number],
         authoring = getAuthoring(),
-    ): string[] =>
-        referenceEndpointPolicy(clip, authoring.defaults.modelCatalog)
-            .positions;
+    ): ClipReferenceEndpointPolicy =>
+        referenceEndpointPolicy(clip, authoring.defaults.modelCatalog);
     const resolveDragPolicy = (
         clip: ReturnType<typeof getClips>[number],
         fps: number,
         authoring: AuthoringTransactionSnapshot,
     ): ReferenceDragPolicy => ({
         supported: canEditReferences(clip, authoring),
-        positions: referencePositions(clip, authoring),
+        endpoints: referenceEndpoints(clip, authoring),
         frameGrid: resolvedClipFrameGrid(clip, authoring.defaults.modelCatalog),
         frameMax: getReferenceFrameMax(() => authoring.defaults, clip, fps),
     });
@@ -99,9 +101,9 @@ export const createTimelineReferencesTrack = (
         left.frameGrid.frameGrid === right.frameGrid.frameGrid &&
         left.frameGrid.frameGridOrigin === right.frameGrid.frameGridOrigin &&
         left.frameMax === right.frameMax &&
-        left.positions.length === right.positions.length &&
-        left.positions.every(
-            (position, index) => position === right.positions[index],
+        left.endpoints.positions.length === right.endpoints.positions.length &&
+        left.endpoints.positions.every(
+            (position, index) => position === right.endpoints.positions[index],
         );
 
     const findArrow = (clipIdx: number, refIdx: number): HTMLElement | null =>
@@ -150,9 +152,12 @@ export const createTimelineReferencesTrack = (
                     clip,
                     fps,
                 );
-                const allowed = referencePositions(clip, authoring);
+                const endpoints = referenceEndpoints(clip, authoring);
+                if (!endpoints.available) {
+                    return null;
+                }
                 const ref = buildDefaultRef();
-                if (allowed.includes("any")) {
+                if (!endpoints.bounded) {
                     ref.frame = clamp(
                         Math.round(frame),
                         REF_FRAME_MIN,
@@ -162,7 +167,7 @@ export const createTimelineReferencesTrack = (
                     const position = nextAllowedReferencePosition(
                         clip.frameRefs,
                         frameMax,
-                        allowed,
+                        endpoints.positions,
                     );
                     if (!position) {
                         return null;
@@ -198,14 +203,10 @@ export const createTimelineReferencesTrack = (
         state: RefDragState,
         clientX: number,
     ): { frame: number; fromEnd: boolean } => {
-        const bounded =
-            state.policy.positions.length > 0 &&
-            !state.policy.positions.includes("any");
+        const { bounded, supportsFirst, supportsLast } = state.policy.endpoints;
         if (bounded) {
             const rect = state.lane.getBoundingClientRect();
             const prefersLast = clientX - rect.left >= rect.width / 2;
-            const supportsFirst = state.policy.positions.includes("first");
-            const supportsLast = state.policy.positions.includes("last");
             return {
                 frame: REF_FRAME_MIN,
                 fromEnd: supportsLast && (!supportsFirst || prefersLast),
@@ -352,7 +353,7 @@ export const createTimelineReferencesTrack = (
             return claimOnly();
         }
         const arrow = findArrow(clipIdx, refIdx);
-        if (policy.positions.length === 0) {
+        if (!policy.endpoints.available) {
             me.preventDefault();
             return claimOnly();
         }

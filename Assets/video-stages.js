@@ -15298,15 +15298,15 @@ ${slot}`;
     let boundBody = null;
     let unregister = null;
     const canEditReferences = (clip, authoring = getAuthoring()) => authoring.capabilities.forClip(clip).decision("frameReferences").supported;
-    const referencePositions = (clip, authoring = getAuthoring()) => referenceEndpointPolicy(clip, authoring.defaults.modelCatalog).positions;
+    const referenceEndpoints = (clip, authoring = getAuthoring()) => referenceEndpointPolicy(clip, authoring.defaults.modelCatalog);
     const resolveDragPolicy = (clip, fps, authoring) => ({
       supported: canEditReferences(clip, authoring),
-      positions: referencePositions(clip, authoring),
+      endpoints: referenceEndpoints(clip, authoring),
       frameGrid: resolvedClipFrameGrid(clip, authoring.defaults.modelCatalog),
       frameMax: getReferenceFrameMax(() => authoring.defaults, clip, fps)
     });
-    const sameDragPolicy = (left, right) => left.supported === right.supported && left.frameGrid.frameGrid === right.frameGrid.frameGrid && left.frameGrid.frameGridOrigin === right.frameGrid.frameGridOrigin && left.frameMax === right.frameMax && left.positions.length === right.positions.length && left.positions.every(
-      (position, index) => position === right.positions[index]
+    const sameDragPolicy = (left, right) => left.supported === right.supported && left.frameGrid.frameGrid === right.frameGrid.frameGrid && left.frameGrid.frameGridOrigin === right.frameGrid.frameGridOrigin && left.frameMax === right.frameMax && left.endpoints.positions.length === right.endpoints.positions.length && left.endpoints.positions.every(
+      (position, index) => position === right.endpoints.positions[index]
     );
     const findArrow = (clipIdx, refIdx) => boundBody?.querySelector(
       `.vst-region[data-clip-idx="${clipIdx}"] .vst-key[data-ref-idx="${refIdx}"]`
@@ -15339,9 +15339,12 @@ ${slot}`;
             clip,
             fps
           );
-          const allowed = referencePositions(clip, authoring);
+          const endpoints = referenceEndpoints(clip, authoring);
+          if (!endpoints.available) {
+            return null;
+          }
           const ref = buildDefaultRef();
-          if (allowed.includes("any")) {
+          if (!endpoints.bounded) {
             ref.frame = clamp(
               Math.round(frame),
               REF_FRAME_MIN,
@@ -15351,7 +15354,7 @@ ${slot}`;
             const position = nextAllowedReferencePosition(
               clip.frameRefs,
               frameMax,
-              allowed
+              endpoints.positions
             );
             if (!position) {
               return null;
@@ -15375,12 +15378,10 @@ ${slot}`;
       });
     };
     const dragPositionAt = (state, clientX) => {
-      const bounded = state.policy.positions.length > 0 && !state.policy.positions.includes("any");
+      const { bounded, supportsFirst, supportsLast } = state.policy.endpoints;
       if (bounded) {
         const rect2 = state.lane.getBoundingClientRect();
         const prefersLast = clientX - rect2.left >= rect2.width / 2;
-        const supportsFirst = state.policy.positions.includes("first");
-        const supportsLast = state.policy.positions.includes("last");
         return {
           frame: REF_FRAME_MIN,
           fromEnd: supportsLast && (!supportsFirst || prefersLast)
@@ -15505,7 +15506,7 @@ ${slot}`;
         return claimOnly();
       }
       const arrow = findArrow(clipIdx, refIdx);
-      if (policy.positions.length === 0) {
+      if (!policy.endpoints.available) {
         me.preventDefault();
         return claimOnly();
       }
