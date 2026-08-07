@@ -56,6 +56,21 @@ internal static class ArchitectureFeatureVocabulary
         _ => throw new ArgumentOutOfRangeException(nameof(join)),
     };
 
+    internal static string WireName(RuleSupport support) => support switch
+    {
+        RuleSupport.Supported => "supported",
+        RuleSupport.Unsupported => "unsupported",
+        RuleSupport.Conditional => "conditional",
+        _ => throw new ArgumentOutOfRangeException(nameof(support)),
+    };
+
+    internal static string WireName(ContinueBoundaryMode mode) => mode switch
+    {
+        ContinueBoundaryMode.Overlap => "overlap",
+        ContinueBoundaryMode.Reference => "reference",
+        _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+    };
+
     internal static IEnumerable<string> WireNames(ArchitectureFeature features) =>
         Features
             .Where(entry => features.HasFlag(entry.Feature))
@@ -99,6 +114,16 @@ internal static class ArchitectureFeatureVocabulary
         StringList(
             "BOUNDARY_MODES",
             [.. Enum.GetValues<BoundaryJoinType>().Select(WireName)]);
+        Line();
+        Line("/** Every rule support the serialized catalog can carry, in declaration order. */");
+        StringList(
+            "RULE_SUPPORTS",
+            [.. Enum.GetValues<RuleSupport>().Select(WireName)]);
+        Line();
+        Line("/** Every continue mode the serialized catalog can carry, in declaration order. */");
+        StringList(
+            "CONTINUE_MODES",
+            [.. Enum.GetValues<ContinueBoundaryMode>().Select(WireName)]);
 
         // Biome keeps a const array on one line while it fits its 80-column width.
         void StringList(string name, IReadOnlyList<string> values)

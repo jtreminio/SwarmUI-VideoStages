@@ -466,6 +466,12 @@
     "init-video"
   ];
   var BOUNDARY_MODES = ["cut", "continue", "crossfade"];
+  var RULE_SUPPORTS = [
+    "supported",
+    "unsupported",
+    "conditional"
+  ];
+  var CONTINUE_MODES = ["overlap", "reference"];
 
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
@@ -797,7 +803,7 @@
     (entry) => REFERENCE_POSITIONS.includes(entry)
   );
   var hasExactKeys = (value, expected) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
-  var isRuleDecision = (value) => isRecord(value) && hasExactKeys(value, ["support", "code", "reason", "constraints"]) && typeof value.support === "string" && ["supported", "unsupported", "conditional"].includes(value.support) && isTrimmedNonEmpty(value.code) && isTrimmedNonEmpty(value.reason) && (value.constraints === null || isRecord(value.constraints) && value.support !== "unsupported");
+  var isRuleDecision = (value) => isRecord(value) && hasExactKeys(value, ["support", "code", "reason", "constraints"]) && typeof value.support === "string" && RULE_SUPPORTS.includes(value.support) && isTrimmedNonEmpty(value.code) && isTrimmedNonEmpty(value.reason) && (value.constraints === null || isRecord(value.constraints) && value.support !== "unsupported");
   var isBoundaryRule = (value) => {
     if (!isRuleDecision(value)) {
       return false;
@@ -827,7 +833,7 @@
       "targetRequiresGeneratedEntry",
       "targetRequiresStage",
       "targetDisallowsInitialReference"
-    ]) || constraints.sameArchitecture !== true || !["overlap", "reference"].includes(
+    ]) || constraints.sameArchitecture !== true || !CONTINUE_MODES.includes(
       constraints.continueMode
     ) || typeof constraints.targetRequiresGeneratedEntry !== "boolean" || typeof constraints.targetRequiresStage !== "boolean" || typeof constraints.targetDisallowsInitialReference !== "boolean" || !integers.every(Number.isInteger)) {
       return false;

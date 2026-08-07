@@ -29,3 +29,13 @@ export const ENTRY_MODES = [
 
 /** Every boundary join the serialized catalog can carry, in declaration order. */
 export const BOUNDARY_MODES = ["cut", "continue", "crossfade"] as const;
+
+/** Every rule support the serialized catalog can carry, in declaration order. */
+export const RULE_SUPPORTS = [
+    "supported",
+    "unsupported",
+    "conditional",
+] as const;
+
+/** Every continue mode the serialized catalog can carry, in declaration order. */
+export const CONTINUE_MODES = ["overlap", "reference"] as const;

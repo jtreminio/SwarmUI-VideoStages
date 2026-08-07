@@ -1,7 +1,9 @@
+import type { RULE_SUPPORTS } from "./generatedFeatures";
+
 export type VideoArchitectureId = string;
 export type ModelProfileId = string;
 
-export type CapabilitySupport = "supported" | "unsupported" | "conditional";
+export type CapabilitySupport = (typeof RULE_SUPPORTS)[number];
 
 export interface CapabilityRuleDecision {
     support: CapabilitySupport;

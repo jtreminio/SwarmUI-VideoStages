@@ -1,3 +1,4 @@
+import type { CONTINUE_MODES } from "./generatedFeatures";
 import type { CapabilityRuleDecision } from "./types";
 
 export interface BoundaryWindowConstraints {
@@ -6,7 +7,7 @@ export interface BoundaryWindowConstraints {
     maxFrames: number;
     defaultFrames: number;
     continuityExtraFrames: number;
-    continueMode: "overlap" | "reference";
+    continueMode: (typeof CONTINUE_MODES)[number];
 }
 
 const GENERIC_BOUNDARY_CONSTRAINTS: BoundaryWindowConstraints = {

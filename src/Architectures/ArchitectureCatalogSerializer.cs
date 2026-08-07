@@ -40,7 +40,7 @@ internal static class ArchitectureCatalogSerializer
 
     private static JObject SerializeRule(RuleDecision decision) => new()
     {
-        ["support"] = SerializeRuleSupport(decision.Support),
+        ["support"] = ArchitectureFeatureVocabulary.WireName(decision.Support),
         ["code"] = decision.Code,
         ["reason"] = decision.Reason,
         ["constraints"] = decision.Constraints is null
@@ -56,12 +56,7 @@ internal static class ArchitectureCatalogSerializer
         ["maxFrames"] = value.MaxFrames,
         ["defaultFrames"] = value.DefaultFrames,
         ["continuityExtraFrames"] = value.ContinuityExtraFrames,
-        ["continueMode"] = value.ContinueMode switch
-        {
-            ContinueBoundaryMode.Overlap => "overlap",
-            ContinueBoundaryMode.Reference => "reference",
-            _ => throw new ArgumentOutOfRangeException(nameof(value.ContinueMode)),
-        },
+        ["continueMode"] = ArchitectureFeatureVocabulary.WireName(value.ContinueMode),
         ["targetRequiresGeneratedEntry"] = value.TargetRequiresGeneratedEntry,
         ["targetRequiresStage"] = value.TargetRequiresStage,
         ["targetDisallowsInitialReference"] = value.TargetDisallowsInitialReference,
@@ -93,11 +88,4 @@ internal static class ArchitectureCatalogSerializer
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
-    private static string SerializeRuleSupport(RuleSupport support) => support switch
-    {
-        RuleSupport.Supported => "supported",
-        RuleSupport.Unsupported => "unsupported",
-        RuleSupport.Conditional => "conditional",
-        _ => throw new ArgumentOutOfRangeException(nameof(support)),
-    };
 }

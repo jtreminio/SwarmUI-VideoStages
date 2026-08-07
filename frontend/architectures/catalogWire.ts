@@ -1,4 +1,9 @@
-import { BOUNDARY_MODES, ENTRY_MODES } from "./generatedFeatures";
+import {
+    BOUNDARY_MODES,
+    CONTINUE_MODES,
+    ENTRY_MODES,
+    RULE_SUPPORTS,
+} from "./generatedFeatures";
 import { MAX_FRAME_GRID } from "./temporalGrid";
 import type {
     ArchitectureCapabilities,
@@ -41,7 +46,7 @@ const isRuleDecision = (value: unknown): value is CapabilityRuleDecision =>
     isRecord(value) &&
     hasExactKeys(value, ["support", "code", "reason", "constraints"]) &&
     typeof value.support === "string" &&
-    ["supported", "unsupported", "conditional"].includes(value.support) &&
+    (RULE_SUPPORTS as readonly string[]).includes(value.support) &&
     isTrimmedNonEmpty(value.code) &&
     isTrimmedNonEmpty(value.reason) &&
     (value.constraints === null ||
@@ -79,7 +84,7 @@ const isBoundaryRule = (value: unknown): value is CapabilityRuleDecision => {
             "targetDisallowsInitialReference",
         ]) ||
         constraints.sameArchitecture !== true ||
-        !["overlap", "reference"].includes(
+        !(CONTINUE_MODES as readonly string[]).includes(
             constraints.continueMode as string,
         ) ||
         typeof constraints.targetRequiresGeneratedEntry !== "boolean" ||
