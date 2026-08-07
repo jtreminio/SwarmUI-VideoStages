@@ -19,10 +19,7 @@ import {
 } from "../detailStrip/panelRouter";
 import { renderTimeline } from "../timelineView";
 import { reconcileClipArchitectureIdentity } from "./clipIdentity";
-import {
-    architectureFeatureSupport,
-    createCapabilityViewResolver,
-} from "./policy";
+import { createCapabilityViewResolver } from "./policy";
 import type { ArchitectureModelCatalog } from "./types";
 
 const catalog = (): ArchitectureModelCatalog => {
@@ -75,22 +72,6 @@ describe("catalog-backed authoring policy", () => {
         expect(createCapabilityViewResolver(catalog()).forClip(left)).not.toBe(
             resolver.forClip(left),
         );
-    });
-
-    it("requires both halves of the frame-reference contract", () => {
-        const capabilities = structuredClone(
-            catalog().architectures[0].capabilities,
-        );
-        expect(
-            architectureFeatureSupport("frameReferences", capabilities),
-        ).toBe(true);
-
-        capabilities.features = capabilities.features.filter(
-            (capability) => capability !== "frameReferences",
-        );
-        expect(
-            architectureFeatureSupport("frameReferences", capabilities),
-        ).toBe(false);
     });
 
     it("tracks generation stages independently of frame-grid applicability", () => {

@@ -6,7 +6,6 @@ import type { ArchitectureModelCatalog } from "./types";
 
 export type { GeneratedArchitectureFeature } from "./generatedFeatures";
 export {
-    architectureFeatureSupport,
     isAudioSourceSupported,
     upscaleModeForMethod,
 } from "./policy/featureValues";
