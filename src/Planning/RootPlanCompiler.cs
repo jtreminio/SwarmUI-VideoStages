@@ -15,8 +15,7 @@ internal static class RootPlanCompiler
                 UsesGeneratedClipDonor: false,
                 InterceptsHostCore: false,
                 UsesStageHandoff: false,
-                DropsTextToVideoRootDonor: false,
-                DiscardsTextToVideoRoot: false);
+                DropsTextToVideoRootDonor: false);
         }
 
         bool hasGeneratedClip = clips.Any(clip => clip.InitVideo is null);
@@ -32,8 +31,6 @@ internal static class RootPlanCompiler
             InterceptsHostCore: interceptsHostCore,
             UsesStageHandoff: interceptsHostCore && !firstClipHasInitVideo,
             DropsTextToVideoRootDonor: environment.HostKind == HostRootKind.TextToVideo
-                && initVideoLeadWithGeneratedClips,
-            DiscardsTextToVideoRoot: environment.HostKind == HostRootKind.TextToVideo
-                && discardsRoot);
+                && initVideoLeadWithGeneratedClips);
     }
 }

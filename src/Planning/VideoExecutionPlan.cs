@@ -28,9 +28,11 @@ internal sealed record RootPlan(
     bool UsesGeneratedClipDonor,
     bool InterceptsHostCore,
     bool UsesStageHandoff,
-    bool DropsTextToVideoRootDonor,
-    bool DiscardsTextToVideoRoot)
+    bool DropsTextToVideoRootDonor)
 {
+    public bool DiscardsTextToVideoRoot =>
+        HostKind == HostRootKind.TextToVideo && DiscardsRoot;
+
     public bool ReplacesTextToVideoRootStage(StagePlan stage, ClipPlan clip) =>
         DiscardsTextToVideoRoot
         && clip.EntryMode == ArchitectureEntryMode.TextToVideo

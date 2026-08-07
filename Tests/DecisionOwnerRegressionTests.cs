@@ -431,8 +431,7 @@ public class DecisionOwnerRegressionTests
                 UsesGeneratedClipDonor: false,
                 InterceptsHostCore: true,
                 UsesStageHandoff: false,
-                DropsTextToVideoRootDonor: false,
-                DiscardsTextToVideoRoot: true),
+                DropsTextToVideoRootDonor: false),
             [clip],
             [],
             []);
@@ -513,8 +512,7 @@ public class DecisionOwnerRegressionTests
                 UsesGeneratedClipDonor: false,
                 InterceptsHostCore: true,
                 UsesStageHandoff: !firstClipHasInitVideo,
-                DropsTextToVideoRootDonor: firstClipHasInitVideo && hasGeneratedClip,
-                DiscardsTextToVideoRoot: true),
+                DropsTextToVideoRootDonor: firstClipHasInitVideo && hasGeneratedClip),
             clips,
             [],
             []);

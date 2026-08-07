@@ -257,8 +257,7 @@ public class ArchitectureRuntimeOwnershipTests
                 UsesGeneratedClipDonor: true,
                 InterceptsHostCore: true,
                 UsesStageHandoff: false,
-                DropsTextToVideoRootDonor: false,
-                DiscardsTextToVideoRoot: false),
+                DropsTextToVideoRootDonor: false),
             [initVideoClip, generated],
             [
                 new(

@@ -71,8 +71,7 @@ public class AudioHandlerTests
             UsesGeneratedClipDonor: false,
             InterceptsHostCore: true,
             UsesStageHandoff: true,
-            DropsTextToVideoRootDonor: false,
-            DiscardsTextToVideoRoot: false),
+            DropsTextToVideoRootDonor: false),
         Clips: clips,
         Boundaries: [],
         Diagnostics: []);
