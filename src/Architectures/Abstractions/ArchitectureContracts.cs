@@ -219,6 +219,10 @@ internal sealed record ResolvedVideoModel(
     public int FrameGrid => Architecture.FrameGrid;
 
     public int FrameGridOrigin => Architecture.FrameGridOrigin;
+
+    public LoraTarget LoraTarget => LorasTargetTextEncoder
+        ? LoraTarget.ModelAndTextEncoder
+        : LoraTarget.ModelOnly;
 }
 
 // --- Behavior contracts: backend-only, never serialized ---
