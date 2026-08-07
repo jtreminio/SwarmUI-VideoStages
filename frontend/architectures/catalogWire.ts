@@ -2,6 +2,7 @@ import {
     BOUNDARY_MODES,
     CONTINUE_MODES,
     ENTRY_MODES,
+    REFERENCE_POSITIONS,
     RULE_SUPPORTS,
 } from "./generatedFeatures";
 import { MAX_FRAME_GRID } from "./temporalGrid";
@@ -10,10 +11,9 @@ import type {
     ArchitectureCatalogEntryDto,
     CapabilityRuleDecision,
     CapabilitySupport,
+    ReferencePosition,
     VideoArchitectureCatalogDto,
 } from "./types";
-
-const REFERENCE_POSITIONS = ["first", "last", "any"] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
@@ -30,7 +30,9 @@ const isEntryModeArray = (value: unknown): value is string[] =>
     isUniqueStringArray(value) &&
     value.every((entry) => (ENTRY_MODES as readonly string[]).includes(entry));
 
-const isReferencePositionArray = (value: unknown): value is string[] =>
+const isReferencePositionArray = (
+    value: unknown,
+): value is ReferencePosition[] =>
     isUniqueStringArray(value) &&
     value.every((entry) =>
         (REFERENCE_POSITIONS as readonly string[]).includes(entry),
@@ -243,9 +245,7 @@ export const parseVideoArchitectureCatalog = (
             frameGridOrigin: Number(raw.frameGridOrigin),
             capabilities: structuredClone(raw.capabilities),
             enhancements: {
-                referencePositions: [
-                    ...(raw.enhancements.referencePositions as string[]),
-                ],
+                referencePositions: [...raw.enhancements.referencePositions],
             },
         });
     }

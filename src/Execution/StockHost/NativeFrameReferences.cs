@@ -44,13 +44,13 @@ internal static class NativeFrameReferences
                 $"effective-request.{codeToken}-{code}",
                 message,
                 clip.Id));
-        bool Declares(StageSpec stage, string position, out string modelName)
+        bool Declares(StageSpec stage, ReferencePosition position, out string modelName)
         {
             ResolvedVideoModel model = stage is null
                 ? null
                 : stageModels.GetValueOrDefault(stage.ClipStageRawIndex);
             modelName = model?.ModelName ?? "<missing>";
-            return model?.ReferencePositions?.Contains(position, StringComparer.Ordinal) == true;
+            return model?.ReferencePositions?.Contains(position) == true;
         }
 
         foreach (FrameRefSpec reference in clip.FrameRefs ?? [])
@@ -81,7 +81,7 @@ internal static class NativeFrameReferences
                 && !Declares(
                     activeStages.FirstOrDefault(stage =>
                         !StagePassthroughPolicy.IsPassthrough(stage, architecture)),
-                    "first",
+                    ReferencePosition.First,
                     out string firstModel))
             {
                 Ignore(
@@ -117,7 +117,7 @@ internal static class NativeFrameReferences
                 && !Declares(
                     activeStages.LastOrDefault(stage =>
                         !StagePassthroughPolicy.IsPassthrough(stage, architecture)),
-                    "last",
+                    ReferencePosition.Last,
                     out string terminalModel))
             {
                 Ignore(

@@ -472,6 +472,7 @@
     "conditional"
   ];
   var CONTINUE_MODES = ["overlap", "reference"];
+  var REFERENCE_POSITIONS = ["first", "last", "any"];
 
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
@@ -794,7 +795,6 @@
   };
 
   // frontend/architectures/catalogWire.ts
-  var REFERENCE_POSITIONS = ["first", "last", "any"];
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var isTrimmedNonEmpty = (value) => typeof value === "string" && value.length > 0 && value === value.trim();
   var isUniqueStringArray = (value) => Array.isArray(value) && value.every((entry) => isTrimmedNonEmpty(entry)) && new Set(value).size === value.length;
@@ -921,9 +921,7 @@
         frameGridOrigin: Number(raw.frameGridOrigin),
         capabilities: structuredClone(raw.capabilities),
         enhancements: {
-          referencePositions: [
-            ...raw.enhancements.referencePositions
-          ]
+          referencePositions: [...raw.enhancements.referencePositions]
         }
       });
     }

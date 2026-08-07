@@ -83,6 +83,14 @@ internal enum ContinueBoundaryMode
     Reference,
 }
 
+/// <summary>The frame positions a model's native image-conditioning path accepts.</summary>
+internal enum ReferencePosition
+{
+    First,
+    Last,
+    Any,
+}
+
 internal sealed record BoundaryRuleConstraints(
     int FrameStep,
     int MinFrames,
@@ -231,8 +239,6 @@ internal sealed record VideoArchitectureDescriptor(
 
 /// <summary>A host model bound to the architecture that claimed it.</summary>
 /// <remarks>
-/// <see cref="ReferencePositions"/> carries stable wire names — <c>first</c>, <c>last</c>,
-/// <c>any</c> — for the frame positions this model's native image-conditioning path accepts.
 /// <see cref="LorasTargetTextEncoder"/> is a core-owned fact from the resolved model
 /// compatibility: false means normal LoRAs must not become effective solely through their
 /// text-encoder weight.
@@ -243,7 +249,7 @@ internal sealed record ResolvedVideoModel(
     VideoArchitectureDescriptor Architecture,
     string ModelClassId,
     string CompatibilityClassId,
-    IReadOnlyList<string> ReferencePositions,
+    IReadOnlyList<ReferencePosition> ReferencePositions,
     bool LorasTargetTextEncoder)
 {
     public ArchitectureId ArchitectureId => Architecture.Id;

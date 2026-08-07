@@ -1,9 +1,10 @@
-import type { RULE_SUPPORTS } from "./generatedFeatures";
+import type { REFERENCE_POSITIONS, RULE_SUPPORTS } from "./generatedFeatures";
 
 export type VideoArchitectureId = string;
 export type ModelProfileId = string;
 
 export type CapabilitySupport = (typeof RULE_SUPPORTS)[number];
+export type ReferencePosition = (typeof REFERENCE_POSITIONS)[number];
 
 export interface CapabilityRuleDecision {
     support: CapabilitySupport;
@@ -35,7 +36,7 @@ export interface ArchitectureModelEntry {
 }
 
 export interface ModelEnhancements {
-    referencePositions: string[];
+    referencePositions: ReferencePosition[];
 }
 
 export interface ArchitectureModelCatalog {

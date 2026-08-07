@@ -112,7 +112,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             Descriptor,
             model.ModelClass.ID,
             model.ModelClass.CompatClass.ID,
-            ["first", "last"],
+            [ReferencePosition.First, ReferencePosition.Last],
             model.ModelClass.CompatClass.LorasTargetTextEnc);
         return true;
     }

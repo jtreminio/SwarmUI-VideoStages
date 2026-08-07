@@ -22,7 +22,10 @@ import {
     TIMELINE_PPS,
 } from "./__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
-import type { ArchitectureModelCatalog } from "./architectures/types";
+import type {
+    ArchitectureModelCatalog,
+    ReferencePosition,
+} from "./architectures/types";
 import { createGestureRouter } from "./gestureRouter";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
@@ -107,7 +110,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
     const setup = (
         fixtures: ClipFixture[],
         fps?: number,
-        referencePositions: string[] = ["any"],
+        referencePositions: ReferencePosition[] = ["any"],
     ): HTMLElement => {
         mountPrompt(fixtures, fps);
         const body = mountTimelineBody();

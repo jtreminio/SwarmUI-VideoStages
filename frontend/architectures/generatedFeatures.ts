@@ -39,3 +39,6 @@ export const RULE_SUPPORTS = [
 
 /** Every continue mode the serialized catalog can carry, in declaration order. */
 export const CONTINUE_MODES = ["overlap", "reference"] as const;
+
+/** Every reference position the serialized catalog can carry, in declaration order. */
+export const REFERENCE_POSITIONS = ["first", "last", "any"] as const;

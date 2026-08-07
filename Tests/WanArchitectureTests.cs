@@ -482,9 +482,9 @@ public class WanArchitectureTests
             RootEnvironment.FromSpec(spec),
             ResolveWan(
                 spec,
-                referencePositionsByModel: new Dictionary<string, IReadOnlyList<string>>
+                referencePositionsByModel: new Dictionary<string, IReadOnlyList<ReferencePosition>>
                 {
-                    [stage.Model] = ["last"],
+                    [stage.Model] = [ReferencePosition.Last],
                 }));
 
         ClipPlan compiled = Assert.Single(plan.Clips);
@@ -549,10 +549,11 @@ public class WanArchitectureTests
             ResolveWan(
                 spec,
                 referencePositionsByModel:
-                    new Dictionary<string, IReadOnlyList<string>>
+                    new Dictionary<string, IReadOnlyList<ReferencePosition>>
                     {
-                        [first.Model] = ["first", "last"],
-                        [latentTail.Model] = ["first"],
+                        [first.Model] =
+                            [ReferencePosition.First, ReferencePosition.Last],
+                        [latentTail.Model] = [ReferencePosition.First],
                     }));
 
         Assert.NotNull(Assert.Single(plan.Clips).RequireWanPayload().LastFrameReference);
@@ -1449,7 +1450,7 @@ public class WanArchitectureTests
     private static ArchitecturePlanningResult ResolveWan(
         TimelineSpec spec,
         IReadOnlyDictionary<string, ModelProfileId> profilesByModel = null,
-        IReadOnlyDictionary<string, IReadOnlyList<string>>
+        IReadOnlyDictionary<string, IReadOnlyList<ReferencePosition>>
             referencePositionsByModel = null)
     {
         VideoArchitectureDescriptor descriptor = WanArchitectureModule.Instance.Descriptor;
@@ -1459,7 +1460,7 @@ public class WanArchitectureTests
             Dictionary<int, ResolvedVideoModel> stageModels = [];
             foreach (StageSpec stage in clip.Stages ?? [])
             {
-                IReadOnlyList<string> referencePositions = null;
+                IReadOnlyList<ReferencePosition> referencePositions = null;
                 referencePositionsByModel?.TryGetValue(
                     stage.Model,
                     out referencePositions);
@@ -1486,7 +1487,7 @@ public class WanArchitectureTests
         string model,
         ModelProfileId profile,
         VideoArchitectureDescriptor descriptor,
-        IReadOnlyList<string> referencePositions = null)
+        IReadOnlyList<ReferencePosition> referencePositions = null)
     {
         bool five = profile == WanArchitectureModule.Ti2v5bProfileId;
         bool ordinary = profile == WanArchitectureModule.OrdinaryImageToVideoProfileId;
@@ -1502,7 +1503,10 @@ public class WanArchitectureTests
             five
                 ? T2IModelClassSorter.CompatWan22_5b.ID
                 : T2IModelClassSorter.CompatWan21_14b.ID,
-            referencePositions ?? (five ? ["first"] : ["first", "last"]));
+            referencePositions
+                ?? (five
+                    ? [ReferencePosition.First]
+                    : [ReferencePosition.First, ReferencePosition.Last]));
     }
 
     private static T2IModel AddWanModel(
