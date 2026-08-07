@@ -64,28 +64,28 @@ public class VideoStagesExtension : Extension
         // Phase 1 is the only place a request may be rejected for a missing dependency: every later
         // phase mutates the host graph, so a failure past it leaves the user with a broken workflow.
         WorkflowGenerator.AddStep(
-            Runner.Phase(context => context.PrepareRequest()),
+            WorkflowPhase.Guarded(context => context.PrepareRequest()),
             Constants.WorkflowStepPriority.PreflightRequest);
         WorkflowGenerator.AddStep(
-            Runner.Phase(context => context.CaptureControlNetPreprocessors()),
+            WorkflowPhase.Guarded(context => context.CaptureControlNetPreprocessors()),
             Constants.WorkflowStepPriority.ControlNetPreprocessors);
         WorkflowGenerator.AddStep(
-            Runner.Phase(context => context.CaptureBaseReference()),
+            WorkflowPhase.Guarded(context => context.CaptureBaseReference()),
             Constants.WorkflowStepPriority.CaptureBase);
         WorkflowGenerator.AddStep(
-            Runner.Phase(context => context.CaptureRefinerReference()),
+            WorkflowPhase.Guarded(context => context.CaptureRefinerReference()),
             Constants.WorkflowStepPriority.CaptureRefiner);
         WorkflowGenerator.AddStep(
-            Runner.Phase(context => context.CapturePreCoreMedia()),
+            WorkflowPhase.Guarded(context => context.CapturePreCoreMedia()),
             Constants.WorkflowStepPriority.CapturePreCoreVideoMedia);
         WorkflowGenerator.AddStep(
-            Runner.Phase(context => context.DropCoreOutput()),
+            WorkflowPhase.Guarded(context => context.DropCoreOutput()),
             Constants.WorkflowStepPriority.DropCoreImageToVideoOutput);
         WorkflowGenerator.AddStep(
-            Runner.Phase(context => context.ApplyRootAudioMaskDimensions()),
+            WorkflowPhase.Guarded(context => context.ApplyRootAudioMaskDimensions()),
             Constants.WorkflowStepPriority.ApplyRootAudioMaskDimensions);
         WorkflowGenerator.AddStep(
-            Runner.Phase(context => context.RunConfiguredStages()),
+            WorkflowPhase.Guarded(context => context.RunConfiguredStages()),
             Constants.WorkflowStepPriority.RunConfiguredStages);
     }
 

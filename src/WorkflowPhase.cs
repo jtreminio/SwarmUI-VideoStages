@@ -3,10 +3,10 @@ using VideoStages.Authoring;
 
 namespace VideoStages;
 
-internal static class Runner
+internal static class WorkflowPhase
 {
     // The gate is what keeps a registered step inert on a request this extension is not driving.
-    internal static Action<WorkflowGenerator> Phase(Action<VideoExecutionPlanContext> phase) =>
+    internal static Action<WorkflowGenerator> Guarded(Action<VideoExecutionPlanContext> phase) =>
         g =>
         {
             if (!DocumentJson.IsActive(g.UserInput))
