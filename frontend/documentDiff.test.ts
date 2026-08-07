@@ -103,7 +103,7 @@ const span = (id: string): CanonicalAudioTrackSpan => ({
 const track = (id: string): CanonicalAudioTrack => ({
     id,
     source: {
-        kind: "External",
+        kind: "Unrecognized",
         reference: id,
         uploadedAudio: null,
     },

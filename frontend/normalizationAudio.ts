@@ -3,6 +3,13 @@ import {
     AUDIO_SPAN_VOLUME_MAX,
     AUDIO_SPAN_VOLUME_MIN,
 } from "./constants";
+import type { AudioTrackSourceKind } from "./generatedMediaSource";
+import {
+    MEDIA_SOURCE_ACE_STEP_FUN,
+    MEDIA_SOURCE_CONTROLNET,
+    MEDIA_SOURCE_NATIVE,
+    MEDIA_SOURCE_UPLOAD,
+} from "./generatedMediaSource";
 import { normalizeUploadedMedia } from "./normalizationMedia";
 import {
     clampedNumber,
@@ -11,7 +18,7 @@ import {
     optionalPositiveNumber,
     trimmedText,
 } from "./normalizationShared";
-import type { AudioTrack, AudioTrackSourceKind, AudioTrackSpan } from "./types";
+import type { AudioTrack, AudioTrackSpan } from "./types";
 import { isRecord } from "./utils";
 
 const normalizeAudioTrackSourceKind = (
@@ -19,16 +26,16 @@ const normalizeAudioTrackSourceKind = (
 ): AudioTrackSourceKind => {
     const compact = trimmedText(value).toLowerCase();
     switch (compact) {
-        case "upload":
-            return "Upload";
-        case "acestepfun":
-            return "AceStepFun";
-        case "native":
-            return "Native";
-        case "controlnet":
-            return "ControlNet";
+        case MEDIA_SOURCE_UPLOAD.toLowerCase():
+            return MEDIA_SOURCE_UPLOAD;
+        case MEDIA_SOURCE_ACE_STEP_FUN.toLowerCase():
+            return MEDIA_SOURCE_ACE_STEP_FUN;
+        case MEDIA_SOURCE_NATIVE.toLowerCase():
+            return MEDIA_SOURCE_NATIVE;
+        case MEDIA_SOURCE_CONTROLNET.toLowerCase():
+            return MEDIA_SOURCE_CONTROLNET;
         default:
-            return "External";
+            return "Unrecognized";
     }
 };
 

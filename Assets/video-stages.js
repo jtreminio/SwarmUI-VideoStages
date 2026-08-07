@@ -2380,6 +2380,12 @@
     ...(state.audioTracks ?? []).flatMap(ownedIds)
   ].filter((id) => !!id);
 
+  // frontend/generatedMediaSource.ts
+  var MEDIA_SOURCE_UPLOAD = "Upload";
+  var MEDIA_SOURCE_NATIVE = "Native";
+  var MEDIA_SOURCE_CONTROLNET = "ControlNet";
+  var MEDIA_SOURCE_ACE_STEP_FUN = "AceStepFun";
+
   // frontend/clipReferenceAuthoring.ts
   var CLIP_REFERENCE_KIND_INFO = {
     image: {
@@ -2583,16 +2589,16 @@
   var normalizeAudioTrackSourceKind = (value) => {
     const compact = trimmedText(value).toLowerCase();
     switch (compact) {
-      case "upload":
-        return "Upload";
-      case "acestepfun":
-        return "AceStepFun";
-      case "native":
-        return "Native";
-      case "controlnet":
-        return "ControlNet";
+      case MEDIA_SOURCE_UPLOAD.toLowerCase():
+        return MEDIA_SOURCE_UPLOAD;
+      case MEDIA_SOURCE_ACE_STEP_FUN.toLowerCase():
+        return MEDIA_SOURCE_ACE_STEP_FUN;
+      case MEDIA_SOURCE_NATIVE.toLowerCase():
+        return MEDIA_SOURCE_NATIVE;
+      case MEDIA_SOURCE_CONTROLNET.toLowerCase():
+        return MEDIA_SOURCE_CONTROLNET;
       default:
-        return "External";
+        return "Unrecognized";
     }
   };
   var normalizeAudioTrackSpan = (value) => {

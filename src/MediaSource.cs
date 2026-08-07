@@ -15,6 +15,36 @@ public static class MediaSource
     public const string Base = "Base";
     public const string Refiner = "Refiner";
 
+    /// <summary>
+    /// Renders the checked-in TypeScript projection. A backend test compares this byte for byte
+    /// with <c>frontend/generatedMediaSource.ts</c>.
+    /// </summary>
+    internal static string RenderGeneratedTypeScript()
+    {
+        System.Text.StringBuilder result = new();
+        void Line(string value = "") => result.Append(value).Append('\n');
+
+        Line("// Generated from MediaSource.cs. Do not edit by hand.");
+        Line();
+        Line($"export const MEDIA_SOURCE_UPLOAD = \"{Upload}\";");
+        Line($"export const MEDIA_SOURCE_NATIVE = \"{Native}\";");
+        Line($"export const MEDIA_SOURCE_CONTROLNET = \"{ControlNet}\";");
+        Line($"export const MEDIA_SOURCE_ACE_STEP_FUN = \"{AceStepFun}\";");
+        Line();
+        Line("/**");
+        Line(" * The audio-track sources the backend recognises. Anything else an authored");
+        Line(" * document carries normalizes to \"Unrecognized\" and is dropped at planning.");
+        Line(" */");
+        Line("export type AudioTrackSourceKind =");
+        Line($"    | \"{Upload}\"");
+        Line($"    | \"{AceStepFun}\"");
+        Line($"    | \"{Native}\"");
+        Line($"    | \"{ControlNet}\"");
+        Line("    | \"Unrecognized\";");
+
+        return result.ToString();
+    }
+
     private const string AceStepFunPrefix = "audio";
     private const string Base2EditPrefix = "edit";
 

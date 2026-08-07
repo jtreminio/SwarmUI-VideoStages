@@ -3,6 +3,7 @@ import type {
     ModelProfileId,
     VideoArchitectureId,
 } from "./architectures/types";
+import type { AudioTrackSourceKind } from "./generatedMediaSource";
 
 export interface RootDefaults {
     modelValues: string[];
@@ -248,13 +249,6 @@ export interface Clip {
     frameRefs: FrameRefImage[];
     stages: Stage[];
 }
-
-export type AudioTrackSourceKind =
-    | "Upload"
-    | "AceStepFun"
-    | "Native"
-    | "ControlNet"
-    | "External";
 
 /** Source identity for a timeline-wide audio span. */
 export interface AudioTrackSource {

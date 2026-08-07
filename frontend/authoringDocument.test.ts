@@ -227,7 +227,7 @@ describe("versioned authoring document identity", () => {
                     {
                         id: duplicate,
                         source: {
-                            kind: "External",
+                            kind: "Unrecognized",
                             reference: "music",
                             uploadedAudio: null,
                         },
@@ -288,7 +288,7 @@ describe("versioned authoring document identity", () => {
                 {
                     id: "track-fixed",
                     source: {
-                        kind: "External",
+                        kind: "Unrecognized",
                         reference: "music",
                         uploadedAudio: null,
                     },
@@ -389,7 +389,7 @@ describe("versioned authoring document identity", () => {
                     {
                         id: "track-a",
                         source: {
-                            kind: "External",
+                            kind: "Unrecognized",
                             reference: "a",
                             uploadedAudio: null,
                         },
@@ -405,7 +405,7 @@ describe("versioned authoring document identity", () => {
                     {
                         id: "track-b",
                         source: {
-                            kind: "External",
+                            kind: "Unrecognized",
                             reference: "b",
                             uploadedAudio: null,
                         },

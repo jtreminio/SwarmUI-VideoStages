@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -79,4 +80,19 @@ public class MediaSourceTests
         Assert.Throws<ArgumentOutOfRangeException>(() => MediaSource.FormatAceStepFun(-1));
         Assert.Throws<ArgumentOutOfRangeException>(() => MediaSource.FormatBase2Edit(-1));
     }
+
+    [Fact]
+    public void Generated_typescript_media_source_names_are_current()
+    {
+        string committedPath = Path.GetFullPath(
+            Path.Combine(TestSourceDirectory(), "..", "frontend", "generatedMediaSource.ts"));
+
+        Assert.Equal(
+            MediaSource.RenderGeneratedTypeScript(),
+            File.ReadAllText(committedPath));
+    }
+
+    private static string TestSourceDirectory(
+        [CallerFilePath] string sourcePath = "") =>
+        Path.GetDirectoryName(sourcePath)!;
 }
