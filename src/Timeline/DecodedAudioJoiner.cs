@@ -81,7 +81,7 @@ internal static class DecodedAudioJoiner
         WorkflowBridge bridge,
         IReadOnlyList<DecodedClipArtifact> clips,
         IReadOnlyList<INodeOutput> audioOutputs,
-        BoundaryOverlapPlan plan)
+        TimelineOverlapTrims plan)
     {
         if (plan is null)
         {
@@ -93,7 +93,7 @@ internal static class DecodedAudioJoiner
         {
             int leftHandle = i > 0 ? plan.IncomingHandleFrames[i - 1] : 0;
             int rightReduction = i < audioOutputs.Count - 1
-                ? Math.Max(0, plan.BoundaryOverlap[i] - plan.IncomingHandleFrames[i])
+                ? Math.Max(0, plan.TrimFrames[i] - plan.IncomingHandleFrames[i])
                 : 0;
             aligned.Add(leftHandle > 0 || rightReduction > 0
                 ? TrimToRange(

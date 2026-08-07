@@ -43,7 +43,7 @@ internal sealed class Merger(WorkflowGenerator g)
         IReadOnlyList<BoundaryPlan> generatedBoundaries = conform.Boundaries;
 
         BoundaryBudgetResolution runtimeBoundaries =
-            BoundaryOverlapPlanner.ValidateRuntime(generatedClips, generatedBoundaries);
+            BoundaryOverlaps.ValidateRuntime(generatedClips, generatedBoundaries);
         if (runtimeBoundaries.Degraded)
         {
             RequestWarnings.Track(
@@ -51,8 +51,8 @@ internal sealed class Merger(WorkflowGenerator g)
                 $"VideoStages: overlap boundaries degraded to cuts because "
                 + $"{runtimeBoundaries.Reason}.");
         }
-        BoundaryOverlapPlan overlapPlan =
-            BoundaryOverlapPlanner.ToOverlapPlan(runtimeBoundaries.Boundaries);
+        TimelineOverlapTrims overlapPlan =
+            TimelineOverlapTrims.From(runtimeBoundaries.Boundaries);
         int[] discardedHandles = new int[generatedClips.Count];
         for (int i = 0; i < generatedBoundaries.Count; i++)
         {
@@ -60,7 +60,7 @@ internal sealed class Merger(WorkflowGenerator g)
                 && runtimeBoundaries.Boundaries[i].EffectiveJoin == BoundaryJoinType.Cut)
             {
                 discardedHandles[i + 1] =
-                    BoundaryOverlapPlanner.IncomingHandleFrames(generatedBoundaries[i]);
+                    BoundaryOverlaps.IncomingHandleFrames(generatedBoundaries[i]);
             }
         }
 

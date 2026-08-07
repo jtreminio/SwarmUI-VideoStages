@@ -10,6 +10,7 @@ using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Authoring;
 using VideoStages.Planning;
+using VideoStages.Timeline;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -155,10 +156,10 @@ public class CrossLanguageMirrorTests
                 [.. frames.Select(frame => (int?)frame)],
                 boundaries,
                 boundaryOverlaps);
-            BoundaryOverlapPlan plan = BoundaryOverlapPlanner.ToOverlapPlan(resolution.Boundaries);
+            TimelineOverlapTrims plan = TimelineOverlapTrims.From(resolution.Boundaries);
 
             int boundaryCount = Math.Max(0, frames.Length - 1);
-            int[] actualOverlaps = plan?.BoundaryOverlap ?? new int[boundaryCount];
+            int[] actualOverlaps = plan?.TrimFrames ?? new int[boundaryCount];
             // A null plan is a fallback only when an overlap was requested.
             bool anyRequested = boundaries.Take(boundaryCount).Any(
                 b => string.Equals(b, Constants.BoundaryOutCrossfade, StringComparison.OrdinalIgnoreCase)

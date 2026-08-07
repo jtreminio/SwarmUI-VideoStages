@@ -3,12 +3,6 @@ using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.Planning;
 
-/// <summary>Resolved video-frame overlap at every boundary, plus total frames removed from generated clips.</summary>
-internal sealed record BoundaryOverlapPlan(
-    int[] BoundaryOverlap,
-    int[] IncomingHandleFrames,
-    int RemovedFrames);
-
 /// <summary>
 /// One typed boundary-budget resolution. Planning may shrink authored windows to fit known clip
 /// lengths. Runtime either validates that exact result or explicitly degrades it to cuts.
@@ -18,8 +12,12 @@ internal sealed record BoundaryBudgetResolution(
     bool Degraded,
     string Reason);
 
-/// <summary>Owns all frame-budget reconciliation for typed timeline boundaries.</summary>
-internal static class BoundaryOverlapPlanner
+/// <summary>
+/// Owns frame-budget reconciliation for typed timeline boundaries, and the overlap shape the
+/// decoded joiners read back. Planning fits windows to known clip lengths; runtime revalidates the
+/// same result against decoded artifacts.
+/// </summary>
+internal static class BoundaryOverlaps
 {
     /// <summary>
     /// Reconciles typed boundary windows against planned clip lengths. Unknown lengths remain
@@ -89,6 +87,8 @@ internal static class BoundaryOverlapPlanner
         {
             int leftTrim = i > 0 ? EffectiveOverlapFrames(boundaries[i - 1]) : 0;
             int rightTrim = i < boundaryCount ? EffectiveOverlapFrames(boundaries[i]) : 0;
+            // Planned clip lengths exclude the generated pre-roll handle; decoded ones already
+            // contain it, so only the planning pass adds it back.
             long availableFrames = frames[i]!.Value;
             if (i > 0)
             {
@@ -219,17 +219,6 @@ internal static class BoundaryOverlapPlanner
         }
     }
 
-    internal static BoundaryOverlapPlan ToOverlapPlan(IReadOnlyList<BoundaryPlan> boundaries)
-    {
-        if (boundaries is null || !boundaries.Any(IsOverlapped))
-        {
-            return null;
-        }
-        int[] overlaps = [.. boundaries.Select(EffectiveOverlapFrames)];
-        int[] handles = [.. boundaries.Select(IncomingHandleFrames)];
-        return new(overlaps, handles, overlaps.Sum());
-    }
-
     internal static BoundaryBudgetResolution DegradeAllToCuts(
         IReadOnlyList<BoundaryPlan> boundaries,
         string reason,
@@ -258,7 +247,7 @@ internal static class BoundaryOverlapPlanner
             CarryAudio = false,
         };
 
-    private static bool IsOverlapped(BoundaryPlan boundary) =>
+    internal static bool IsOverlapped(BoundaryPlan boundary) =>
         boundary?.EffectiveJoin == BoundaryJoinType.Crossfade
         || boundary is
         {
@@ -283,8 +272,5 @@ internal static class BoundaryOverlapPlanner
         }
             ? Math.Max(0, boundary.OverlapFrames)
             : 0;
-
-    internal static int TimelineReductionFrames(BoundaryPlan boundary) =>
-        Math.Max(0, EffectiveOverlapFrames(boundary) - IncomingHandleFrames(boundary));
 
 }

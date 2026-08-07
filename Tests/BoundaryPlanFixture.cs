@@ -38,6 +38,6 @@ internal static class BoundaryPlanFixture
                 MinFrames = mode == BoundaryJoinType.Cut ? 0 : 8,
             });
         }
-        return BoundaryOverlapPlanner.FitPlanToFrameBudgets(frames ?? [], boundaries);
+        return BoundaryOverlaps.FitPlanToFrameBudgets(frames ?? [], boundaries);
     }
 }

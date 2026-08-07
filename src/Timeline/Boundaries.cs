@@ -38,7 +38,7 @@ internal sealed class Boundaries
             && _effectiveBoundaries[boundaryIndex].EffectiveJoin == BoundaryJoinType.Continue)
         {
             BoundaryPlan boundary = _effectiveBoundaries[boundaryIndex];
-            handleFrames = BoundaryOverlapPlanner.IncomingHandleFrames(boundary);
+            handleFrames = BoundaryOverlaps.IncomingHandleFrames(boundary);
             windowFrames = boundary.ContinuityWindowFrames;
             return true;
         }
@@ -57,7 +57,7 @@ internal sealed class Boundaries
                 CarryAudio: true,
             } boundary)
         {
-            window = BoundaryOverlapPlanner.EffectiveOverlapFrames(boundary);
+            window = BoundaryOverlaps.EffectiveOverlapFrames(boundary);
             return window > 0;
         }
         window = 0;
@@ -98,7 +98,7 @@ internal sealed class Boundaries
             return;
         }
         _effectiveBoundaries[boundaryIndex] =
-            BoundaryOverlapPlanner.DegradeToCut(_effectiveBoundaries[boundaryIndex]);
+            BoundaryOverlaps.DegradeToCut(_effectiveBoundaries[boundaryIndex]);
     }
 
     public RuntimeArtifact Merge(IReadOnlyList<DecodedClipArtifact> clipOutputs)
