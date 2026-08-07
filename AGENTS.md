@@ -51,6 +51,10 @@ Before running it:
 
 If `./run-tests` fails with “No such file or directory”, you are in the wrong directory—use the path above or `cd` to the extension root (the directory that contains this `AGENTS.md` file).
 
+## Worktrees
+
+Provision one with `scripts/worktree add <name>`, tear it down with `scripts/worktree rm <name>`. Never `git worktree add` by hand: the worktree has to sit at `src/Extensions/<dir>` for the project imports to resolve, and it needs `node_modules` plus a `Directory.Build.rsp` that neither git nor `npm` will put there — without them `./run-tests` cannot run at all.
+
 # SwarmUI core is king
 
 Use core's own code wherever it can do the job. Build on the node core already made instead of a parallel one beside it: call `g.CreateNode`, `g.CreateKSampler`, `g.CreateModelLoader`, `g.CreateConditioning`, `g.CreateImageToVideo` and their siblings rather than hand-assembling the same graph. Taking core's output and adjusting it afterwards beats forking it — reconciling a small difference is cheap, a snowflake implementation is not.

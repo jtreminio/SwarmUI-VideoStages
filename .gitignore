@@ -16,6 +16,7 @@ Properties/
 .aspnet/
 .local/
 **/Directory.Build.local.props
+Directory.Build.rsp
 
 # Node / TypeScript
 node_modules/

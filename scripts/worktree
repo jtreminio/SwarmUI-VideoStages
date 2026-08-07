@@ -1,0 +1,92 @@
+#! /bin/bash
+# Provision or tear down an agent worktree that can run `./run-tests`.
+set -euo pipefail
+
+MAIN="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ARTIFACTS_ROOT="/tmp/swarmui-msbuild"
+
+usage() {
+    cat <<'EOF'
+Usage:
+  scripts/worktree add <name> [start-point]   provision ../SwarmUI-VideoStages-<name>
+  scripts/worktree rm  <name>                 remove it and its build output
+  scripts/worktree ls                         list worktrees of this repo
+
+`add` checks out branch <name> if it exists, otherwise creates it from
+[start-point] (default HEAD).
+EOF
+}
+
+# The worktree must land at src/Extensions/<dir>. The csproj imports
+# ../../SwarmUI.extension.props, and core's SwarmUI.csproj compiles src/**/*.cs with
+# only Extensions/** removed — anywhere else under src/ and the worktree's own
+# sources get swept into core's build.
+worktree_path() { echo "$MAIN-$1"; }
+artifacts_path() { echo "$ARTIFACTS_ROOT/wt-$1"; }
+
+cmd_add() {
+    local name="${1:?name required}" start="${2:-HEAD}"
+    local path artifacts
+    path="$(worktree_path "$name")"
+    artifacts="$(artifacts_path "$name")"
+    if [ -e "$path" ]; then
+        echo "already exists: $path" >&2
+        exit 1
+    fi
+
+    if git -C "$MAIN" show-ref --quiet --verify "refs/heads/$name"; then
+        git -C "$MAIN" worktree add "$path" "$name"
+    else
+        git -C "$MAIN" worktree add "$path" -b "$name" "$start"
+    fi
+
+    # node_modules and nonversioned are untracked, so a fresh worktree has neither.
+    # Sharing beats a 280 MB `npm ci`, and reports land where the owner looks for them.
+    if [ -d "$MAIN/node_modules" ]; then
+        ln -s "$MAIN/node_modules" "$path/node_modules"
+    else
+        echo "warning: $MAIN/node_modules missing — run 'npm ci' in the main checkout, jest will fail" >&2
+    fi
+    if [ -d "$MAIN/nonversioned" ]; then
+        ln -s "$MAIN/nonversioned" "$path/nonversioned"
+    fi
+    if [ -f "$MAIN/AGENTS.dev.md" ]; then
+        cp "$MAIN/AGENTS.dev.md" "$path/AGENTS.dev.md"
+    fi
+
+    # dotnet honours Directory.Build.rsp for every project in the graph, including core's
+    # SwarmUI.csproj — a props file cannot reach core, so it would keep building into the
+    # shared src/bin|obj and collide with concurrent worktrees. Do NOT also copy
+    # Directory.Build.local.props here; ArtifactsPath supersedes it.
+    printf -- '-p:UseArtifactsOutput=true\n-p:ArtifactsPath=%s\n' "$artifacts" > "$path/Directory.Build.rsp"
+
+    cat <<EOF
+
+worktree  $path
+branch    $(git -C "$path" rev-parse --abbrev-ref HEAD) @ $(git -C "$path" log --oneline -1)
+output    $artifacts
+
+Run tests with: cd "$path" && ./run-tests
+Tear down with: scripts/worktree rm $name
+SwarmUI loads every subdirectory of src/Extensions at startup — leaving this in place
+double-loads the extension on the next restart.
+EOF
+}
+
+cmd_rm() {
+    local name="${1:?name required}" path
+    shift
+    path="$(worktree_path "$name")"
+    rm -f "$path/node_modules" "$path/nonversioned" "$path/Directory.Build.rsp"
+    # Deliberately not --force: anything left dirty is the agent's own unharvested work.
+    git -C "$MAIN" worktree remove "$path" "$@"
+    rm -rf "$(artifacts_path "$name")"
+    echo "removed $path"
+}
+
+case "${1:-}" in
+    add) shift; cmd_add "$@" ;;
+    rm) shift; cmd_rm "$@" ;;
+    ls) git -C "$MAIN" worktree list ;;
+    *) usage; exit 1 ;;
+esac
