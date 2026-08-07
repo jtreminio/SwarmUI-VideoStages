@@ -9,6 +9,8 @@ from comfy_api.latest import ComfyExtension, io
 from .SwarmAudioLengthToFrames import SwarmAudioLengthToFrames
 from .SwarmFrameImage import SwarmFrameImage
 from .SwarmFrameWindow import SwarmFrameWindow
+from .SwarmMiniMaxH3AudioLatentWindow import SwarmMiniMaxH3AudioLatentWindow
+from .SwarmMiniMaxH3LatentReferenceToVideo import SwarmMiniMaxH3LatentReferenceToVideo
 from .SwarmPromptRelayEncode import SwarmPromptRelayEncode
 from .SwarmRampMaskBatch import SwarmRampMaskBatch
 from .SwarmSetAudioMaskWindows import SwarmSetAudioMaskWindows
@@ -18,6 +20,8 @@ NODES: list[tuple[type[io.ComfyNode], str]] = [
     (SwarmAudioLengthToFrames, "Swarm Audio Length To Frames"),
     (SwarmFrameImage, "Swarm Frame Image"),
     (SwarmFrameWindow, "Swarm Frame Window"),
+    (SwarmMiniMaxH3AudioLatentWindow, "Swarm MiniMax H3 Audio Latent Window"),
+    (SwarmMiniMaxH3LatentReferenceToVideo, "Swarm MiniMax H3 Latent Reference to Video"),
     (SwarmPromptRelayEncode, "Swarm Prompt Relay Encode"),
     (SwarmRampMaskBatch, "Swarm Ramp Mask Batch"),
     (SwarmSetAudioMaskWindows, "Swarm Set Audio Mask Windows"),
