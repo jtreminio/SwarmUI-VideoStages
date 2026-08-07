@@ -2420,7 +2420,7 @@
   };
   var CLIP_REFERENCE_SCALES = REFERENCE_SCALES.map((value) => ({
     value,
-    label: CLIP_REFERENCE_SCALE_LABELS[value] ?? `${value}`
+    label: CLIP_REFERENCE_SCALE_LABELS[value]
   }));
   var normalizeClipReferenceScale = (value) => {
     const numeric = Number(value);

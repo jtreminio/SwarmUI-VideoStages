@@ -35,20 +35,25 @@ export const CLIP_REFERENCE_KIND_INFO = {
 
 export const CLIP_REFERENCE_KINDS = ["image", "video", "audio"] as const;
 
-const CLIP_REFERENCE_SCALE_LABELS: Record<number, string> = {
+// `satisfies` is what makes a scale added backend-side a tsc error here rather
+// than a dropdown option labelled "0.125".
+const CLIP_REFERENCE_SCALE_LABELS = {
     1: "Full",
     0.5: "Half",
     0.25: "Quarter",
-};
+} satisfies Record<(typeof REFERENCE_SCALES)[number], string>;
 
 /**
  * How much of a video reference's resolution to keep. The model fits every
  * reference video onto its own 32-aligned canvas, so a smaller input simply
  * costs fewer reference tokens — which are re-encoded on every sampling step.
  */
-export const CLIP_REFERENCE_SCALES = REFERENCE_SCALES.map((value) => ({
+export const CLIP_REFERENCE_SCALES: readonly {
+    value: number;
+    label: string;
+}[] = REFERENCE_SCALES.map((value) => ({
     value,
-    label: CLIP_REFERENCE_SCALE_LABELS[value] ?? `${value}`,
+    label: CLIP_REFERENCE_SCALE_LABELS[value],
 }));
 
 export const normalizeClipReferenceScale = (value: unknown): number => {
