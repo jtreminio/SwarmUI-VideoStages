@@ -6252,7 +6252,8 @@
     return diagnostics;
   };
   var effectiveArchitectureIdForClip = (clip, catalog) => resolvedClipArchitectureId(clip, catalog) ?? "unsupported";
-  var deriveArchitectureDiagnostics = (clips, catalog, capabilityViews) => {
+  var deriveArchitectureDiagnostics = (clips, resolver) => {
+    const catalog = resolver.catalog;
     const diagnostics = [];
     const architectureById = new Map(
       catalog.architectures.map((entry) => [entry.id, entry])
@@ -6261,7 +6262,6 @@
       catalog.entries.map((entry) => [entry.value, entry])
     );
     const executableClipIndexSet = new Set(executableClipIndexes(clips));
-    const resolver = capabilityViews ?? createCapabilityViewResolver(catalog);
     clips.forEach((clip, clipIdx) => {
       const temporalGrid = resolver.forClip(clip).frameGridResolution;
       if (executableClipIndexSet.has(clipIdx) && temporalGrid.status === "conflict") {
@@ -6415,15 +6415,11 @@
       clipIdx
     }));
     diagnostics.push(
-      ...deriveArchitectureDiagnostics(
-        authoredPrefix,
-        capabilities.catalog,
-        capabilities
-      )
+      ...deriveArchitectureDiagnostics(authoredPrefix, capabilities)
     );
     for (const { clip, clipIdx } of executable) {
       const retake = capabilities.forClip(clip).decision("retake");
-      if (clip.retake !== null && retake?.code) {
+      if (clip.retake !== null && retake.code) {
         diagnostics.push(
           diagnostic("error", retake.code, retake.reason, clipIdx)
         );

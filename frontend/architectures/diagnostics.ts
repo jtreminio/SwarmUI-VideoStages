@@ -14,7 +14,6 @@ import { resolvedClipArchitectureId } from "./clipIdentity";
 import type { GeneratedArchitectureFeature } from "./generatedFeatures";
 import { effectiveClipCapabilities } from "./modelCapabilities";
 import { NONE_ARCHITECTURE_ID } from "./none/identity";
-import { createCapabilityViewResolver } from "./policy";
 import {
     architectureFeatureSupport,
     supportsClipAudio,
@@ -205,9 +204,9 @@ export const effectiveArchitectureIdForClip = (
  */
 export const deriveArchitectureDiagnostics = (
     clips: readonly Clip[],
-    catalog: ArchitectureModelCatalog,
-    capabilityViews?: CapabilityViewResolver,
+    resolver: CapabilityViewResolver,
 ): ArchitectureDiagnostic[] => {
+    const catalog = resolver.catalog;
     const diagnostics: ArchitectureDiagnostic[] = [];
     const architectureById = new Map(
         catalog.architectures.map((entry) => [entry.id, entry]),
@@ -216,7 +215,6 @@ export const deriveArchitectureDiagnostics = (
         catalog.entries.map((entry) => [entry.value, entry]),
     );
     const executableClipIndexSet = new Set(executableClipIndexes(clips));
-    const resolver = capabilityViews ?? createCapabilityViewResolver(catalog);
 
     clips.forEach((clip, clipIdx) => {
         const temporalGrid = resolver.forClip(clip).frameGridResolution;

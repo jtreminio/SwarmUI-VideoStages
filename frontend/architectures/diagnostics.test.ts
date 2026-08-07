@@ -13,7 +13,14 @@ import {
 } from "../__test_helpers__/clipFixtures";
 import type { Clip } from "../types";
 import { deriveArchitectureDiagnostics } from "./diagnostics";
+import { createCapabilityViewResolver } from "./policy";
 import type { ArchitectureModelCatalog } from "./types";
+
+const architectureDiagnosticsFor = (
+    clips: readonly Clip[],
+    catalog: ArchitectureModelCatalog,
+) =>
+    deriveArchitectureDiagnostics(clips, createCapabilityViewResolver(catalog));
 
 const combinedCatalog = (): ArchitectureModelCatalog => {
     const ltx = testArchitectureCatalog();
@@ -88,10 +95,9 @@ describe("architecture diagnostics", () => {
             stages: [minimalStage({ model: "removed-model.safetensors" })],
         });
 
-        const codes = deriveArchitectureDiagnostics(
-            [clip],
-            combinedCatalog(),
-        ).map(({ code }) => code);
+        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
+            ({ code }) => code,
+        );
 
         expect(codes).toContain("architecture.model-unknown");
         expect(codes).not.toContain("architecture.unknown");
@@ -110,7 +116,7 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const matching = deriveArchitectureDiagnostics(
+        const matching = architectureDiagnosticsFor(
             [clip],
             combinedCatalog(),
         ).filter(({ code }) =>
@@ -141,7 +147,7 @@ describe("architecture diagnostics", () => {
             ],
         });
 
-        const diagnostics = deriveArchitectureDiagnostics(
+        const diagnostics = architectureDiagnosticsFor(
             [clip],
             combinedCatalog(),
         );
@@ -179,7 +185,7 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const matching = deriveArchitectureDiagnostics(
+        const matching = architectureDiagnosticsFor(
             [clip],
             wanCatalog(),
         ).filter(({ code }) =>
@@ -219,7 +225,7 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const matching = deriveArchitectureDiagnostics(
+        const matching = architectureDiagnosticsFor(
             [clip],
             hostVideoCatalog(),
         ).filter(({ code }) => code.startsWith("architecture.unsupported."));
@@ -255,7 +261,7 @@ describe("architecture diagnostics", () => {
             ],
         });
 
-        const matching = deriveArchitectureDiagnostics([clip], models).filter(
+        const matching = architectureDiagnosticsFor([clip], models).filter(
             ({ code }) => code.startsWith("architecture.unsupported."),
         );
         expect(matching).toEqual(
@@ -287,7 +293,7 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            deriveArchitectureDiagnostics([clip], wanCatalog()).find(
+            architectureDiagnosticsFor([clip], wanCatalog()).find(
                 ({ code }) => code === "architecture.unsupported.upscale",
             )?.severity,
         ).toBe("error");
@@ -308,7 +314,7 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            deriveArchitectureDiagnostics([clip], hostVideoCatalog()).find(
+            architectureDiagnosticsFor([clip], hostVideoCatalog()).find(
                 ({ code }) => code === "architecture.unsupported.upscale",
             )?.severity,
         ).toBe("error");
@@ -327,7 +333,7 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const diagnostics = deriveArchitectureDiagnostics(
+        const diagnostics = architectureDiagnosticsFor(
             [clip],
             combinedCatalog(),
         );
@@ -357,9 +363,7 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            deriveArchitectureDiagnostics([clip], models).map(
-                ({ code }) => code,
-            ),
+            architectureDiagnosticsFor([clip], models).map(({ code }) => code),
         ).toContain("architecture.mixed-stage");
     });
 
@@ -372,10 +376,9 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const codes = deriveArchitectureDiagnostics(
-            [clip],
-            combinedCatalog(),
-        ).map(({ code }) => code);
+        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
+            ({ code }) => code,
+        );
 
         expect(codes).toEqual(
             expect.arrayContaining([
@@ -399,10 +402,9 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const codes = deriveArchitectureDiagnostics(
-            [clip],
-            combinedCatalog(),
-        ).map(({ code }) => code);
+        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
+            ({ code }) => code,
+        );
 
         expect(codes).toContain("architecture.unsupported.audio-reuse");
         expect(codes).not.toContain("architecture.unsupported.audio-source");
@@ -425,10 +427,9 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const codes = deriveArchitectureDiagnostics(
-            [clip],
-            combinedCatalog(),
-        ).map(({ code }) => code);
+        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
+            ({ code }) => code,
+        );
 
         expect(codes).toContain(
             "architecture.unsupported.audio-derived-duration",
@@ -451,10 +452,9 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const codes = deriveArchitectureDiagnostics(
-            [clip],
-            combinedCatalog(),
-        ).map(({ code }) => code);
+        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
+            ({ code }) => code,
+        );
 
         expect(codes).toContain(
             "architecture.unsupported.control-signal-derived-duration",
@@ -476,7 +476,7 @@ describe("architecture diagnostics", () => {
             ],
         });
 
-        const validCodes = deriveArchitectureDiagnostics(
+        const validCodes = architectureDiagnosticsFor(
             [valid],
             combinedCatalog(),
         ).map(({ code }) => code);
@@ -495,10 +495,9 @@ describe("architecture diagnostics", () => {
             clipLengthFromAudio: true,
         });
 
-        const codes = deriveArchitectureDiagnostics(
-            [clip],
-            combinedCatalog(),
-        ).map(({ code }) => code);
+        const codes = architectureDiagnosticsFor([clip], combinedCatalog()).map(
+            ({ code }) => code,
+        );
 
         expect(codes).toContain("architecture.unsupported.audio-source");
         expect(codes).not.toContain(
@@ -544,7 +543,7 @@ describe("architecture diagnostics", () => {
         });
         const before = structuredClone(clip);
 
-        const codes = deriveArchitectureDiagnostics([clip], models).map(
+        const codes = architectureDiagnosticsFor([clip], models).map(
             ({ code }) => code,
         );
 
@@ -575,7 +574,7 @@ describe("architecture diagnostics", () => {
             ],
         });
 
-        const diagnostic = deriveArchitectureDiagnostics(
+        const diagnostic = architectureDiagnosticsFor(
             [left, right],
             combinedCatalog(),
         ).find(({ code }) => code === "architecture.cross-boundary-cut-only");
@@ -607,7 +606,7 @@ describe("architecture diagnostics", () => {
         const clips = [staleWanClip("continue"), staleWanClip("cut")];
         const before = structuredClone(clips);
 
-        const diagnostics = deriveArchitectureDiagnostics(clips, models);
+        const diagnostics = architectureDiagnosticsFor(clips, models);
 
         expect(
             diagnostics.filter(
@@ -627,7 +626,7 @@ describe("architecture diagnostics", () => {
 
     describe("persisted joins that only the boundary constraints reject", () => {
         const codesFor = (right: Clip): string[] =>
-            deriveArchitectureDiagnostics(
+            architectureDiagnosticsFor(
                 [minimalClip({ boundaryOut: "continue" }), right],
                 combinedCatalog(),
             ).map(({ code }) => code);
@@ -680,7 +679,7 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            deriveArchitectureDiagnostics([sourceOnly], combinedCatalog()).map(
+            architectureDiagnosticsFor([sourceOnly], combinedCatalog()).map(
                 ({ code }) => code,
             ),
         ).toEqual(["architecture.source-only-requires-none"]);
@@ -714,7 +713,7 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            deriveArchitectureDiagnostics([sourceOnly], combinedCatalog()),
+            architectureDiagnosticsFor([sourceOnly], combinedCatalog()),
         ).toEqual([]);
     });
 
@@ -745,7 +744,7 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            deriveArchitectureDiagnostics([sourceOnly], combinedCatalog()).map(
+            architectureDiagnosticsFor([sourceOnly], combinedCatalog()).map(
                 ({ code }) => code,
             ),
         ).toEqual(["architecture.mixed-stage"]);
@@ -758,7 +757,7 @@ describe("architecture diagnostics", () => {
             stages: [minimalStage({ model: "ltx", loraWeights: [0] })],
         });
 
-        const codes = deriveArchitectureDiagnostics([clip], models).map(
+        const codes = architectureDiagnosticsFor([clip], models).map(
             ({ code }) => code,
         );
         expect(codes).not.toContain(
@@ -775,7 +774,7 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            deriveArchitectureDiagnostics([clip], models).filter(({ code }) =>
+            architectureDiagnosticsFor([clip], models).filter(({ code }) =>
                 code.includes("lora"),
             ),
         ).toEqual([]);
@@ -809,9 +808,7 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            deriveArchitectureDiagnostics([clip], models).map(
-                ({ code }) => code,
-            ),
+            architectureDiagnosticsFor([clip], models).map(({ code }) => code),
         ).toContain("architecture.temporal-grid-conflict");
     });
 
@@ -844,9 +841,7 @@ describe("architecture diagnostics", () => {
         });
 
         expect(
-            deriveArchitectureDiagnostics([clip], models).map(
-                ({ code }) => code,
-            ),
+            architectureDiagnosticsFor([clip], models).map(({ code }) => code),
         ).not.toContain("architecture.temporal-grid-conflict");
     });
 
@@ -899,13 +894,13 @@ describe("architecture diagnostics", () => {
             });
 
         expect(
-            deriveArchitectureDiagnostics(
+            architectureDiagnosticsFor(
                 [guidedClip("wan-14b.safetensors", "wan22-i2v-14b")],
                 models,
             ).map(({ code }) => code),
         ).not.toContain("architecture.entry-mode-unsupported");
         expect(
-            deriveArchitectureDiagnostics(
+            architectureDiagnosticsFor(
                 [guidedClip("wan-5b.safetensors", "wan22-ti2v-5b")],
                 models,
             ).map(({ code }) => code),

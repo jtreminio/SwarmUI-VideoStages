@@ -34,16 +34,12 @@ export const deriveAuthoringDiagnostics = (
         clipIdx,
     }));
     diagnostics.push(
-        ...deriveArchitectureDiagnostics(
-            authoredPrefix,
-            capabilities.catalog,
-            capabilities,
-        ),
+        ...deriveArchitectureDiagnostics(authoredPrefix, capabilities),
     );
 
     for (const { clip, clipIdx } of executable) {
         const retake = capabilities.forClip(clip).decision("retake");
-        if (clip.retake !== null && retake?.code) {
+        if (clip.retake !== null && retake.code) {
             diagnostics.push(
                 diagnostic("error", retake.code, retake.reason, clipIdx),
             );
