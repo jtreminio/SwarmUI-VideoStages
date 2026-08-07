@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using VideoStages.Execution;
+using VideoStages.Execution.Audio;
 
 namespace VideoStages.Timeline;
 
@@ -27,11 +28,9 @@ internal static class DecodedAudioJoiner
         {
             if (clip.Audio is null)
             {
-                EmptyAudioNode silence = bridge.AddNode(new EmptyAudioNode()).With(
-                    Duration: clip.Frames / (double)clip.FramesPerSecond,
-                    SampleRate: 44100,
-                    Channels: 2);
-                outputs.Add(silence.AUDIO);
+                outputs.Add(AudioSpanCombiner.Silence(
+                    bridge,
+                    clip.Frames / (double)clip.FramesPerSecond));
                 continue;
             }
             outputs.Add(clip.Audio.Resolve(bridge)

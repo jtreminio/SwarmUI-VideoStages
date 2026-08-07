@@ -173,6 +173,42 @@ internal sealed class AudioSpanCombiner(WorkflowGenerator g)
         return concat.AUDIO;
     }
 
+    /// <summary>
+    /// Pushes <paramref name="audio"/> back behind <paramref name="delaySeconds"/> of silence,
+    /// padded or trimmed to <paramref name="audioDuration"/> so the delay is the only change.
+    /// </summary>
+    internal WGNodeData DelayBy(WGNodeData audio, double delaySeconds, double audioDuration)
+    {
+        if (audio?.Path is not JArray audioPath || delaySeconds <= 0)
+        {
+            return audio;
+        }
+
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        INodeOutput source = bridge.ResolvePath(audioPath);
+        if (source is null)
+        {
+            return audio;
+        }
+
+        SwarmEnsureAudioNode ensure = bridge.AddNode(new SwarmEnsureAudioNode().With(
+            TargetDuration: audioDuration));
+        ensure.Audio.ConnectToUntyped(source);
+        TrimAudioDurationNode trim = bridge.AddNode(new TrimAudioDurationNode().With(
+            StartIndex: 0.0,
+            Duration: audioDuration));
+        trim.Audio.ConnectTo(ensure.AUDIO);
+        AudioConcatNode concat = bridge.AddNode(
+            new AudioConcatNode().With(Direction: ConcatDirectionAfter));
+        concat.Audio1.ConnectToUntyped(Silence(bridge, delaySeconds));
+        concat.Audio2.ConnectTo(trim.AUDIO);
+        return new WGNodeData(
+            WorkflowBridge.ToPath(concat.AUDIO),
+            g,
+            WGNodeData.DT_AUDIO,
+            audio.Compat ?? g.CurrentAudioVae?.Compat);
+    }
+
     private static INodeOutput ApplyVolume(
         WorkflowBridge bridge,
         INodeOutput audio,
@@ -195,7 +231,8 @@ internal sealed class AudioSpanCombiner(WorkflowGenerator g)
         return adjust.AUDIO;
     }
 
-    private static INodeOutput Silence(WorkflowBridge bridge, double durationSeconds)
+    /// <summary>The extension's one silent-audio bed; every silence in the graph comes from here.</summary>
+    internal static INodeOutput Silence(WorkflowBridge bridge, double durationSeconds)
     {
         EmptyAudioNode empty = bridge.AddNode(new EmptyAudioNode()).With(
             Duration: durationSeconds,

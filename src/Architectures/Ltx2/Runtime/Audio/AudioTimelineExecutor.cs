@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
-using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Abstractions;
@@ -14,9 +13,6 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class AudioTimelineExecutor
 {
-    private const long SilenceSampleRate = 44100;
-    private const long SilenceChannels = 2;
-
     private readonly WorkflowGenerator _generator;
     private readonly LtxAudioInjector _audioInjector;
 
@@ -111,10 +107,8 @@ internal sealed class AudioTimelineExecutor
             ? clipContext.IncomingContinueHandleFrames / (double)framesPerSecond
             : 0;
         double generationDuration = authoredDuration + handleDuration;
-        baseAudio = DelayAuthoredAudio(
-            baseAudio,
-            handleDuration,
-            authoredDuration);
+        AudioSpanCombiner combiner = new(_generator);
+        baseAudio = combiner.DelayBy(baseAudio, handleDuration, authoredDuration);
         ImmutableArray<AudioSpanPlan> spans = handleDuration > 0
             ? [.. clip.Audio.Spans.Select(span =>
                 span with { StartSeconds = span.StartSeconds + handleDuration })]
@@ -154,7 +148,6 @@ internal sealed class AudioTimelineExecutor
             }
         }
 
-        AudioSpanCombiner combiner = new(_generator);
         WGNodeData baseWithBoundaryCarry = boundaryAudioCarry is null
             ? baseAudio
             : combiner.OverlayOpeningWindow(
@@ -182,45 +175,6 @@ internal sealed class AudioTimelineExecutor
             combinedAudio,
             generationDuration,
             preserveWindows);
-    }
-
-    private WGNodeData DelayAuthoredAudio(
-        WGNodeData audio,
-        double handleDuration,
-        double authoredDuration)
-    {
-        if (audio?.Path is not JArray audioPath || handleDuration <= 0)
-        {
-            return audio;
-        }
-
-        using WorkflowBridge bridge = BridgeSync.For(_generator);
-        INodeOutput source = bridge.ResolvePath(audioPath);
-        if (source is null)
-        {
-            return audio;
-        }
-
-        SwarmEnsureAudioNode ensure = bridge.AddNode(new SwarmEnsureAudioNode().With(
-            TargetDuration: authoredDuration));
-        ensure.Audio.ConnectToUntyped(source);
-        TrimAudioDurationNode authored = bridge.AddNode(new TrimAudioDurationNode().With(
-            StartIndex: 0.0,
-            Duration: authoredDuration));
-        authored.Audio.ConnectTo(ensure.AUDIO);
-        EmptyAudioNode silence = bridge.AddNode(new EmptyAudioNode()).With(
-            Duration: handleDuration,
-            SampleRate: SilenceSampleRate,
-            Channels: SilenceChannels);
-        AudioConcatNode concat = bridge.AddNode(
-            new AudioConcatNode().With(Direction: "after"));
-        concat.Audio1.ConnectTo(silence.AUDIO);
-        concat.Audio2.ConnectTo(authored.AUDIO);
-        return new WGNodeData(
-            WorkflowBridge.ToPath(concat.AUDIO),
-            _generator,
-            WGNodeData.DT_AUDIO,
-            audio.Compat ?? _generator.CurrentAudioVae?.Compat);
     }
 
     private void AttachClipAudio(
