@@ -6409,25 +6409,22 @@
 
   // frontend/authoringDiagnostics.ts
   var diagnostic = (severity, code, message, clipIdx) => ({ severity, code, message, clipIdx });
-  var deriveAuthoringDiagnostics = (clips, context = {}) => {
+  var deriveAuthoringDiagnostics = (clips, capabilities) => {
     const diagnostics = [];
     const authoredPrefix = activePrefix(clips);
     const executable = executableClipIndexes(clips).map((clipIdx) => ({
       clip: clips[clipIdx],
       clipIdx
     }));
-    const capabilityViews = context.catalog ? createCapabilityViewResolver(context.catalog) : null;
-    if (context.catalog && capabilityViews) {
-      diagnostics.push(
-        ...deriveArchitectureDiagnostics(
-          authoredPrefix,
-          context.catalog,
-          capabilityViews
-        )
-      );
-    }
+    diagnostics.push(
+      ...deriveArchitectureDiagnostics(
+        authoredPrefix,
+        capabilities.catalog,
+        capabilities
+      )
+    );
     for (const { clip, clipIdx } of executable) {
-      const retake = capabilityViews?.forClip(clip).decision("retake");
+      const retake = capabilities.forClip(clip).decision("retake");
       if (clip.retake !== null && retake?.code) {
         diagnostics.push(
           diagnostic("error", retake.code, retake.reason, clipIdx)
@@ -16560,7 +16557,6 @@ ${slot}`;
         const state = getState();
         const clips = state.clips;
         const globalPrompt = readGlobalPrompt();
-        const architectureCatalog = transaction.defaults.modelCatalog;
         renderTimeline(body, clips, {
           fps: safeFps(state.fps),
           width: state.width,
@@ -16583,9 +16579,10 @@ ${slot}`;
           onRedo: () => history.redo(),
           globalPrompt,
           audioTracks: state.audioTracks,
-          diagnostics: deriveAuthoringDiagnostics(clips, {
-            catalog: architectureCatalog
-          }),
+          diagnostics: deriveAuthoringDiagnostics(
+            clips,
+            transaction.capabilities
+          ),
           capabilities: transaction.capabilities
         });
         renderRetainedArchitectureCatalogStatus(

@@ -1,6 +1,5 @@
 import { deriveArchitectureDiagnostics } from "./architectures/diagnostics";
-import { createCapabilityViewResolver } from "./architectures/policy";
-import type { ArchitectureModelCatalog } from "./architectures/types";
+import type { CapabilityViewResolver } from "./architectures/policy/types";
 import { activePrefix, executableClipIndexes } from "./clipSemantics";
 import type { Clip } from "./types";
 
@@ -11,11 +10,6 @@ export interface AuthoringDiagnostic {
     code: string;
     message: string;
     clipIdx?: number;
-}
-
-export interface AuthoringDiagnosticContext {
-    /** Backend-projected catalog. Without it, architecture-owned rules are not inferred. */
-    catalog?: ArchitectureModelCatalog;
 }
 
 const diagnostic = (
@@ -31,7 +25,7 @@ const diagnostic = (
  */
 export const deriveAuthoringDiagnostics = (
     clips: readonly Clip[],
-    context: AuthoringDiagnosticContext = {},
+    capabilities: CapabilityViewResolver,
 ): AuthoringDiagnostic[] => {
     const diagnostics: AuthoringDiagnostic[] = [];
     const authoredPrefix = activePrefix(clips);
@@ -39,21 +33,16 @@ export const deriveAuthoringDiagnostics = (
         clip: clips[clipIdx],
         clipIdx,
     }));
-    const capabilityViews = context.catalog
-        ? createCapabilityViewResolver(context.catalog)
-        : null;
-    if (context.catalog && capabilityViews) {
-        diagnostics.push(
-            ...deriveArchitectureDiagnostics(
-                authoredPrefix,
-                context.catalog,
-                capabilityViews,
-            ),
-        );
-    }
+    diagnostics.push(
+        ...deriveArchitectureDiagnostics(
+            authoredPrefix,
+            capabilities.catalog,
+            capabilities,
+        ),
+    );
 
     for (const { clip, clipIdx } of executable) {
-        const retake = capabilityViews?.forClip(clip).decision("retake");
+        const retake = capabilities.forClip(clip).decision("retake");
         if (clip.retake !== null && retake?.code) {
             diagnostics.push(
                 diagnostic("error", retake.code, retake.reason, clipIdx),

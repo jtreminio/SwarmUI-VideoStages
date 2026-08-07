@@ -301,7 +301,6 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
             const state = getState();
             const clips = state.clips;
             const globalPrompt = readGlobalPrompt();
-            const architectureCatalog = transaction.defaults.modelCatalog;
             renderTimeline(body, clips, {
                 fps: safeFps(state.fps),
                 width: state.width,
@@ -324,9 +323,10 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
                 onRedo: () => history.redo(),
                 globalPrompt,
                 audioTracks: state.audioTracks,
-                diagnostics: deriveAuthoringDiagnostics(clips, {
-                    catalog: architectureCatalog,
-                }),
+                diagnostics: deriveAuthoringDiagnostics(
+                    clips,
+                    transaction.capabilities,
+                ),
                 capabilities: transaction.capabilities,
             });
             renderRetainedArchitectureCatalogStatus(body, catalogSnapshot, () =>

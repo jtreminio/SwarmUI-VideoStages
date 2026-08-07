@@ -8,14 +8,16 @@ import {
     minimalRef,
     minimalStage,
 } from "./__test_helpers__/clipFixtures";
+import { createCapabilityViewResolver } from "./architectures/policy";
 import { deriveAuthoringDiagnostics } from "./authoringDiagnostics";
 import { activeStageCount } from "./clipSemantics";
 import type { Clip } from "./types";
 
 const codes = (clips: Clip[]): string[] =>
-    deriveAuthoringDiagnostics(clips, {
-        catalog: testArchitectureCatalog(),
-    }).map((item) => item.code);
+    deriveAuthoringDiagnostics(
+        clips,
+        createCapabilityViewResolver(testArchitectureCatalog()),
+    ).map((item) => item.code);
 
 describe("backend-aligned authoring diagnostics", () => {
     it("counts only active stages for catalog-driven rules", () => {
@@ -39,7 +41,7 @@ describe("backend-aligned authoring diagnostics", () => {
                     stages: [minimalStage(), minimalStage({ skipped: true })],
                 }),
             ],
-            { catalog: testArchitectureCatalog() },
+            createCapabilityViewResolver(testArchitectureCatalog()),
         );
         expect(diagnostics.map((item) => item.code)).not.toContain(
             "audio.reuse.requires_three_stages",
@@ -71,7 +73,7 @@ describe("backend-aligned authoring diagnostics", () => {
                     },
                 }),
             ],
-            { catalog: testArchitectureCatalog() },
+            createCapabilityViewResolver(testArchitectureCatalog()),
         ).find(({ code }) => code === "retake-source-required");
         expect(diagnostic?.severity).toBe("error");
     });
@@ -139,9 +141,10 @@ describe("backend-aligned authoring diagnostics", () => {
         });
 
         expect(
-            deriveAuthoringDiagnostics([fakeClip, invalidTail], {
-                catalog,
-            }).filter((item) => item.clipIdx === 1),
+            deriveAuthoringDiagnostics(
+                [fakeClip, invalidTail],
+                createCapabilityViewResolver(catalog),
+            ).filter((item) => item.clipIdx === 1),
         ).toEqual([]);
     });
 
@@ -167,9 +170,10 @@ describe("backend-aligned authoring diagnostics", () => {
             ],
         });
 
-        const diagnostics = deriveAuthoringDiagnostics([clip], {
-            catalog: models,
-        }).map((item) => item.code);
+        const diagnostics = deriveAuthoringDiagnostics(
+            [clip],
+            createCapabilityViewResolver(models),
+        ).map((item) => item.code);
 
         expect(diagnostics).not.toEqual(
             expect.arrayContaining(["retake-source-required"]),
