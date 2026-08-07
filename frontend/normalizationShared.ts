@@ -91,15 +91,6 @@ export const clampWindowInDuration = (
     return { startSeconds, lengthSeconds };
 };
 
-export const resolveRootPreferredUpscaleMethod = (
-    upscaleMethodValues: string[],
-): string =>
-    upscaleMethodValues.find((value) =>
-        value.trim().toLowerCase().startsWith("latentmodel-"),
-    ) ??
-    upscaleMethodValues[0] ??
-    "";
-
 export const snapValueToStep = (
     value: unknown,
     fallback: number,

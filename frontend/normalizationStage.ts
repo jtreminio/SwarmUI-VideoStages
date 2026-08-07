@@ -1,4 +1,5 @@
 import { modelProfileForModel } from "./architectures/catalog";
+import { upscaleModeForMethod } from "./architectures/policy/featureValues";
 import {
     resolveClipFrameGrid,
     resolvedClipFrameGrid,
@@ -23,7 +24,6 @@ import {
     normalizeOptionalEntityId,
     numberOr,
     readProp,
-    resolveRootPreferredUpscaleMethod,
     snapToStep,
     snapValueToStep,
     textOr,
@@ -39,6 +39,16 @@ import {
     type Stage,
 } from "./types";
 import { isRecord } from "./utils";
+
+/** Latent-model upscaling is the root default when the host offers it. */
+const resolveRootPreferredUpscaleMethod = (
+    upscaleMethodValues: string[],
+): string =>
+    upscaleMethodValues.find(
+        (value) => upscaleModeForMethod(value) === "latent-model",
+    ) ??
+    upscaleMethodValues[0] ??
+    "";
 
 export const normalizeStageRefStrengthValue = (value: unknown): number =>
     snapValueToStep(

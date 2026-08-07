@@ -2219,9 +2219,6 @@
     }
     return { startSeconds, lengthSeconds };
   };
-  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find(
-    (value) => value.trim().toLowerCase().startsWith("latentmodel-")
-  ) ?? upscaleMethodValues[0] ?? "";
   var snapValueToStep = (value, fallback, min, max, step) => {
     const unitScale = 1 / step;
     return Math.round(clampedNumber(value, fallback, min, max) * unitScale) / unitScale;
@@ -3321,6 +3318,9 @@
   };
 
   // frontend/normalizationStage.ts
+  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find(
+    (value) => upscaleModeForMethod(value) === "latent-model"
+  ) ?? upscaleMethodValues[0] ?? "";
   var normalizeStageRefStrengthValue = (value) => snapValueToStep(
     value,
     STAGE_REF_STRENGTH_DEFAULT,
