@@ -434,6 +434,10 @@ public sealed class EffectiveVideoRequestTests
         Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Severity == PlanDiagnosticSeverity.Error);
+        // Wan declaring only FrameReferences is what makes ic-lora unsupported here.
+        Assert.Equal(
+            ArchitectureFeature.FrameReferences,
+            WanArchitectureModule.Instance.Descriptor.Features);
         Assert.Contains(
             plan.Diagnostics,
             diagnostic => diagnostic.Code == "effective-request.unsupported-ic-lora-ignored");
@@ -593,14 +597,6 @@ public sealed class EffectiveVideoRequestTests
         Assert.Equal(clip.InitVideo, effective.InitVideo);
         Assert.Equal(clip.Loras, effective.Loras);
         Assert.Equal(first.Loras, effective.Stages[0].Loras);
-    }
-
-    [Fact]
-    public void Wan_absent_capabilities_derive_ignore_dispositions_without_frame_references()
-    {
-        Assert.Equal(
-            ArchitectureFeature.FrameReferences,
-            WanArchitectureModule.Instance.Descriptor.Features);
     }
 
     [Fact]
