@@ -22,7 +22,7 @@ public partial class StageFlowTests
     /// <para>
     /// The timeline's own save — retargeted onto its publication, or removed under
     /// <c>donotsave</c> — is generated end-to-end by
-    /// <see cref="HostVideoContractTests.A_displaced_root_retargets_or_removes_its_own_save"/>.
+    /// <see cref="TimelineOutputContractTests.A_displaced_root_retargets_its_own_save"/>.
     /// </para>
     /// </summary>
     [Theory]

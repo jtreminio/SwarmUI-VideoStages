@@ -1,4 +1,3 @@
-using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 
 namespace VideoStages.Tests;

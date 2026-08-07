@@ -4,7 +4,6 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Architectures.Ltx2;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;

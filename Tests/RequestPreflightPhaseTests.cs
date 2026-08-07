@@ -1,10 +1,8 @@
 using ComfyTyped.Core;
-using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
-using VideoStages.Architectures.Ltx2;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;

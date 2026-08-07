@@ -15,7 +15,7 @@ namespace VideoStages.Tests;
 /// keeps the root cleanup from having anything to delete: <c>RemoveOwnedNodesNotLive</c> is
 /// liveness-based, so any core node a stage consumes survives it.
 /// <para>
-/// The model loader is adopted at <see cref="WorkflowGenerator.CreateNode"/>'s dedup cache, not at
+/// The model loader is adopted at <c>WorkflowGenerator.CreateNode</c>'s dedup cache, not at
 /// <c>CreateModelLoader</c>'s <c>modelloader_*</c> cache — the extension clears that key per stage
 /// so a stage's LoRAs and model patches still apply. Because dedup happens after the model-gen
 /// steps run, the reused node is the tail they had nothing to add to, which is why adoption cannot

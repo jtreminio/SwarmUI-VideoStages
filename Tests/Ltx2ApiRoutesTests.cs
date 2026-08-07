@@ -3,7 +3,6 @@ using System.Text;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Utils;
 using SwarmUI.WebAPI;
-using VideoStages.Architectures.Ltx2;
 using Xunit;
 
 namespace VideoStages.Tests;

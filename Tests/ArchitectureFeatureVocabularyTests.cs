@@ -1,4 +1,3 @@
-using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using Xunit;
 

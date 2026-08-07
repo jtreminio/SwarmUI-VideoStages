@@ -4,7 +4,6 @@ using SwarmUI.Text2Image;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
-using VideoStages.Architectures.Ltx2;
 using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
 using VideoStages.Authoring;

@@ -6,7 +6,12 @@
     <IsTestProject>true</IsTestProject>
     <IsPackable>false</IsPackable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <NoWarn>CS0436</NoWarn>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Required for IDE0005 (unused using directives) to fire at build time. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>CS0436;CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

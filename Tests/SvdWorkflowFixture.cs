@@ -9,7 +9,7 @@ namespace VideoStages.Tests;
 /// node, so there are no support stubs to install and nothing to download — but only a
 /// <c>checkpoints/</c> model gets that loader. And its architecture id: the registered
 /// <c>stable-video-diffusion-img2vid-v1</c> class declares <c>IsThisModelOfClass = false</c>, which
-/// <see cref="T2IModelClassSorter.IdentifyClassFor"/> never consults because the header's
+/// <c>T2IModelClassSorter.IdentifyClassFor</c> never consults because the header's
 /// <c>modelspec.architecture</c> matches the class id outright.
 /// </para>
 /// <para>

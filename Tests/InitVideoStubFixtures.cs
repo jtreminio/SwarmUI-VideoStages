@@ -4,7 +4,6 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
-using VideoStages.Generated;
 using static VideoStages.Tests.Fixtures;
 
 namespace VideoStages.Tests;
