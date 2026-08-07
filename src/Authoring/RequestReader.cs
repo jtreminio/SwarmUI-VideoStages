@@ -264,7 +264,7 @@ internal static class RequestReader
                 rawStageIndex: stageIndex,
                 clipStageIndex: stages.Count,
                 defaults: context.StageDefaults,
-                clipRefCount: referenceCount,
+                frameRefCount: referenceCount,
                 isTextToVideoRootWorkflow: context.IsTextToVideoRootWorkflow,
                 initVideoClip: initVideoClip,
                 warn: context.Warn);
@@ -283,7 +283,7 @@ internal static class RequestReader
         int rawStageIndex,
         int clipStageIndex,
         StageDefaults defaults,
-        int clipRefCount,
+        int frameRefCount,
         bool isTextToVideoRootWorkflow,
         bool initVideoClip,
         Action<string> warn)
@@ -342,7 +342,7 @@ internal static class RequestReader
             ClipStageRawIndex: rawStageIndex,
             ControlNetStrength: ReadControlNetStrength(stage, location, warn),
             IcLoraStrengths: ReadIcLoraStrengths(stage),
-            FrameRefStrengths: ReadRefStrengths(stage, clipRefCount),
+            FrameRefStrengths: ReadRefStrengths(stage, frameRefCount),
             ImageRefWasExplicit: DocumentJson.HasProperty(stage, "imageReference"),
             Loras: Loras.ReadNormal(stage, warn),
             LoraWeights: Loras.ReadWeights(stage));
@@ -488,9 +488,9 @@ internal static class RequestReader
         return strengths.AsReadOnly();
     }
 
-    private static IReadOnlyList<double> ReadRefStrengths(JObject stage, int clipRefCount)
+    private static IReadOnlyList<double> ReadRefStrengths(JObject stage, int frameRefCount)
     {
-        if (clipRefCount <= 0)
+        if (frameRefCount <= 0)
         {
             return [];
         }
@@ -517,13 +517,13 @@ internal static class RequestReader
             }
         }
 
-        while (strengths.Count < clipRefCount)
+        while (strengths.Count < frameRefCount)
         {
             strengths.Add(Constants.DefaultStageRefStrength);
         }
-        if (strengths.Count > clipRefCount)
+        if (strengths.Count > frameRefCount)
         {
-            strengths.RemoveRange(clipRefCount, strengths.Count - clipRefCount);
+            strengths.RemoveRange(frameRefCount, strengths.Count - frameRefCount);
         }
         return strengths;
     }

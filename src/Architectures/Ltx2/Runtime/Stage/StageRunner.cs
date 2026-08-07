@@ -14,7 +14,7 @@ internal class StageRunner
     private readonly WorkflowGenerator _generator;
     private readonly LtxStageExecutor _stageExecutor;
     private readonly LtxStageGuideMediaResolver _guideMediaResolver;
-    private readonly FrameRefResolver _clipRefResolver;
+    private readonly FrameRefResolver _frameRefResolver;
     private readonly StageSourceMediaResolver _sourceMediaResolver;
     private readonly StageFramePreparer _framePreparer;
 
@@ -22,14 +22,14 @@ internal class StageRunner
         WorkflowGenerator generator,
         LtxStageExecutor stageExecutor,
         LtxStageGuideMediaResolver guideMediaResolver,
-        FrameRefResolver clipRefResolver)
+        FrameRefResolver frameRefResolver)
     {
         _generator = generator ?? throw new ArgumentNullException(nameof(generator));
         _stageExecutor = stageExecutor ?? throw new ArgumentNullException(nameof(stageExecutor));
         _guideMediaResolver = guideMediaResolver
             ?? throw new ArgumentNullException(nameof(guideMediaResolver));
-        _clipRefResolver = clipRefResolver
-            ?? throw new ArgumentNullException(nameof(clipRefResolver));
+        _frameRefResolver = frameRefResolver
+            ?? throw new ArgumentNullException(nameof(frameRefResolver));
         _sourceMediaResolver = new StageSourceMediaResolver(generator);
         _framePreparer = new StageFramePreparer(
             generator,
@@ -99,7 +99,7 @@ internal class StageRunner
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
         ReferenceFramingMode referenceFraming =
             clipContext.PlannedClip.RequireLtx2Payload().ReferenceFraming;
-        List<ResolvedFrameRef> frameRefs = _clipRefResolver.ResolveStageFrameRefs(
+        List<ResolvedFrameRef> frameRefs = _frameRefResolver.ResolveStageFrameRefs(
             clipContext.PlannedClip,
             stage,
             clipContext.Plan.Root.HostKind == HostRootKind.TextToVideo,

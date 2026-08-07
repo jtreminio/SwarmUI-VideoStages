@@ -7,7 +7,7 @@ using Image = SwarmUI.Utils.Image;
 
 namespace VideoStages.Execution.StockHost;
 
-/// <summary>An authored image reference bound for a model's native first/last frame input.</summary>
+/// <summary>An authored frame reference bound for a model's native first/last frame input.</summary>
 internal sealed record NativeFrameReferencePlan(
     string Source,
     string UploadFileName,
@@ -61,7 +61,7 @@ internal static class NativeFrameReferences
             {
                 Ignore(
                     "middle-frame-reference-ignored",
-                    $"Clip {clip.Id} has a {label} image reference at "
+                    $"Clip {clip.Id} has a {label} frame reference at "
                         + $"{(reference.FromEnd ? "end-relative" : "start-relative")} frame "
                         + $"{reference.Frame}. {label} native conditioning accepts only the first "
                         + "and final frame. The authored reference remains saved and is ignored "

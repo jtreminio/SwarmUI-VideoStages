@@ -238,7 +238,7 @@ public class Ltx2GuideAndRetakeContractTests
         // Control 0.5 over 10 steps would start at 5; the retake overrides that to 0.
         Assert.Equal(10, sampler.Steps.LiteralAsInt());
         Assert.Equal(0, sampler.StartAtStep.LiteralAsInt());
-        // Stage 0 here carries no image reference, so nothing builds an in-place guide; this pins
+        // Stage 0 here carries no frame reference, so nothing builds an in-place guide; this pins
         // that the retake path adds none of its own. Retake does NOT suppress one — keep the
         // reference and production emits an LTXVImgToVideoInplace alongside the mask.
         Assert.Empty(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());

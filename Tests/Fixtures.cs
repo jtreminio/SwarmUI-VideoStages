@@ -147,7 +147,7 @@ internal static class Fixtures
             ["fromEnd"] = fromEnd
         };
 
-    /// <summary>A clip reference carrying its own uploaded image.</summary>
+    /// <summary>A frame reference carrying its own uploaded image.</summary>
     public static JObject UploadedReference(
         string payload = "AAAA",
         bool fromEnd = false,
