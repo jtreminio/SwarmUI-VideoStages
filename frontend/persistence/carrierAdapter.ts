@@ -23,7 +23,6 @@ import type { Clip, RootDefaults, VideoStagesConfig } from "../types";
 import { applyUiState, saveUiState } from "../uiState";
 import {
     createRootConfig,
-    type DocumentNormalizationEnvironment,
     decodeStoredDocument,
     type InheritedDims,
     resolveRootDims,
@@ -72,23 +71,20 @@ const inheritedDims = (defaults: RootDefaults): InheritedDims => ({
     fps: defaults.fps,
 });
 
-const normalizationEnvironment = (
-    defaults: RootDefaults,
-): DocumentNormalizationEnvironment => ({
-    defaults,
-    defaultStageModel: getDefaultStageModel(
+const defaultStageModelFor = (defaults: RootDefaults): string =>
+    getDefaultStageModel(
         defaults.modelValues,
         undefined,
         defaults.modelCatalog,
-    ),
-});
+    );
 
 const parse = (serialized: string): VideoStagesConfig | null => {
     const defaults = getRootDefaults();
     const decoded = decodeStoredDocument(
         serialized,
         inheritedDims(defaults),
-        normalizationEnvironment(defaults),
+        defaults,
+        defaultStageModelFor(defaults),
     );
     if (!decoded) return null;
     overlayPromptAndUiState(decoded.clips);
@@ -120,7 +116,8 @@ const restoreDurableSnapshot = (
     const decoded = decodeStoredDocument(
         snapshot.document,
         inheritedDims(defaults),
-        normalizationEnvironment(defaults),
+        defaults,
+        defaultStageModelFor(defaults),
     );
     if (!decoded || snapshot.prompts.length !== decoded.clips.length) {
         return false;

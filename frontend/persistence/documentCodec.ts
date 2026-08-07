@@ -31,11 +31,6 @@ export interface DecodedStoredDocument {
     audioTracks: VideoStagesConfig["audioTracks"];
 }
 
-export interface DocumentNormalizationEnvironment {
-    defaults: RootDefaults;
-    defaultStageModel: string;
-}
-
 const toIntOrNull = (value: unknown): number | null => {
     const num = optionalNonNegativeNumber(value);
     return num === null ? null : Math.round(num);
@@ -582,7 +577,8 @@ const migrateStoredDocument = (
 export const decodeStoredDocument = (
     serialized: string,
     inherited: InheritedDims,
-    environment: DocumentNormalizationEnvironment,
+    defaults: RootDefaults,
+    defaultStageModel: string,
 ): DecodedStoredDocument | null => {
     try {
         const parsed: unknown = JSON.parse(serialized);
@@ -605,12 +601,7 @@ export const decodeStoredDocument = (
             height: current.height,
         });
         const clips = current.clips.map((entry) =>
-            normalizeClip(
-                entry,
-                environment.defaults,
-                environment.defaultStageModel,
-                dims.fps,
-            ),
+            normalizeClip(entry, defaults, defaultStageModel, dims.fps),
         );
         sealSkipSuffix(clips);
         return {

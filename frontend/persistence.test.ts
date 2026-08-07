@@ -34,7 +34,6 @@ import {
     timelineCarrierAdapter,
 } from "./persistence/carrierAdapter";
 import {
-    type DocumentNormalizationEnvironment,
     decodeStoredDocument,
     serializeClipsForStorage,
     serializeStateForDurableStorage,
@@ -59,16 +58,13 @@ const dataInput = (): HTMLTextAreaElement =>
 const promptEl = (): HTMLTextAreaElement =>
     document.getElementById("input_prompt") as HTMLTextAreaElement;
 
-const normalizationEnvironment = (): DocumentNormalizationEnvironment => {
+const testStageModel = (): string => {
     const defaults = getRootDefaults();
-    return {
-        defaults,
-        defaultStageModel: getDefaultStageModel(
-            defaults.modelValues,
-            undefined,
-            defaults.modelCatalog,
-        ),
-    };
+    return getDefaultStageModel(
+        defaults.modelValues,
+        undefined,
+        defaults.modelCatalog,
+    );
 };
 
 describe("persistence", () => {
@@ -102,7 +98,8 @@ describe("persistence", () => {
                     height: 1024,
                     fps: 24,
                 },
-                normalizationEnvironment(),
+                getRootDefaults(),
+                testStageModel(),
             );
 
         it.each([

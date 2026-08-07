@@ -7,7 +7,6 @@ import { beforeEach, describe, expect, it } from "@jest/globals";
 import { mountSelect, mountVideoFps } from "./__test_helpers__/dom";
 import {
     createRootConfig,
-    type DocumentNormalizationEnvironment,
     decodeStoredDocument,
     serializeStateForStorage,
 } from "./persistence/documentCodec";
@@ -31,16 +30,13 @@ const fixturePath = path.resolve(
 const fixture = (): Record<string, unknown> =>
     JSON.parse(fs.readFileSync(fixturePath, "utf8"));
 
-const normalizationEnvironment = (): DocumentNormalizationEnvironment => {
+const testStageModel = (): string => {
     const defaults = getRootDefaults();
-    return {
-        defaults,
-        defaultStageModel: getDefaultStageModel(
-            defaults.modelValues,
-            undefined,
-            defaults.modelCatalog,
-        ),
-    };
+    return getDefaultStageModel(
+        defaults.modelValues,
+        undefined,
+        defaults.modelCatalog,
+    );
 };
 
 /**
@@ -289,7 +285,8 @@ describe("authoring document contract fixture", () => {
                 height: 1024,
                 fps: 24,
             },
-            normalizationEnvironment(),
+            getRootDefaults(),
+            testStageModel(),
         );
         expect(decoded).not.toBeNull();
         if (!decoded) {

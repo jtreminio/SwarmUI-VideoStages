@@ -4199,7 +4199,7 @@
     }
     return migrated;
   };
-  var decodeStoredDocument = (serialized, inherited, environment) => {
+  var decodeStoredDocument = (serialized, inherited, defaults, defaultStageModel) => {
     try {
       const parsed = JSON.parse(serialized);
       if (!isRecord2(parsed)) {
@@ -4221,12 +4221,7 @@
         height: current.height
       });
       const clips = current.clips.map(
-        (entry) => normalizeClip(
-          entry,
-          environment.defaults,
-          environment.defaultStageModel,
-          dims.fps
-        )
+        (entry) => normalizeClip(entry, defaults, defaultStageModel, dims.fps)
       );
       sealSkipSuffix(clips);
       return {
@@ -5701,20 +5696,18 @@
     height: defaults.height,
     fps: defaults.fps
   });
-  var normalizationEnvironment = (defaults) => ({
-    defaults,
-    defaultStageModel: getDefaultStageModel(
-      defaults.modelValues,
-      void 0,
-      defaults.modelCatalog
-    )
-  });
+  var defaultStageModelFor = (defaults) => getDefaultStageModel(
+    defaults.modelValues,
+    void 0,
+    defaults.modelCatalog
+  );
   var parse = (serialized) => {
     const defaults = getRootDefaults();
     const decoded = decodeStoredDocument(
       serialized,
       inheritedDims(defaults),
-      normalizationEnvironment(defaults)
+      defaults,
+      defaultStageModelFor(defaults)
     );
     if (!decoded) return null;
     overlayPromptAndUiState(decoded.clips);
@@ -5741,7 +5734,8 @@
     const decoded = decodeStoredDocument(
       snapshot.document,
       inheritedDims(defaults),
-      normalizationEnvironment(defaults)
+      defaults,
+      defaultStageModelFor(defaults)
     );
     if (!decoded || snapshot.prompts.length !== decoded.clips.length) {
       return false;
