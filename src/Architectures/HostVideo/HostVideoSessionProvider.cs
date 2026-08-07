@@ -26,7 +26,7 @@ internal sealed class HostVideoSessionProvider(WorkflowGenerator generator) :
         {
             diagnostics.Add(Ignored(
                 "host-video.end-frame.ignored",
-                "'Video End Frame' is not supported by the generic host-video fallback and was "
+                $"'Video End Frame' is not supported by the {Label} fallback and was "
                     + "ignored. The authored request value remains unchanged."));
         }
         if (generator.UserInput.TryGet(
@@ -36,27 +36,30 @@ internal sealed class HostVideoSessionProvider(WorkflowGenerator generator) :
         {
             diagnostics.Add(Ignored(
                 "host-video.creativity.ignored",
-                "'Video2Video Creativity' is request-global and was ignored by the generic "
-                    + "host-video fallback. Use each later stage's Control value instead."));
+                $"'Video2Video Creativity' is request-global and was ignored by the {Label} "
+                    + "fallback. Use each later stage's Control value instead."));
         }
         if (generator.UserInput.TryGet(T2IParamTypes.PromptAudios, out List<AudioFile> promptAudios)
             && promptAudios.Count > 0)
         {
             diagnostics.Add(Ignored(
                 "host-video.audio-reference.ignored",
-                "'Prompt Audios' is an architecture-specific enhancement and was "
-                    + "ignored by the generic host-video fallback."));
+                $"'Prompt Audios' is an architecture-specific enhancement and was "
+                    + $"ignored by the {Label} fallback."));
         }
         if (generator.UserInput.TryGet(T2IParamTypes.PromptVideos, out List<VideoFile> promptVideos)
             && promptVideos.Count > 0)
         {
             diagnostics.Add(Ignored(
                 "host-video.video-reference.ignored",
-                "'Prompt Videos' is an architecture-specific enhancement and was "
-                    + "ignored by the generic host-video fallback."));
+                $"'Prompt Videos' is an architecture-specific enhancement and was "
+                    + $"ignored by the {Label} fallback."));
         }
         return diagnostics;
     }
+
+    private static string Label =>
+        HostVideoArchitectureModule.Instance.Descriptor.DisplayName;
 
     public IVideoGenerationSession CreateSession(
         ArchitectureTimelineSessionContext context) =>

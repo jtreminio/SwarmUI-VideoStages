@@ -29,7 +29,6 @@ internal sealed class MiniMaxGenerationSession(
     HostVideoDecodedStageInput stageInput,
     HostRootAdoption rootAdoption) : IVideoGenerationSession
 {
-
     private readonly PlannedStagePromptResolver _prompts = new(g);
     private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
     private readonly MiniMaxBoundaryReferenceBuilder _boundaryReferenceBuilder =

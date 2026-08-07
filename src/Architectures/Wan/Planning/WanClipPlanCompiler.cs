@@ -168,7 +168,7 @@ internal static class WanClipPlanCompiler
             diagnostics.Add(new(
                 PlanDiagnosticSeverity.Warning,
                 "effective-request.wan-reference-strengths-ignored",
-                $"Clip {clip.Id} configures per-stage frame-reference strengths, which WAN "
+                $"Clip {clip.Id} configures per-stage frame-reference strengths, which WAN Video "
                     + "native conditioning does not use. The authored strengths remain saved "
                     + "and are ignored for this generation.",
                 clip.Id));

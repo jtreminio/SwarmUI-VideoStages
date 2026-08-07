@@ -35,9 +35,9 @@ internal sealed class WanSessionProvider(WorkflowGenerator generator) :
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Warning,
                     "wan.end-frame.ignored",
-                    "'Video End Frame' was ignored because it can only target the final "
-                        + "generating stage of one WAN clip, and that stage must "
-                        + "use a WAN model whose host workflow supports a final image. "
+                    $"'Video End Frame' was ignored because it can only target the final "
+                        + $"generating stage of one {Label} clip, and that stage must "
+                        + $"use a {Label} model whose host workflow supports a final image. "
                         + $"This request has {context.Plan.Clips.Count} clip(s) across "
                         + $"architecture(s): {families}."));
             }
@@ -48,12 +48,14 @@ internal sealed class WanSessionProvider(WorkflowGenerator generator) :
             && creativity != 1)
         {
             diagnostics.Add(Warn(
-                "'Video2Video Creativity' is request-global, but Wan refinement strength is "
+                $"'Video2Video Creativity' is request-global, but {Label} refinement strength is "
                 + "clip-local. Use init-video stage 0 or each later stage's authored 'Control' "
                 + "value instead."));
         }
         return diagnostics;
     }
+
+    private static string Label => WanArchitectureModule.Instance.Descriptor.DisplayName;
 
     public IVideoGenerationSession CreateSession(
         ArchitectureTimelineSessionContext context) =>

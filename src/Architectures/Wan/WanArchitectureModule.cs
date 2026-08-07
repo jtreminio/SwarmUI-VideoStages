@@ -54,7 +54,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
         ArchitectureFeature.FrameReferences,
         ArchitectureBoundaryPolicy.CutOnly(
             "wan22",
-            "Decoded Wan clips can be joined with a hard cut."))
+            "Decoded WAN Video clips can be joined with a hard cut."))
     {
         RunsOnStockHostSampler = true,
         FrameGrid = FrameGrid,

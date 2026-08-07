@@ -22,7 +22,7 @@ internal sealed class StockHostVideoGenerationSession(
     VideoArchitectureDescriptor architecture,
     WanStockHostVideoBehavior wanBehavior = null) : IVideoGenerationSession
 {
-    private readonly string architectureLabel = architecture.DisplayName;
+    private readonly string _architectureLabel = architecture.DisplayName;
 
     private readonly PlannedStagePromptResolver _prompts = new(g);
     private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
@@ -68,7 +68,7 @@ internal sealed class StockHostVideoGenerationSession(
         {
             InitVideoPlan source = clip.InitVideo
                 ?? throw Invariant.Failure(
-                    $"InitVideo {architectureLabel} clip {clip.ClipId} has no init-video plan.");
+                    $"InitVideo {_architectureLabel} clip {clip.ClipId} has no init-video plan.");
             ClipPlan sourceInstallPlan = clip with
             {
                 InitVideo = source with
@@ -466,7 +466,7 @@ internal sealed class StockHostVideoGenerationSession(
         genInfo.Frames
         ?? throw Invariant.Failure(
             $"Clip {clip.ClipId} stage {stage.StageId} has no "
-                + $"{architectureLabel} text-video frame count.");
+                + $"{_architectureLabel} text-video frame count.");
 
     private void SampleTextStage(
         ClipPlan clip,
@@ -549,7 +549,7 @@ internal sealed class StockHostVideoGenerationSession(
         {
             throw Invariant.Failure(
                 $"clip {clip.ClipId} stage {stage.StageId} could not create a "
-                    + $"valid {width}x{height}, {frames}-frame {architectureLabel} "
+                    + $"valid {width}x{height}, {frames}-frame {_architectureLabel} "
                     + "text-video latent.");
         }
     }
@@ -567,9 +567,8 @@ internal sealed class StockHostVideoGenerationSession(
         StageCorePlan core = stage.Core;
         T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId)
             ?? throw Invariant.Failure(
-                $"clip {clip.ClipId} could not resolve {architectureLabel} "
-                    + "video model "
-                + $"'{stage.ResolvedModel.ModelName}'.");
+                $"clip {clip.ClipId} could not resolve the {_architectureLabel} "
+                    + $"model '{stage.ResolvedModel.ModelName}'.");
         T2IModel continuationModel = null;
         if (continuation is not null)
         {
@@ -581,8 +580,8 @@ internal sealed class StockHostVideoGenerationSession(
             if (continuationModel is null)
             {
                 throw Invariant.Failure(
-                    $"clip {clip.ClipId} could not resolve {architectureLabel} "
-                        + $"video model '{continuation.ResolvedModel.ModelName}'.");
+                    $"clip {clip.ClipId} could not resolve the {_architectureLabel} "
+                        + $"model '{continuation.ResolvedModel.ModelName}'.");
             }
         }
         int width = g.CurrentMedia?.Width ?? _dimensions.Width;
@@ -656,5 +655,5 @@ internal sealed class StockHostVideoGenerationSession(
     }
 
     private StockHostVideoStagePayload ResolvePayload(StagePlan stage) =>
-        stage.RequireStockHostVideoPayload(ArchitectureId, architectureLabel);
+        stage.RequireStockHostVideoPayload(ArchitectureId, _architectureLabel);
 }

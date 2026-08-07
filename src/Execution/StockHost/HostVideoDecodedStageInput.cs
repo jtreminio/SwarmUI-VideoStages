@@ -85,7 +85,7 @@ internal sealed class HostVideoDecodedStageInput
         {
             throw Invariant.Failure(
                 $"clip {clip.ClipId} stage {stage.StageId} produced no "
-                + $"{_architectureDisplayLabel} video.");
+                + $"{_architectureDisplayLabel} output.");
         }
         _generator.CurrentMedia.Frames =
             genInfo.Frames ?? _generator.CurrentMedia.Frames;
@@ -103,8 +103,8 @@ internal sealed class HostVideoDecodedStageInput
             || bridge.ResolvePath(path) is null)
         {
             throw Invariant.Failure(
-                $"clip {clip.ClipId} stage {stage.StageId} did not produce a "
-                + $"resolvable decoded {_architectureDisplayLabel} video.");
+                $"clip {clip.ClipId} stage {stage.StageId} did not produce "
+                + $"resolvable decoded {_architectureDisplayLabel} output.");
         }
     }
 

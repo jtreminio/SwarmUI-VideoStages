@@ -74,7 +74,7 @@ internal sealed class WanStockHostVideoBehavior(
         {
             Logs.Info(
                 $"VideoStages: clip {clip.ClipId} stage {stage.StageId} length {frames} snapped to "
-                + $"{snapped} — Wan generates in steps of {frameGrid} frames.");
+                + $"{snapped} — WAN Video generates in steps of {frameGrid} frames.");
         }
         return snapped;
     }
