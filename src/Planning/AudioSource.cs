@@ -17,25 +17,6 @@ internal enum AudioSourceKind
     AceStepFun,
 }
 
-internal static class AudioSourceKindPolicy
-{
-    /// <summary>
-    /// Only authored external audio can set video duration; native audio is generated with video.
-    /// </summary>
-    internal static bool CanDriveClipDuration(AudioSourceKind kind) =>
-        kind is AudioSourceKind.Upload
-            or AudioSourceKind.ControlNet
-            or AudioSourceKind.AceStepFun;
-
-    /// <summary>
-    /// Whether the clip's authored audio-derived length is usable. A request against a source that
-    /// cannot supply one is warned about by the capability pass and normalized away here.
-    /// </summary>
-    internal static bool CanUseAudioDerivedLength(ClipSpec clip) =>
-        clip.ClipLengthFromAudio
-        && CanDriveClipDuration(AudioSource.Parse(clip.AudioSource).Kind);
-}
-
 internal sealed record AudioSource(
     AudioSourceKind Kind,
     string Raw,
@@ -60,4 +41,23 @@ internal sealed record AudioSource(
             ? new(AudioSourceKind.AceStepFun, trimmed, track)
             : new(AudioSourceKind.Unknown, trimmed, null);
     }
+}
+
+internal static class AudioSourceKindPolicy
+{
+    /// <summary>
+    /// Only authored external audio can set video duration; native audio is generated with video.
+    /// </summary>
+    internal static bool CanDriveClipDuration(AudioSourceKind kind) =>
+        kind is AudioSourceKind.Upload
+            or AudioSourceKind.ControlNet
+            or AudioSourceKind.AceStepFun;
+
+    /// <summary>
+    /// Whether the clip's authored audio-derived length is usable. A request against a source that
+    /// cannot supply one is warned about by the capability pass and normalized away here.
+    /// </summary>
+    internal static bool CanUseAudioDerivedLength(ClipSpec clip) =>
+        clip.ClipLengthFromAudio
+        && CanDriveClipDuration(AudioSource.Parse(clip.AudioSource).Kind);
 }

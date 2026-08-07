@@ -145,9 +145,9 @@ internal static class EffectiveVideoRequestProjection
         ICollection<PlanDiagnostic> diagnostics)
     {
         ArchitectureFeature features = assignment.Architecture.Features;
+        // Runtime-derived lengths skip grid snapping only when the architecture supports them.
         if (!clip.Frames.HasValue
             || clip.Stages is not { Count: > 0 }
-            // Runtime-derived lengths skip grid snapping only when the architecture supports them.
             || (AudioSourceKindPolicy.CanUseAudioDerivedLength(clip)
                 && features.HasFlag(ArchitectureFeature.AudioDerivedDuration)
                 && assignment.Architecture.AudioSourceKinds.Contains(

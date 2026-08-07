@@ -239,11 +239,11 @@ internal sealed class AudioTimelineExecutor
             && baseAudio is null
             && duration > 0;
         // Nothing may condition core's text-to-video root; a stage builds under its nodes.
-        bool takesOverHostChain = root.IgnoresTextToVideoRoot;
+        bool ignoresHostRoot = root.IgnoresTextToVideoRoot;
         bool overlaysConditionRootGeneration = hasGenerationStage
             && runtimeContext.ClipIndex == 0
             && overlaysOverNoBase
-            && !takesOverHostChain
+            && !ignoresHostRoot
             && _audioInjector.TryInject(
                 combinedAudio,
                 matchVideoLengthToAudio: false,
@@ -271,7 +271,7 @@ internal sealed class AudioTimelineExecutor
         }
         _generator.CurrentMedia = currentMedia;
 
-        if (!hasGenerationStage || takesOverHostChain)
+        if (!hasGenerationStage || ignoresHostRoot)
         {
             return;
         }

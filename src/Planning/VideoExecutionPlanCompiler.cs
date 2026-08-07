@@ -75,7 +75,7 @@ internal static class VideoExecutionPlanCompiler
         {
             ClipArchitectureAssignment assignment =
                 architecturePlanning.Clips.GetValueOrDefault(activeClips[i].Id);
-            ArchitectureEntryMode entryMode = ResolveEntryMode(spec, activeClips[i]);
+            ArchitectureEntryMode entryMode = ResolveEntryMode(effective, activeClips[i]);
             ArchitectureClipCompilation acceptedArchitectureCompilation = null;
             if (assignment is not null
                 && !architecturePlanning.IsBlocked(activeClips[i].Id))

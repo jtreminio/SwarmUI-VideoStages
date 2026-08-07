@@ -4,8 +4,8 @@ using SwarmUI.Utils;
 namespace VideoStages.Planning;
 
 /// <summary>
-/// Errors block the generation, warnings reach the host's warning channel, and info stays in the
-/// debug log.
+/// How a compiled plan's diagnostics reach the user: errors block the generation, warnings reach
+/// the host's warning channel, and info stays in the debug log.
 /// </summary>
 internal static class PlanDiagnosticReporter
 {
@@ -16,7 +16,7 @@ internal static class PlanDiagnosticReporter
         ];
 
     /// <summary>
-    /// Fails the generation closed when any diagnostic is blocking. <c>context</c> is the failing
+    /// Fails the generation closed when any diagnostic is blocking. <paramref name="context"/> is the failing
     /// phase (plan compilation, timeline merge), not a timeline stage.
     /// </summary>
     internal static void ThrowIfBlocking(

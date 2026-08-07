@@ -20,7 +20,7 @@ internal sealed class StageFrame
         Stage = stage;
         ClipContext = clipContext;
         PriorOutputPath = priorOutputPath;
-        IgnoresTextToVideoRoot = takesOverTextToVideoRoot;
+        TakesOverTextToVideoRoot = takesOverTextToVideoRoot;
         PostVideoChain = postVideoChain;
         SourceMedia = sourceMedia;
         GenInfo = genInfo;
@@ -30,7 +30,7 @@ internal sealed class StageFrame
     public StagePlan Stage { get; }
     public ClipContext ClipContext { get; }
     public JArray PriorOutputPath { get; }
-    public bool IgnoresTextToVideoRoot { get; }
+    public bool TakesOverTextToVideoRoot { get; }
     public LtxPostVideoChainCapture PostVideoChain { get; }
     public WGNodeData SourceMedia { get; }
     public WorkflowGenerator.ImageToVideoGenInfo GenInfo { get; }
