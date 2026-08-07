@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
 import { minimalClip, minimalRef } from "./__test_helpers__/clipFixtures";
+import { requireEl } from "./__test_helpers__/dom";
 import { createCapabilityViewResolver } from "./architectures/policy";
 import { resolveTimelineTiming } from "./timelineTiming";
 import { renderTimeline } from "./timelineView";
@@ -1412,17 +1413,27 @@ describe("unsupported persisted timeline controls", () => {
             capabilities: createCapabilityViewResolver(catalog),
         });
 
-        for (const selector of [
-            '[data-vst-prompt="major"]',
-            '[data-vst-prompt="minor"]',
-            '[data-vst-audio="clip"]',
-            '[data-vst-ref="thumb"]',
-            "[data-vst-retake]",
-        ]) {
-            expect(
-                document.querySelector(selector)?.hasAttribute("aria-disabled"),
-            ).toBe(false);
-        }
+        expect(
+            requireEl(
+                document.body,
+                '.vst-audio-clip[data-clip-idx="0"]',
+            ).getAttribute("data-vst-audio"),
+        ).toBe("clip");
+        expect(
+            requireEl(document.body, '.vst-minor-seg[data-clip-idx="0"]').title,
+        ).toContain("click to inspect or Shift+click to delete");
+        expect(
+            requireEl(
+                document.body,
+                '.vst-refs-mark[data-clip-idx="0"]',
+            ).getAttribute("aria-label"),
+        ).toBe("Inspect unsupported persisted reference 0 for removal");
+        expect(
+            requireEl(
+                document.body,
+                '[data-vst-retake][data-clip-idx="0"]',
+            ).getAttribute("aria-label"),
+        ).toContain("Unsupported persisted retake");
         expect(
             document
                 .querySelector('.vst-refs-lane[data-clip-idx="0"]')
