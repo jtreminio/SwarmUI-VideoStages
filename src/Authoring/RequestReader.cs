@@ -534,7 +534,8 @@ internal static class RequestReader
         if (isTextToVideoRootWorkflow)
         {
             if (!string.IsNullOrWhiteSpace(rawValue)
-                && !StringUtils.Equals(StringUtils.Compact(rawValue), MediaSource.Generated))
+                && StageGuideReference.Classify(rawValue).Kind
+                    != StageGuideReferenceKind.Generated)
             {
                 DocumentJson.Warn(
                     warn,
@@ -553,23 +554,26 @@ internal static class RequestReader
         }
 
         StageGuideReferenceSelection selection = StageGuideReference.Classify(rawValue);
-        switch (selection.Kind)
+        switch (selection)
         {
-            case StageGuideReferenceKind.Generated:
+            case { Kind: StageGuideReferenceKind.Generated }:
                 return MediaSource.Generated;
-            case StageGuideReferenceKind.Base:
+            case { Kind: StageGuideReferenceKind.Base }:
                 return MediaSource.Base;
-            case StageGuideReferenceKind.Refiner:
+            case { Kind: StageGuideReferenceKind.Refiner }:
                 return MediaSource.Refiner;
-            // Stage 0 has no previous stage, so defaultReference collapses it to Generated.
-            case StageGuideReferenceKind.PreviousStage:
+            case { Kind: StageGuideReferenceKind.PreviousStage }:
+                // Stage 0 has no previous stage, so defaultReference collapses it to Generated.
                 return defaultReference;
-            case StageGuideReferenceKind.Base2Edit:
-                return MediaSource.FormatBase2Edit(selection.ReferencedStageIndex.Value);
-            case StageGuideReferenceKind.ExplicitStage
-                when selection.ReferencedStageIndex.Value < stageIndex:
-                return MediaSource.FormatExplicitStageIndex(selection.ReferencedStageIndex.Value);
-            case StageGuideReferenceKind.ExplicitStage:
+            case { Kind: StageGuideReferenceKind.Base2Edit, ReferencedStageIndex: int edit }:
+                return MediaSource.FormatBase2Edit(edit);
+            case
+            {
+                Kind: StageGuideReferenceKind.ExplicitStage,
+                ReferencedStageIndex: int explicitStage,
+            } when explicitStage < stageIndex:
+                return MediaSource.FormatExplicitStageIndex(explicitStage);
+            case { Kind: StageGuideReferenceKind.ExplicitStage }:
                 DocumentJson.Warn(
                     warn,
                     $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has invalid ImageReference '{rawValue}' "
