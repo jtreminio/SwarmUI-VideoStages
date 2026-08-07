@@ -33,17 +33,6 @@ export const STAGE_REF_STRENGTH_STEP = 0.1;
 export const STAGE_REF_STRENGTH_DEFAULT = 0.8;
 export const IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
 
-export const parseBase2EditStageIndex = (value: string): number | null => {
-    const match = `${value || ""}`
-        .trim()
-        .replace(/\s+/g, "")
-        .match(/^edit(\d+)$/i);
-    if (!match) {
-        return null;
-    }
-    return parseInt(match[1], 10);
-};
-
 export const normalizeUploadFileName = (
     value: string | null | undefined,
 ): string | null => {

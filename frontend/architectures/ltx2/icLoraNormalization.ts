@@ -1,4 +1,3 @@
-import { canonicalControlNetSource } from "../../controlNetSource";
 import {
     CONTROLNET_SOURCE_OPTIONS,
     MEDIA_SOURCE_INCOMING,
@@ -15,6 +14,7 @@ import {
     IC_LORA_STRENGTH_MIN,
     IC_LORA_STRENGTH_STEP,
 } from "../../icLoraAuthoring";
+import { canonicalControlNetSource } from "../../mediaSourceSyntax";
 import { normalizeUploadedMedia } from "../../normalizationMedia";
 import {
     normalizeOptionalEntityId,

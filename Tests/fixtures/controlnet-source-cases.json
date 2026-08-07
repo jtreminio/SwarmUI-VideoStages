@@ -1,0 +1,13 @@
+[
+  { "source": "ControlNet 1", "slotIndex": 0 },
+  { "source": "ControlNet 2", "slotIndex": 1 },
+  { "source": "ControlNet 3", "slotIndex": 2 },
+  { "source": "controlnet1", "slotIndex": 0 },
+  { "source": "  ControlNet   3  ", "slotIndex": 2 },
+  { "source": "ControlNet+2", "slotIndex": 1 },
+  { "source": "ControlNet 0", "slotIndex": null },
+  { "source": "ControlNet 4", "slotIndex": null },
+  { "source": "ControlNet -1", "slotIndex": null },
+  { "source": "ControlNet", "slotIndex": null },
+  { "source": "", "slotIndex": null }
+]

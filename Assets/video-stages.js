@@ -481,6 +481,43 @@
     "AceStepFun"
   ];
 
+  // frontend/generatedMediaSource.ts
+  var MEDIA_SOURCE_UPLOAD = "Upload";
+  var MEDIA_SOURCE_NATIVE = "Native";
+  var MEDIA_SOURCE_INCOMING = "Incoming";
+  var MEDIA_SOURCE_CONTROLNET = "ControlNet";
+  var MEDIA_SOURCE_ACE_STEP_FUN = "AceStepFun";
+  var MEDIA_SOURCE_BASE = "Base";
+  var MEDIA_SOURCE_REFINER = "Refiner";
+  var CONTROLNET_SOURCE_OPTIONS = [
+    "ControlNet 1",
+    "ControlNet 2",
+    "ControlNet 3"
+  ];
+  var MEDIA_SOURCE_ACE_STEP_FUN_PREFIX = "audio";
+  var MEDIA_SOURCE_BASE_2_EDIT_PREFIX = "edit";
+
+  // frontend/mediaSourceSyntax.ts
+  var compact = (value) => `${value ?? ""}`.trim().replaceAll(" ", "");
+  var parseIndexedMediaSource = (value, prefix) => {
+    const text2 = compact(value);
+    if (!text2.toLowerCase().startsWith(prefix.toLowerCase())) {
+      return null;
+    }
+    const rest = text2.slice(prefix.length);
+    if (!/^\+?\d+$/.test(rest)) {
+      return null;
+    }
+    const index = Number(rest);
+    return Number.isSafeInteger(index) ? index : null;
+  };
+  var parseAceStepFunIndex = (value) => parseIndexedMediaSource(value, MEDIA_SOURCE_ACE_STEP_FUN_PREFIX);
+  var parseBase2EditStageIndex = (value) => parseIndexedMediaSource(value, MEDIA_SOURCE_BASE_2_EDIT_PREFIX);
+  var canonicalControlNetSource = (value) => {
+    const oneBased = parseIndexedMediaSource(value, MEDIA_SOURCE_CONTROLNET);
+    return oneBased !== null && oneBased >= 1 && oneBased <= CONTROLNET_SOURCE_OPTIONS.length ? CONTROLNET_SOURCE_OPTIONS[oneBased - 1] : null;
+  };
+
   // frontend/selectOption.ts
   var preserveSelectedOption = (options, selectedValue, position, build) => {
     const value = `${selectedValue || ""}`.trim();
@@ -510,8 +547,7 @@
     AUDIO_SOURCE_CONTROLNET,
     AUDIO_SOURCE_ACE_STEP_FUN
   ] = AUDIO_SOURCE_KINDS;
-  var ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
-  var isAceStepFunAudioSource = (source) => ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
+  var isAceStepFunAudioSource = (source) => parseAceStepFunIndex(source) !== null;
   var audioSourceKind = (source) => {
     const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
     return isAceStepFunAudioSource(normalized) ? AUDIO_SOURCE_ACE_STEP_FUN : normalized;
@@ -544,11 +580,8 @@
     return refs;
   };
   var getAceStepFunRefLabel = (ref) => {
-    const audioRef = ACESTEPFUN_AUDIO_REF_PATTERN.exec(ref);
-    if (audioRef) {
-      return `AceStepFun Audio ${audioRef[1]}`;
-    }
-    return ref;
+    const index = parseAceStepFunIndex(ref);
+    return index === null ? ref : `AceStepFun Audio ${index}`;
   };
   var appendAceStepFunRefs = (options) => {
     for (const ref of getAceStepFunRefs()) {
@@ -1436,13 +1469,6 @@
   var STAGE_REF_STRENGTH_STEP = 0.1;
   var STAGE_REF_STRENGTH_DEFAULT = 0.8;
   var IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
-  var parseBase2EditStageIndex = (value) => {
-    const match = `${value || ""}`.trim().replace(/\s+/g, "").match(/^edit(\d+)$/i);
-    if (!match) {
-      return null;
-    }
-    return parseInt(match[1], 10);
-  };
   var normalizeUploadFileName = (value) => {
     const raw = `${value ?? ""}`.trim();
     if (!raw) {
@@ -2392,20 +2418,6 @@
     ...(state.audioTracks ?? []).flatMap(ownedIds)
   ].filter((id) => !!id);
 
-  // frontend/generatedMediaSource.ts
-  var MEDIA_SOURCE_UPLOAD = "Upload";
-  var MEDIA_SOURCE_NATIVE = "Native";
-  var MEDIA_SOURCE_INCOMING = "Incoming";
-  var MEDIA_SOURCE_CONTROLNET = "ControlNet";
-  var MEDIA_SOURCE_ACE_STEP_FUN = "AceStepFun";
-  var MEDIA_SOURCE_BASE = "Base";
-  var MEDIA_SOURCE_REFINER = "Refiner";
-  var CONTROLNET_SOURCE_OPTIONS = [
-    "ControlNet 1",
-    "ControlNet 2",
-    "ControlNet 3"
-  ];
-
   // frontend/generatedReferenceScale.ts
   var REFERENCE_SCALE_FULL = 1;
   var REFERENCE_SCALES = [1, 0.5, 0.25];
@@ -2615,8 +2627,8 @@
 
   // frontend/normalizationAudio.ts
   var normalizeAudioTrackSourceKind = (value) => {
-    const compact = trimmedText(value).toLowerCase();
-    switch (compact) {
+    const compact2 = trimmedText(value).toLowerCase();
+    switch (compact2) {
       case MEDIA_SOURCE_UPLOAD.toLowerCase():
         return MEDIA_SOURCE_UPLOAD;
       case MEDIA_SOURCE_ACE_STEP_FUN.toLowerCase():
@@ -2999,20 +3011,6 @@
     return changed;
   };
 
-  // frontend/controlNetSource.ts
-  var canonicalControlNetSource = (value) => {
-    const compact = `${value ?? ""}`.trim().replace(/\s+/g, "").toLowerCase();
-    if (!compact.startsWith("controlnet")) {
-      return null;
-    }
-    const rawIndex = compact.slice("controlnet".length);
-    if (!/^[+-]?\d+$/.test(rawIndex)) {
-      return null;
-    }
-    const oneBased = Number(rawIndex);
-    return Number.isSafeInteger(oneBased) && oneBased >= 1 && oneBased <= 3 ? CONTROLNET_SOURCE_OPTIONS[oneBased - 1] : null;
-  };
-
   // frontend/icLoraAuthoring.ts
   var STAGE_CONTROLNET_STRENGTH_MIN = 0;
   var STAGE_CONTROLNET_STRENGTH_MAX = 1;
@@ -3059,18 +3057,18 @@
   };
   var normalizeIcLoraDriveSource = (value) => {
     const authored = `${value ?? ""}`.trim();
-    const compact = authored.replace(/\s+/g, "").toLowerCase();
-    if (!compact || compact === "upload") {
+    const compact2 = authored.replace(/\s+/g, "").toLowerCase();
+    if (!compact2 || compact2 === "upload") {
       return MEDIA_SOURCE_UPLOAD;
     }
-    if (compact === "incoming" || compact === "stageinput") {
+    if (compact2 === "incoming" || compact2 === "stageinput") {
       return MEDIA_SOURCE_INCOMING;
     }
     return canonicalControlNetSource(authored) ?? authored;
   };
   var normalizeIcLoraDriveData = (value) => {
-    const compact = `${value ?? ""}`.trim().toLowerCase();
-    return compact === "none" || compact === "audio" ? compact : "visual";
+    const compact2 = `${value ?? ""}`.trim().toLowerCase();
+    return compact2 === "none" || compact2 === "audio" ? compact2 : "visual";
   };
   var mediaKindsForData = (driveData) => icLoraDriveMediaContractForData(driveData).acceptedKinds;
   var normalizeIcLoraDriveMediaKinds = (value, driveData) => {

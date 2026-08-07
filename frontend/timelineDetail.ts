@@ -1,5 +1,5 @@
-import { parseBase2EditStageIndex } from "./constants";
 import { MEDIA_SOURCE_REFINER } from "./generatedMediaSource";
+import { parseBase2EditStageIndex } from "./mediaSourceSyntax";
 import type { Stage } from "./types";
 
 export type TimelineUnit = "seconds" | "frames";

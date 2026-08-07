@@ -1,10 +1,10 @@
-import { parseBase2EditStageIndex } from "./constants";
 import {
     CONTROLNET_SOURCE_OPTIONS,
     MEDIA_SOURCE_BASE,
     MEDIA_SOURCE_REFINER,
     MEDIA_SOURCE_UPLOAD,
 } from "./generatedMediaSource";
+import { parseBase2EditStageIndex } from "./mediaSourceSyntax";
 
 import { preserveSelectedOption, resolveSelectValue } from "./selectOption";
 import { getBase2EditStageRefs } from "./swarmInputs";

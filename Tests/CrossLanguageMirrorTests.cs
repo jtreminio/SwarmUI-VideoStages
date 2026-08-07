@@ -70,6 +70,26 @@ public class CrossLanguageMirrorTests
         }
     }
 
+    /// <summary>The frontend re-derives this grammar rather than calling the backend, so both
+    /// halves read the same cases — including the compacting and the leading "+" that
+    /// int.TryParse accepts.</summary>
+    [Fact]
+    public void ControlNetSourceParsing_MatchesSharedFixture()
+    {
+        foreach (JObject c in LoadFixture("controlnet-source-cases.json").OfType<JObject>())
+        {
+            string source = c.Value<string>("source");
+            int? expected = c.Value<int?>("slotIndex");
+            Assert.Equal(
+                expected.HasValue,
+                MediaSource.TryParseControlNetIndex(source, out int slotIndex));
+            if (expected.HasValue)
+            {
+                Assert.Equal(expected.Value, slotIndex);
+            }
+        }
+    }
+
     [Fact]
     public void DimensionSnap_MatchesSharedFixture()
     {

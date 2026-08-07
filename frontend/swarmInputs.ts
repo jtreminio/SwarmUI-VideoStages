@@ -4,8 +4,8 @@ import {
 } from "./architectures/catalog";
 import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
 import type { ArchitectureModelCatalog } from "./architectures/types";
-import { parseBase2EditStageIndex } from "./constants";
 import { getVideoStagesHostBridge } from "./host";
+import { parseBase2EditStageIndex } from "./mediaSourceSyntax";
 import {
     type ClipTextInput,
     extractGlobalPrompt,

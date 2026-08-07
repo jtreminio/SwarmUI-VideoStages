@@ -1,5 +1,6 @@
 import { AUDIO_SOURCE_KINDS } from "./architectures/generatedFeatures";
 import { getVideoStagesHostBridge } from "./host";
+import { parseAceStepFunIndex } from "./mediaSourceSyntax";
 import { preserveSelectedOption, type SelectOption } from "./selectOption";
 
 export type AudioSourceOption = Pick<SelectOption, "value" | "label">;
@@ -25,10 +26,8 @@ export {
     AUDIO_SOURCE_UPLOAD,
 };
 
-const ACESTEPFUN_AUDIO_REF_PATTERN = /^audio(\d+)$/i;
-
 export const isAceStepFunAudioSource = (source: string): boolean =>
-    ACESTEPFUN_AUDIO_REF_PATTERN.test(`${source ?? ""}`.trim());
+    parseAceStepFunIndex(source) !== null;
 
 export const audioSourceKind = (source: string): string => {
     const normalized = `${source ?? ""}`.trim() || AUDIO_SOURCE_NATIVE;
@@ -88,11 +87,8 @@ const getAceStepFunRefs = (): string[] => {
 };
 
 const getAceStepFunRefLabel = (ref: string): string => {
-    const audioRef = ACESTEPFUN_AUDIO_REF_PATTERN.exec(ref);
-    if (audioRef) {
-        return `AceStepFun Audio ${audioRef[1]}`;
-    }
-    return ref;
+    const index = parseAceStepFunIndex(ref);
+    return index === null ? ref : `AceStepFun Audio ${index}`;
 };
 
 const appendAceStepFunRefs = (options: AudioSourceOption[]): void => {

@@ -2,8 +2,6 @@ import {
     buildAudioTrackSourceOptions,
     isAceStepFunAudioSource,
 } from "./audioSource";
-import { parseBase2EditStageIndex } from "./constants";
-import { canonicalControlNetSource } from "./controlNetSource";
 import {
     CONTROLNET_SOURCE_OPTIONS,
     MEDIA_SOURCE_BASE,
@@ -11,6 +9,10 @@ import {
     MEDIA_SOURCE_UPLOAD,
 } from "./generatedMediaSource";
 import { buildImageSourceOptions } from "./imageSource";
+import {
+    canonicalControlNetSource,
+    parseBase2EditStageIndex,
+} from "./mediaSourceSyntax";
 import { preserveSelectedOption, resolveSelectValue } from "./selectOption";
 import type { ClipReferenceKind, ImageSourceOption } from "./types";
 

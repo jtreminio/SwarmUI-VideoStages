@@ -22,6 +22,8 @@ import { canUseClipLengthFromAudio } from "./audioSource";
 import { boundaryPlanForClips } from "./boundaryPlan";
 import { dimensionsFor } from "./dimensionPresets";
 import { snapDimensions } from "./dimensionSnap";
+import { CONTROLNET_SOURCE_OPTIONS } from "./generatedMediaSource";
+import { canonicalControlNetSource } from "./mediaSourceSyntax";
 import { framesForClip } from "./renderUtils";
 import type { BoundaryOut, Clip } from "./types";
 
@@ -66,6 +68,20 @@ describe("cross-language mirror: audio sources that can drive clip duration", ()
         canDriveClipDuration,
     }) => {
         expect(canUseClipLengthFromAudio(source)).toBe(canDriveClipDuration);
+    });
+});
+
+describe("cross-language mirror: ControlNet source parsing", () => {
+    interface ControlNetCase {
+        source: string;
+        slotIndex: number | null;
+    }
+    const cases = loadFixture<ControlNetCase[]>("controlnet-source-cases.json");
+
+    it.each(cases)("$source -> $slotIndex", ({ source, slotIndex }) => {
+        expect(canonicalControlNetSource(source)).toBe(
+            slotIndex === null ? null : CONTROLNET_SOURCE_OPTIONS[slotIndex],
+        );
     });
 });
 

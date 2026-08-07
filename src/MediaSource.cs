@@ -45,6 +45,11 @@ public static class MediaSource
         }
         Line("] as const;");
         Line();
+        Line("// Prefixes of the indexed spellings. ExplicitStagePrefix stays backend-only: no");
+        Line("// frontend code parses it, and a generated constant nothing reads is a liability.");
+        Line($"export const MEDIA_SOURCE_ACE_STEP_FUN_PREFIX = \"{AceStepFunPrefix}\";");
+        Line($"export const MEDIA_SOURCE_BASE_2_EDIT_PREFIX = \"{Base2EditPrefix}\";");
+        Line();
         Line("/**");
         Line(" * The audio-track sources the backend recognises. Anything else an authored");
         Line(" * document carries normalizes to \"Unrecognized\" and is dropped at planning.");
