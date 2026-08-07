@@ -77,13 +77,11 @@ const persistedCapabilityIssues = (
     const unsupportedFeature = (
         active: boolean,
         feature: GeneratedArchitectureFeature,
-        severity?: ArchitectureDiagnostic["severity"],
     ): void =>
         unsupported(
             active,
             feature.replace(/[A-Z]/g, (upper) => `-${upper.toLowerCase()}`),
             ARCHITECTURE_FEATURE_LABELS[feature],
-            severity,
         );
     unsupportedFeature(
         !supports("frameReferences") && clip.frameRefs.length > 0,

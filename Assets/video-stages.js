@@ -6152,11 +6152,10 @@
         );
       }
     };
-    const unsupportedFeature = (active, feature, severity) => unsupported(
+    const unsupportedFeature = (active, feature) => unsupported(
       active,
       feature.replace(/[A-Z]/g, (upper) => `-${upper.toLowerCase()}`),
-      ARCHITECTURE_FEATURE_LABELS[feature],
-      severity
+      ARCHITECTURE_FEATURE_LABELS[feature]
     );
     unsupportedFeature(
       !supports("frameReferences") && clip.frameRefs.length > 0,
