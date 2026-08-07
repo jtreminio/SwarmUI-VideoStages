@@ -130,7 +130,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         IReadOnlyList<StageSpec> activeStages = clip.Stages ?? [];
         AudioSourceKind audioKind = AudioSourceParser.Parse(clip.AudioSource).Kind;
         if (context.EntryMode == ArchitectureEntryMode.InitVideo
-            && AudioSourceKindPolicy.AudioOwnsClipDuration(clip)
+            && AudioSourceKindPolicy.WantsAudioDerivedLength(clip)
             && Descriptor.AudioSourceKinds.Contains(audioKind))
         {
             diagnostics.Add(new(

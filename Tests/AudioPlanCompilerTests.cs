@@ -95,7 +95,6 @@ public class AudioPlanCompilerTests
     [InlineData((int)AudioSourceKind.Native, false)]
     [InlineData((int)AudioSourceKind.Disabled, false)]
     [InlineData((int)AudioSourceKind.Unknown, false)]
-    [InlineData((int)AudioSourceKind.External, false)]
     public void Audio_duration_source_policy_matches_the_external_source_contract(
         int sourceValue,
         bool expected)

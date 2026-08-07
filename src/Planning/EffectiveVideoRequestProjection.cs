@@ -150,7 +150,7 @@ internal static class EffectiveVideoRequestProjection
         ArchitectureFeature features = assignment.Architecture.Features;
         if (!clip.Frames.HasValue
             || clip.Stages is not { Count: > 0 }
-            || (AudioSourceKindPolicy.AudioOwnsClipDuration(clip)
+            || (AudioSourceKindPolicy.WantsAudioDerivedLength(clip)
                 && features.HasFlag(ArchitectureFeature.AudioDerivedDuration)
                 && assignment.Architecture.AudioSourceKinds.Contains(
                     AudioSourceParser.Parse(clip.AudioSource).Kind))

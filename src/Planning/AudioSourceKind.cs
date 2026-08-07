@@ -10,16 +10,12 @@ internal enum AudioSourceKind
     /// <summary>The authored source string matched nothing known.</summary>
     Unknown,
 
-    /// <summary>Audio is disabled.</summary>
     Disabled,
 
     Native,
     Upload,
     ControlNet,
     AceStepFun,
-
-    /// <summary>A timeline track whose media is resolved outside the clip audio vocabulary.</summary>
-    External,
 }
 
 internal static class AudioSourceKindPolicy
@@ -33,11 +29,10 @@ internal static class AudioSourceKindPolicy
             or AudioSourceKind.AceStepFun;
 
     /// <summary>
-    /// Whether a clip's authored audio-derived duration is usable. An authored request against a
-    /// source that cannot supply a length is warned about once by the capability pass and
-    /// normalized away here, so the clip keeps its authored length everywhere downstream.
+    /// Whether the clip's authored audio-derived length is usable. A request against a source that
+    /// cannot supply one is warned about by the capability pass and normalized away here.
     /// </summary>
-    internal static bool AudioOwnsClipDuration(ClipSpec clip) =>
+    internal static bool WantsAudioDerivedLength(ClipSpec clip) =>
         clip.ClipLengthFromAudio
         && CanDriveClipDuration(AudioSourceParser.Parse(clip.AudioSource).Kind);
 }
@@ -48,7 +43,6 @@ internal sealed record AudioSourceSelection(
     string Raw,
     int? AceStepFunTrack);
 
-/// <summary>Parses authored audio-source strings.</summary>
 internal static class AudioSourceParser
 {
     internal static AudioSourceSelection Parse(string raw)
