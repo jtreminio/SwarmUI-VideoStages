@@ -1,6 +1,5 @@
 using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
-using VideoStages.Authoring;
 
 namespace VideoStages.Planning;
 
