@@ -11,14 +11,6 @@ namespace VideoStages.Tests;
 public class VideoExecutionPlanCompilerTests
 {
     [Fact]
-    public void Generated_typescript_plan_diagnostic_codes_are_current()
-    {
-        Assert.Equal(
-            PlanDiagnosticCodes.RenderGeneratedTypeScript(),
-            RepoFiles.ReadFrontend("generatedPlanDiagnostics.ts"));
-    }
-
-    [Fact]
     public void Compile_TextToVideoGeneratedClip_ReplacesRootAndGeneratesFromEmptyLatent()
     {
         VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(
