@@ -665,8 +665,8 @@ public class Ltx2CoreVideoContractTests
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
         // Full strength is also the codegen default, the guide is extension-built (so the shipped
         // JSON carries the default regardless), and an implicit guide cannot be authored otherwise;
-        // Stage_controlnet_strength_scales_each_stages_guide is the control that an authored value
-        // reaches this input at all.
+        // A_frame_one_base_ref_reuses_the_root_framing_at_its_authored_strength is the control that
+        // an authored value reaches this input at all.
         Assert.Equal(1.0, guide.Strength.LiteralAsDouble());
         Assert.Same(preprocess.OutputImage, guide.Image.Connection);
 
