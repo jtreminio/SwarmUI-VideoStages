@@ -30,7 +30,6 @@ import type {
     Retake,
     UploadedMedia,
 } from "./types";
-
 import { isRecord, roundToTenth } from "./utils";
 
 const normalizePromptWindow = (

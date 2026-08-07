@@ -16,9 +16,10 @@ same method that its coverage exists elsewhere — a claim that it does is not p
 wrong, in both directions: a reviewer's reasoned argument that coverage exists is not proof either.
 Measure it.
 
-Restore from a copy, not `git checkout --`: on an uncommitted file that reverts your own work, and
-every result after it is noise. Confirm the mutation actually applied — a pattern that silently
-missed leaves you reading a green run as evidence.
+Restore from a copy, not `git checkout --`: on an uncommitted file, that reverts your own work, and
+every result after it is noise. Take the copy immediately before each mutation — a snapshot from
+earlier in the session restores the same way. Confirm the mutation actually applied — a pattern that
+silently missed leaves you reading a green run as evidence.
 
 Read the `Test Suites:` line, not just `Tests:` — a suite that fails to compile still prints a
 plausible `Tests:` count, and a mutation that breaks the build looks like a passing run. `run-tests`

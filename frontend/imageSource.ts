@@ -5,7 +5,6 @@ import {
     MEDIA_SOURCE_UPLOAD,
 } from "./generatedMediaSource";
 import { parseBase2EditStageIndex } from "./mediaSourceSyntax";
-
 import { preserveSelectedOption, resolveSelectValue } from "./selectOption";
 import { getBase2EditStageRefs } from "./swarmInputs";
 import type { ImageSourceOption } from "./types";
