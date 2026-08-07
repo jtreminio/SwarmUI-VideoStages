@@ -16,3 +16,6 @@ export const ARCHITECTURE_FEATURE_LABELS = {
 
 export type GeneratedArchitectureFeature =
     keyof typeof ARCHITECTURE_FEATURE_LABELS;
+
+/** The entry modes a generated clip can take; a sourced clip is always init-video. */
+export type GeneratedEntryMode = "text-to-video" | "image-to-video";

@@ -1,8 +1,8 @@
 import { ROOT_DIMENSION_STEP } from "../constants";
 import type { Clip, IcLora } from "../types";
 import { resolvedClipArchitectureId } from "./clipIdentity";
+import type { GeneratedEntryMode } from "./generatedFeatures";
 import { ltx2DimensionMultiple } from "./ltx2/dimensionPolicy";
-import type { GeneratedEntryMode } from "./ltx2/icLoraDriveAvailability";
 import { reconcileIncomingIcLoraDrives } from "./ltx2/icLoraDriveAvailability";
 import * as icLoraNormalization from "./ltx2/icLoraNormalization";
 import { icLoraDisplayName } from "./ltx2/icLoraPresets";

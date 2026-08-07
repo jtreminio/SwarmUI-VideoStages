@@ -1,1 +1,1 @@
-export type GeneratedEntryMode = "text-to-video" | "image-to-video";
+export type { GeneratedEntryMode } from "../generatedFeatures";

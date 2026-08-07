@@ -1,4 +1,5 @@
 import { getArchitectureCatalogSnapshot } from "./architectures/catalog";
+import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
 import {
     type CapabilityViewResolver,
     createCapabilityViewResolver,
@@ -17,7 +18,7 @@ export interface AuthoringTransactionSnapshot {
     catalogStatus: ArchitectureCatalogSnapshot;
     defaults: RootDefaults;
     capabilities: CapabilityViewResolver;
-    generatedEntryMode: "text-to-video" | "image-to-video";
+    generatedEntryMode: GeneratedEntryMode;
 }
 
 export const captureAuthoringTransactionSnapshot =

@@ -1,3 +1,4 @@
+import type { GeneratedEntryMode } from "../architectures/generatedFeatures";
 import { createCapabilityViewResolver } from "../architectures/policy";
 import type {
     ArchitectureCapabilities,
@@ -265,7 +266,7 @@ export const testRootDefaults = (
 
 export const testAuthoringTransactionSnapshot = (
     modelCatalog: ArchitectureModelCatalog = testArchitectureCatalog(),
-    generatedEntryMode: "text-to-video" | "image-to-video" = "text-to-video",
+    generatedEntryMode: GeneratedEntryMode = "text-to-video",
 ): AuthoringTransactionSnapshot => ({
     catalogStatus: {
         status: "ready",

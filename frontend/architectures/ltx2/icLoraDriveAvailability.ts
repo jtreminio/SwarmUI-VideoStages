@@ -4,8 +4,7 @@ import {
     IC_LORA_SOURCE_UPLOAD,
 } from "../../icLoraAuthoring";
 import type { Clip, IcLora } from "../../types";
-
-export type GeneratedEntryMode = "text-to-video" | "image-to-video";
+import type { GeneratedEntryMode } from "../generatedFeatures";
 
 /** Whether every stage targeted by an entry has compatible media entering it. */
 export const canUseIncomingIcLoraDrive = (

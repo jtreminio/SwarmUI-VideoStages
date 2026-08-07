@@ -18,6 +18,7 @@ import {
 } from "../__test_helpers__/dom";
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
 import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
+import type { GeneratedEntryMode } from "../architectures/generatedFeatures";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
@@ -78,7 +79,7 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
 
 const context = (
     models = catalog(),
-    generatedEntryMode: "text-to-video" | "image-to-video" = "text-to-video",
+    generatedEntryMode: GeneratedEntryMode = "text-to-video",
 ): DetailStripContext => ({
     commit: jest.fn(),
     commitState: jest.fn(),
@@ -179,7 +180,7 @@ describe("stage architecture model filtering", () => {
         );
         const stage = minimalStage({ model: "ltx" });
         const optionsFor = (
-            entryMode: "text-to-video" | "image-to-video",
+            entryMode: GeneratedEntryMode,
             initVideo = false,
             initialReference = false,
         ) => {
@@ -228,7 +229,7 @@ describe("stage architecture model filtering", () => {
         ]);
 
         const laterOptionsFor = (
-            entryMode: "text-to-video" | "image-to-video",
+            entryMode: GeneratedEntryMode,
             initVideo = false,
             persistedModel = "wan-5b.safetensors",
         ) => {

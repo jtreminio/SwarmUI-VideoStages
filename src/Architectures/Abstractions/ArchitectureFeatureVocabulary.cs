@@ -74,6 +74,11 @@ internal static class ArchitectureFeatureVocabulary
         Line();
         Line("export type GeneratedArchitectureFeature =");
         Line("    keyof typeof ARCHITECTURE_FEATURE_LABELS;");
+        Line();
+        Line("/** The entry modes a generated clip can take; a sourced clip is always init-video. */");
+        Line($"export type GeneratedEntryMode ="
+            + $" \"{WireName(ArchitectureEntryMode.TextToVideo)}\""
+            + $" | \"{WireName(ArchitectureEntryMode.ImageToVideo)}\";");
 
         return result.ToString();
     }

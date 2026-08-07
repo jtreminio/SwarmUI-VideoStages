@@ -2,6 +2,7 @@ import {
     buildArchitectureModelCatalog,
     buildArchitectureRetargetPlan,
 } from "./architectures/catalog";
+import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
 import type { ArchitectureModelCatalog } from "./architectures/types";
 import { parseBase2EditStageIndex } from "./constants";
 import { getVideoStagesHostBridge } from "./host";
@@ -124,7 +125,7 @@ export const isRootTextToVideoModel = (
 
 export const getRootGeneratedEntryMode = (
     modelCatalog?: ArchitectureModelCatalog,
-): "text-to-video" | "image-to-video" =>
+): GeneratedEntryMode =>
     !`${getRootModelInput()?.value ?? ""}`.trim() ||
     isRootTextToVideoModel(modelCatalog)
         ? "text-to-video"
