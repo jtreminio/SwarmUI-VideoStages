@@ -65,16 +65,14 @@ export const buildArchitectureRetargetPlan = (
 ): ArchitectureRetargetPlan | null => {
     const entry = modelCatalogEntry(catalog, model);
     const architectureId = entry?.architectureId ?? null;
-    const descriptor = architectureDescriptor(catalog, architectureId);
     const profileId = entry?.modelProfileId ?? null;
-    const capabilities = entry?.capabilities ?? descriptor?.capabilities;
-    return entry && architectureId && profileId && descriptor && capabilities
-        ? {
-              architectureId,
-              modelProfileId: profileId,
-              model,
-              capabilities: structuredClone(capabilities),
-              entryModes: [...entry.entryModes],
-          }
+    return entry && architectureId && profileId
+        ? { architectureId, modelProfileId: profileId, model }
         : null;
 };
+
+/** The entry modes a root model offers, empty when the catalog does not know it. */
+export const entryModesForModel = (
+    catalog: ArchitectureModelCatalog,
+    model: string,
+): readonly string[] => modelCatalogEntry(catalog, model)?.entryModes ?? [];

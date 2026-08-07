@@ -38,10 +38,6 @@ export const resolveArchitectureRetarget = (
         architectureId: descriptor.id,
         modelProfileId: model.modelProfileId,
         model: model.value,
-        capabilities: structuredClone(
-            model.capabilities ?? descriptor.capabilities,
-        ),
-        entryModes: [...model.entryModes],
     };
 };
 

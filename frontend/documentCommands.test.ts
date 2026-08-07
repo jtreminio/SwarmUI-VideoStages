@@ -823,8 +823,6 @@ describe("reduceDocumentCommand", () => {
                     architectureId: "test-video",
                     modelProfileId: "test-profile",
                     model: "test-video.safetensors",
-                    capabilities: fake.architectures[0].capabilities,
-                    entryModes: fake.architectures[0].capabilities.entryModes,
                 },
             },
             { architectureCatalog: catalogWithFake(fake) },
@@ -905,8 +903,6 @@ describe("reduceDocumentCommand", () => {
                     architectureId: "test-video",
                     modelProfileId: "test-profile",
                     model: "test-video.safetensors",
-                    capabilities: fake.architectures[0].capabilities,
-                    entryModes: fake.architectures[0].capabilities.entryModes,
                 },
             },
             { architectureCatalog: catalogWithFake(fake) },
@@ -1178,9 +1174,6 @@ describe("reduceDocumentCommand", () => {
                     architectureId: "ltx2",
                     modelProfileId: "ltx-2.3",
                     model: "ltx",
-                    capabilities: catalog.architectures[0].capabilities,
-                    entryModes:
-                        catalog.architectures[0].capabilities.entryModes,
                 },
             },
             { architectureCatalog: catalog },
@@ -1532,9 +1525,6 @@ describe("reduceDocumentCommand", () => {
                     architectureId: "test-video",
                     modelProfileId: "forged-profile",
                     model: "test-video.safetensors",
-                    capabilities:
-                        testArchitectureCatalog().architectures[0].capabilities,
-                    entryModes: [],
                 },
             },
             { architectureCatalog: catalogWithFake(fake) },
@@ -1576,9 +1566,6 @@ describe("reduceDocumentCommand", () => {
                     modelProfileId: "test-profile",
                     model: "test-video.safetensors",
                     // This forged capability set deliberately over-claims support.
-                    capabilities:
-                        testArchitectureCatalog().architectures[0].capabilities,
-                    entryModes: fake.architectures[0].capabilities.entryModes,
                 },
             },
             { architectureCatalog: catalogWithFake(fake) },
@@ -1622,8 +1609,6 @@ describe("reduceDocumentCommand", () => {
                 driveMedia: null,
             },
         ];
-        const ltx = testArchitectureCatalog();
-
         const result = reduceDocumentCommand(
             source,
             {
@@ -1633,8 +1618,6 @@ describe("reduceDocumentCommand", () => {
                     architectureId: "ltx2",
                     modelProfileId: "ltx-2.3",
                     model: "ltx",
-                    capabilities: ltx.architectures[0].capabilities,
-                    entryModes: ltx.entries[0].entryModes,
                 },
             },
             {

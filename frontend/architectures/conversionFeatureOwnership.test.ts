@@ -45,8 +45,6 @@ describe("nondestructive architecture conversion", () => {
                 architectureId: "test-video",
                 modelProfileId: "stale-profile-hint",
                 model: "test-video.safetensors",
-                capabilities: catalog.architectures[0].capabilities,
-                entryModes: ["text-to-video", "image-to-video"],
             },
             catalog,
         );

@@ -53,8 +53,6 @@ export interface ArchitectureRetargetPlan {
     architectureId: VideoArchitectureId;
     modelProfileId: ModelProfileId;
     model: string;
-    capabilities: ArchitectureCapabilities;
-    entryModes: string[];
 }
 
 export interface ArchitectureCatalogModelDto {

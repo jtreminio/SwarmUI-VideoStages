@@ -356,17 +356,10 @@
   var buildArchitectureRetargetPlan = (catalog, model) => {
     const entry = modelCatalogEntry(catalog, model);
     const architectureId = entry?.architectureId ?? null;
-    const descriptor = architectureDescriptor(catalog, architectureId);
     const profileId = entry?.modelProfileId ?? null;
-    const capabilities = entry?.capabilities ?? descriptor?.capabilities;
-    return entry && architectureId && profileId && descriptor && capabilities ? {
-      architectureId,
-      modelProfileId: profileId,
-      model,
-      capabilities: structuredClone(capabilities),
-      entryModes: [...entry.entryModes]
-    } : null;
+    return entry && architectureId && profileId ? { architectureId, modelProfileId: profileId, model } : null;
   };
+  var entryModesForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.entryModes ?? [];
 
   // frontend/architectures/none/identity.ts
   var NONE_ARCHITECTURE_ID = "none";
@@ -1860,11 +1853,7 @@
       return false;
     }
     const catalog = modelCatalog ?? buildArchitectureModelCatalog([modelName], [modelName]);
-    const target = buildArchitectureRetargetPlan(catalog, modelName);
-    if (!target) {
-      return false;
-    }
-    return target.entryModes.includes("text-to-video");
+    return entryModesForModel(catalog, modelName).includes("text-to-video");
   };
   var getRootGeneratedEntryMode = (modelCatalog) => !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel(modelCatalog) ? "text-to-video" : "image-to-video";
   var getDropdownOptions = (paramId, fallbackSelectId) => {
@@ -4305,11 +4294,7 @@
     return {
       architectureId: descriptor.id,
       modelProfileId: model.modelProfileId,
-      model: model.value,
-      capabilities: structuredClone(
-        model.capabilities ?? descriptor.capabilities
-      ),
-      entryModes: [...model.entryModes]
+      model: model.value
     };
   };
   var planArchitectureConversion = (source, requested, catalog) => {

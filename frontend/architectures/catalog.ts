@@ -8,6 +8,7 @@ export {
     architectureDescriptor,
     architectureForModel,
     buildArchitectureRetargetPlan,
+    entryModesForModel,
     modelCatalogEntry,
     modelProfileForModel,
     supportedArchitectureCatalog,

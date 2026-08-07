@@ -1,6 +1,6 @@
 import {
     buildArchitectureModelCatalog,
-    buildArchitectureRetargetPlan,
+    entryModesForModel,
 } from "./architectures/catalog";
 import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
 import type { ArchitectureModelCatalog } from "./architectures/types";
@@ -116,11 +116,7 @@ export const isRootTextToVideoModel = (
     }
     const catalog =
         modelCatalog ?? buildArchitectureModelCatalog([modelName], [modelName]);
-    const target = buildArchitectureRetargetPlan(catalog, modelName);
-    if (!target) {
-        return false;
-    }
-    return target.entryModes.includes("text-to-video");
+    return entryModesForModel(catalog, modelName).includes("text-to-video");
 };
 
 export const getRootGeneratedEntryMode = (

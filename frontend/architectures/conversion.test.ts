@@ -61,8 +61,6 @@ describe("architecture conversion policy", () => {
                 architectureId: "test-video",
                 modelProfileId: "test-profile",
                 model: "test-video.safetensors",
-                capabilities: catalog.architectures[0].capabilities,
-                entryModes: ["image-to-video"],
             },
             catalog,
         );
@@ -85,8 +83,6 @@ describe("architecture conversion policy", () => {
                 architectureId: "ltx2",
                 modelProfileId: "ltx-2.3",
                 model: "ltx",
-                capabilities: catalog.architectures[0].capabilities,
-                entryModes: catalog.architectures[0].capabilities.entryModes,
             },
             catalog,
         );

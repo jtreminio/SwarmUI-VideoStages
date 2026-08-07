@@ -156,8 +156,6 @@ const crossArchitectureCatalog = (): {
             architectureId: "test-video",
             modelProfileId: "test-profile",
             model: "test-video.safetensors",
-            capabilities: structuredClone(fake.architectures[0].capabilities),
-            entryModes: [...fake.architectures[0].capabilities.entryModes],
         },
     };
 };
