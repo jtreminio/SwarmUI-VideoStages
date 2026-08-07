@@ -3,6 +3,7 @@ import {
     AUDIO_SOURCE_NATIVE,
     isAllowedAudioSource,
 } from "../../audioSource";
+import { PLAN_DIAGNOSTIC_RETAKE_SOURCE_REQUIRED } from "../../generatedPlanDiagnostics";
 import {
     ARCHITECTURE_FEATURE_LABELS,
     type GeneratedArchitectureFeature,
@@ -12,11 +13,11 @@ import type { ClipCapabilityView } from "./types";
 
 /**
  * Retake re-diffuses a window of existing footage, so a clip with no init video has nothing to
- * retake. The code mirrors the backend plan diagnostic for the same condition; the shared
- * plan-diagnostic-codes fixture pins the two spellings together.
+ * retake. The frontend refuses it up front and the backend reports the same condition after the
+ * fact, under the code they share.
  */
 export const RETAKE_SOURCE_RULE = {
-    code: "retake-source-required",
+    code: PLAN_DIAGNOSTIC_RETAKE_SOURCE_REQUIRED,
     reason: "Retake requires an init-video clip.",
 } as const;
 

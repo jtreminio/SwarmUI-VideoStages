@@ -700,9 +700,12 @@
     }, structuredClone(architecture.capabilities));
   };
 
+  // frontend/generatedPlanDiagnostics.ts
+  var PLAN_DIAGNOSTIC_RETAKE_SOURCE_REQUIRED = "retake-source-required";
+
   // frontend/architectures/policy/featureValues.ts
   var RETAKE_SOURCE_RULE = {
-    code: "retake-source-required",
+    code: PLAN_DIAGNOSTIC_RETAKE_SOURCE_REQUIRED,
     reason: "Retake requires an init-video clip."
   };
   var supportsClipAudio = (audioSourceKinds) => audioSourceKinds.some(

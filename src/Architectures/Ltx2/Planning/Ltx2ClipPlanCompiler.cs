@@ -31,7 +31,7 @@ internal static class Ltx2ClipPlanCompiler
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Warning,
-                    "retake-source-required",
+                    PlanDiagnosticCodes.RetakeSourceRequired,
                     "Retake was ignored because the clip has no init video.",
                     clip.Id,
                     stage.Id));

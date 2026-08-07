@@ -1,4 +1,0 @@
-{
-  "_comment": "Plan diagnostic codes the frontend also reports. C# owns the spelling; this pins the ones that cross.",
-  "retakeSourceRequired": "retake-source-required"
-}

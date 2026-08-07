@@ -17,7 +17,6 @@ import {
     icLoraLegacyAutoModelName,
 } from "./architectures/ltx2/icLoraPresets";
 import { upscaleModeForMethod } from "./architectures/policy";
-import { RETAKE_SOURCE_RULE } from "./architectures/policy/featureValues";
 import type { ArchitectureCatalogEntryDto } from "./architectures/types";
 import { canUseClipLengthFromAudio } from "./audioSource";
 import { boundaryPlanForClips } from "./boundaryPlan";
@@ -69,16 +68,6 @@ describe("cross-language mirror: audio sources that can drive clip duration", ()
         canDriveClipDuration,
     }) => {
         expect(canUseClipLengthFromAudio(source)).toBe(canDriveClipDuration);
-    });
-});
-
-describe("cross-language mirror: plan diagnostic codes", () => {
-    const codes = loadFixture<Record<string, string>>(
-        "plan-diagnostic-codes.json",
-    );
-
-    it("reports the backend's spelling for a retake without init video", () => {
-        expect(RETAKE_SOURCE_RULE.code).toBe(codes.retakeSourceRequired);
     });
 });
 
