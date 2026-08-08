@@ -87,7 +87,8 @@ public class LtxPostVideoChainComponentsTests
         Assert.Equal(WGNodeData.DT_LATENT_AUDIO, result.DataType);
         Assert.Equal("remembered", $"{result.Path[0]}");
         Assert.Equal(1L, (long)result.Path[1]);
-        Assert.NotSame(audioReuse.ReusedAudioPath, result.Path);
+        Assert.True(audioReuse.TryGetPath(out JArray storedPath));
+        Assert.NotSame(storedPath, result.Path);
     }
 
     [Fact]
