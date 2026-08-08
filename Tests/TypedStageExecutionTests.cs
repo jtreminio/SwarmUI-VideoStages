@@ -1,7 +1,7 @@
 using System.Reflection;
 using VideoStages.Planning;
 using Xunit;
-using VideoStages.Architectures.Ltx2.Runtime.Audio;
+using VideoStages.Architectures.Ltx2.Runtime;
 using VideoStages.Architectures.Ltx2.Runtime.Guide;
 using VideoStages.Architectures.Ltx2.Runtime.Stage;
 
@@ -34,13 +34,13 @@ public class TypedStageExecutionTests
     public void Ltx_latent_collaborators_keep_typed_plan_boundaries()
     {
         MethodInfo retake = typeof(LtxVideoRetakeMasker).GetMethod("ApplyIfActive", AnyMember);
-        MethodInfo audioLength = typeof(LtxStageLatentAudioFactory).GetMethod(
-            "TryResolveControlNetLengthFrames",
+        MethodInfo clipLength = typeof(LtxControlNetMediaNormalizer).GetMethod(
+            "CreateClipLengthFrames",
             AnyMember);
 
         Assert.NotNull(retake);
         Assert.Equal(typeof(RetakePlan), retake.GetParameters()[2].ParameterType);
-        Assert.NotNull(audioLength);
-        Assert.Equal(typeof(ClipPlan), Assert.Single(audioLength.GetParameters()).ParameterType);
+        Assert.NotNull(clipLength);
+        Assert.Equal(typeof(ClipPlan), clipLength.GetParameters()[0].ParameterType);
     }
 }

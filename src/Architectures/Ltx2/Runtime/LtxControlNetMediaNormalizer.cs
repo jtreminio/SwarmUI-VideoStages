@@ -3,7 +3,9 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution.Graph;
+using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2.Runtime;
 
@@ -97,6 +99,22 @@ internal sealed class LtxControlNetMediaNormalizer(WorkflowGenerator g)
         framesConnection = WorkflowBridge.ToPath(sizeNode.BatchSize);
         VideoGraphHelpers.CachePath(g, helperKey, framesConnection);
         return true;
+    }
+
+    /// <summary>
+    /// The frame count a clip's length follows when ControlNet owns it; null when it does not, when
+    /// the plan named no source, or when that source captured no video. <paramref name="sourceIndex"/>
+    /// separates those cases for callers that warn about them.
+    /// </summary>
+    internal JArray CreateClipLengthFrames(ClipPlan clip, out int? sourceIndex)
+    {
+        sourceIndex = (clip.ArchitecturePayload as IArchitectureControlNetSourcePlan)
+            ?.ControlNetSourceIndex;
+        return clip.Audio.LengthOwner == AudioLengthOwner.ControlNet
+            && sourceIndex is int index
+            && TryCreateFrameCount(index, out JArray framesConnection)
+                ? framesConnection
+                : null;
     }
 
     private void Clear(int index)

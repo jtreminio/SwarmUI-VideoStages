@@ -257,35 +257,20 @@ internal sealed class AudioTimelineExecutor
             return;
         }
 
-        int? sourceIndex = (plannedClip.ArchitecturePayload as IArchitectureControlNetSourcePlan)
-            ?.ControlNetSourceIndex;
-        if (!sourceIndex.HasValue)
+        JArray framesConnection = new LtxControlNetMediaNormalizer(_generator)
+            .CreateClipLengthFrames(plannedClip, out int? sourceIndex);
+        if (framesConnection is not null)
         {
-            RequestWarnings.Track(
-                _generator.UserInput,
-                "VideoStages: ControlNet owns clip length, but the compiled plan has no valid "
-                + "ControlNet 1-3 source; using the authored clip length instead.");
+            LtxFrameCountConnector.ApplyToExistingSources(_generator, framesConnection);
             return;
         }
-        if (!TryApplyControlNetFrameCount(sourceIndex.Value))
-        {
-            RequestWarnings.Track(
-                _generator.UserInput,
-                $"VideoStages: ControlNet {sourceIndex.Value + 1} owns clip {plannedClip.ClipId} "
-                + "length, but its captured video frame count is unavailable; using the authored "
-                + "clip length instead.");
-        }
-    }
-
-    private bool TryApplyControlNetFrameCount(int controlNetSourceIndex)
-    {
-        if (!new LtxControlNetMediaNormalizer(_generator).TryCreateFrameCount(
-                controlNetSourceIndex,
-                out JArray framesConnection))
-        {
-            return false;
-        }
-        LtxFrameCountConnector.ApplyToExistingSources(_generator, framesConnection);
-        return true;
+        RequestWarnings.Track(
+            _generator.UserInput,
+            sourceIndex is null
+                ? "VideoStages: ControlNet owns clip length, but the compiled plan has no valid "
+                    + "ControlNet 1-3 source; using the authored clip length instead."
+                : $"VideoStages: ControlNet {sourceIndex.Value + 1} owns clip {plannedClip.ClipId} "
+                    + "length, but its captured video frame count is unavailable; using the "
+                    + "authored clip length instead.");
     }
 }

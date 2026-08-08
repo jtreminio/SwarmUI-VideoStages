@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution.Audio;
 using VideoStages.Generated;
 using VideoStages.Planning;
@@ -179,25 +178,6 @@ internal sealed class LtxStageLatentAudioFactory(WorkflowGenerator g)
         pending.Clear();
         applied = true;
         return conditioned;
-    }
-
-    internal JArray TryResolveControlNetLengthFrames(ClipPlan clip)
-    {
-        if (clip.Audio.LengthOwner != AudioLengthOwner.ControlNet)
-        {
-            return null;
-        }
-        if (clip.ArchitecturePayload is not IArchitectureControlNetSourcePlan
-            { ControlNetSourceIndex: int sourceIndex })
-        {
-            // Without a source, the authored clip length remains in effect.
-            return null;
-        }
-        return new LtxControlNetMediaNormalizer(g).TryCreateFrameCount(
-            sourceIndex,
-            out JArray framesConnection)
-            ? framesConnection
-            : null;
     }
 
     internal static bool ShouldMatchStageLengthToAudio(AudioPlan audio) =>

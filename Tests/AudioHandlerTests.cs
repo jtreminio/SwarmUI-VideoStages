@@ -268,8 +268,8 @@ public class AudioHandlerTests
         Assert.Equal(AudioLengthOwner.ControlNet, clip.Audio.LengthOwner);
         Assert.Null(clip.RequireLtx2Payload().ControlNetSourceIndex);
         Assert.Null(
-            new LtxStageLatentAudioFactory(generator)
-                .TryResolveControlNetLengthFrames(clip));
+            new LtxControlNetMediaNormalizer(generator)
+                .CreateClipLengthFrames(clip, out _));
     }
 
     [Fact]

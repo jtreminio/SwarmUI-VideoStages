@@ -47,7 +47,7 @@ internal sealed class LtxStageLatentBuilder
             genInfo.StartStep = 0;
         }
         JArray controlNetLengthFrames =
-            latentAudioFactory.TryResolveControlNetLengthFrames(clip);
+            new LtxControlNetMediaNormalizer(g).CreateClipLengthFrames(clip, out _);
 
         if (stageContext.ClaimsTextToVideoRoot
             || (stageContext.ClipContext.IncomingContinueHandleFrames > 0
