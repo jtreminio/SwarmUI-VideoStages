@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -24,12 +23,7 @@ public class BridgeSyncTests
     public void SyncLastId_AfterBridgeOps_CoversBridgeIds()
     {
         JObject workflow = LtxDecodedChainWorkflow.Build();
-        WorkflowGenerator g = new()
-        {
-            UserInput = new T2IParamInput(null),
-            Workflow = workflow,
-            LastID = 100
-        };
+        WorkflowGenerator g = UnitTestStubs.StubGenerator(workflow);
 
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         bridge.AddNode(new KSamplerNode());

@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 using Xunit;
 using VideoStages.Architectures.Ltx2.Runtime.Chain;
 
@@ -39,21 +38,12 @@ public class LtxPostVideoChainSpliceTests
         return workflow;
     }
 
-    private static WorkflowGenerator CreateGenerator(JObject workflow)
-    {
-        return new WorkflowGenerator
-        {
-            UserInput = new T2IParamInput(null),
-            Workflow = workflow
-        };
-    }
-
     private static WorkflowGenerator CreateGeneratorWithCurrentMedia(
         JObject workflow,
         string mediaNodeId = "5",
         string audioVaeNodeId = null)
     {
-        WorkflowGenerator generator = CreateGenerator(workflow);
+        WorkflowGenerator generator = UnitTestStubs.StubGenerator(workflow);
         generator.CurrentMedia = new WGNodeData(
             new JArray(mediaNodeId, 0), generator, WGNodeData.DT_VIDEO, null)
         {

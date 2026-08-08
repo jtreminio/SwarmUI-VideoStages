@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -20,18 +19,11 @@ public class MediaRefTests
         NodeRegistrations.EnsureRegistered();
     }
 
-    private static WorkflowGenerator CreateGenerator(JObject workflow) =>
-        new()
-        {
-            UserInput = new T2IParamInput(null),
-            Workflow = workflow
-        };
-
     [Fact]
     public void MediaRef_FromWGNodeData_ResolvesTypedOutput()
     {
         JObject workflow = LtxDecodedChainWorkflow.Build();
-        WorkflowGenerator g = CreateGenerator(workflow);
+        WorkflowGenerator g = UnitTestStubs.StubGenerator(workflow);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WGNodeData data = new(new JArray("5", 0), g, WGNodeData.DT_VIDEO, null)
@@ -54,7 +46,7 @@ public class MediaRefTests
     public void MediaRef_FromWGNodeData_WithAttachedAudio_ResolvesRecursively()
     {
         JObject workflow = LtxDecodedChainWorkflow.Build();
-        WorkflowGenerator g = CreateGenerator(workflow);
+        WorkflowGenerator g = UnitTestStubs.StubGenerator(workflow);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WGNodeData audio = new(new JArray("6", 0), g, WGNodeData.DT_AUDIO, null);
@@ -83,7 +75,7 @@ public class MediaRefTests
     public void MediaRef_FromWGNodeData_UnresolvablePath_ReturnsNull()
     {
         JObject workflow = LtxDecodedChainWorkflow.Build();
-        WorkflowGenerator g = CreateGenerator(workflow);
+        WorkflowGenerator g = UnitTestStubs.StubGenerator(workflow);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WGNodeData data = new(new JArray("nonexistent", 0), g, WGNodeData.DT_VIDEO, null);
@@ -95,7 +87,7 @@ public class MediaRefTests
     public void MediaRef_ToWGNodeData_ProducesCorrectPath()
     {
         JObject workflow = LtxDecodedChainWorkflow.Build();
-        WorkflowGenerator g = CreateGenerator(workflow);
+        WorkflowGenerator g = UnitTestStubs.StubGenerator(workflow);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WGNodeData original = new(new JArray("5", 0), g, WGNodeData.DT_VIDEO, null)
@@ -122,7 +114,7 @@ public class MediaRefTests
     public void MediaRef_ToWGNodeData_WithAttachedAudio_Recursive()
     {
         JObject workflow = LtxDecodedChainWorkflow.Build();
-        WorkflowGenerator g = CreateGenerator(workflow);
+        WorkflowGenerator g = UnitTestStubs.StubGenerator(workflow);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WGNodeData audio = new(new JArray("6", 0), g, WGNodeData.DT_AUDIO, null);
@@ -143,7 +135,7 @@ public class MediaRefTests
     public void MediaRef_RoundTrip_WGNodeData_MediaRef_WGNodeData()
     {
         JObject workflow = LtxDecodedChainWorkflow.Build();
-        WorkflowGenerator g = CreateGenerator(workflow);
+        WorkflowGenerator g = UnitTestStubs.StubGenerator(workflow);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WGNodeData original = new(new JArray("5", 0), g, WGNodeData.DT_VIDEO, null)
@@ -170,7 +162,7 @@ public class MediaRefTests
     public void MediaRef_Clone_PreservesAllFields()
     {
         JObject workflow = LtxDecodedChainWorkflow.Build();
-        WorkflowGenerator g = CreateGenerator(workflow);
+        WorkflowGenerator g = UnitTestStubs.StubGenerator(workflow);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WGNodeData audio = new(new JArray("6", 0), g, WGNodeData.DT_AUDIO, null);
