@@ -101,6 +101,20 @@ public class PhaseADriftRegressionTests
             FrontendConstant("STAGE_REF_STRENGTH_DEFAULT"));
     }
 
+    [Fact]
+    public void Frontend_audio_span_bounds_match_the_backend()
+    {
+        Assert.Equal(
+            AuthoringTimeline.MinAudioLength,
+            FrontendConstant("AUDIO_SPAN_MIN_LENGTH"));
+        Assert.Equal(
+            AuthoringTimeline.MinAudioVolume,
+            FrontendConstant("AUDIO_SPAN_VOLUME_MIN"));
+        Assert.Equal(
+            AuthoringTimeline.MaxAudioVolume,
+            FrontendConstant("AUDIO_SPAN_VOLUME_MAX"));
+    }
+
     /// <summary>Reads a number out of the hand-written frontend module. Parsing it beats matching
     /// the rendered text: C# spells 0.00001 as 1E-05, which is the same number and not drift.
     /// </summary>

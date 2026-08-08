@@ -7,9 +7,11 @@ namespace VideoStages.Authoring;
 /// </summary>
 internal static class AuthoringTimeline
 {
-    private const double MinAudioLength = 0.1;
-    private const double MinAudioVolume = 0.00001;
-    private const double MaxAudioVolume = 100000.0;
+    // A span the authoring UI can build has to survive being read back, so these bound the
+    // frontend's audio-span editor too, as AUDIO_SPAN_MIN_LENGTH and AUDIO_SPAN_VOLUME_MIN/MAX.
+    internal const double MinAudioLength = 0.1;
+    internal const double MinAudioVolume = 0.00001;
+    internal const double MaxAudioVolume = 100000.0;
 
     /// <summary>
     /// Converts authored time to an inclusive pixel-frame count without importing model policy.
