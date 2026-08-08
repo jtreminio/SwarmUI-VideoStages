@@ -1677,11 +1677,9 @@ public class ArchitectureFoundationTests
         {
             public VideoArchitectureDescriptor Descriptor => descriptor;
 
-            public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
-            {
-                resolved = null;
-                return false;
-            }
+            // The registry resolves from its own table, so nothing routes through the module.
+            public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved) =>
+                throw new NotSupportedException();
 
             public ArchitectureClipCompilation ValidateAndCompileClip(
                 ClipSpec clip,
