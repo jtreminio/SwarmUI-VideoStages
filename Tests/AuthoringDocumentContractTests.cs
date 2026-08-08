@@ -198,7 +198,7 @@ public class AuthoringDocumentContractTests
         Assert.Equal("pose", icLora.Preset);
         Assert.Equal("Upload", icLora.DriveSource);
         Assert.Equal(IcLoraDriveData.Visual, icLora.DriveData);
-        Assert.Equal(["video"], icLora.DriveMediaKinds);
+        Assert.Equal<ClipReferenceKind>([ClipReferenceKind.Video], icLora.DriveMediaKinds);
         Assert.Equal(0, icLora.Stage);
         Assert.Equal(0.9, icLora.Strength);
         Assert.Equal(0.8, icLora.AttentionStrength);

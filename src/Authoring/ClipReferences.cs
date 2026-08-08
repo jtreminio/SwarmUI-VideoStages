@@ -50,8 +50,7 @@ internal static class ClipReferences
         return references;
     }
 
-    /// <summary>The enum names are the wire tokens; IC-LoRA drive media kinds spell them the
-    /// same way.</summary>
+    /// <summary>The enum names are the wire tokens.</summary>
     public static string WireName(ClipReferenceKind kind) => kind.ToString().ToLowerInvariant();
 
     public static bool TryParseKind(string raw, out ClipReferenceKind kind)

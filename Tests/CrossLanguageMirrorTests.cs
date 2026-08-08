@@ -244,12 +244,18 @@ public class CrossLanguageMirrorTests
             IcLoraDriveData driveData = Enum.Parse<IcLoraDriveData>(
                 expected.Value<string>("driveData"),
                 ignoreCase: true);
-            string[] driveMediaKinds =
-                [.. expected["driveMediaKinds"]!.Values<string>()];
+            ClipReferenceKind[] driveMediaKinds =
+                [.. expected["driveMediaKinds"]!.Values<string>().Select(ParseKind)];
             AssertAcceptedKinds(
                 expected,
                 IcLoraDriveMediaKinds.AcceptedFor(driveData, driveMediaKinds));
         }
+    }
+
+    private static ClipReferenceKind ParseKind(string wireName)
+    {
+        Assert.True(ClipReferences.TryParseKind(wireName, out ClipReferenceKind kind));
+        return kind;
     }
 
     private static void AssertAcceptedKinds(

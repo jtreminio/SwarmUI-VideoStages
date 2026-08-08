@@ -121,8 +121,8 @@ public sealed record InitVideoSpec(
 /// <c>AttentionStrength</c>, and <c>ControlType</c> are architecture-interpreted settings.
 /// <c>DriveSource</c> selects either the per-entry upload or contextual media entering the stage;
 /// <c>DriveData</c> declares the single stream consumed from that source, while
-/// <c>DriveMediaKinds</c> optionally narrows the accepted source containers using <c>image</c>,
-/// <c>video</c>, and/or <c>audio</c>. <c>Stage</c> scopes the entry to one authored stage
+/// <c>DriveMediaKinds</c> optionally narrows the accepted source containers.
+/// <c>Stage</c> scopes the entry to one authored stage
 /// (-1 = every stage). <c>DriveMedia</c> is the upload used only by the Upload source and is
 /// independent from the clip's base audio track.
 /// </summary>
@@ -136,7 +136,7 @@ public sealed record IcLoraSpec(
     IcLoraDriveData DriveData = IcLoraDriveData.None,
     string Preset = null,
     int Stage = -1,
-    IReadOnlyList<string> DriveMediaKinds = null
+    IReadOnlyList<ClipReferenceKind> DriveMediaKinds = null
 );
 
 /// <summary>

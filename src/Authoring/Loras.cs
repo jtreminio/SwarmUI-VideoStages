@@ -142,7 +142,7 @@ internal static class Loras
         return IcLoraDriveData.None;
     }
 
-    private static IReadOnlyList<string> ReadDriveMediaKinds(
+    private static IReadOnlyList<ClipReferenceKind> ReadDriveMediaKinds(
         JObject entry,
         int entryIndex,
         Action<string> warn)
@@ -160,12 +160,12 @@ internal static class Loras
             return null;
         }
 
-        List<string> kinds = [];
-        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+        List<ClipReferenceKind> kinds = [];
         for (int itemIndex = 0; itemIndex < array.Count; itemIndex++)
         {
-            string kind = NormalizeDriveMediaKind(array[itemIndex]);
-            if (kind is null)
+            JToken item = array[itemIndex];
+            if (item.Type != JTokenType.String
+                || !ClipReferences.TryParseKind(item.Value<string>(), out ClipReferenceKind kind))
             {
                 DocumentJson.Warn(
                     warn,
@@ -173,24 +173,18 @@ internal static class Loras
                         + "must be image, video, or audio; ignoring it.");
                 continue;
             }
-            if (!seen.Add(kind))
+            if (kinds.Contains(kind))
             {
                 DocumentJson.Warn(
                     warn,
-                    $"VideoStages: IC-LoRA {entryIndex} DriveMediaKinds repeats '{kind}'; "
-                        + "ignoring the duplicate.");
+                    $"VideoStages: IC-LoRA {entryIndex} DriveMediaKinds repeats "
+                        + $"'{ClipReferences.WireName(kind)}'; ignoring the duplicate.");
                 continue;
             }
             kinds.Add(kind);
         }
         return kinds;
     }
-
-    private static string NormalizeDriveMediaKind(JToken token) =>
-        token.Type == JTokenType.String
-            && ClipReferences.TryParseKind(token.Value<string>(), out ClipReferenceKind kind)
-            ? ClipReferences.WireName(kind)
-            : null;
 
     private static double SanitizeWeight(double value, double fallback) =>
         double.IsFinite(value) ? value : fallback;

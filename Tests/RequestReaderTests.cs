@@ -387,7 +387,8 @@ public class RequestReaderTests
         Assert.Equal("lipdub", parsed.Preset);
         Assert.Equal(MediaSource.Upload, parsed.DriveSource);
         Assert.Equal(IcLoraDriveData.Audio, parsed.DriveData);
-        Assert.Equal(["audio", "video"], parsed.DriveMediaKinds);
+        Assert.Equal<ClipReferenceKind>(
+            [ClipReferenceKind.Audio, ClipReferenceKind.Video], parsed.DriveMediaKinds);
         Assert.NotNull(parsed.DriveMedia);
         Assert.Equal("data:audio/wav;base64,QUJD", parsed.DriveMedia.Data);
         Assert.Equal("target-voice.wav", parsed.DriveMedia.FileName);
@@ -488,7 +489,7 @@ public class RequestReaderTests
         List<string> warnings =
             Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
 
-        Assert.Equal(["image"], parsed.DriveMediaKinds);
+        Assert.Equal<ClipReferenceKind>([ClipReferenceKind.Image], parsed.DriveMediaKinds);
         Assert.Equal(3, warnings.Count(warning => warning.Contains("DriveMediaKinds")));
         Assert.Contains(warnings, warning => warning.Contains("repeats 'image'"));
     }

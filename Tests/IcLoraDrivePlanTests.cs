@@ -101,7 +101,7 @@ public class IcLoraDrivePlanTests
                 Constants.IcLoraControlNone,
                 new UploadedMediaSpec(data, "drive.media"),
                 DriveData: IcLoraDriveData.Visual,
-                DriveMediaKinds: ["image"]),
+                DriveMediaKinds: [ClipReferenceKind.Image]),
         ]);
 
         IReadOnlyList<PlanDiagnostic> diagnostics =
@@ -129,7 +129,7 @@ public class IcLoraDrivePlanTests
                 Constants.IcLoraControlNone,
                 null,
                 DriveData: IcLoraDriveData.Visual,
-                DriveMediaKinds: ["image"]),
+                DriveMediaKinds: [ClipReferenceKind.Image]),
         ]);
         ArchitectureClipCompileContext context = new(
             640,
@@ -147,12 +147,12 @@ public class IcLoraDrivePlanTests
     }
 
     [Theory]
-    [InlineData((int)IcLoraDriveData.Visual, "audio")]
-    [InlineData((int)IcLoraDriveData.Audio, "image")]
-    [InlineData((int)IcLoraDriveData.None, "video")]
+    [InlineData((int)IcLoraDriveData.Visual, (int)ClipReferenceKind.Audio)]
+    [InlineData((int)IcLoraDriveData.Audio, (int)ClipReferenceKind.Image)]
+    [InlineData((int)IcLoraDriveData.None, (int)ClipReferenceKind.Video)]
     public void Contradictory_explicit_media_kinds_are_diagnostics(
         int driveData,
-        string mediaKind)
+        int mediaKind)
     {
         ClipSpec clip = Clip([
             new(
@@ -163,7 +163,7 @@ public class IcLoraDrivePlanTests
                 Constants.IcLoraControlNone,
                 null,
                 DriveData: (IcLoraDriveData)driveData,
-                DriveMediaKinds: [mediaKind]),
+                DriveMediaKinds: [(ClipReferenceKind)mediaKind]),
         ]);
 
         Assert.Contains(

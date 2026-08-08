@@ -382,29 +382,22 @@ internal static class IcLoraPlanCompiler
             return;
         }
 
-        HashSet<IcLoraDriveMediaKind> explicitKinds = [];
-        foreach (string rawKind in entry.DriveMediaKinds)
-        {
-            if (IcLoraDriveMediaKinds.TryParse(
-                    rawKind,
-                    out IcLoraDriveMediaKind kind))
-            {
-                explicitKinds.Add(kind);
-            }
-        }
-
+        HashSet<IcLoraDriveMediaKind> explicitKinds =
+            [.. entry.DriveMediaKinds.Select(IcLoraDriveMediaKinds.From)];
         IReadOnlySet<IcLoraDriveMediaKind> generic =
             IcLoraDriveMediaKinds.AcceptedFor(entry.DriveData);
         bool contradictory = explicitKinds.Any(kind => !generic.Contains(kind))
             || (entry.DriveData != IcLoraDriveData.None && explicitKinds.Count == 0);
         if (contradictory)
         {
+            string authored = string.Join(
+                ", ", entry.DriveMediaKinds.Select(ClipReferences.WireName));
             diagnostics.Add(Warning(
                 clip,
                 entryIndex,
                 "ltx2.ic-lora.drive-media-kinds-contradictory",
                 $"sets DriveData to {entry.DriveData}, but DriveMediaKinds "
-                    + $"[{string.Join(", ", entry.DriveMediaKinds)}] cannot supply that stream"));
+                    + $"[{authored}] cannot supply that stream"));
         }
     }
 

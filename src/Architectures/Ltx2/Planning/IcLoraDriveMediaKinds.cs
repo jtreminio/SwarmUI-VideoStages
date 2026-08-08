@@ -23,7 +23,7 @@ internal static class IcLoraDriveMediaKinds
 
     internal static IReadOnlySet<IcLoraDriveMediaKind> AcceptedFor(
         IcLoraDriveData stream,
-        IReadOnlyList<string> authoredKinds = null)
+        IReadOnlyList<ClipReferenceKind> authoredKinds = null)
     {
         IReadOnlySet<IcLoraDriveMediaKind> generic = stream switch
         {
@@ -37,10 +37,10 @@ internal static class IcLoraDriveMediaKinds
         }
 
         HashSet<IcLoraDriveMediaKind> accepted = [];
-        foreach (string rawKind in authoredKinds)
+        foreach (ClipReferenceKind authored in authoredKinds)
         {
-            if (TryParse(rawKind, out IcLoraDriveMediaKind kind)
-                && generic.Contains(kind))
+            IcLoraDriveMediaKind kind = From(authored);
+            if (generic.Contains(kind))
             {
                 accepted.Add(kind);
             }
@@ -48,25 +48,11 @@ internal static class IcLoraDriveMediaKinds
         return accepted;
     }
 
-    internal static bool TryParse(string raw, out IcLoraDriveMediaKind kind)
+    internal static IcLoraDriveMediaKind From(ClipReferenceKind kind) => kind switch
     {
-        string compact = StringUtils.Compact(raw);
-        if (StringUtils.Equals(compact, nameof(IcLoraDriveMediaKind.Image)))
-        {
-            kind = IcLoraDriveMediaKind.Image;
-            return true;
-        }
-        if (StringUtils.Equals(compact, nameof(IcLoraDriveMediaKind.Video)))
-        {
-            kind = IcLoraDriveMediaKind.Video;
-            return true;
-        }
-        if (StringUtils.Equals(compact, nameof(IcLoraDriveMediaKind.Audio)))
-        {
-            kind = IcLoraDriveMediaKind.Audio;
-            return true;
-        }
-        kind = IcLoraDriveMediaKind.Unknown;
-        return false;
-    }
+        ClipReferenceKind.Image => IcLoraDriveMediaKind.Image,
+        ClipReferenceKind.Video => IcLoraDriveMediaKind.Video,
+        ClipReferenceKind.Audio => IcLoraDriveMediaKind.Audio,
+        _ => IcLoraDriveMediaKind.Unknown,
+    };
 }
