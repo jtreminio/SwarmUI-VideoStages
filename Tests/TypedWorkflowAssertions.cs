@@ -331,10 +331,6 @@ internal static class TypedWorkflowAssertions
         return (Assert.IsType<UNETLoaderNode>(node), [.. loras.Order()]);
     }
 
-    /// <summary>
-    /// A clip that refines uploaded footage instead of generating from noise. Stage 0's default
-    /// <c>Generated</c> reference is stripped so the source, not a root donor, is its input.
-    /// </summary>
     public static IReadOnlyList<PlanDiagnostic> Diagnostics(WorkflowGenerator generator) =>
         generator.RequireVideoExecutionPlanContext().Plan.Diagnostics;
 
