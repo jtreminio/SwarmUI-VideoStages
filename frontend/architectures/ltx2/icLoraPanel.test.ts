@@ -848,7 +848,7 @@ describe("detail strip IC-LoRA panel", () => {
         ).toContain(`Download failed: ${message}`);
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
 
-        h.renderStrip();
+        h.strip.render();
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
 
         changeIcLoraSelect("Preset", "custom");

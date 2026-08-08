@@ -297,7 +297,7 @@ describe("detail strip boundary panel", () => {
         clips.splice(1, 1);
         persistence.saveClips(clips);
         // A re-render re-clamps the now-invalid selection to none.
-        h.renderStrip();
+        h.strip.render();
         expect(getSelection()).toEqual({ kind: "none" });
     });
 });

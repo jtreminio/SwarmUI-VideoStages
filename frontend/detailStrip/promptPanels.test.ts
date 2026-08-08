@@ -82,7 +82,7 @@ describe("detail strip prompt panels", () => {
         before.setSelectionRange(3, 3);
         // A self-triggered re-render must preserve the caret, not snap it back
         // to the end via auto-focus.
-        h.renderStrip();
+        h.strip.render();
         const after =
             document.querySelector<HTMLTextAreaElement>(".vst-detail-prompt");
         if (!after) {

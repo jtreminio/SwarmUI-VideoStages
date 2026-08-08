@@ -313,7 +313,7 @@ describe("detail strip draft queue", () => {
             const before = fieldByLabel("Duration (s)").querySelector("input");
             // An external carrier change arriving as a plain render (no flush in
             // flight) must rebuild the dock, replacing the node.
-            h.renderStrip();
+            h.strip.render();
             expect(
                 fieldByLabel("Duration (s)").querySelector("input"),
             ).not.toBe(before);
@@ -770,7 +770,7 @@ describe("detail strip draft queue", () => {
             editor.dispatchEvent(new Event("input", { bubbles: true }));
             blurOutOfDock(editor);
             // A later refresh/render must NOT yank focus back into the prompt.
-            h.renderStrip();
+            h.strip.render();
             const after =
                 document.querySelector<HTMLTextAreaElement>(
                     ".vst-detail-prompt",

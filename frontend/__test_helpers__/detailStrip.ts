@@ -251,7 +251,6 @@ export const minorEditor = (idx: number): HTMLTextAreaElement => {
 export interface DetailStripHarness {
     /** Mounts the fixtures, renders the timeline and attaches a fresh strip. */
     setup(fixtures: ClipFixture[], loras?: string[]): HTMLElement;
-    renderStrip(): void;
     readonly strip: TimelineDetailStrip;
     readonly saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
     /**
@@ -335,7 +334,6 @@ export const detailStripHarness = (): DetailStripHarness => {
             strip.attach(body, dockHost(body));
             return body;
         },
-        renderStrip: () => requireStrip().render(),
         get strip() {
             return requireStrip();
         },

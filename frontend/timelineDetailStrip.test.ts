@@ -685,7 +685,7 @@ describe("createTimelineDetailStrip", () => {
         const clips = persistence.getClips().slice(0, 1);
         persistence.saveClips(clips, { notifyDomChange: false });
         renderTimeline(body, persistence.getClips());
-        h.renderStrip();
+        h.strip.render();
         expect(getSelection()).toEqual({
             kind: "clip",
             clipIdx: 0,
@@ -700,7 +700,7 @@ describe("createTimelineDetailStrip", () => {
 
         persistence.saveClips([], { notifyDomChange: false });
         renderTimeline(body, persistence.getClips());
-        h.renderStrip();
+        h.strip.render();
         expect(getSelection().kind).toBe("none");
         expect(crumbText()).toBe("Timeline settings");
     });
@@ -1367,7 +1367,7 @@ describe("createTimelineDetailStrip", () => {
             expect(source?.classList.contains("input-group-open")).toBe(true);
             expect(stages?.classList.contains("input-group-open")).toBe(true);
 
-            h.renderStrip();
+            h.strip.render();
             expect(
                 detailBody()
                     ?.querySelector('[data-vst-repeater-key="stages"]')
@@ -1427,7 +1427,7 @@ describe("createTimelineDetailStrip", () => {
                 ),
             ).toHaveLength(2);
 
-            h.renderStrip();
+            h.strip.render();
             expect(
                 stageGroups().every((group) =>
                     group.classList.contains("input-group-open"),
@@ -1497,7 +1497,7 @@ describe("createTimelineDetailStrip", () => {
             }
             body.scrollTop = 140;
             // A full re-render rebuilds .vst-detail-body's innerHTML.
-            h.renderStrip();
+            h.strip.render();
             const rebuilt = detailBody();
             expect(rebuilt).not.toBe(body); // proves a rebuild happened
             expect(rebuilt?.scrollTop).toBe(140); // ...yet scroll is preserved
