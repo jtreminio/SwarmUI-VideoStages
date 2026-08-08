@@ -13,9 +13,6 @@ internal static class RequestReader
     private const string DefaultUpscaleMethod = "pixel-lanczos";
 
     private sealed record StageDefaults(
-        double Control,
-        double Upscale,
-        string UpscaleMethod,
         int Steps,
         double CfgScale,
         string Sampler,
@@ -294,11 +291,11 @@ internal static class RequestReader
         }
 
         double control = NormalizeControl(DocumentJson.GetOptionalDouble(
-            stage, "control", defaults.Control, location, warn));
+            stage, "control", DefaultControl, location, warn));
         double upscale = NormalizeUpscale(DocumentJson.GetOptionalDouble(
-            stage, "upscale", defaults.Upscale, location, warn));
+            stage, "upscale", DefaultUpscale, location, warn));
         string upscaleMethod = DocumentJson.GetOptionalString(
-            stage, "upscaleMethod", defaults.UpscaleMethod, location, allowEmpty: false, warn);
+            stage, "upscaleMethod", DefaultUpscaleMethod, location, allowEmpty: false, warn);
 
         bool isGenerationFirstStage = clipStageIndex == 0 && !initVideoClip;
         if (isGenerationFirstStage)
@@ -365,9 +362,6 @@ internal static class RequestReader
                 autoFixDefault: true);
 
         return new StageDefaults(
-            NormalizeControl(DefaultControl),
-            NormalizeUpscale(DefaultUpscale),
-            DefaultUpscaleMethod,
             Math.Max(1, steps),
             NormalizeCfgScale(cfgScale),
             sampler,
