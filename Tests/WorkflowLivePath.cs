@@ -39,7 +39,6 @@ internal sealed class WorkflowLivePath : IDisposable
         }
     }
 
-    /// <summary>One handle over a generated workflow: it makes the bridge and disposes it.</summary>
     public static WorkflowLivePath Open(JObject workflow) =>
         new(WorkflowBridge.Create(workflow), ownsBridge: true);
 
@@ -53,9 +52,6 @@ internal sealed class WorkflowLivePath : IDisposable
 
     public WorkflowBridge Bridge => _bridge;
 
-    /// <summary>The workflow document the bridge reads and writes through.</summary>
-    public JObject Json => _bridge.Workflow;
-
     /// <summary>
     /// The four whole-graph checks every generated-workflow test closes with: nothing built is
     /// orphaned, no input references a pruned node, the graph is acyclic, and the video is
@@ -66,7 +62,7 @@ internal sealed class WorkflowLivePath : IDisposable
     {
         AssertNoOrphanNodes();
         AssertPublishedSaveCount(publishedVideoSaves);
-        TypedWorkflowAssertions.AssertNoDanglingNodeRefs(Json);
+        TypedWorkflowAssertions.AssertNoDanglingNodeRefs(_bridge.Workflow);
         TypedWorkflowAssertions.AssertAcyclic(_bridge);
     }
 
