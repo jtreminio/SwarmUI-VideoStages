@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Utils;
 using VideoStages.Authoring;
 using VideoStages.Generated;
 using Xunit;
@@ -603,6 +604,51 @@ public class Ltx2IcLoraContractTests
 
         live.AssertAllLive(load, guide);
         AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// Preflight reads an uploaded drive through a different entry point per media kind, picked
+    /// from the payload's data-URI prefix, and each one refuses the whole request rather than
+    /// dropping the entry. The expected text is the arm's own, so no arm can stand in for another.
+    /// </summary>
+    [Theory]
+    [InlineData(
+        IcLoraDriveData.Audio,
+        "data:audio/wav;base64,@@@",
+        "drive.wav",
+        "uploaded audio embedded in Video Stages JSON is not readable")]
+    [InlineData(
+        IcLoraDriveData.Visual,
+        "data:image/png;base64,@@@",
+        "drive.png",
+        "clip 0 IC-LoRA drive image payload is not a readable image")]
+    [InlineData(
+        IcLoraDriveData.Visual,
+        "data:video/mp4;base64,@@@",
+        "drive.mp4",
+        "clip 0 IC-LoRA drive video embedded in Video Stages JSON is not readable")]
+    public async Task An_unreadable_drive_upload_refuses_the_request(
+        IcLoraDriveData driveData,
+        string payload,
+        string fileName,
+        string expected)
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        fixture.InstallModel("LoRA", "UnitTest_IcLoraA.safetensors");
+
+        // The exact type is the claim: an internal crash escaping the route is also an
+        // InvalidOperationException, and only a readable refusal reaches the user as a message.
+        SwarmReadableErrorException refusal =
+            await Assert.ThrowsAsync<SwarmReadableErrorException>(
+                () => fixture.GenerateAsync(MakeDocument(IcLoraClip(
+                    [fixture.Stage()],
+                    MakeIcLora(
+                        "UnitTest_IcLoraA",
+                        driveMediaData: payload,
+                        driveMediaFileName: fileName,
+                        driveData: driveData)))));
+
+        Assert.Contains(expected, refusal.Message, StringComparison.Ordinal);
     }
 
     [Fact]
