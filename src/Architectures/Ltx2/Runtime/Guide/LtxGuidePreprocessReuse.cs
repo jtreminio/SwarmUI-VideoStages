@@ -67,7 +67,7 @@ internal sealed class LtxGuidePreprocessReuse(
             return false;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         if (TryResolveReusablePreprocessNode(bridge, guideImagePath, out string preprocessNodeId))
         {
             preprocessOutputPath = new JArray(preprocessNodeId, 0);

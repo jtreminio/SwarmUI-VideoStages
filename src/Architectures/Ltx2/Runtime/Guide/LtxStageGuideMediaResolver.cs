@@ -36,7 +36,7 @@ internal sealed class LtxStageGuideMediaResolver(WorkflowGenerator g)
         WGNodeData guideVae = guideReference.Vae ?? g.CurrentVae;
         if (guideReference.Media.Path is JArray { Count: 2 } guidePath)
         {
-            WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+            using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
             INodeOutput guideOutput = bridge.ResolvePath(guidePath);
             // Stop at the sampler: a decode on its far side is of different pixels, so an
             // unbounded walk resolved a Base reference to the refined image whenever core built no
