@@ -1,6 +1,5 @@
 using Newtonsoft.Json.Linq;
 using SwarmUI.Text2Image;
-using SwarmUI.Utils;
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
@@ -90,29 +89,34 @@ public class CrossLanguageMirrorTests
         }
     }
 
+    /// <summary>The unsnapped side of each case is whatever core's own aspect-ratio arithmetic
+    /// produces, so it is read back off a request rather than recomputed here.</summary>
     [Fact]
     public void DimensionSnap_MatchesSharedFixture()
     {
+        List<(string Name, int RawWidth, int RawHeight, int Width, int Height)> actual = [];
+        List<(string Name, int RawWidth, int RawHeight, int Width, int Height)> expected = [];
         foreach (JObject c in LoadFixture("dimension-snap-cases.json").OfType<JObject>())
         {
-            Assert.True(T2IParamInput.ResolutionAspectReferences.TryGetValue(
-                c.Value<string>("ratio"),
-                out (int Width, int Height) reference));
-            int sideLength = c.Value<int>("sideLength");
-            (int Width, int Height) raw = (
-                (int)Utilities.RoundToPrecision(reference.Width * (sideLength / 512.0), 16),
-                (int)Utilities.RoundToPrecision(reference.Height * (sideLength / 512.0), 16));
-            Assert.Equal(c.Value<int>("rawWidth"), raw.Width);
-            Assert.Equal(c.Value<int>("rawHeight"), raw.Height);
-            Assert.Equal(
-                (
-                    c.Value<int>("expectedWidth"),
-                    c.Value<int>("expectedHeight")),
-                DimensionSnap.Snap(
-                    raw.Width,
-                    raw.Height,
-                    DimensionSnap.MinimumMultiple * c.Value<int>("factor")));
+            T2IParamInput input = new(null);
+            input.Set(T2IParamTypes.AspectRatio, c.Value<string>("ratio"));
+            input.Set(T2IParamTypes.SideLength, c.Value<int>("sideLength"));
+            (int Width, int Height) raw = (input.GetImageWidth(), input.GetImageHeight());
+            (int Width, int Height) snapped = DimensionSnap.Snap(
+                raw.Width,
+                raw.Height,
+                DimensionSnap.MinimumMultiple * c.Value<int>("factor"));
+
+            actual.Add((c.Value<string>("name"), raw.Width, raw.Height, snapped.Width, snapped.Height));
+            expected.Add((
+                c.Value<string>("name"),
+                c.Value<int>("rawWidth"),
+                c.Value<int>("rawHeight"),
+                c.Value<int>("expectedWidth"),
+                c.Value<int>("expectedHeight")));
         }
+
+        Assert.Equal(expected, actual);
     }
 
     [Fact]
