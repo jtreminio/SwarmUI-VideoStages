@@ -185,7 +185,7 @@ public class CrossLanguageMirrorTests
             Assert.Equal(factor, weight.DimensionDownscaleFactor);
             Assert.Equal(modelName, IcLoraWeights.ModelNameFor(id));
             Assert.Equal(legacyModelName, IcLoraWeights.LegacyModelNameFor(id));
-            Assert.Equal(factor, IcLoraDimensionPolicyResolver.Resolve(id, modelName));
+            Assert.Equal(factor, IcLoraDimensionPolicy.Resolve(id, modelName));
         }
     }
 
@@ -194,20 +194,20 @@ public class CrossLanguageMirrorTests
     {
         Assert.Equal(
             4,
-            IcLoraDimensionPolicyResolver.Resolve(
+            IcLoraDimensionPolicy.Resolve(
                 "custom",
                 "FOLDER\\LTX-2.3-22B-IC-LORA-PIXEL-SPATIAL-UPSCALER-X4-0.9.SAFETENSORS"));
         Assert.Equal(
             2,
-            IcLoraDimensionPolicyResolver.Resolve(
+            IcLoraDimensionPolicy.Resolve(
                 "custom",
                 IcLoraWeights.LegacyModelNameFor("union-control")));
         Assert.Equal(
             2,
-            IcLoraDimensionPolicyResolver.Resolve(
+            IcLoraDimensionPolicy.Resolve(
                 "pixel-spatial-upscaler-x2",
                 IcLoraWeights.ModelNameFor("pixel-spatial-upscaler-x4")));
-        Assert.Equal(1, IcLoraDimensionPolicyResolver.Resolve("custom", "third-party-x4"));
+        Assert.Equal(1, IcLoraDimensionPolicy.Resolve("custom", "third-party-x4"));
     }
 
     /// <summary>Auto-download names must survive core filename cleaning and remain distinct.</summary>

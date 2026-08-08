@@ -1,6 +1,6 @@
 namespace VideoStages.Architectures.Ltx2.Planning;
 
-internal static class IcLoraDimensionPolicyResolver
+internal static class IcLoraDimensionPolicy
 {
     private static readonly IReadOnlyDictionary<string, int> CuratedModelFactors =
         BuildCuratedModelFactors();

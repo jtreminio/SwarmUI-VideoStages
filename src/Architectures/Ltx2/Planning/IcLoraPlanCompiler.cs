@@ -48,9 +48,7 @@ internal static class IcLoraPlanCompiler
             IcLoraControlMode controlMode =
                 CompileControlMode(entry.ControlType);
             int dimensionDownscaleFactor =
-                IcLoraDimensionPolicyResolver.Resolve(
-                    entry.Preset,
-                    entry.Lora);
+                IcLoraDimensionPolicy.Resolve(entry.Preset, entry.Lora);
             if (entry.DriveData == IcLoraDriveData.None
                 && authoredSource != IcLoraMediaSourceKind.Upload)
             {
