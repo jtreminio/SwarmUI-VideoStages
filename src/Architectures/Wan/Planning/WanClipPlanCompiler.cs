@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 using VideoStages.Execution.StockHost;
@@ -89,12 +88,6 @@ internal static class WanClipPlanCompiler
                     previousModel.CompatibilityClassId,
                     resolved.CompatibilityClassId,
                     StringComparison.Ordinal);
-            // Wan pins the model-only target for every compat class, not per resolved model.
-            ImmutableArray<LoraPlan> loras =
-                LoraPlanCompiler.Compile(
-                    clip,
-                    stage,
-                    LoraTarget.ModelOnly);
             WarnAndNormalize(
                 !firstStage
                     // Text-root parsing canonicalizes selectors to Generated. Other later stages
@@ -119,22 +112,16 @@ internal static class WanClipPlanCompiler
                         stage.Control),
                 "decoded-input partial control that quantizes to sampler start step 0",
                 stage.Id);
-            StockHostVideoStagePayload payload = new(
-                    WanArchitectureModule.ArchitectureId,
-                    resolved.ModelClassId,
-                    resolved.CompatibilityClassId,
-                    LoraTarget.ModelOnly,
-                    new StageCorePlan(
-                        stage.Control,
-                        stage.Steps,
-                        stage.CfgScale,
-                        stage.Sampler,
-                        stage.Scheduler,
-                        StageUpscalePlanCompiler.Compile(stage),
-                        loras))
-                {
-                    ContinuesSamplingFromPreviousStage = continuesPreviousSampling,
-                };
+            // Wan pins the model-only target for every compat class, not per resolved model.
+            StockHostVideoStagePayload payload = StockHostVideoStagePayload.Compile(
+                WanArchitectureModule.ArchitectureId,
+                clip,
+                stage,
+                resolved,
+                LoraTarget.ModelOnly) with
+            {
+                ContinuesSamplingFromPreviousStage = continuesPreviousSampling,
+            };
             stages.Add(stage.ClipStageRawIndex, payload);
             previousStageContinuesSampling = continuesPreviousSampling;
         }

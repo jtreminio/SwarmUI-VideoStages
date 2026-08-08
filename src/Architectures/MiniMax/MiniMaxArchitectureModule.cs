@@ -184,19 +184,12 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                     stage.ClipStageRawIndex));
             }
 
-            stages[stage.ClipStageRawIndex] = new StockHostVideoStagePayload(
+            stages[stage.ClipStageRawIndex] = StockHostVideoStagePayload.Compile(
                 ArchitectureId,
-                resolved.ModelClassId,
-                resolved.CompatibilityClassId,
-                resolved.LoraTarget,
-                new StageCorePlan(
-                    stage.Control,
-                    stage.Steps,
-                    stage.CfgScale,
-                    stage.Sampler,
-                    stage.Scheduler,
-                    StageUpscalePlanCompiler.Compile(stage),
-                    LoraPlanCompiler.Compile(clip, stage, resolved.LoraTarget)));
+                clip,
+                stage,
+                resolved,
+                resolved.LoraTarget);
         }
 
         return new(

@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
@@ -93,10 +92,6 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool decodedInput = context.EntryMode == ArchitectureEntryMode.InitVideo
                 || stage.ClipStageIndex > 0;
-            ImmutableArray<LoraPlan> loras = LoraPlanCompiler.Compile(
-                clip,
-                stage,
-                resolved.LoraTarget);
             if (decodedInput
                 && (!double.IsFinite(stage.Control)
                     || stage.Control < 0
@@ -123,19 +118,12 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
                     stage.ClipStageRawIndex));
             }
 
-            stages[stage.ClipStageRawIndex] = new StockHostVideoStagePayload(
+            stages[stage.ClipStageRawIndex] = StockHostVideoStagePayload.Compile(
                 ArchitectureId,
-                resolved.ModelClassId,
-                resolved.CompatibilityClassId,
-                resolved.LoraTarget,
-                new StageCorePlan(
-                    stage.Control,
-                    stage.Steps,
-                    stage.CfgScale,
-                    stage.Sampler,
-                    stage.Scheduler,
-                    StageUpscalePlanCompiler.Compile(stage),
-                    loras));
+                clip,
+                stage,
+                resolved,
+                resolved.LoraTarget);
         }
 
         return new(
