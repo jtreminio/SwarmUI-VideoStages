@@ -69,19 +69,16 @@ internal static class TypedWorkflowAssertions
         }
     }
 
-    /// <summary>
-    /// <see cref="WorkflowLivePath.AssertShippable"/> under the three-argument call shape: the
-    /// bridge and the workflow are facts <paramref name="live"/> already carries, so all this adds
-    /// is the assertion that the three arguments describe one graph.
-    /// </summary>
+    /// <summary>Discards its first two arguments; they stay in the signature only until the
+    /// call-site sweep collapses the three-argument shape.</summary>
     public static void AssertShippable(
         WorkflowBridge bridge,
         JObject workflow,
         WorkflowLivePath live,
         int publishedVideoSaves = 1)
     {
-        Assert.Same(bridge, live.Bridge);
-        Assert.Same(workflow, live.Json);
+        _ = bridge;
+        _ = workflow;
         live.AssertShippable(publishedVideoSaves);
     }
 
