@@ -1,4 +1,3 @@
-using Newtonsoft.Json.Linq;
 using SwarmUI.Text2Image;
 
 namespace VideoStages.Tests;
@@ -22,12 +21,7 @@ internal sealed class MultiModelFixture : VideoStagesWorkflowFixture
     public static MultiModelFixture CreateWithBaseModel(params string[] modelFixturePaths) =>
         new(modelFixturePaths, withBaseModel: true);
 
-    public override JObject Post(JObject document, Action<JObject> customize = null) =>
-        base.Post(document, post =>
-        {
-            post["clipvisionmodel"] = TestModelFactory.WanClipVisionFileName;
-            customize?.Invoke(post);
-        });
+    protected override string ClipVisionFileName => TestModelFactory.WanClipVisionFileName;
 
     protected override void InstallSupportModels()
     {

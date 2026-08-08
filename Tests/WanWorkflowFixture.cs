@@ -65,16 +65,7 @@ internal sealed class WanWorkflowFixture : VideoStagesWorkflowFixture
 
     public T2IModel LowNoiseModel => Models[1];
 
-    /// <summary>
-    /// Naming the CLIP-vision model keeps core's <c>RequireVisionModel</c> away from its 1.2 GB
-    /// download — see <see cref="TestModelFactory.InstallWanSupportModels"/>.
-    /// </summary>
-    public override JObject Post(JObject document, Action<JObject> customize = null) =>
-        base.Post(document, post =>
-        {
-            post["clipvisionmodel"] = TestModelFactory.WanClipVisionFileName;
-            customize?.Invoke(post);
-        });
+    protected override string ClipVisionFileName => TestModelFactory.WanClipVisionFileName;
 
     protected override void InstallSupportModels() =>
         TestModelFactory.InstallWanSupportModels();

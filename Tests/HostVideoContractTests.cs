@@ -471,12 +471,8 @@ public class HostVideoContractTests
 
         public T2IModel MochiModel => Models[1];
 
-        public override JObject Post(JObject document, Action<JObject> customize = null) =>
-            base.Post(document, post =>
-            {
-                post["clipvisionmodel"] = TestModelFactory.Hunyuan15ClipVisionFileName;
-                customize?.Invoke(post);
-            });
+        protected override string ClipVisionFileName =>
+            TestModelFactory.Hunyuan15ClipVisionFileName;
 
         protected override void InstallSupportModels()
         {

@@ -1,4 +1,3 @@
-using Newtonsoft.Json.Linq;
 using SwarmUI.Core;
 using SwarmUI.Text2Image;
 
@@ -49,14 +48,7 @@ internal sealed class LtxAndWanFixture() : MixedArchitectureFixture(
         TestModelFactory.InstallLtx2SupportModels,
         () => TestModelFactory.InstallWanSupportModels());
 
-    /// <summary>Naming the CLIP-vision model keeps core's <c>RequireVisionModel</c> away from
-    /// its 1.2 GB download — see <see cref="TestModelFactory.InstallWanSupportModels"/>.</summary>
-    public override JObject Post(JObject document, Action<JObject> customize = null) =>
-        base.Post(document, post =>
-        {
-            post["clipvisionmodel"] = TestModelFactory.WanClipVisionFileName;
-            customize?.Invoke(post);
-        });
+    protected override string ClipVisionFileName => TestModelFactory.WanClipVisionFileName;
 }
 
 internal sealed class LtxAndMiniMaxFixture() : MixedArchitectureFixture(
@@ -76,10 +68,5 @@ internal sealed class WanAndMiniMaxFixture() : MixedArchitectureFixture(
         () => TestModelFactory.InstallWanSupportModels(),
         TestModelFactory.InstallMiniMaxSupportModels);
 
-    public override JObject Post(JObject document, Action<JObject> customize = null) =>
-        base.Post(document, post =>
-        {
-            post["clipvisionmodel"] = TestModelFactory.WanClipVisionFileName;
-            customize?.Invoke(post);
-        });
+    protected override string ClipVisionFileName => TestModelFactory.WanClipVisionFileName;
 }

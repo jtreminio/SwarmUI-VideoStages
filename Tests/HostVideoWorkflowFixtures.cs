@@ -1,5 +1,3 @@
-using Newtonsoft.Json.Linq;
-
 namespace VideoStages.Tests;
 
 /// <summary>
@@ -19,16 +17,7 @@ internal sealed class Hunyuan15WorkflowFixture : VideoStagesWorkflowFixture
 
     public static Hunyuan15WorkflowFixture CreateWithBaseModel() => new(withBaseModel: true);
 
-    /// <summary>
-    /// Naming the CLIP-vision model keeps core's <c>RequireVisionModel</c> away from its download —
-    /// see <see cref="TestModelFactory.InstallHunyuan15SupportModels"/>.
-    /// </summary>
-    public override JObject Post(JObject document, Action<JObject> customize = null) =>
-        base.Post(document, post =>
-        {
-            post["clipvisionmodel"] = TestModelFactory.Hunyuan15ClipVisionFileName;
-            customize?.Invoke(post);
-        });
+    protected override string ClipVisionFileName => TestModelFactory.Hunyuan15ClipVisionFileName;
 
     protected override void InstallSupportModels() =>
         TestModelFactory.InstallHunyuan15SupportModels();

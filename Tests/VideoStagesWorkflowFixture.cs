@@ -68,6 +68,12 @@ internal abstract class VideoStagesWorkflowFixture : IDisposable
     /// </summary>
     protected abstract void InstallSupportModels();
 
+    /// <summary>
+    /// Named on families whose loader branch reaches core's <c>RequireVisionModel</c>: leaving it
+    /// null there is a multi-gigabyte download, not a failure. Null means the family never asks.
+    /// </summary>
+    protected virtual string ClipVisionFileName => null;
+
     public abstract int DefaultSteps { get; }
 
     public abstract double DefaultCfgScale { get; }
@@ -117,7 +123,7 @@ internal abstract class VideoStagesWorkflowFixture : IDisposable
             cfgScale ?? DefaultCfgScale);
 
     /// <summary>The POST body the Generate tab sends.</summary>
-    public virtual JObject Post(JObject document, Action<JObject> customize = null)
+    public JObject Post(JObject document, Action<JObject> customize = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         JObject post = new()
@@ -133,6 +139,10 @@ internal abstract class VideoStagesWorkflowFixture : IDisposable
             ["videostagesenabled"] = true,
             ["videostages"] = document.ToString(),
         };
+        if (ClipVisionFileName is not null)
+        {
+            post["clipvisionmodel"] = ClipVisionFileName;
+        }
         customize?.Invoke(post);
         return post;
     }
