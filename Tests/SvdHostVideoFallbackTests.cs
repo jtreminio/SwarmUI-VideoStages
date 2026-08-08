@@ -9,7 +9,8 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-public partial class StageFlowTests
+[Collection("VideoStagesTests")]
+public sealed class SvdHostVideoFallbackTests
 {
     /// <summary>
     /// SVD has no architecture module, so a timeline naming it must land on the host-video
