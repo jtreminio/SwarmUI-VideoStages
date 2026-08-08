@@ -43,28 +43,13 @@ internal static class VideoExecutionPlanCompiler
                     + "The authored values remain in request metadata. Create separate timeline "
                     + "stages instead."));
         }
-        IReadOnlyList<ClipSpec> executableClips = (effective.Clips ?? []).Where(IsExecutableClip).ToArray();
-        if (executableClips.Count != (effective.Clips?.Count ?? 0))
+        IReadOnlyList<ClipSpec> activeClips = (effective.Clips ?? []).Where(IsExecutableClip).ToArray();
+        if (activeClips.Count != (effective.Clips?.Count ?? 0))
         {
             diagnostics.Add(new PlanDiagnostic(
                 PlanDiagnosticSeverity.Warning,
                 "inactive-clips-ignored",
                 "Clips without a source video or active stages were ignored by the execution plan."));
-        }
-        List<ClipSpec> activeClips = [];
-        HashSet<int> seenClipIds = [];
-        foreach (ClipSpec clip in executableClips)
-        {
-            if (!seenClipIds.Add(clip.Id))
-            {
-                diagnostics.Add(new PlanDiagnostic(
-                    PlanDiagnosticSeverity.Warning,
-                    "duplicate-clip-id",
-                    $"Clip id {clip.Id} is duplicated; only its first occurrence is planned.",
-                    clip.Id));
-                continue;
-            }
-            activeClips.Add(clip);
         }
 
         RootPlan root = RootPlanCompiler.Compile(rootEnvironment, activeClips);
@@ -194,5 +179,4 @@ internal static class VideoExecutionPlanCompiler
             : spec.IsTextToVideo
                 ? ArchitectureEntryMode.TextToVideo
                 : ArchitectureEntryMode.ImageToVideo;
-
 }

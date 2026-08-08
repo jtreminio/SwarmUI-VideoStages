@@ -516,46 +516,6 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_DuplicateClipIds_WarnsAndDropsLaterOccurrence()
-    {
-        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(
-            false,
-            GeneratedClip(4, Stage(10)),
-            GeneratedClip(4, Stage(11))));
-
-        Assert.Single(plan.Clips);
-        Assert.Equal(4, plan.Clips[0].ClipId);
-        Assert.Contains(plan.Diagnostics, diagnostic =>
-            diagnostic.Code == "duplicate-clip-id"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
-    }
-
-    [Fact]
-    public void Compile_DuplicateClipIds_RootPlanUsesSurvivingOccurrence()
-    {
-        VideoExecutionPlan plan = TestPlanCompiler.Compile(
-            Spec(
-                false,
-                InitVideoClip(4),
-                GeneratedClip(4, Stage(10))),
-            new RootEnvironment(
-                HostRootKind.ImageToVideo,
-                CanInterceptHostCore: true));
-
-        ClipPlan surviving = Assert.Single(plan.Clips);
-        Assert.Equal(ArchitectureEntryMode.InitVideo, surviving.EntryMode);
-        Assert.True(plan.Root.IgnoresHostRootOutput);
-        Assert.True(plan.Root.InterceptsHostCore);
-        Assert.False(plan.Root.UsesGeneratedClipDonor);
-        Assert.False(plan.Root.UsesStageHandoff);
-        Assert.False(plan.Root.DropsTextToVideoRootDonor);
-        Assert.False(plan.Root.IgnoresTextToVideoRoot);
-        Assert.Contains(plan.Diagnostics, diagnostic =>
-            diagnostic.Code == "duplicate-clip-id"
-                && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
-    }
-
-    [Fact]
     public void Compile_ContinueIntoInitVideoClip_PreservesAuthoredBoundaryAndWarnsWhileUsingCut()
     {
         ClipSpec first = GeneratedClip(0, Stage(10)) with
