@@ -7,7 +7,6 @@ using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Authoring;
 using Xunit;
-using static VideoStages.Tests.Fixtures;
 
 namespace VideoStages.Tests;
 
@@ -69,7 +68,7 @@ public class RequestReaderTests
     {
         UnitTestStubs.EnsureComfySamplerSchedulerRegistered();
         T2IParamInput input = new(null);
-        SetVideoStagesConfig(input, json);
+        Fixtures.SetVideoStagesConfig(input, json);
         return input;
     }
 
@@ -301,7 +300,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [MakeStage("model-a")],
-                refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 12, fromEnd: true)],
+                refs: [Fixtures.MakeRef("Base", frame: 1), Fixtures.MakeRef("Refiner", frame: 12, fromEnd: true)],
                 duration: 4.0,
                 icLoras: new JArray(new JObject
                 {
@@ -524,7 +523,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadRequest_RootShape_PopulatesRootDimensionsAndClipAudioSource()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(Fixtures.MakeRootConfig(
             width: 1344,
             height: 832,
             clips: [
@@ -545,7 +544,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadDocument_GroupToggleOff_YieldsNoRootDimensionsOrEntries()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(800, 600));
+        string json = JsonConvert.SerializeObject(Fixtures.MakeRootConfig(800, 600));
         T2IParamInput enabled = BuildInputWithJson(json);
         AuthoringDocument enabledDocument =
             DocumentJson.Read(enabled);
@@ -571,11 +570,11 @@ public class RequestReaderTests
             MakeClip(
                 stages: [MakeStage("model-a")],
                 audioSource: MediaSource.Upload,
-                uploadedAudio: UploadedAudio(fileName: "first.wav")),
+                uploadedAudio: Fixtures.UploadedAudio(fileName: "first.wav")),
             MakeClip(
                 stages: [MakeStage("model-b")],
                 audioSource: MediaSource.Upload,
-                uploadedAudio: UploadedAudio(fileName: "second.wav"))
+                uploadedAudio: Fixtures.UploadedAudio(fileName: "second.wav"))
         ));
         T2IParamInput input = BuildInputWithJson(json);
 
@@ -713,7 +712,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadRequest_RootShape_UsesRootDimensionsAcrossClips()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(Fixtures.MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
@@ -742,7 +741,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadRequest_ControlNetAndAudioLength_IntentsBothReachPlanning()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(Fixtures.MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
@@ -764,7 +763,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadRequest_JsonRootDimensions_AreAuthoritative()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(Fixtures.MakeRootConfig(
             width: 1536,
             height: 864,
             clips: [
@@ -785,7 +784,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadRequest_JsonRootFps_OverridesCoreVideoFpsForClipDurationFrames()
     {
-        JObject config = MakeRootConfig(
+        JObject config = Fixtures.MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
@@ -924,7 +923,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [MakeStage("model-a")],
-                refs: [brokenRef, MakeRef("Base")])
+                refs: [brokenRef, Fixtures.MakeRef("Base")])
         ));
         T2IParamInput input = BuildInputWithJson(json);
 
@@ -938,7 +937,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadRequest_PropagatesTopLevelDimensionsAndPerClipFrames()
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(Fixtures.MakeRootConfig(
             width: 800,
             height: 600,
             clips: [
@@ -965,7 +964,7 @@ public class RequestReaderTests
     [InlineData(21.5, 517)]
     public void ReadRequest_ClipDurationFrames_AreStructural(double duration, int expectedFrames)
     {
-        string json = JsonConvert.SerializeObject(MakeRootConfig(
+        string json = JsonConvert.SerializeObject(Fixtures.MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [
@@ -1156,7 +1155,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [stage],
-                refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 9)])));
+                refs: [Fixtures.MakeRef("Base", frame: 1), Fixtures.MakeRef("Refiner", frame: 9)])));
 
         T2IParamInput input = BuildInputWithJson(json);
 
@@ -1203,7 +1202,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [stage],
-                refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 2)])));
+                refs: [Fixtures.MakeRef("Base", frame: 1), Fixtures.MakeRef("Refiner", frame: 2)])));
 
         T2IParamInput input = BuildInputWithJson(json);
 
@@ -1217,7 +1216,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadRequest_WidthZero_FallsBackToGlobal()
     {
-        JObject root = MakeRootConfig(
+        JObject root = Fixtures.MakeRootConfig(
             width: 0,
             height: 720,
             clips: [MakeClip(stages: [MakeStage("model-a")])]);
@@ -1234,7 +1233,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadRequest_HeightZero_FallsBackToGlobal()
     {
-        JObject root = MakeRootConfig(
+        JObject root = Fixtures.MakeRootConfig(
             width: 1280,
             height: 0,
             clips: [MakeClip(stages: [MakeStage("model-a")])]);
@@ -1269,7 +1268,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadRequest_FpsMissing_FallsBackToVideoFps()
     {
-        JObject root = MakeRootConfig(
+        JObject root = Fixtures.MakeRootConfig(
             width: 1280,
             height: 720,
             clips: [MakeClip(stages: [MakeStage("model-a")])]);
@@ -1627,7 +1626,7 @@ public class RequestReaderTests
     [Fact]
     public void Read_RootTimelineAudioSpans_PreservesExecutableSourceWindowAndVolume()
     {
-        JObject span = AudioSpan(
+        JObject span = Fixtures.AudioSpan(
             timelineStartSeconds: 1.5,
             timelineLengthSeconds: 2.5,
             sourceStartSeconds: 4);
@@ -1642,7 +1641,7 @@ public class RequestReaderTests
         {
             ["clips"] = new JArray(MakeClip([MakeStage("ltx-2")], duration: 4)),
             ["audioTracks"] = new JArray(
-                AudioTrack("track-dialogue", volume: 0.75, fileName: "dialogue.wav", span)),
+                Fixtures.AudioTrack("track-dialogue", volume: 0.75, fileName: "dialogue.wav", span)),
         };
         ((JObject)((JArray)root["clips"])[0])["id"] = "clip-a";
 
@@ -1663,7 +1662,7 @@ public class RequestReaderTests
     }
 
     private static JObject MakeAudioTrack(string id, params JObject[] spans) =>
-        AudioTrack(id, volume: 0.5, fileName: "score.wav", spans);
+        Fixtures.AudioTrack(id, volume: 0.5, fileName: "score.wav", spans);
 
     [Fact]
     public void Read_RootTimelineAudioSpans_MultiSpanTrackMatchesSplitSingleSpanLanes()
@@ -1682,11 +1681,11 @@ public class RequestReaderTests
         IReadOnlyList<TimelineAudioSpanSpec> combined = ReadWithTracks(
             MakeAudioTrack(
                 "track-multi",
-                AudioSpan(0, 1, 0),
-                AudioSpan(3, 2, 5))).TimelineAudioSpans;
+                Fixtures.AudioSpan(0, 1, 0),
+                Fixtures.AudioSpan(3, 2, 5))).TimelineAudioSpans;
         IReadOnlyList<TimelineAudioSpanSpec> split = ReadWithTracks(
-            MakeAudioTrack("track-multi:0", AudioSpan(0, 1, 0)),
-            MakeAudioTrack("track-multi:1", AudioSpan(3, 2, 5))).TimelineAudioSpans;
+            MakeAudioTrack("track-multi:0", Fixtures.AudioSpan(0, 1, 0)),
+            MakeAudioTrack("track-multi:1", Fixtures.AudioSpan(3, 2, 5))).TimelineAudioSpans;
 
         Assert.Equal(2, combined.Count);
         Assert.Equal(
