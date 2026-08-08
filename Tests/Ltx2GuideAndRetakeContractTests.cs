@@ -38,12 +38,9 @@ public class Ltx2GuideAndRetakeContractTests
     private static int[] RetakeMaskBlocks(LTXVSetVideoLatentNoiseMasksNode maskNode)
     {
         ImageToMaskNode toMask = Assert.IsType<ImageToMaskNode>(maskNode.Masks.Connection?.Node);
-        ComfyNode masked = toMask.Image.Connection?.Node;
-        IEnumerable<ComfyNode> blocks = masked is BatchImagesNodeNode batch
-            ? batch.Images.Items.Select(image => image.Connection?.Node)
-            : [masked];
-        return [.. blocks.Select(block =>
-            Assert.IsType<RepeatImageBatchNode>(block).Amount.LiteralAsInt() ?? 0)];
+        BatchImagesNodeNode batch = Assert.IsType<BatchImagesNodeNode>(toMask.Image.Connection?.Node);
+        return [.. batch.Images.Items.Select(image =>
+            Assert.IsType<RepeatImageBatchNode>(image.Connection?.Node).Amount.LiteralAsInt() ?? 0)];
     }
 
     /// <summary>
@@ -308,7 +305,7 @@ public class Ltx2GuideAndRetakeContractTests
         Assert.Single(solids, solid => solid.Value.LiteralAsDouble() == strength);
         Assert.Single(solids, solid => solid.Value.LiteralAsDouble() == 0.0);
 
-        // The joint audio/video window spans the same latent block, whose boundary pixels are 17/41.
+        // The joint audio/video window covers the same latent block as the ladder above.
         LTXVSetAudioVideoMaskByTimeNode maskByTime = Assert.Single(
             bridge.Graph.NodesOfType<LTXVSetAudioVideoMaskByTimeNode>());
         Assert.Equal(17.0 / 24, maskByTime.StartTime.LiteralAsDouble()!.Value, precision: 6);
