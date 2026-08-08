@@ -769,27 +769,60 @@ public class ArchitectureFoundationTests
         Assert.Equal(1, registry.CompileCounts[new("fake")]);
     }
 
+    /// <summary>
+    /// Every mode the classifier can return for a real method survives the common projection with
+    /// nothing said about it, once the architecture declares it. The wire prefix is the mode's own
+    /// name, and the classifier is asked to confirm that rather than it being spelled out a second
+    /// time here — so a mode added with some other prefix arrives as a failure instead of silently
+    /// going untested.
+    /// <para>
+    /// <see cref="StageUpscaleMode.None"/> is what a factor of 1 produces rather than a method, and
+    /// <see cref="StageUpscaleMode.Unsupported"/> is the absence of a known mode; neither has a
+    /// method that names it. The stage's own upscale plan is not asserted because
+    /// <c>FakeModule</c> fabricates its stage core.
+    /// </para>
+    /// </summary>
     [Fact]
     public void Common_projection_keeps_every_known_upscale_mode()
     {
-        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor();
-        FakeRegistry registry = new(fakeDescriptor: descriptor);
-        ClipSpec clip = GeneratedClip(
-            0,
-            Stage(10, "fake-model") with
-            {
-                Upscale = 2,
-                UpscaleMethod = "model-fake",
-            }) with
+        VideoArchitectureDescriptor descriptor = FakeCapabilityDescriptor() with
         {
-            AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
+            Features = ArchitectureFeature.LatentUpscale
+                | ArchitectureFeature.LatentModelUpscale,
         };
-        VideoExecutionPlan plan = Compile(clip, registry);
+        List<(StageUpscaleMode Named, StageUpscaleMode Classified, string Diagnostics, int Compiles)>
+            actual = [];
+        List<(StageUpscaleMode Named, StageUpscaleMode Classified, string Diagnostics, int Compiles)>
+            expected = [];
+        foreach (StageUpscaleMode mode in Enum.GetValues<StageUpscaleMode>())
+        {
+            if (mode is StageUpscaleMode.None or StageUpscaleMode.Unsupported)
+            {
+                continue;
+            }
+            string method = $"{mode}-fake".ToLowerInvariant();
+            FakeRegistry registry = new(fakeDescriptor: descriptor);
+            ClipSpec clip = GeneratedClip(
+                0,
+                Stage(10, "fake-model") with
+                {
+                    Upscale = 2,
+                    UpscaleMethod = method,
+                }) with
+            {
+                AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
+            };
+            VideoExecutionPlan plan = Compile(clip, registry);
 
-        Assert.DoesNotContain(
-            plan.Diagnostics,
-            item => item.Message.Contains("upscale"));
-        Assert.Equal(1, registry.CompileCounts[new("fake")]);
+            actual.Add((
+                mode,
+                StageUpscalePlanCompiler.Classify(method),
+                string.Join(",", plan.Diagnostics.Select(item => item.Code)),
+                registry.CompileCounts[new("fake")]));
+            expected.Add((mode, mode, "", 1));
+        }
+
+        Assert.Equal(expected, actual);
     }
 
     [Fact]
