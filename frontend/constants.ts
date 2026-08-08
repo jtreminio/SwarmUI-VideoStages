@@ -1,15 +1,13 @@
-import {
-    ENTRY_MODES,
-    type GeneratedEntryMode,
-} from "./architectures/generatedFeatures";
+import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
 import { getVideoStagesHostBridge } from "./host";
 
 /**
- * What a generated clip's root is taken to be when the host has not said. C#
- * declares it first, so it is ArchitectureEntryMode's zero value; reordering
- * the enum there fails this annotation rather than silently moving the default.
+ * What a generated clip's root is taken to be when nothing has said: the one
+ * mode that asks for no incoming media. C# spells the modes and the annotation
+ * holds this to that spelling, but it declares no default — which mode to
+ * assume is this frontend's own choice.
  */
-export const DEFAULT_GENERATED_ENTRY_MODE: GeneratedEntryMode = ENTRY_MODES[0];
+export const DEFAULT_GENERATED_ENTRY_MODE: GeneratedEntryMode = "text-to-video";
 
 export const REF_FRAME_MIN = 1;
 export const DEFAULT_CLIP_DURATION_SECONDS = 5;

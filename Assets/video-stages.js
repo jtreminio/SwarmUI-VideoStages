@@ -1456,7 +1456,7 @@
   };
 
   // frontend/constants.ts
-  var DEFAULT_GENERATED_ENTRY_MODE = ENTRY_MODES[0];
+  var DEFAULT_GENERATED_ENTRY_MODE = "text-to-video";
   var REF_FRAME_MIN = 1;
   var DEFAULT_CLIP_DURATION_SECONDS = 5;
   var CLIP_DURATION_MIN = 1;
@@ -1925,7 +1925,12 @@
     const catalog = modelCatalog ?? buildArchitectureModelCatalog([modelName], [modelName]);
     return entryModesForModel(catalog, modelName).includes("text-to-video");
   };
-  var getRootGeneratedEntryMode = (modelCatalog) => !`${getRootModelInput()?.value ?? ""}`.trim() || isRootTextToVideoModel(modelCatalog) ? "text-to-video" : "image-to-video";
+  var getRootGeneratedEntryMode = (modelCatalog) => {
+    if (!`${getRootModelInput()?.value ?? ""}`.trim()) {
+      return DEFAULT_GENERATED_ENTRY_MODE;
+    }
+    return isRootTextToVideoModel(modelCatalog) ? "text-to-video" : "image-to-video";
+  };
   var getDropdownOptions = (paramId, fallbackSelectId) => {
     const registered = getVideoStagesHostBridge().getParamOptions(paramId);
     if (registered) {

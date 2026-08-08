@@ -4,6 +4,7 @@ import {
 } from "./architectures/catalog";
 import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
 import type { ArchitectureModelCatalog } from "./architectures/types";
+import { DEFAULT_GENERATED_ENTRY_MODE } from "./constants";
 import { getVideoStagesHostBridge } from "./host";
 import { parseBase2EditStageIndex } from "./mediaSourceSyntax";
 import {
@@ -121,11 +122,14 @@ export const isRootTextToVideoModel = (
 
 export const getRootGeneratedEntryMode = (
     modelCatalog?: ArchitectureModelCatalog,
-): GeneratedEntryMode =>
-    !`${getRootModelInput()?.value ?? ""}`.trim() ||
-    isRootTextToVideoModel(modelCatalog)
+): GeneratedEntryMode => {
+    if (!`${getRootModelInput()?.value ?? ""}`.trim()) {
+        return DEFAULT_GENERATED_ENTRY_MODE;
+    }
+    return isRootTextToVideoModel(modelCatalog)
         ? "text-to-video"
         : "image-to-video";
+};
 
 export const getDropdownOptions = (
     paramId: string,
