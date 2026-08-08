@@ -364,9 +364,9 @@ public class TimelineOutputContractTests
     }
 
     /// <summary>
-    /// The sole owner of "<c>donotsave</c> does not change the graph": core honours it above the
-    /// graph, where the API returns a data URI instead of writing to disk. Every other output test
-    /// generates without the flag and relies on this.
+    /// <c>donotsave</c> does not change the graph: core honours it above the graph, where the API
+    /// returns a data URI instead of writing to disk. Generating both is what proves it, so no
+    /// other test has to carry the flag to record it.
     /// </summary>
     [Fact]
     public async Task Do_not_save_generates_the_same_graph_as_a_saving_request()
