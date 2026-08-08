@@ -14,12 +14,6 @@ namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 /// <summary>Applies LTX IC-LoRA guide nodes after drive media and control signals are resolved.</summary>
 internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
 {
-    private const int GuideFrameIdx = 0;
-    private const string GuideCrop = "disabled";
-    private const bool GuideUseTiledEncode = false;
-    private const int GuideTileSize = 256;
-    private const int GuideTileOverlap = 64;
-
     internal void Apply(
         WorkflowBridge bridge,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -47,12 +41,7 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
         {
             LTXAddVideoICLoRAGuideAdvancedNode advanced =
                 bridge.AddNode(new LTXAddVideoICLoRAGuideAdvancedNode().With(
-                    FrameIdx: GuideFrameIdx,
                     Strength: strength,
-                    Crop: GuideCrop,
-                    UseTiledEncode: GuideUseTiledEncode,
-                    TileSize: GuideTileSize,
-                    TileOverlap: GuideTileOverlap,
                     AttentionStrength: entry.AttentionStrength));
             guideNode = advanced;
             vae = advanced.Vae;
@@ -64,13 +53,7 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
         else
         {
             LTXAddVideoICLoRAGuideNode basic =
-                bridge.AddNode(new LTXAddVideoICLoRAGuideNode().With(
-                    FrameIdx: GuideFrameIdx,
-                    Strength: strength,
-                    Crop: GuideCrop,
-                    UseTiledEncode: GuideUseTiledEncode,
-                    TileSize: GuideTileSize,
-                    TileOverlap: GuideTileOverlap));
+                bridge.AddNode(new LTXAddVideoICLoRAGuideNode().With(Strength: strength));
             guideNode = basic;
             vae = basic.Vae;
             latentInput = basic.LatentInput;
