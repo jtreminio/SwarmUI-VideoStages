@@ -8,8 +8,7 @@ namespace VideoStages.Tests;
 public class GeneratedBindingRetentionTests
 {
     // The bindings the prune tool keeps only because production source references them; everything
-    // else in the namespace is force-kept by comfytyped.keep.json. Disjoint, and together covering
-    // the namespace, so a new generated wrapper needs one retention reason or the other.
+    // else in the namespace is force-kept by comfytyped.keep.json.
     private static readonly string[] DirectlyReferencedProductionBindings =
     [
         nameof(SwarmAudioLengthToFramesNode),
