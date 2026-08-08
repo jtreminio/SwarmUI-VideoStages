@@ -17,25 +17,20 @@ public partial class StageFlowTests
     /// publication (<c>801</c> off its own media <c>800</c>) and a foreign sink hanging off the
     /// shared root VAE loader (<c>802</c> off <c>101</c>). Both sit inside the closure the
     /// displaced-root sweep walks, and neither belongs to the timeline, so both must survive
-    /// untouched — under suppression as well as retargeting. Nothing in core or VideoStages emits
-    /// a second extension's save.
+    /// untouched. Nothing in core or VideoStages emits a second extension's save.
     /// <para>
-    /// The timeline's own save — retargeted onto its publication, or removed under
-    /// <c>donotsave</c> — is generated end-to-end by
+    /// The timeline's own save, retargeted onto its publication, is generated end-to-end by
     /// <see cref="TimelineOutputContractTests.A_displaced_root_retargets_its_own_save"/>.
     /// </para>
     /// </summary>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Displaced_root_only_retargets_or_suppresses_its_owned_save(bool doNotSave)
+    [Fact]
+    public void Displaced_root_leaves_a_foreign_extensions_save_alone()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         T2IParamInput input = BuildTextToVideoInput(
             models.VideoModel,
             MakeRootConfig(512, 512, MakeGeneratedClip(models)).ToString());
-        input.Set(T2IParamTypes.DoNotSave, doNotSave);
 
         (JObject workflow, WorkflowGenerator generator) =
             WorkflowTestHarness.GenerateWithStepsAndState(
@@ -60,17 +55,13 @@ public partial class StageFlowTests
         List<SwarmSaveAnimationWSNode> saves = [
             .. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>()
         ];
-        // donotsave is honoured above the graph — it makes T2IAPI return a data URI instead of
-        // writing to disk — so it changes nothing here. Both arms assert the same shape.
-        {
-            Assert.Equal(2, saves.Count);
-            Assert.Single(
-                saves,
-                save => save.Id != unrelatedSave.Id
-                    && JToken.DeepEquals(
-                        WorkflowBridge.ToPath(save.Images.Connection!),
-                        generator.CurrentMedia.Path));
-        }
+        Assert.Equal(2, saves.Count);
+        Assert.Single(
+            saves,
+            save => save.Id != unrelatedSave.Id
+                && JToken.DeepEquals(
+                    WorkflowBridge.ToPath(save.Images.Connection!),
+                    generator.CurrentMedia.Path));
     }
 
     /// <summary>
