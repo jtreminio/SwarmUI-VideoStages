@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.Families;
 using ComfyTyped.Generated;
+using ComfyTyped.Types;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
@@ -254,12 +255,11 @@ internal static class TypedWorkflowAssertions
         {
             return;
         }
-        Assert.False(
-            source is EmptyMiniMaxH3LatentAVNode or LTXVConcatAVLatentNode
-                or SetLatentNoiseMaskNode or EmptyLatentImageNode or VAEEncodeNode
-                or SwarmKSamplerNode or KSamplerAdvancedNode,
-            $"{inputName} is fed by {source.ClassTypeName} (node {source.Id}), which produces a "
-                + "latent, not an image.");
+        Assert.True(
+            source.Outputs.Any(output => output.TypeName == ImageType.TypeName),
+            $"{inputName} is fed by {source.ClassTypeName} (node {source.Id}), which outputs "
+                + $"[{string.Join(", ", source.Outputs.Select(output => output.TypeName))}], "
+                + "not an image.");
     }
 
     public static List<SwarmKSamplerNode> SamplerNodesOrdered(WorkflowBridge bridge)
