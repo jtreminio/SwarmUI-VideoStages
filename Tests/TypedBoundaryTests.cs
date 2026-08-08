@@ -17,78 +17,26 @@ public class TypedBoundaryTests
         NodeRegistrations.EnsureRegistered();
     }
 
-    private static JObject BuildLtxWorkflow()
+    /// <summary>The decoded chain plus the terminal save that publishes it, which the capture
+    /// tests need as a downstream consumer of the video decode.</summary>
+    private static JObject BuildLtxWorkflowWithSave()
     {
-        return new JObject
+        JObject workflow = LtxDecodedChainWorkflow.Build();
+        workflow["7"] = new JObject
         {
-            ["1"] = new JObject
+            ["class_type"] = SwarmSaveAnimationWSNode.ClassType,
+            ["inputs"] = new JObject
             {
-                ["class_type"] = CheckpointLoaderSimpleNode.ClassType,
-                ["inputs"] = new JObject { ["ckpt_name"] = "ltxv2.safetensors" }
-            },
-            ["2"] = new JObject
-            {
-                ["class_type"] = LTXVAudioVAELoaderNode.ClassType,
-                ["inputs"] = new JObject { ["audio_vae_name"] = "audio.safetensors" }
-            },
-            ["3"] = new JObject
-            {
-                ["class_type"] = SwarmKSamplerNode.ClassType,
-                ["inputs"] = new JObject
-                {
-                    ["model"] = new JArray("1", 0),
-                    ["seed"] = 42,
-                    ["steps"] = 20,
-                    ["cfg"] = 7.0,
-                    ["sampler_name"] = "euler",
-                    ["scheduler"] = "normal",
-                    ["positive"] = new JArray("99", 0),
-                    ["negative"] = new JArray("98", 0),
-                    ["latent_image"] = new JArray("97", 0),
-                    ["denoise"] = 1.0
-                }
-            },
-            ["4"] = new JObject
-            {
-                ["class_type"] = LTXVSeparateAVLatentNode.ClassType,
-                ["inputs"] = new JObject
-                {
-                    ["av_latent"] = new JArray("3", 0)
-                }
-            },
-            ["5"] = new JObject
-            {
-                ["class_type"] = VAEDecodeNode.ClassType,
-                ["inputs"] = new JObject
-                {
-                    ["samples"] = new JArray("4", 0),
-                    ["vae"] = new JArray("1", 2)
-                }
-            },
-            ["6"] = new JObject
-            {
-                ["class_type"] = LTXVAudioVAEDecodeNode.ClassType,
-                ["inputs"] = new JObject
-                {
-                    ["samples"] = new JArray("4", 1),
-                    ["audio_vae"] = new JArray("2", 0)
-                }
-            },
-            ["7"] = new JObject
-            {
-                ["class_type"] = SwarmSaveAnimationWSNode.ClassType,
-                ["inputs"] = new JObject
-                {
-                    ["images"] = new JArray("5", 0),
-                    ["fps"] = 24.0,
-                    ["lossless"] = true,
-                    ["quality"] = 80,
-                    ["method"] = "default",
-                    ["format"] = "webp",
-                    ["audio"] = new JArray("6", 0)
-                }
+                ["images"] = new JArray("5", 0),
+                ["fps"] = 24.0,
+                ["lossless"] = true,
+                ["quality"] = 80,
+                ["method"] = "default",
+                ["format"] = "webp",
+                ["audio"] = new JArray("6", 0)
             }
         };
+        return workflow;
     }
 
     private static WorkflowGenerator CreateGenerator(JObject workflow)
@@ -125,7 +73,7 @@ public class TypedBoundaryTests
     [Fact]
     public void MediaRef_FromWGNodeData_ResolvesTypedOutput()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowGenerator g = CreateGenerator(workflow);
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -148,7 +96,7 @@ public class TypedBoundaryTests
     [Fact]
     public void MediaRef_FromWGNodeData_WithAttachedAudio_ResolvesRecursively()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowGenerator g = CreateGenerator(workflow);
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -169,7 +117,7 @@ public class TypedBoundaryTests
     [Fact]
     public void MediaRef_FromWGNodeData_NullPath_ReturnsNull()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         MediaRef result = MediaRef.FromWGNodeData(null, bridge);
@@ -179,7 +127,7 @@ public class TypedBoundaryTests
     [Fact]
     public void MediaRef_FromWGNodeData_UnresolvablePath_ReturnsNull()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowGenerator g = CreateGenerator(workflow);
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -192,7 +140,7 @@ public class TypedBoundaryTests
     [Fact]
     public void MediaRef_ToWGNodeData_ProducesCorrectPath()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowGenerator g = CreateGenerator(workflow);
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -219,7 +167,7 @@ public class TypedBoundaryTests
     [Fact]
     public void MediaRef_ToWGNodeData_WithAttachedAudio_Recursive()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowGenerator g = CreateGenerator(workflow);
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -240,7 +188,7 @@ public class TypedBoundaryTests
     [Fact]
     public void MediaRef_RoundTrip_WGNodeData_MediaRef_WGNodeData()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowGenerator g = CreateGenerator(workflow);
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -267,7 +215,7 @@ public class TypedBoundaryTests
     [Fact]
     public void MediaRef_Clone_PreservesAllFields()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowGenerator g = CreateGenerator(workflow);
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -393,7 +341,7 @@ public class TypedBoundaryTests
     [Fact]
     public void TryCapture_WithPostDecodeWrappers_DetectsCorrectly()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         workflow["8"] = new JObject
         {
             ["class_type"] = ImageScaleNode.ClassType,
@@ -418,7 +366,7 @@ public class TypedBoundaryTests
     [Fact]
     public void TryCapture_TerminalSaveNodeOutput_ReturnsNull()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow, "7");
         Assert.Null(LtxPostVideoChain.TryCapture(generator));
     }
@@ -426,7 +374,7 @@ public class TypedBoundaryTests
     [Fact]
     public void Splice_RetargetsDecodeToNewSeparate()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
@@ -454,7 +402,7 @@ public class TypedBoundaryTests
     [Fact]
     public void Splice_RetargetsAudioDecodeToNewSeparate()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
@@ -479,7 +427,7 @@ public class TypedBoundaryTests
     [Fact]
     public void Splice_ReturnsClonedMediaRef()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
@@ -503,7 +451,7 @@ public class TypedBoundaryTests
     [Fact]
     public void AttachAudio_ReusesExistingDecodeNode()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         INodeOutput decodeOutput = bridge.ResolvePath(new JArray("5", 0));
@@ -523,7 +471,7 @@ public class TypedBoundaryTests
     [Fact]
     public void AttachAudio_CreatesDecodeNodeWhenMissing()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         workflow.Remove("6");
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
@@ -549,7 +497,7 @@ public class TypedBoundaryTests
     [Fact]
     public void AttachAudio_DoesNotReuseADecoderWithAnotherAudioVae()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         UnknownNode requestedAudioVae = bridge.AddStub("UnitTest_AudioVae", "alternate-audio-vae")
             .WithOutputs(WGNodeData.DT_AUDIOVAE);
@@ -575,7 +523,7 @@ public class TypedBoundaryTests
     [Fact]
     public void AttachAudio_ReplacesAnUnrelatedDecodedAttachment()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         workflow.Remove("6");
         WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         UnknownNode upload = bridge.AddStub("UnitTest_UploadAudio", "upload")
@@ -629,7 +577,7 @@ public class TypedBoundaryTests
     [Fact]
     public void FullStage_TryCapture_Then_Splice_ProducesValidWorkflow()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowGenerator generator = CreateGeneratorWithCurrentMedia(workflow);
         LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
         Assert.NotNull(capture);
@@ -672,7 +620,7 @@ public class TypedBoundaryTests
     [Fact]
     public void SyncLastId_AfterBridgeOps_CoversBridgeIds()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = BuildLtxWorkflowWithSave();
         WorkflowGenerator g = CreateGenerator(workflow);
         g.LastID = 100;
 

@@ -20,7 +20,7 @@ public class LtxPostVideoChainComponentsTests
     [Fact]
     public void CaptureFindsExpectedGraphState()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = LtxDecodedChainWorkflow.Build();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
 
@@ -34,7 +34,7 @@ public class LtxPostVideoChainComponentsTests
     [Fact]
     public void CaptureWithoutAudioDecodeOrCurrentAudioVaeReturnsNullWithoutMutation()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = LtxDecodedChainWorkflow.Build();
         workflow.Remove("6");
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
@@ -49,7 +49,7 @@ public class LtxPostVideoChainComponentsTests
     [Fact]
     public void CaptureCreatesStageInputWithCapturedMetadataAndAudio()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = LtxDecodedChainWorkflow.Build();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
         LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
@@ -124,7 +124,7 @@ public class LtxPostVideoChainComponentsTests
     [Fact]
     public void MissingStageOutputFailsClosedWithoutGraphMutation()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = LtxDecodedChainWorkflow.Build();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
         LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
@@ -139,7 +139,7 @@ public class LtxPostVideoChainComponentsTests
     [Fact]
     public void MissingVaeFailsClosedWithoutCreatingAnOrphanSeparate()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = LtxDecodedChainWorkflow.Build();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
         LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
@@ -155,7 +155,7 @@ public class LtxPostVideoChainComponentsTests
     [Fact]
     public void MissingCapturedDecodeFailsClosedWithoutCreatingAnOrphanSeparate()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = LtxDecodedChainWorkflow.Build();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
         LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
@@ -172,7 +172,7 @@ public class LtxPostVideoChainComponentsTests
     [Fact]
     public void DedicatedSpliceMissingAudioVaeFailsClosedWithoutGraphMutation()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = LtxDecodedChainWorkflow.Build();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
         LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
@@ -194,7 +194,7 @@ public class LtxPostVideoChainComponentsTests
     [Fact]
     public void DedicatedSpliceLeavesCapturedDecodeBranchesUnchanged()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = LtxDecodedChainWorkflow.Build();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
         LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
@@ -222,7 +222,7 @@ public class LtxPostVideoChainComponentsTests
     [Fact]
     public void DedicatedSpliceUsesCurrentAudioVaeWithoutAnExistingAudioDecode()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = LtxDecodedChainWorkflow.Build();
         workflow.Remove("6");
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
@@ -252,7 +252,7 @@ public class LtxPostVideoChainComponentsTests
     [Fact]
     public void OrdinarySplicePreservesPostDecodeWrappers()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = LtxDecodedChainWorkflow.Build();
         workflow["8"] = new JObject
         {
             ["class_type"] = ImageScaleNode.ClassType,
@@ -281,7 +281,7 @@ public class LtxPostVideoChainComponentsTests
     [Fact]
     public void RepeatedSpliceFailsClosed()
     {
-        JObject workflow = BuildLtxWorkflow();
+        JObject workflow = LtxDecodedChainWorkflow.Build();
         WorkflowGenerator generator = CreateGenerator(workflow);
         generator.CurrentMedia = Video(generator, "5");
         LtxPostVideoChain capture = LtxPostVideoChain.TryCapture(generator);
@@ -337,63 +337,6 @@ public class LtxPostVideoChainComponentsTests
             Features = [],
             ModelFolderFormat = "/",
             Workflow = workflow
-        };
-    }
-
-    private static JObject BuildLtxWorkflow()
-    {
-        return new JObject
-        {
-            ["1"] = new JObject
-            {
-                ["class_type"] = CheckpointLoaderSimpleNode.ClassType,
-                ["inputs"] = new JObject { ["ckpt_name"] = "ltxv2.safetensors" }
-            },
-            ["2"] = new JObject
-            {
-                ["class_type"] = LTXVAudioVAELoaderNode.ClassType,
-                ["inputs"] = new JObject { ["audio_vae_name"] = "audio.safetensors" }
-            },
-            ["3"] = new JObject
-            {
-                ["class_type"] = SwarmKSamplerNode.ClassType,
-                ["inputs"] = new JObject
-                {
-                    ["model"] = new JArray("1", 0),
-                    ["seed"] = 42,
-                    ["steps"] = 20,
-                    ["cfg"] = 7.0,
-                    ["sampler_name"] = "euler",
-                    ["scheduler"] = "normal",
-                    ["positive"] = new JArray("99", 0),
-                    ["negative"] = new JArray("98", 0),
-                    ["latent_image"] = new JArray("97", 0),
-                    ["denoise"] = 1.0
-                }
-            },
-            ["4"] = new JObject
-            {
-                ["class_type"] = LTXVSeparateAVLatentNode.ClassType,
-                ["inputs"] = new JObject { ["av_latent"] = new JArray("3", 0) }
-            },
-            ["5"] = new JObject
-            {
-                ["class_type"] = VAEDecodeNode.ClassType,
-                ["inputs"] = new JObject
-                {
-                    ["samples"] = new JArray("4", 0),
-                    ["vae"] = new JArray("1", 2)
-                }
-            },
-            ["6"] = new JObject
-            {
-                ["class_type"] = LTXVAudioVAEDecodeNode.ClassType,
-                ["inputs"] = new JObject
-                {
-                    ["samples"] = new JArray("4", 1),
-                    ["audio_vae"] = new JArray("2", 0)
-                }
-            }
         };
     }
 }
