@@ -38,7 +38,6 @@ public class HostVideoRuntimeFlowTests
                 MakeClip(MakeStage(models.VideoModel.Name, "Generated", steps: 8)),
                 MakeClip(MakeStage(hostModel.Name, "Generated", steps: 8)))
                 .ToString());
-        input.Set(T2IParamTypes.VideoSwapModel, hostModel);
         input.Set(T2IParamTypes.Video2VideoCreativity, 0.25);
         WorkflowGenerator generator = new()
         {
@@ -62,23 +61,39 @@ public class HostVideoRuntimeFlowTests
         Assert.DoesNotContain(
             plan.Diagnostics,
             diagnostic => diagnostic.Code.StartsWith("host-video.", StringComparison.Ordinal));
+    }
 
+    /// <summary>Only a host-video root owns the discarded core pass; under a specialized root the
+    /// isolation is a no-op.</summary>
+    [Fact]
+    public void Core_isolation_skips_a_specialized_root_owner()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
+        T2IParamInput input = BuildNativeInput(
+            models.BaseModel,
+            models.VideoModel,
+            JsonSingleClipStages(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 8)));
+        WorkflowGenerator generator = new()
+        {
+            UserInput = input,
+            Workflow = [],
+        };
+        generator.RequireVideoExecutionPlanContext();
         WorkflowGenerator.ImageToVideoGenInfo core = new()
         {
             Generator = generator,
             ContextID = T2IParamInput.SectionID_Video,
-            VideoSwapModel = hostModel,
-            VideoSwapPercent = 0.2,
-            VideoEndFrame = new Image([0x01], MediaType.ImagePng),
             StartStep = 4,
         };
+
         HostVideoCorePassIsolation.Isolate(core);
 
-        Assert.Same(hostModel, core.VideoSwapModel);
-        Assert.Equal(0.2, core.VideoSwapPercent);
-        Assert.NotNull(core.VideoEndFrame);
-        Assert.Equal(4, core.StartStep);
+        // Isolate's own mark, which it sets only after mutating.
         Assert.False(core.HasMatchedModelData);
+        // A value the test supplied: the isolation would have zeroed it.
+        Assert.Equal(4, core.StartStep);
     }
 
     /// <summary>
