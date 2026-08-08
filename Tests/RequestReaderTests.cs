@@ -281,18 +281,44 @@ public class RequestReaderTests
     }
 
     [Fact]
-    public void ReadClips_OutOfRangeOverrideIndex_IsIgnoredWithoutThrowing()
+    public void ReadClips_OutOfRangeOverrideIndex_IsIgnoredWithAWarning()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: MediaSource.Native);
         string json = JsonConvert.SerializeObject(new JArray(clip));
+        T2IParamInput input = BuildInputWithPrompt(
+            json,
+            "<videoclip[5,audiosource]:X> <videoclip[0,5,steps]:99>");
 
-        IReadOnlyList<ClipSpec> clips = RequestReader.Read(
-            BuildInputWithPrompt(json, "<videoclip[5,audiosource]:X> <videoclip[0,5,steps]:99>")).Clips;
+        ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips);
 
-        ClipSpec parsed = Assert.Single(clips);
         Assert.Equal(MediaSource.Native, parsed.AudioSource);
+        Assert.Equal(8, parsed.Stages[0].Steps);
+        List<string> warnings = TypedWorkflowAssertions.RequestWarnings(input);
+        Assert.Contains(warnings, warning => warning.Contains("out-of-range clip 5"));
+        Assert.Contains(warnings, warning => warning.Contains("out-of-range stage 5 on clip 0"));
     }
 
+    [Theory]
+    [InlineData("<videoclip[x,steps]:20>", "non-numeric clip index")]
+    [InlineData("<videoclip[0,0,0,steps]:20>", "unsupported bracket arity")]
+    [InlineData("<videoclip[0]:notawindow>", "is not a valid time window")]
+    [InlineData("<videoclip[0,0,steps]:not-a-number>", "with invalid value")]
+    [InlineData("<videostages[width,height]:1280>", "too many bracket groups")]
+    public void ReadClips_MalformedOverrideTag_WarnsAndLeavesTheStageUntouched(
+        string tag,
+        string warning)
+    {
+        JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0);
+        T2IParamInput input =
+            BuildInputWithPrompt(JsonConvert.SerializeObject(new JArray(clip)), tag);
+
+        ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips);
+
+        Assert.Equal(8, parsed.Stages[0].Steps);
+        Assert.Contains(
+            TypedWorkflowAssertions.RequestWarnings(input),
+            tracked => tracked.Contains(warning));
+    }
 
     [Fact]
     public void ReadClips_ClipShape_PopulatesPerClipFields()
