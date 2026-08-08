@@ -255,11 +255,9 @@ internal static class RequestReader
                 stageId: firstStageId + stages.Count,
                 rawStageIndex: stageIndex,
                 clipStageIndex: stages.Count,
-                defaults: context.StageDefaults,
                 frameRefCount: frameRefCount,
-                isTextToVideoRootWorkflow: context.IsTextToVideoRootWorkflow,
                 initVideoClip: initVideoClip,
-                warn: context.Warn);
+                context);
             if (parsed is not null)
             {
                 stages.Add(parsed);
@@ -274,28 +272,27 @@ internal static class RequestReader
         int stageId,
         int rawStageIndex,
         int clipStageIndex,
-        StageDefaults defaults,
         int frameRefCount,
-        bool isTextToVideoRootWorkflow,
         bool initVideoClip,
-        Action<string> warn)
+        ClipReadContext context)
     {
         string location = $"Clip {clipIndex} stage {rawStageIndex}";
         string model = DocumentJson.GetString(stage, "model")?.Trim();
         if (string.IsNullOrWhiteSpace(model))
         {
             DocumentJson.Warn(
-                warn,
+                context.Warn,
                 $"VideoStages: Clip {clipIndex} stage {rawStageIndex} has no model and was ignored.");
             return null;
         }
 
         double control = NormalizeControl(DocumentJson.GetOptionalDouble(
-            stage, "control", DefaultControl, location, warn));
+            stage, "control", DefaultControl, location, context.Warn));
         double upscale = NormalizeUpscale(DocumentJson.GetOptionalDouble(
-            stage, "upscale", DefaultUpscale, location, warn));
+            stage, "upscale", DefaultUpscale, location, context.Warn));
         string upscaleMethod = DocumentJson.GetOptionalString(
-            stage, "upscaleMethod", DefaultUpscaleMethod, location, allowEmpty: false, warn);
+            stage, "upscaleMethod", DefaultUpscaleMethod, location,
+            allowEmpty: false, context.Warn);
 
         bool isGenerationFirstStage = clipStageIndex == 0 && !initVideoClip;
         if (isGenerationFirstStage)
@@ -316,27 +313,29 @@ internal static class RequestReader
             UpscaleMethod: upscaleMethod,
             Model: model,
             Steps: Math.Max(1, DocumentJson.GetOptionalInt(
-                stage, "steps", defaults.Steps, location, warn)),
+                stage, "steps", context.StageDefaults.Steps, location, context.Warn)),
             CfgScale: NormalizeCfgScale(DocumentJson.GetOptionalDouble(
-                stage, "cfgScale", defaults.CfgScale, location, warn)),
+                stage, "cfgScale", context.StageDefaults.CfgScale, location, context.Warn)),
             Sampler: DocumentJson.GetOptionalString(
-                stage, "sampler", defaults.Sampler, location, allowEmpty: false, warn),
+                stage, "sampler", context.StageDefaults.Sampler, location,
+                allowEmpty: false, context.Warn),
             Scheduler: DocumentJson.GetOptionalString(
-                stage, "scheduler", defaults.Scheduler, location, allowEmpty: false, warn),
+                stage, "scheduler", context.StageDefaults.Scheduler, location,
+                allowEmpty: false, context.Warn),
             ImageReference: NormalizeImageReference(
                 DocumentJson.GetString(stage, "imageReference"),
                 clipIndex,
                 rawStageIndex,
                 clipStageIndex,
-                isTextToVideoRootWorkflow,
-                warn),
+                context.IsTextToVideoRootWorkflow,
+                context.Warn),
             ClipStageIndex: clipStageIndex,
             ClipStageRawIndex: rawStageIndex,
-            ControlNetStrength: ReadControlNetStrength(stage, location, warn),
+            ControlNetStrength: ReadControlNetStrength(stage, location, context.Warn),
             IcLoraStrengths: ReadIcLoraStrengths(stage),
             FrameRefStrengths: ReadRefStrengths(stage, frameRefCount),
             ImageRefWasExplicit: DocumentJson.HasProperty(stage, "imageReference"),
-            Loras: Loras.ReadNormal(stage, warn),
+            Loras: Loras.ReadNormal(stage, context.Warn),
             LoraWeights: Loras.ReadWeights(stage));
     }
 
