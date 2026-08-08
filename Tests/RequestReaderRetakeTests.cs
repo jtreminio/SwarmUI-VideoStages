@@ -6,19 +6,12 @@ using static VideoStages.Tests.Fixtures;
 
 namespace VideoStages.Tests;
 
-/// <summary>Reading a clip that refines uploaded footage: its duration guards, and the retake
-/// window only such a clip can carry. FPS is left unset throughout, so the reader's 24 fps fallback
-/// is what converts every authored second here.</summary>
+/// <summary>The retake window, which the reader only honours on a clip that refines uploaded
+/// footage. FPS is left unset throughout, so the reader's 24 fps fallback is what converts every
+/// authored second here.</summary>
 [Collection("VideoStagesTests")]
-public class RequestReaderInitVideoTests
+public class RequestReaderRetakeTests
 {
-    private static JObject SourcedClip(double duration, params JObject[] stages)
-    {
-        JObject clip = MakeClip(duration, stages);
-        clip["initVideo"] = SourceVideo();
-        return clip;
-    }
-
     private static JObject MakeRetake(double startSeconds, double lengthSeconds, double? strength = null)
     {
         JObject retake = new()
@@ -41,37 +34,9 @@ public class RequestReaderInitVideoTests
     }
 
     [Fact]
-    public void ReadClips_DropsNegativeDuration()
-    {
-        T2IParamInput input = InputFor(SourcedClip(-1, MakeStage("model-a")));
-
-        ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips);
-
-        Assert.Null(parsed.Frames);
-        Assert.Contains(
-            TypedWorkflowAssertions.RequestWarnings(input),
-            warning => warning.Contains("duration must be finite and non-negative")
-                && warning.Contains("ignoring it"));
-    }
-
-    [Fact]
-    public void ReadClips_DropsDurationBeyondTheRepresentableFrameRange()
-    {
-        T2IParamInput input = InputFor(SourcedClip(int.MaxValue, MakeStage("model-a")));
-
-        ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips);
-
-        Assert.Null(parsed.Frames);
-        Assert.Contains(
-            TypedWorkflowAssertions.RequestWarnings(input),
-            warning => warning.Contains("duration at 24 fps exceeds")
-                && warning.Contains("was ignored"));
-    }
-
-    [Fact]
     public void ReadClips_Retake_ConvertsSecondsToFramesAtFpsAndAttachesToLastStage()
     {
-        JObject clip = SourcedClip(3.0, MakeStage("model-a"), MakeStage("model-b"));
+        JObject clip = SourceClip(3.0, 0, MakeStage("model-a"), MakeStage("model-b"));
         clip["retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 1.5, strength: 0.6);
 
         ClipSpec parsed = Assert.Single(RequestReader.Read(InputFor(clip)).Clips);
@@ -88,7 +53,7 @@ public class RequestReaderInitVideoTests
     public void ReadClips_Retake_ReachingClipEndExtendsToStructuralFrameCount()
     {
         // Model-grid normalization occurs later, after architecture resolution.
-        JObject clip = SourcedClip(1.05, MakeStage("model-a"));
+        JObject clip = SourceClip(1.05, 0, MakeStage("model-a"));
         clip["retake"] = MakeRetake(startSeconds: 0.5, lengthSeconds: 0.55);
 
         ClipSpec parsed = Assert.Single(RequestReader.Read(InputFor(clip)).Clips);
@@ -103,7 +68,7 @@ public class RequestReaderInitVideoTests
     [Fact]
     public void ReadClips_Retake_DefaultsStrengthToOneWhenAbsent()
     {
-        JObject clip = SourcedClip(3.0, MakeStage("model-a"));
+        JObject clip = SourceClip(3.0, 0, MakeStage("model-a"));
         clip["retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 1.0);
 
         ClipSpec parsed = Assert.Single(RequestReader.Read(InputFor(clip)).Clips);
@@ -118,7 +83,7 @@ public class RequestReaderInitVideoTests
     [Fact]
     public void ReadClips_Retake_ClampsStrengthToUnitRange()
     {
-        JObject clip = SourcedClip(3.0, MakeStage("model-a"));
+        JObject clip = SourceClip(3.0, 0, MakeStage("model-a"));
         clip["retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 1.0, strength: 5.0);
 
         ClipSpec parsed = Assert.Single(RequestReader.Read(InputFor(clip)).Clips);
@@ -143,7 +108,7 @@ public class RequestReaderInitVideoTests
     [InlineData(-1.0, 2.0)]
     public void ReadClips_Retake_NullWhenInvalidWindow(double startSeconds, double lengthSeconds)
     {
-        JObject clip = SourcedClip(3.0, MakeStage("model-a"));
+        JObject clip = SourceClip(3.0, 0, MakeStage("model-a"));
         clip["retake"] = MakeRetake(startSeconds, lengthSeconds);
 
         ClipSpec parsed = Assert.Single(RequestReader.Read(InputFor(clip)).Clips);
@@ -154,7 +119,7 @@ public class RequestReaderInitVideoTests
     [Fact]
     public void ReadClips_Retake_NullWhenSubFrameLengthRoundsToZero()
     {
-        JObject clip = SourcedClip(3.0, MakeStage("model-a"));
+        JObject clip = SourceClip(3.0, 0, MakeStage("model-a"));
         // 0.01s at 24 fps => round(0.24) = 0 frames => disabled.
         clip["retake"] = MakeRetake(startSeconds: 0.0, lengthSeconds: 0.01);
 
@@ -167,7 +132,7 @@ public class RequestReaderInitVideoTests
     public void ReadClips_Retake_AbsentLeavesStagesUntouched()
     {
         ClipSpec parsed = Assert.Single(
-            RequestReader.Read(InputFor(SourcedClip(3.0, MakeStage("model-a")))).Clips);
+            RequestReader.Read(InputFor(SourceClip(3.0, 0, MakeStage("model-a")))).Clips);
 
         Assert.Null(parsed.Stages[^1].RetakeWindow);
     }

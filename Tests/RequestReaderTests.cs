@@ -1017,6 +1017,38 @@ public class RequestReaderTests
     }
 
     [Fact]
+    public void ReadClips_DropsNegativeDuration()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [MakeStage("model-a")], duration: -1)));
+        T2IParamInput input = BuildInputWithJson(json);
+
+        ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips);
+
+        Assert.Null(parsed.Frames);
+        Assert.Contains(
+            TypedWorkflowAssertions.RequestWarnings(input),
+            warning => warning.Contains("duration must be finite and non-negative")
+                && warning.Contains("ignoring it"));
+    }
+
+    [Fact]
+    public void ReadClips_DropsDurationBeyondTheRepresentableFrameRange()
+    {
+        string json = JsonConvert.SerializeObject(new JArray(
+            MakeClip(stages: [MakeStage("model-a")], duration: int.MaxValue)));
+        T2IParamInput input = BuildInputWithJson(json);
+
+        ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips);
+
+        Assert.Null(parsed.Frames);
+        Assert.Contains(
+            TypedWorkflowAssertions.RequestWarnings(input),
+            warning => warning.Contains("duration at 24 fps exceeds")
+                && warning.Contains("was ignored"));
+    }
+
+    [Fact]
     public void ReadClips_PreservesUploadFileName()
     {
         JObject uploadRef = new()
