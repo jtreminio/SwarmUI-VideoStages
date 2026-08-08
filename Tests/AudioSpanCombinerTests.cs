@@ -209,11 +209,12 @@ public class AudioSpanCombinerTests
     }
 
     [Fact]
-    public void Combine_NoMaterializableSegments_ReportsNoWindows()
+    public void Combine_AceStepFunSpanWithNoDecodeNode_AddsNothingAndReportsNoWindow()
     {
         JObject workflow = BuildWorkflowWithBaseAudio();
         WorkflowGenerator g = BuildGenerator(workflow);
         WGNodeData baseAudio = BaseAudio(g);
+        int before = workflow.Count;
 
         WGNodeData result = new AudioSpanCombiner(g).Combine(
             0,
@@ -225,6 +226,7 @@ public class AudioSpanCombinerTests
 
         Assert.Same(baseAudio, result);
         Assert.Empty(windows);
+        Assert.Equal(before, workflow.Count);
     }
 
     [Fact]
@@ -270,26 +272,6 @@ public class AudioSpanCombinerTests
             .Select(p => p.Value as JObject)
             .Single(node => node?["class_type"]?.ToString() == "TrimAudioDuration");
         Assert.Equal(ensureId, (trim["inputs"]?["audio"] as JArray)?[0]?.ToString());
-    }
-
-    [Fact]
-    public void Combine_AceStepFunSegment_MissingDecodeNode_IsSkipped()
-    {
-        JObject workflow = BuildWorkflowWithBaseAudio();
-        WorkflowGenerator g = BuildGenerator(workflow);
-        WGNodeData baseAudio = BaseAudio(g);
-        int before = workflow.Count;
-
-        WGNodeData result = new AudioSpanCombiner(g).Combine(
-            0,
-            SpanPlan(AceSpan(
-                track: 5, StartSeconds: 0.0, TrimStartSeconds: 0.0, LengthSeconds: 3.0)),
-            baseAudio,
-            clipDurationSeconds: 10.0,
-            out _);
-
-        Assert.Same(baseAudio, result);
-        Assert.Equal(before, workflow.Count);
     }
 
     [Fact]
