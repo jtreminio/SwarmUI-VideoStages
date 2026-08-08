@@ -42,9 +42,6 @@ internal sealed class WorkflowLivePath
         return new WorkflowLivePath(bridge);
     }
 
-    public IEnumerable<ComfyNode> Roots() =>
-        _bridge.Graph.Nodes.Values.Where(node => !_bridge.Graph.FindUpstream(node).Any());
-
     /// <summary>
     /// A node fed only by literals — an empty latent, a loader — is a root itself and so is its
     /// own answer here.
