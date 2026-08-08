@@ -15,7 +15,7 @@ using static VideoStages.Tests.Fixtures;
 namespace VideoStages.Tests;
 
 [Collection("VideoStagesTests")]
-public sealed class EffectiveVideoRequestTests
+public sealed class EffectiveVideoRequestProjectionTests
 {
     [Theory]
     [InlineData(1, 27)]
