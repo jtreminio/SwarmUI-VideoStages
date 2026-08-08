@@ -117,6 +117,37 @@ public class HostVideoArchitectureTests
         Assert.Equal(expectedLoras, payload.Core.Loras.Length);
     }
 
+    /// <summary>A host-video clip's first stage reads decoded root media, which the runtime resizes;
+    /// projecting the un-upscaled size would warn about a conform that does happen. A text latent is
+    /// the one input the projection skips, because only an architecture-materialized first frame
+    /// gives the runtime anything to resize there.</summary>
+    [Theory]
+    [InlineData((int)StageInputKind.RootMedia, 768)]
+    [InlineData((int)StageInputKind.PreviousStage, 768)]
+    [InlineData((int)StageInputKind.EmptyLatent, 512)]
+    public void Geometry_projects_the_upscale_of_every_decoded_stage_input(
+        int input,
+        int expected)
+    {
+        StagePlan stage = new(
+            0,
+            0,
+            0,
+            (StageInputKind)input,
+            false,
+            new StockHostVideoStagePayload(
+                HostVideoArchitectureModule.ArchitectureId,
+                "unit-test-model",
+                "unit-test-compatibility",
+                LoraTarget.ModelOnly,
+                new(0.5, 10, 4.5, "euler", "normal", new(StageUpscaleMode.Pixel, 1.5, "raw", "lanczos"), [])),
+            false);
+
+        Assert.Equal(
+            (expected, expected),
+            new HostVideoClipPayload().ProjectFinalDimensions([stage], 512, 512));
+    }
+
     [Theory]
     [InlineData("invented-video", "invented-video", true)]
     [InlineData("stable-video-diffusion-img2vid-v1", "stable-video-diffusion-img2vid-v1", true)]

@@ -33,8 +33,7 @@ internal sealed class VideoStageRunner : IDisposable
 
         RuntimeArtifact output = ExecuteStages(clip, (stage, continuation) =>
         {
-            StageCorePlan settings = stage.Core;
-            ApplyUpscale(stage, settings.Upscale);
+            ApplyUpscale(stage);
             bool consumedContinuation = false;
             if (stage.IsPassthrough)
             {
@@ -118,18 +117,12 @@ internal sealed class VideoStageRunner : IDisposable
         return RuntimeArtifact.Capture(_generator, bridge);
     }
 
-    private void ApplyUpscale(StagePlan stage, StageUpscalePlan upscale)
+    private void ApplyUpscale(StagePlan stage)
     {
-        if (upscale.Mode == StageUpscaleMode.None)
-        {
-            return;
-        }
-        if (_generator.CurrentMedia is null)
-        {
-            // Native text entry has no decoded pixels to resize.
-            return;
-        }
-        if (upscale.Mode is not (StageUpscaleMode.Pixel or StageUpscaleMode.Model))
+        StageUpscalePlan upscale = stage.Core.Upscale;
+        // Native text entry has no decoded pixels to resize.
+        if (!HostVideoStageGeometry.ResizesDecodedPixels(upscale)
+            || _generator.CurrentMedia is null)
         {
             return;
         }
