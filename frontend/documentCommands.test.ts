@@ -17,7 +17,7 @@ import {
     type DocumentCommand,
     reduceDocumentCommand,
 } from "./documentCommands";
-import type { CanonicalAuthoringDocument } from "./types";
+import type { CanonicalAuthoringDocument, CanonicalIcLora } from "./types";
 
 const document = (): CanonicalAuthoringDocument =>
     canonicalDocument({
@@ -64,6 +64,20 @@ const catalogWithSecondLtxProfile = (): ReturnType<
     });
     return catalog;
 };
+
+const imageDrivenIncomingIcLora = (): CanonicalIcLora => ({
+    id: "ic-guide",
+    lora: "guide.safetensors",
+    preset: "custom",
+    driveSource: "Incoming",
+    driveData: "visual",
+    driveMediaKinds: ["image"],
+    stage: 0,
+    strength: 1,
+    attentionStrength: 1,
+    controlType: "none",
+    driveMedia: null,
+});
 
 const apply = (
     source: CanonicalAuthoringDocument,
@@ -308,25 +322,55 @@ describe("reduceDocumentCommand", () => {
 
     it("takes a root the host has not named as text-to-video", () => {
         const source = document();
-        source.clips[0].icLoras = [
-            {
-                id: "ic-guide",
-                lora: "guide.safetensors",
-                preset: "custom",
-                driveSource: "Incoming",
-                driveData: "visual",
-                driveMediaKinds: ["image"],
-                stage: 0,
-                strength: 1,
-                attentionStrength: 1,
-                controlType: "none",
-                driveMedia: null,
-            },
-        ];
+        source.clips[0].icLoras = [imageDrivenIncomingIcLora()];
 
         const result = reduceDocumentCommand(
             source,
             { type: "clip.toggle-skip", clipId: "clip-b" },
+            { architectureCatalog: catalogWithFake() },
+        );
+
+        expect(result.applied).toBe(true);
+        expect(result.document.clips[0].icLoras[0].driveSource).toBe("Upload");
+    });
+
+    it("takes an unnamed root as text-to-video when a stage skip repairs drives", () => {
+        const source = document();
+        source.clips[0].icLoras = [imageDrivenIncomingIcLora()];
+
+        const result = reduceDocumentCommand(
+            source,
+            { type: "stage.toggle-skip", clipId: "clip-a", stageId: "stage-b" },
+            { architectureCatalog: catalogWithFake() },
+        );
+
+        expect(result.applied).toBe(true);
+        expect(result.document.clips[0].stages[1].skipped).toBe(true);
+        expect(result.document.clips[0].icLoras[0].driveSource).toBe("Upload");
+    });
+
+    it("takes an unnamed root as text-to-video when a conversion repairs drives", () => {
+        const source = document();
+        const targetClip = source.clips[0];
+        targetClip.architectureHint = "test-video";
+        targetClip.modelProfileId = "test-profile";
+        targetClip.stages.forEach((entry) => {
+            entry.model = "test-video.safetensors";
+            entry.modelProfileId = "test-profile";
+        });
+        targetClip.icLoras = [imageDrivenIncomingIcLora()];
+
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "clip.convert-architecture",
+                clipId: "clip-a",
+                target: {
+                    architectureId: "ltx2",
+                    modelProfileId: "ltx-2.3",
+                    model: "ltx",
+                },
+            },
             { architectureCatalog: catalogWithFake() },
         );
 
