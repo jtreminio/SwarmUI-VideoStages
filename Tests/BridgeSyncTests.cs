@@ -10,11 +10,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class BridgeSyncTests
 {
-    public BridgeSyncTests()
-    {
-        NodeRegistrations.EnsureRegistered();
-    }
-
     /// <summary>
     /// <c>SyncLastId</c> hands the ids a bridge minted back to the generator's counter; without it
     /// the next core-authored node reuses one and silently overwrites it.

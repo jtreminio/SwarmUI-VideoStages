@@ -1,5 +1,4 @@
 using ComfyTyped.Core;
-using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -14,11 +13,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class MediaRefTests
 {
-    public MediaRefTests()
-    {
-        NodeRegistrations.EnsureRegistered();
-    }
-
     [Fact]
     public void MediaRef_FromWGNodeData_ResolvesTypedOutput()
     {

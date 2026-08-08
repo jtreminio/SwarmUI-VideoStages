@@ -11,11 +11,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class LtxPostVideoChainSpliceTests
 {
-    public LtxPostVideoChainSpliceTests()
-    {
-        NodeRegistrations.EnsureRegistered();
-    }
-
     /// <summary>The decoded chain plus the terminal save that publishes it, which the capture
     /// tests need as a downstream consumer of the video decode.</summary>
     private static JObject BuildLtxWorkflowWithSave()
