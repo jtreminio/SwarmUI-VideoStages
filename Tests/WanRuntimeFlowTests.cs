@@ -232,8 +232,10 @@ public class WanRuntimeFlowTests
                     Assert.True(captured.IsImageToVideo);
                     Assert.Null(captured.CurrentAudioVae);
                     Assert.NotNull(captured.CurrentVae);
+                    // 13 authored intervals plus the endpoint frame is 14, which WAN's 4k+1 grid
+                    // snaps up to 17.
                     int scopedFrames = input.Get(T2IParamTypes.Text2VideoFrames);
-                    Assert.NotEqual(25, scopedFrames);
+                    Assert.Equal(17, scopedFrames);
                     string node = captured.CreateNode(
                         "EmptyHunyuanLatentVideo",
                         new JObject
