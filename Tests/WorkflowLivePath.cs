@@ -55,8 +55,7 @@ internal sealed class WorkflowLivePath : IDisposable
     /// <summary>
     /// The four whole-graph checks every generated-workflow test closes with: nothing built is
     /// orphaned, no input references a pruned node, the graph is acyclic, and the video is
-    /// published exactly once. Only <c>outputintermediateimages</c> raises
-    /// <paramref name="publishedVideoSaves"/> above one.
+    /// published exactly once.
     /// </summary>
     public void AssertShippable(int publishedVideoSaves = 1)
     {
