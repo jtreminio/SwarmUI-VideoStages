@@ -22,13 +22,7 @@ public class LtxStageExecutorComponentTests
     public void Reusable_latent_resolver_returns_decode_samples_for_the_same_vae_route()
     {
         JObject workflow = BuildDecodeWorkflow(includeSecondVae: false);
-        WorkflowGenerator generator = new()
-        {
-            UserInput = new T2IParamInput(null),
-            Features = [],
-            ModelFolderFormat = "/",
-            Workflow = workflow
-        };
+        WorkflowGenerator generator = RuntimeGenerator(workflow);
         WGNodeData source = new(
             new JArray("3", 0),
             generator,
@@ -47,6 +41,7 @@ public class LtxStageExecutorComponentTests
                 WGNodeData.DT_VAE,
                 null)
         };
+
         bool reused = new LtxReusableLatentResolver(generator).TryResolve(
             source,
             genInfo,
@@ -61,13 +56,7 @@ public class LtxStageExecutorComponentTests
     public void Reusable_latent_resolver_rejects_a_decode_from_another_vae_route()
     {
         JObject workflow = BuildDecodeWorkflow(includeSecondVae: true);
-        WorkflowGenerator generator = new()
-        {
-            UserInput = new T2IParamInput(null),
-            Features = [],
-            ModelFolderFormat = "/",
-            Workflow = workflow
-        };
+        WorkflowGenerator generator = RuntimeGenerator(workflow);
         WGNodeData source = new(
             new JArray("3", 0),
             generator,
@@ -104,13 +93,7 @@ public class LtxStageExecutorComponentTests
         bool matchingCompat)
     {
         JObject workflow = BuildDecodeWorkflow(includeSecondVae: true);
-        WorkflowGenerator generator = new()
-        {
-            UserInput = new T2IParamInput(null),
-            Features = [],
-            ModelFolderFormat = "/",
-            Workflow = workflow
-        };
+        WorkflowGenerator generator = RuntimeGenerator(workflow);
         WGNodeData source = new(
             new JArray("3", 0),
             generator,
@@ -138,6 +121,14 @@ public class LtxStageExecutorComponentTests
         Assert.Equal(matchingCompat, reused);
         Assert.True(JToken.DeepEquals(matchingCompat ? new JArray("2", 0) : null, latentPath));
     }
+
+    private static WorkflowGenerator RuntimeGenerator(JObject workflow) => new()
+    {
+        UserInput = new T2IParamInput(null),
+        Features = [],
+        ModelFolderFormat = "/",
+        Workflow = workflow
+    };
 
     private static JObject BuildDecodeWorkflow(bool includeSecondVae)
     {
