@@ -1768,9 +1768,12 @@
 }
 
 /* Native outline: retain SwarmUI's input-group DOM and controls, but tighten
-   its page-form spacing for the 352px dock. The scoped min-width override is
-   required by themes such as Punked that otherwise force nested open groups
-   wider than the dock. */
+   its page-form spacing for the 352px dock. The two min-width declarations
+   below look redundant and are not. This one clears flex's `min-width: auto`
+   min-content floor so a group can shrink to the dock; it loses outright to a
+   theme's own floor. The `!important` one is the only declaration that beats
+   Punked's `.input-group-open { min-width: 280px !important }`. Deleting
+   either regresses a different case. */
 .vst-detail .input-group {
     min-width: 0;
     max-width: 100%;
