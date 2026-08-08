@@ -16,7 +16,8 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>Direct tests for WAN runtime failure recovery and unreachable states.</summary>
+/// <summary>Direct tests for WAN host-handler registration and isolation, legacy swap fields, and
+/// runtime failure recovery.</summary>
 [Collection("VideoStagesTests")]
 public class WanRuntimeFlowTests
 {
@@ -131,17 +132,24 @@ public class WanRuntimeFlowTests
         AssertAcyclic(bridge);
     }
 
+    /// <summary>Registration appends to a process-global handler list, so a second call must not
+    /// leave a second copy of the handler on it.</summary>
+    [Fact]
+    public void Host_handler_registration_is_idempotent()
+    {
+        WanHostHandlers.Register();
+        WanHostHandlers.Register();
+        Assert.Single(
+            WorkflowGenerator.AltImageToVideoPreHandlers,
+            handler => handler == WanHostHandlers.IsolateCoreSettings);
+    }
+
     [Fact]
     public void Legacy_swap_isolation_does_not_touch_non_VideoStages_or_no_Wan_requests()
     {
         using SwarmUiTestContext context = new();
         MixedVideoModelBundle models =
             TestModelFactory.CreateBaseLtxv2AndWan22ImageToVideoModels();
-        WanHostHandlers.Register();
-        WanHostHandlers.Register();
-        Assert.Single(
-            WorkflowGenerator.AltImageToVideoPreHandlers,
-            handler => handler == WanHostHandlers.IsolateCoreSettings);
 
         WorkflowGenerator inactive = new()
         {
