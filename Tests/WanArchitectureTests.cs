@@ -1522,17 +1522,15 @@ public class WanArchitectureTests
         string modelClassId,
         T2IModelCompatClass compatibility)
     {
-        T2IModelHandler handler = Program.T2IModelSets["Stable-Diffusion"];
-        T2IModel model = new(handler, TestStubModel.Folder(handler), TestStubModel.File(handler, name), name)
+        T2IModel model = TestStubModel.Install(
+            Program.T2IModelSets["Stable-Diffusion"],
+            name);
+        model.ModelClass = template.ModelClass with
         {
-            ModelClass = template.ModelClass with
-            {
-                ID = modelClassId,
-                Name = modelClassId,
-                CompatClass = compatibility,
-            },
+            ID = modelClassId,
+            Name = modelClassId,
+            CompatClass = compatibility,
         };
-        handler.Models[model.Name] = model;
         return model;
     }
 

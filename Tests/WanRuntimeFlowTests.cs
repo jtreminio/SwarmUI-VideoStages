@@ -32,7 +32,7 @@ public class WanRuntimeFlowTests
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         T2IModel legacySwapModel =
-            AddDistinctWanModel(models.VideoModel, "UnitTest_Legacy_Wan_Swap.safetensors");
+            AddWanModelLike(models.VideoModel, "UnitTest_Legacy_Wan_Swap.safetensors");
         T2IParamInput input = WanInput(models, steps: 10);
         input.Set(T2IParamTypes.VideoSwapModel, legacySwapModel);
         input.Set(T2IParamTypes.VideoSwapPercent, double.NaN);
@@ -576,10 +576,10 @@ public class WanRuntimeFlowTests
             TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         AddLoraModel("UnitTest_Wan_Low_Failure_Prompt.safetensors");
         AddLoraModel("UnitTest_Wan_Low_Failure_Persisted.safetensors");
-        T2IModel high = AddDistinctWanModel(
+        T2IModel high = AddWanModelLike(
             models.VideoModel,
             "Wan2.2-I2V-A14B-HighNoise.safetensors");
-        T2IModel low = AddDistinctWanModel(
+        T2IModel low = AddWanModelLike(
             models.VideoModel,
             "Wan2.2-I2V-A14B-LowNoise.safetensors");
         JObject lowStage = MakeStage(
@@ -835,19 +835,17 @@ public class WanRuntimeFlowTests
             handler = new() { ModelType = "LoRA" };
             Program.T2IModelSets["LoRA"] = handler;
         }
-        T2IModel model = TestStubModel.Create(handler, name);
-        handler.Models[model.Name] = model;
-        return model;
+        return TestStubModel.Install(handler, name);
     }
 
-    private static T2IModel AddDistinctWanModel(T2IModel recognizedModel, string name)
+    /// <summary>A second checkpoint that resolves like the template. The class is copied rather
+    /// than shared: <c>T2IModelClass</c> holds mutable fields.</summary>
+    private static T2IModel AddWanModelLike(T2IModel template, string name)
     {
-        T2IModelHandler handler = Program.T2IModelSets["Stable-Diffusion"];
-        T2IModel model = new(handler, TestStubModel.Folder(handler), TestStubModel.File(handler, name), name)
-        {
-            ModelClass = recognizedModel.ModelClass,
-        };
-        handler.Models[model.Name] = model;
+        T2IModel model = TestStubModel.Install(
+            Program.T2IModelSets["Stable-Diffusion"],
+            name);
+        model.ModelClass = template.ModelClass with { };
         return model;
     }
 }
