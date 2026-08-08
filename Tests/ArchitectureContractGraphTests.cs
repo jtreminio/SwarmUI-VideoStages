@@ -599,8 +599,8 @@ public sealed class ArchitectureContractGraphTests
 
         VAEDecodeTiledNode[] decodes = [.. bridge.Graph.NodesOfType<VAEDecodeTiledNode>()];
         Assert.Equal(2, decodes.Length);
-        Assert.True(ReachesUpstream(bridge, decodes[0], StageSampler(bridge, 0).Id));
-        Assert.True(ReachesUpstream(bridge, decodes[1], StageSampler(bridge, 1).Id));
+        Assert.Single(decodes, decode => ReachesUpstream(bridge, decode, StageSampler(bridge, 0).Id));
+        Assert.Single(decodes, decode => ReachesUpstream(bridge, decode, StageSampler(bridge, 1).Id));
 
         VAELoaderNode rootVae = Assert.IsType<VAELoaderNode>(decodes[0].Vae.Connection?.Node);
         Assert.Same(rootVae, decodes[1].Vae.Connection?.Node);
