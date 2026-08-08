@@ -17,19 +17,9 @@ internal sealed class LtxConditioningPipeline(
 {
     private WGNodeData stageLatent;
 
-    public LtxConditioningPipeline WithLatent(WGNodeData stageLatent, WGNodeData sourceMedia)
+    public LtxConditioningPipeline WithLatent(WGNodeData stageLatent)
     {
         this.stageLatent = stageLatent;
-        LtxStageRuntimeSettings.ApplyResolvedFpsToWorkflow(
-            g,
-            genInfo,
-            LtxStageRuntimeSettings.ResolveFps(g, genInfo, sourceMedia));
-        genInfo.VideoFPS ??= LtxStageRuntimeSettings.DefaultFps;
-        genInfo.Frames ??= LtxStageRuntimeSettings.DefaultFrameCount;
-        genInfo.DefaultCFG = LtxStageRuntimeSettings.DefaultCfg;
-        genInfo.HadSpecialCond = true;
-        genInfo.DefaultSampler = LtxStageRuntimeSettings.DefaultSampler;
-        genInfo.DefaultScheduler = LtxStageRuntimeSettings.DefaultScheduler;
         return this;
     }
 

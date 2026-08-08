@@ -86,6 +86,9 @@ internal sealed class LtxStageExecutor
             }
             else
             {
+                // Must stay below the latent build: defaulting Frames here would make the builder's
+                // "no frame count" branch — the one that lands on PrepFullCond — unreachable.
+                ApplyStageRuntimeDefaults(genInfo, effectiveSourceMedia);
                 new LtxConditioningPipeline(
                         g,
                         genInfo,
@@ -96,7 +99,7 @@ internal sealed class LtxStageExecutor
                             stageContext.ClipContext.PlannedClip
                                 .RequireLtx2Payload()
                                 .ReferenceFraming))
-                    .WithLatent(stageLatent, effectiveSourceMedia)
+                    .WithLatent(stageLatent)
                     .WithUpscaleIfNeeded(effectiveSourceMedia)
                     .WithInplaceMerges(frameRefs)
                     .BindToCurrentMedia(
@@ -150,6 +153,22 @@ internal sealed class LtxStageExecutor
         {
             g.IsImageToVideo = false;
         }
+    }
+
+    private void ApplyStageRuntimeDefaults(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        WGNodeData sourceMedia)
+    {
+        LtxStageRuntimeSettings.ApplyResolvedFpsToWorkflow(
+            g,
+            genInfo,
+            LtxStageRuntimeSettings.ResolveFps(g, genInfo, sourceMedia));
+        genInfo.VideoFPS ??= LtxStageRuntimeSettings.DefaultFps;
+        genInfo.Frames ??= LtxStageRuntimeSettings.DefaultFrameCount;
+        genInfo.DefaultCFG = LtxStageRuntimeSettings.DefaultCfg;
+        genInfo.HadSpecialCond = true;
+        genInfo.DefaultSampler = LtxStageRuntimeSettings.DefaultSampler;
+        genInfo.DefaultScheduler = LtxStageRuntimeSettings.DefaultScheduler;
     }
 
     private WGNodeData ResolveIcLoraStageInput(StageContext stageContext)
