@@ -1446,33 +1446,10 @@ public class ArchitectureFoundationTests
         new(512, 512, 24, false, clips);
 
     private static ClipSpec GeneratedClip(int id, params StageSpec[] stages) =>
-        new(
-            id,
-            25,
-            MediaSource.Native,
-            [],
-            false,
-            false,
-            false,
-            false,
-            null,
-            [],
-            stages);
+        SpecFixtures.Clip(id, stages, frames: 25);
 
     private static ClipSpec InitVideoClip(int id) =>
-        new(
-            id,
-            25,
-            MediaSource.Native,
-            [],
-            false,
-            false,
-            false,
-            false,
-            null,
-            [],
-            [],
-            InitVideo: new("data", "source.mp4", 0));
+        SpecFixtures.SourcedClip(id, [], frames: 25);
 
     private static StageSpec Stage(int id, string model) =>
         SpecFixtures.Stage(id, model);
