@@ -21,21 +21,12 @@ public class CrossLanguageMirrorTests
     [Fact]
     public void UpscaleMethodClassification_MatchesSharedFixture()
     {
-        static string WireName(StageUpscaleMode mode) => mode switch
-        {
-            StageUpscaleMode.Pixel => "pixel",
-            StageUpscaleMode.Model => "model",
-            StageUpscaleMode.Latent => "latent",
-            StageUpscaleMode.LatentModel => "latent-model",
-            StageUpscaleMode.Unsupported => "unsupported",
-            _ => throw new InvalidOperationException($"Unexpected fixture mode {mode}.")
-        };
-
         foreach (JObject c in LoadFixture("upscale-method-cases.json").OfType<JObject>())
         {
             Assert.Equal(
                 c.Value<string>("expectedMode"),
-                WireName(StageUpscalePlanCompiler.Classify(c.Value<string>("method"))));
+                StageUpscalePlanCompiler.WireName(
+                    StageUpscalePlanCompiler.Classify(c.Value<string>("method"))));
         }
     }
 

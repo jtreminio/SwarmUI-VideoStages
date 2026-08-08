@@ -5,6 +5,10 @@ import {
 } from "../../audioSource";
 import { PLAN_DIAGNOSTIC_RETAKE_SOURCE_REQUIRED } from "../../generatedPlanDiagnostics";
 import {
+    UPSCALE_METHOD_PREFIXES,
+    UPSCALE_MODE_UNSUPPORTED,
+} from "../../generatedUpscaleModes";
+import {
     ARCHITECTURE_FEATURE_LABELS,
     type GeneratedArchitectureFeature,
 } from "../generatedFeatures";
@@ -50,22 +54,20 @@ export const isAudioSourceSupported = (
 ): boolean => isAllowedAudioSource(view.audioSourceKinds, source);
 
 export type UpscaleMethodMode =
-    | "pixel"
-    | "model"
-    | "latent"
-    | "latent-model"
-    | "unsupported";
+    | (typeof UPSCALE_METHOD_PREFIXES)[number][1]
+    | typeof UPSCALE_MODE_UNSUPPORTED;
 
 export const upscaleModeForMethod = (method: string): UpscaleMethodMode => {
     const normalized = method.trim().toLowerCase();
-    const hasMethodName = (prefix: string): boolean =>
-        normalized.startsWith(prefix) &&
-        normalized.slice(prefix.length).trim().length > 0;
-    if (hasMethodName("latentmodel-")) return "latent-model";
-    if (hasMethodName("latent-")) return "latent";
-    if (hasMethodName("pixel-")) return "pixel";
-    if (hasMethodName("model-")) return "model";
-    return "unsupported";
+    for (const [prefix, mode] of UPSCALE_METHOD_PREFIXES) {
+        if (
+            normalized.startsWith(prefix) &&
+            normalized.slice(prefix.length).trim().length > 0
+        ) {
+            return mode;
+        }
+    }
+    return UPSCALE_MODE_UNSUPPORTED;
 };
 
 /**

@@ -707,6 +707,15 @@
   // frontend/generatedPlanDiagnostics.ts
   var PLAN_DIAGNOSTIC_RETAKE_SOURCE_REQUIRED = "retake-source-required";
 
+  // frontend/generatedUpscaleModes.ts
+  var UPSCALE_MODE_UNSUPPORTED = "unsupported";
+  var UPSCALE_METHOD_PREFIXES = [
+    ["latentmodel-", "latent-model"],
+    ["latent-", "latent"],
+    ["pixel-", "pixel"],
+    ["model-", "model"]
+  ];
+
   // frontend/architectures/policy/featureValues.ts
   var RETAKE_SOURCE_RULE = {
     code: PLAN_DIAGNOSTIC_RETAKE_SOURCE_REQUIRED,
@@ -719,12 +728,12 @@
   var noArchitectureReason = (feature) => `${ARCHITECTURE_FEATURE_LABELS[feature]} requires a generated clip with a known architecture.`;
   var upscaleModeForMethod = (method) => {
     const normalized = method.trim().toLowerCase();
-    const hasMethodName = (prefix) => normalized.startsWith(prefix) && normalized.slice(prefix.length).trim().length > 0;
-    if (hasMethodName("latentmodel-")) return "latent-model";
-    if (hasMethodName("latent-")) return "latent";
-    if (hasMethodName("pixel-")) return "pixel";
-    if (hasMethodName("model-")) return "model";
-    return "unsupported";
+    for (const [prefix, mode] of UPSCALE_METHOD_PREFIXES) {
+      if (normalized.startsWith(prefix) && normalized.slice(prefix.length).trim().length > 0) {
+        return mode;
+      }
+    }
+    return UPSCALE_MODE_UNSUPPORTED;
   };
   var architectureFeatureSupport = (feature, capabilities) => capabilities.features.includes(feature);
 
