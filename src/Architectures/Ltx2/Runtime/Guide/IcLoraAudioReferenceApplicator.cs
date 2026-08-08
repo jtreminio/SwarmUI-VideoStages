@@ -1,5 +1,4 @@
 using ComfyTyped.Core;
-using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -69,11 +68,7 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
         {
             return cached;
         }
-        WGNodeData sample;
-        using (WorkflowBridge bridge = BridgeSync.For(g))
-        {
-            sample = ResolveDriveAudio(bridge, clip.ClipId, entry, incomingMedia);
-        }
+        WGNodeData sample = ResolveDriveAudio(clip.ClipId, entry, incomingMedia);
         if (sample is null)
         {
             return null;
@@ -104,7 +99,6 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
     }
 
     internal WGNodeData ResolveDriveAudio(
-        WorkflowBridge bridge,
         int clipId,
         IcLoraPlan entry,
         WGNodeData incomingMedia)
@@ -146,16 +140,14 @@ internal sealed class IcLoraAudioReferenceApplicator(WorkflowGenerator g)
             throw Invariant.Failure(
                 "This IC-LoRA requires audio or video Drive Media for its speaker reference.");
         }
-        SwarmLoadVideoB64Node load =
-            bridge.AddNode(new SwarmLoadVideoB64Node().With(
-                VideoBase64: UploadedMedia.GetVideo(
-                    g.UserInput,
-                    media.Data,
-                    media.FileName,
-                    IcLoraDriveDescriptor.Video(clipId)).AsBase64));
-        GetVideoComponentsNode components = bridge.AddNode(new GetVideoComponentsNode());
-        components.Video.ConnectToUntyped(load.VIDEO);
-        return components.Audio.ToWGNodeData(g, WGNodeData.DT_AUDIO);
+        return g.LoadImage(
+            UploadedMedia.GetVideo(
+                g.UserInput,
+                media.Data,
+                media.FileName,
+                IcLoraDriveDescriptor.Video(clipId)),
+            "${vsicloradrivevideo}",
+            resize: false).AttachedAudio;
     }
 
     private JArray LoadUploadedAudio(UploadedMediaSpec media)

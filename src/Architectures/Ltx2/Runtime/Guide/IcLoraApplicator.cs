@@ -35,6 +35,14 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
         {
             return false;
         }
+        // Uploaded drive media loads through core's own loader, which writes to the workflow behind
+        // any bridge already open — so resolve every drive before this one exists.
+        IcLoraVisualGuideResolver driveResolver = new(g);
+        List<ResolvedIcLoraDrive> drives = [.. resolved.Select(entry =>
+            driveResolver.TryResolve(clip, stage, entry.Plan, stageInput, out ResolvedIcLoraDrive drive)
+                ? drive
+                : null)];
+
         using WorkflowBridge bridge = BridgeSync.For(g);
         List<LTXICLoRALoaderModelOnlyNode> loaders = [];
         foreach (ResolvedIcLoraModel entry in resolved)
@@ -56,20 +64,13 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
             loaders.Add(loader);
         }
 
-        IcLoraVisualGuideResolver driveResolver = new(g);
         IcLoraControlSignalBuilder controlSignals = new(g);
         LtxIcLoraGuideApplicator guides = new(g);
         bool anyGuide = false;
         for (int i = 0; i < resolved.Count; i++)
         {
             ResolvedIcLoraModel entry = resolved[i];
-            if (!driveResolver.TryResolve(
-                    bridge,
-                    clip,
-                    stage,
-                    entry.Plan,
-                    stageInput,
-                    out ResolvedIcLoraDrive drive))
+            if (drives[i] is not ResolvedIcLoraDrive drive)
             {
                 continue;
             }

@@ -1,5 +1,4 @@
 using ComfyTyped.Core;
-using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Ltx2.Planning;
@@ -17,7 +16,6 @@ internal sealed record ResolvedIcLoraDrive(
 internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
 {
     internal bool TryResolve(
-        WorkflowBridge bridge,
         ClipPlan clip,
         StagePlan stage,
         IcLoraPlan entry,
@@ -33,10 +31,7 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         {
             case IcLoraMediaSourceKind.Upload:
             {
-                JArray images = GetOrCreateUploadedDriveImages(
-                    bridge,
-                    clip.ClipId,
-                    entry);
+                JArray images = GetOrCreateUploadedDriveImages(clip.ClipId, entry);
                 if (images is null)
                 {
                     return false;
@@ -88,16 +83,16 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         }
     }
 
-    private JArray GetOrCreateUploadedDriveImages(
-        WorkflowBridge bridge,
-        int clipId,
-        IcLoraPlan entry)
+    private JArray GetOrCreateUploadedDriveImages(int clipId, IcLoraPlan entry)
     {
         int entryIndex = entry.EntryIndex;
         string key = LtxRuntimeKeyScope.IcLoraUploadedDriveImages(clipId, entryIndex);
-        if (VideoGraphHelpers.TryGetCachedPath(g, bridge, key, out JArray cached))
+        using (WorkflowBridge live = WorkflowBridge.Create(g.Workflow))
         {
-            return cached;
+            if (VideoGraphHelpers.TryGetCachedPath(g, live, key, out JArray cached))
+            {
+                return cached;
+            }
         }
         if (string.IsNullOrWhiteSpace(entry.Drive.Upload?.Data))
         {
@@ -111,28 +106,25 @@ internal sealed class IcLoraVisualGuideResolver(WorkflowGenerator g)
         JArray path;
         if (entry.Drive.MediaKind == IcLoraDriveMediaKind.Image)
         {
-            SwarmLoadImageB64Node loadImage =
-                bridge.AddNode(new SwarmLoadImageB64Node().With(
-                    ImageBase64: UploadedMedia.GetRefImage(
-                        g.UserInput,
-                        entry.Drive.Upload.Data,
-                        entry.Drive.Upload.FileName,
-                        IcLoraDriveDescriptor.Image(clipId)).AsBase64));
-            path = WorkflowBridge.ToPath(loadImage.IMAGE);
+            path = g.LoadImage(
+                UploadedMedia.GetRefImage(
+                    g.UserInput,
+                    entry.Drive.Upload.Data,
+                    entry.Drive.Upload.FileName,
+                    IcLoraDriveDescriptor.Image(clipId)),
+                "${vsicloradriveimage}",
+                resize: false).Path;
         }
         else if (entry.Drive.MediaKind == IcLoraDriveMediaKind.Video)
         {
-            SwarmLoadVideoB64Node load =
-                bridge.AddNode(new SwarmLoadVideoB64Node().With(
-                    VideoBase64: UploadedMedia.GetVideo(
-                        g.UserInput,
-                        entry.Drive.Upload.Data,
-                        entry.Drive.Upload.FileName,
-                        IcLoraDriveDescriptor.Video(clipId)).AsBase64));
-            GetVideoComponentsNode components =
-                bridge.AddNode(new GetVideoComponentsNode());
-            components.Video.ConnectToUntyped(load.VIDEO);
-            path = WorkflowBridge.ToPath(components.Images);
+            path = g.LoadImage(
+                UploadedMedia.GetVideo(
+                    g.UserInput,
+                    entry.Drive.Upload.Data,
+                    entry.Drive.Upload.FileName,
+                    IcLoraDriveDescriptor.Video(clipId)),
+                "${vsicloradrivevideo}",
+                resize: false).Path;
         }
         else
         {

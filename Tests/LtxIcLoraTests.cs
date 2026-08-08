@@ -105,7 +105,6 @@ public sealed class LtxIcLoraTests
             .WithOutputs(WGNodeData.DT_VIDEO);
 
         WGNodeData resolved = new IcLoraAudioReferenceApplicator(generator).ResolveDriveAudio(
-            bridge,
             clipId: 0,
             plan,
             incoming.GetOutput(0).ToWGNodeData(generator, WGNodeData.DT_VIDEO));
@@ -162,7 +161,6 @@ public sealed class LtxIcLoraTests
 
         Assert.Throws<InvalidOperationException>(() =>
             new IcLoraAudioReferenceApplicator(generator).ResolveDriveAudio(
-                bridge,
                 clipId: 0,
                 plan,
                 incomingMedia: null));
@@ -173,7 +171,6 @@ public sealed class LtxIcLoraTests
     public void Missing_incoming_visual_media_warns_and_drops_the_guide()
     {
         WorkflowGenerator generator = RuntimeGenerator();
-        using WorkflowBridge bridge = BridgeSync.For(generator);
         IcLoraPlan plan = RuntimeIcLoraPlan(
             IcLoraDriveData.Visual,
             IcLoraMediaSourceKind.Incoming,
@@ -196,7 +193,6 @@ public sealed class LtxIcLoraTests
             IsIntermediateStage: false);
 
         bool resolved = new IcLoraVisualGuideResolver(generator).TryResolve(
-            bridge,
             clip,
             stage,
             plan,
