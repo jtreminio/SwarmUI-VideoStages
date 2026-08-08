@@ -994,8 +994,6 @@ public class Ltx2CoreVideoContractTests
         ResizeImageMaskNodeNode guideResize = GuideResizeOverCorePreprocessor(bridge);
         ImageFromBatchNode guideFrames = GuideFramesOf(bridge);
         Assert.Same(guideResize.Resized, guideFrames.Image.Connection);
-        // Extension-built, so index 0 is unfalsifiable here (it is also the codegen default); the
-        // length beside it is not, and is what says the guide takes the whole clip.
         Assert.Equal(0, guideFrames.BatchIndex.LiteralAsInt());
         Assert.Equal(fixture.ExpectedGeneratedFrames, guideFrames.Length.LiteralAsInt());
 
