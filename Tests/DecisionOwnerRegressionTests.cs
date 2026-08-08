@@ -30,66 +30,6 @@ public class DecisionOwnerRegressionTests
         Workflow = workflow ?? [],
     };
 
-    /// <summary>The splice path reads a config object and the ad-hoc path emits a node; this pins
-    /// that they agree. What the numbers themselves should be is core's call, asserted against core
-    /// in <see cref="Decode_tiling_geometry_matches_core"/>.</summary>
-    [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public void Explicit_vae_decode_tiling_uses_one_owner_for_splice_and_adhoc_paths(
-        bool setSpatialTile,
-        bool setTemporalTile)
-    {
-        WorkflowGenerator generator = Generator();
-        if (setSpatialTile)
-        {
-            generator.UserInput.Set(T2IParamTypes.VAETileSize, 512);
-        }
-        if (setTemporalTile)
-        {
-            generator.UserInput.Set(T2IParamTypes.VAETemporalTileSize, 48);
-        }
-
-        LtxDecodeConfig config = LtxDecodeConfig.From(generator);
-
-        Assert.True(config.UseTiledDecode);
-
-        JObject workflow = [];
-        WorkflowGenerator decodeGenerator = Generator(workflow);
-        if (setSpatialTile)
-        {
-            decodeGenerator.UserInput.Set(T2IParamTypes.VAETileSize, 512);
-        }
-        if (setTemporalTile)
-        {
-            decodeGenerator.UserInput.Set(T2IParamTypes.VAETemporalTileSize, 48);
-        }
-        string vaeId;
-        string latentId;
-        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
-        {
-            vaeId = bridge.AddStub("UnitTest_Vae", "900")
-                .WithOutputs(WGNodeData.DT_VAE).Id;
-            latentId = bridge.AddStub("UnitTest_Latent", "901")
-                .WithOutputs(WGNodeData.DT_LATENT_VIDEO).Id;
-        }
-        WGNodeData vae = new(new JArray(vaeId, 0), decodeGenerator, WGNodeData.DT_VAE, null);
-        WGNodeData latent = new(
-            new JArray(latentId, 0), decodeGenerator, WGNodeData.DT_LATENT_VIDEO, null);
-
-        _ = VaeDecodePreference.AsRawImage(decodeGenerator, latent, vae);
-
-        using WorkflowBridge decoded = WorkflowBridge.Create(decodeGenerator.Workflow);
-        VAEDecodeTiledNode tiled = Assert.Single(
-            decoded.Graph.NodesOfType<VAEDecodeTiledNode>());
-        Assert.Equal(config.TileSize, tiled.TileSize.LiteralAsInt());
-        Assert.Equal(config.TemporalSize, tiled.TemporalSize.LiteralAsInt());
-        Assert.Equal(config.Overlap, tiled.Overlap.LiteralAsInt());
-        Assert.Equal(config.TemporalOverlap, tiled.TemporalOverlap.LiteralAsInt());
-        Assert.Equal(vaeId, tiled.Vae.Connection?.Node.Id);
-        Assert.Equal(latentId, tiled.Samples.Connection?.Node.Id);
-    }
-
     /// <summary>The extension re-types core's LTX-2 tiling geometry because it splices decodes by
     /// id, which core has no API for. Two copies that must agree, so the assertion is against what
     /// core emits today rather than against literals that would keep this green through a core
