@@ -365,8 +365,9 @@ public class TimelineOutputContractTests
 
     /// <summary>
     /// <c>donotsave</c> does not change the graph: core honours it above the graph, where the API
-    /// returns a data URI instead of writing to disk. Generating both is what proves it, so no
-    /// other test has to carry the flag to record it.
+    /// returns a data URI instead of writing to disk. Generating both proves it for this shape
+    /// only — the request builds no interpolation, so reinstating the suppression inside
+    /// <c>FrameInterpolator</c> reds nothing here.
     /// </summary>
     [Fact]
     public async Task Do_not_save_generates_the_same_graph_as_a_saving_request()
