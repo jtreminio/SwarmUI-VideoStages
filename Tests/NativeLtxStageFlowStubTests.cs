@@ -10,15 +10,12 @@ using VideoStages.Architectures.Ltx2.Runtime;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// The one native-LTX stage-flow case that cannot move to the Comfy API path: it needs a core
-/// post-decode wrapper still standing when the stage runner reaches 11.5, and no POST produces
-/// that — whenever the extension intercepts the host root,
-/// <c>DropCoreImageToVideoOutput</c> prunes core's whole chain at 11.05. Everything else in these
-/// files now lives in <see cref="Ltx2StageChainContractTests"/>.
-/// </summary>
 public partial class StageFlowTests
 {
+    /// <summary>The one native-LTX stage-flow case that cannot move to the Comfy API path: it needs
+    /// a core post-decode wrapper still standing when the stage runner reaches 11.5, and no POST
+    /// produces that — whenever the extension intercepts the host root,
+    /// <c>DropCoreImageToVideoOutput</c> prunes core's whole chain at 11.05.</summary>
     [Fact]
     public void Native_ltx_wrapper_chain_reuses_decode_audio_and_save_without_duplicate_trim()
     {
