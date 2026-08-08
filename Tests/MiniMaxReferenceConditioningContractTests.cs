@@ -1,9 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
-using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
-using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 using VideoStages.Execution.Audio;
 using VideoStages.Generated;
 using Xunit;
@@ -125,8 +122,10 @@ public class MiniMaxReferenceConditioningContractTests
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
             fixture.Post(MakeDocument(clip)),
-            extraSteps: [SeedControlNetReferenceSource(controlNetIndex)]);
+            extraSteps: MiniMaxWorkflowFixture.SeedControlNetVideoSources(
+                firstIndex: controlNetIndex));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
@@ -157,8 +156,7 @@ public class MiniMaxReferenceConditioningContractTests
         }
 
         Assert.Same(referenceNode, StageSampler(bridge, 0).Positive.Connection?.Node);
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     [Fact]
@@ -491,29 +489,4 @@ public class MiniMaxReferenceConditioningContractTests
         live.AssertAllLive(published, referenceNode);
         AssertShippable(bridge, workflow, live);
     }
-
-    private static WorkflowGenerator.WorkflowGenStep SeedControlNetReferenceSource(
-        int index) =>
-        new(g =>
-        {
-            UnitTestStubs.EnsureComfyControlNetParamsRegistered();
-            T2IModelHandler handler = new() { ModelType = "ControlNet" };
-            using WorkflowBridge bridge = BridgeSync.For(g);
-            T2IModel model = TestStubModel.Create(
-                handler,
-                $"UnitTest_MiniMax_Reference_ControlNet_{index}.safetensors");
-            g.UserInput.Set(T2IParamTypes.Controlnets[index].Strength, 0.8);
-            g.UserInput.Set(T2IParamTypes.Controlnets[index].Model, model);
-            GetVideoComponentsNode components = bridge.AddNode(
-                new GetVideoComponentsNode(),
-                "901");
-            ControlNetLoaderNode loader = bridge.AddNode(
-                new ControlNetLoaderNode().With(
-                    ControlNetName: model.ToString(g.ModelFolderFormat)),
-                "911");
-            ControlNetApplyAdvancedNode apply = new();
-            apply.ControlNet.ConnectTo(loader.CONTROLNET);
-            apply.Image.ConnectTo(components.Images);
-            bridge.AddNode(apply, "921");
-        }, Constants.WorkflowStepPriority.ControlNetPreprocessors - 0.01);
 }

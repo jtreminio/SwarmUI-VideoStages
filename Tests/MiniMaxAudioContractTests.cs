@@ -1,11 +1,8 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
-using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Text2Image;
 using VideoStages.Execution.Audio;
-using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -21,46 +18,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class MiniMaxAudioContractTests
 {
-    /// <summary>Seeds the core ControlNet branches no MiniMax POST shape builds.</summary>
-    private static IEnumerable<WorkflowGenerator.WorkflowGenStep> SeedControlNetCoreBranches(
-        int count) =>
-    [
-        new(g =>
-        {
-            UnitTestStubs.EnsureComfyControlNetParamsRegistered();
-            T2IModelHandler handler = new() { ModelType = "ControlNet" };
-            using WorkflowBridge bridge = BridgeSync.For(g);
-            for (int index = 0; index < count; index++)
-            {
-                T2IModel model = TestStubModel.Create(
-                    handler,
-                    $"UnitTest_MiniMax_ControlNet_{index}.safetensors");
-                g.UserInput.Set(T2IParamTypes.Controlnets[index].Strength, 0.8);
-                g.UserInput.Set(T2IParamTypes.Controlnets[index].Model, model);
-                GetVideoComponentsNode components = bridge.AddNode(
-                    new GetVideoComponentsNode(),
-                    $"90{index + 1}");
-                ControlNetLoaderNode loader = bridge.AddNode(
-                    new ControlNetLoaderNode().With(
-                        ControlNetName: model.ToString(g.ModelFolderFormat)),
-                    $"91{index + 1}");
-                ControlNetApplyAdvancedNode apply = new();
-                apply.ControlNet.ConnectTo(loader.CONTROLNET);
-                apply.Image.ConnectTo(components.Images);
-                bridge.AddNode(apply, $"92{index + 1}");
-            }
-        }, Constants.WorkflowStepPriority.ControlNetPreprocessors - 0.01),
-        new(g =>
-        {
-            using WorkflowBridge bridge = BridgeSync.For(g);
-            for (int index = 0; index < count; index++)
-            {
-                VideoGraphHelpers.RemoveNode(g, bridge, $"92{index + 1}");
-                VideoGraphHelpers.RemoveNode(g, bridge, $"91{index + 1}");
-            }
-        }, Constants.WorkflowStepPriority.ControlNetPreprocessors + 0.01),
-    ];
-
     /// <summary>
     /// A masked audio latent with <c>SolidMask</c> value 0 is what "preserved" means: the sampler
     /// must not regenerate over the uploaded track.
@@ -271,7 +228,7 @@ public class MiniMaxAudioContractTests
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
             fixture.Post(MakeDocument(clip)),
-            extraSteps: SeedControlNetCoreBranches(1));
+            extraSteps: MiniMaxWorkflowFixture.SeedControlNetVideoSources(1));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -319,7 +276,7 @@ public class MiniMaxAudioContractTests
                 fixture.Post(MakeDocument(clip)),
                 extraSteps: capturedTracks == 0
                     ? null
-                    : SeedControlNetCoreBranches(capturedTracks));
+                    : MiniMaxWorkflowFixture.SeedControlNetVideoSources(capturedTracks));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
