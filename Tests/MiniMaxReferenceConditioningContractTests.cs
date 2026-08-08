@@ -53,8 +53,7 @@ public class MiniMaxReferenceConditioningContractTests
             fixture.RefinerSampler(bridge).Id));
 
         live.AssertLive(keyframes);
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     [Fact]
@@ -204,6 +203,7 @@ public class MiniMaxReferenceConditioningContractTests
             fixture.Post(MakeDocument(clip)),
             extraSteps: [PublishAceStepFunAudioTrackStep(0)]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
@@ -213,8 +213,7 @@ public class MiniMaxReferenceConditioningContractTests
             AudioHandler.MakeAceStepFunDecodeId(0),
             ((JArray)inputs["ref_audios.ref_audio_0"])[0].ToString());
         Assert.Same(referenceNode, StageSampler(bridge, 0).Positive.Connection?.Node);
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     [Fact]
