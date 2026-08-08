@@ -23,7 +23,8 @@ import {
     type TimelineAudioSpanTrack,
 } from "./timelineAudioSpanTrack";
 import { setTimelineAuthoringSetting } from "./timelineAuthoringSettings";
-import type { AuthoringDocument } from "./types";
+import { renderTimeline } from "./timelineView";
+import type { AudioTrack, AuthoringDocument } from "./types";
 
 const clipRecord = (duration: number): Record<string, unknown> => ({
     duration,
@@ -74,21 +75,38 @@ describe("timeline-wide audio span gestures", () => {
         };
     };
 
-    const setupGlobal = (withTrack = true, withJoin = false): HTMLElement => {
-        mountVideoStagesData(rootState(withTrack, withJoin));
+    const LOWER_TRACK: AudioTrack = {
+        id: "track-lower",
+        volume: 1,
+        source: { kind: "Upload", reference: "", uploadedAudio: null },
+        spans: [
+            {
+                id: "span-lower",
+                timelineStartSeconds: 1,
+                timelineLengthSeconds: 2,
+                sourceStartSeconds: 0,
+            },
+        ],
+    };
+
+    const setupGlobal = (
+        withTrack = true,
+        withJoin = false,
+        extraTracks: AudioTrack[] = [],
+    ): HTMLElement => {
+        const state = rootState(withTrack, withJoin);
+        (state.audioTracks as AudioTrack[]).push(...extraTracks);
+        mountVideoStagesData(state);
         mountPromptBox("");
         const duration = withJoin ? 6 : 7;
         const body = mountTimelineBody();
-        body.innerHTML =
-            `<div class="vst-audio-track-lane${withTrack ? "" : " vst-audio-track-lane-blank"}" ` +
-            `${withTrack ? 'data-track-idx="0"' : "data-vst-audio-track-add"} style="left:0;width:${duration * TIMELINE_PPS}px">` +
-            (withTrack
-                ? `<div class="vst-audio-span" data-vst-audio-span data-track-idx="0" style="left:${(2 / duration) * 100}%;width:${(3 / duration) * 100}%">` +
-                  `<span data-vst-audio-span-edge="left"></span><span data-vst-audio-span-edge="right"></span></div>`
-                : "") +
-            `</div>`;
-        const lane = body.querySelector<HTMLElement>(".vst-audio-track-lane");
-        if (lane) {
+        renderTimeline(body, persistence.getClips(), {
+            pxPerSecond: TIMELINE_PPS,
+            audioTracks: persistence.getState().audioTracks,
+        });
+        for (const lane of body.querySelectorAll<HTMLElement>(
+            ".vst-audio-track-lane",
+        )) {
             stubRect(lane, 0, duration * TIMELINE_PPS);
         }
         track = createTimelineAudioSpanTrack();
@@ -146,34 +164,7 @@ describe("timeline-wide audio span gestures", () => {
     });
 
     it("snaps to the span immediately above before clip edges", () => {
-        const state = rootState() as unknown as AuthoringDocument;
-        state.audioTracks?.push({
-            id: "track-lower",
-            volume: 1,
-            source: {
-                kind: "Upload",
-                reference: "",
-                uploadedAudio: null,
-            },
-            spans: [
-                {
-                    id: "span-lower",
-                    timelineStartSeconds: 1,
-                    timelineLengthSeconds: 2,
-                    sourceStartSeconds: 0,
-                },
-            ],
-        });
-        mountVideoStagesData(state);
-        mountPromptBox("");
-        const body = mountTimelineBody();
-        body.innerHTML =
-            `<div class="vst-audio-span" data-vst-audio-span data-track-idx="0"></div>` +
-            `<div class="vst-audio-span" data-vst-audio-span data-track-idx="1"></div>`;
-        track = createTimelineAudioSpanTrack();
-        router = createGestureRouter();
-        router.attach(body);
-        track.attach(body, router);
+        const body = setupGlobal(true, false, [LOWER_TRACK]);
 
         const lower = requireEl(body, '.vst-audio-span[data-track-idx="1"]');
         lower.dispatchEvent(mouse("mousedown", 1 * TIMELINE_PPS));
@@ -198,30 +189,7 @@ describe("timeline-wide audio span gestures", () => {
     });
 
     it("deleting one of several tracks selects the surviving neighbour", () => {
-        const state = rootState() as unknown as AuthoringDocument;
-        state.audioTracks?.push({
-            id: "track-lower",
-            volume: 1,
-            source: { kind: "Upload", reference: "", uploadedAudio: null },
-            spans: [
-                {
-                    id: "span-lower",
-                    timelineStartSeconds: 1,
-                    timelineLengthSeconds: 2,
-                    sourceStartSeconds: 0,
-                },
-            ],
-        });
-        mountVideoStagesData(state);
-        mountPromptBox("");
-        const body = mountTimelineBody();
-        body.innerHTML =
-            `<div class="vst-audio-span" data-track-idx="0"></div>` +
-            `<div class="vst-audio-span" data-track-idx="1"></div>`;
-        track = createTimelineAudioSpanTrack();
-        router = createGestureRouter();
-        router.attach(body);
-        track.attach(body, router);
+        const body = setupGlobal(true, false, [LOWER_TRACK]);
 
         requireEl(body, '.vst-audio-span[data-track-idx="1"]').dispatchEvent(
             mouse("click", 10, { shiftKey: true }),
@@ -299,7 +267,10 @@ describe("timeline-wide audio span gestures", () => {
 
     it("creates a default span on the global blank lane", () => {
         const body = setupGlobal(false);
-        const lane = requireEl(body, "[data-vst-audio-track-add]");
+        const lane = requireEl(
+            body,
+            ".vst-audio-track-lane[data-vst-audio-track-add]",
+        );
 
         lane.dispatchEvent(mouse("mousedown", 4 * TIMELINE_PPS));
         document.dispatchEvent(mouse("mouseup", 4 * TIMELINE_PPS));
@@ -313,16 +284,8 @@ describe("timeline-wide audio span gestures", () => {
         });
     });
 
-    const headAddButton = (body: HTMLElement): HTMLElement => {
-        const button = document.createElement("div");
-        button.className =
-            "vst-head-tag vst-head-tag-track vst-head-tag-action";
-        button.setAttribute("data-vst-audio-track-add", "");
-        button.setAttribute("role", "button");
-        button.tabIndex = 0;
-        body.appendChild(button);
-        return button;
-    };
+    const headAddButton = (body: HTMLElement): HTMLElement =>
+        requireEl(body, ".vst-head-tag-track[data-vst-audio-track-add]");
 
     it("adds a track from the track head's add button", () => {
         const body = setupGlobal(false);
@@ -356,7 +319,10 @@ describe("timeline-wide audio span gestures", () => {
 
     it("allows independently overlapping global lanes", () => {
         const body = setupGlobal(false);
-        const lane = requireEl(body, "[data-vst-audio-track-add]");
+        const lane = requireEl(
+            body,
+            ".vst-audio-track-lane[data-vst-audio-track-add]",
+        );
 
         lane.dispatchEvent(mouse("mousedown", 2 * TIMELINE_PPS));
         document.dispatchEvent(mouse("mousemove", 5 * TIMELINE_PPS));
