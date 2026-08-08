@@ -143,7 +143,7 @@ public sealed class LtxIcLoraTests
     /// reaching it with the same payload as a bug rather than dropping the reference.
     /// </summary>
     [Fact]
-    public void Invalid_uploaded_audio_blocks_the_request_at_preflight()
+    public void Invalid_uploaded_audio_is_a_blocking_diagnostic_the_runtime_treats_as_a_bug()
     {
         WorkflowGenerator generator = RuntimeGenerator();
         using WorkflowBridge bridge = BridgeSync.For(generator);
