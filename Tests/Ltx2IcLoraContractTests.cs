@@ -788,7 +788,8 @@ public class Ltx2IcLoraContractTests
         ImageFromBatchNode[] guideTrims = [.. guides.Select(
             guide => Assert.IsType<ImageFromBatchNode>(guide.Image.Connection?.Node))];
         // 0.6s at 24 fps snaps up to 17 frames, and each guide covers those plus the handle ahead
-        // of them. Neither clip authors an overlap, so the handle is the architecture's default.
+        // of them. 17 frames cannot fund a full overlap, so the budget fit steps the handle down to
+        // the policy floor, which Ltx2BoundaryPolicy declares with this same constant.
         Assert.All(
             guideTrims,
             trim => Assert.Equal(
