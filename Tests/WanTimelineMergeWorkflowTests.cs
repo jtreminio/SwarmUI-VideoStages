@@ -2,6 +2,7 @@ using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Text2Image;
 using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -597,9 +598,12 @@ public class WanTimelineMergeWorkflowTests
 
     /// <summary>
     /// <c>donotsave</c> is honoured above the graph — <c>T2IAPI</c> returns a data URI rather than
-    /// writing to disk — so a mixed timeline publishes exactly as it would without the flag. It once
-    /// stripped the timeline's own saves, which in text-to-video left ComfyUI with no output node at
-    /// all to reject (P5 in <c>nonversioned/20260804-production-findings.md</c>).
+    /// writing to disk — so this ships the same two saves as the saving request in
+    /// <see cref="A_mixed_text_timeline_keeps_order_provenance_and_audio_per_clip"/>: clip 0's
+    /// intermediate, then the timeline's publication, which is also clip 1's intermediate rather
+    /// than a node of its own. It once stripped the timeline's own saves, which in text-to-video
+    /// left ComfyUI with no output node at all to reject (P5 in
+    /// <c>nonversioned/20260804-production-findings.md</c>).
     /// </summary>
     [Fact]
     public async Task A_do_not_save_mixed_timeline_publishes_exactly_as_a_saving_request_does()
@@ -611,18 +615,19 @@ public class WanTimelineMergeWorkflowTests
             MakeClip(MakeStage(fixture.Model.Name, "Generated", steps: 7)),
             MakeClip(MakeStage(fixture.Models[1].Name, "Generated", steps: 9)));
 
-        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(fixture.Post(
-            document,
-            post =>
-            {
-                post["outputintermediateimages"] = true;
-                post["donotsave"] = true;
-            }));
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(fixture.Post(
+                document,
+                post =>
+                {
+                    post["outputintermediateimages"] = true;
+                    post["donotsave"] = true;
+                }));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        // Two saves, not three: clip 0's intermediate, then the timeline's publication, which is
-        // also clip 1's intermediate rather than a node of its own.
+        // Without this the request is just the saving one and the test duplicates its sibling.
+        Assert.True(generator.UserInput.Get(T2IParamTypes.DoNotSave, false));
         live.AssertAllLive(StageSampler(bridge, 0), StageSampler(bridge, 1));
         AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
