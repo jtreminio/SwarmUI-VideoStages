@@ -154,25 +154,17 @@ internal sealed class StockHostVideoGenerationSession(
                 continuationPayload.LoraTarget,
                 T2IParamInput.SectionID_VideoSwap))
         {
-            return _wanBehavior is null
-                ? ExecuteGenericGeneratingStage(
-                    clip,
-                    stage,
-                    continuation,
-                    sectionId,
-                    positive,
-                    negative)
-                : ExecuteWanGeneratingStage(
-                    clip,
-                    stage,
-                    continuation,
-                    sectionId,
-                    positive,
-                    negative);
+            return RunGeneratingStage(
+                clip,
+                stage,
+                continuation,
+                sectionId,
+                positive,
+                negative);
         }
     }
 
-    private bool ExecuteGenericGeneratingStage(
+    private bool RunGeneratingStage(
         ClipPlan clip,
         StagePlan stage,
         StagePlan continuation,
@@ -180,47 +172,16 @@ internal sealed class StockHostVideoGenerationSession(
         string positive,
         string negative)
     {
-        using ParamSnapshot ignoredAudioReference = ParamSnapshot.Of(
-            g.UserInput,
-            T2IParamTypes.PromptAudios.Type);
-        g.UserInput.InternalSet.ValuesInput.Remove(
-            T2IParamTypes.PromptAudios.Type.ID);
-        WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
-            clip,
-            stage,
-            continuation,
-            sectionId,
-            positive,
-            negative,
-            ResolveGenericFrames(clip, stage),
-            videoEndFrame: null);
-        if (stage.Input == StageInputKind.EmptyLatent)
+        // Core wires Prompt Audios into the families whose reference encode takes them. WAN's path
+        // leaves the parameter in place.
+        using ParamSnapshot ignoredAudioReference = _wanBehavior is null
+            ? ParamSnapshot.Of(g.UserInput, T2IParamTypes.PromptAudios.Type)
+            : null;
+        if (_wanBehavior is null)
         {
-            ExecuteGenericTextStage(clip, stage, genInfo);
-            stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
-            return false;
+            g.UserInput.InternalSet.ValuesInput.Remove(
+                T2IParamTypes.PromptAudios.Type.ID);
         }
-        int startStep = StageStartStepPolicy.StartStep(
-            stage.Core.Steps,
-            stage.Core.Control);
-        stageInput.Configure(clip, stage, genInfo, startStep);
-        RunHostImageBuilder(stage, continuation, genInfo);
-        stageInput.NormalizeDecodedOutput(
-            clip,
-            continuation ?? stage,
-            genInfo);
-        return continuation is not null;
-    }
-
-    private bool ExecuteWanGeneratingStage(
-        ClipPlan clip,
-        StagePlan stage,
-        StagePlan continuation,
-        int sectionId,
-        string positive,
-        string negative)
-    {
-        WanStockHostVideoBehavior wanBehavior = _wanBehavior;
         WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
             clip,
             stage,
@@ -228,27 +189,40 @@ internal sealed class StockHostVideoGenerationSession(
             sectionId,
             positive,
             negative,
-            wanBehavior.ResolveGeneratedFrames(clip, stage, sectionId),
-            wanBehavior.ResolveEndFrame(clip, continuation ?? stage));
+            _wanBehavior is null
+                ? ResolveGenericFrames(clip, stage)
+                : _wanBehavior.ResolveGeneratedFrames(clip, stage, sectionId),
+            _wanBehavior?.ResolveEndFrame(clip, continuation ?? stage));
+        // Only WAN authors a first frame onto a text entry. That frame goes through the host image
+        // builder instead of the native text latent.
         bool materializedFirstFrame =
-            stage.Input == StageInputKind.EmptyLatent
+            _wanBehavior is not null
+            && stage.Input == StageInputKind.EmptyLatent
             && g.CurrentMedia is not null;
         if (stage.Input == StageInputKind.EmptyLatent
             && !materializedFirstFrame)
         {
-            ExecuteWanTextStage(clip, stage, genInfo, wanBehavior);
+            if (_wanBehavior is null)
+            {
+                ExecuteGenericTextStage(clip, stage, genInfo);
+            }
+            else
+            {
+                ExecuteWanTextStage(clip, stage, genInfo);
+            }
             stageInput.NormalizeDecodedOutput(clip, stage, genInfo);
             return false;
         }
-        int startStep = StageStartStepPolicy.StartStep(
-            stage.Core.Steps,
-            stage.Core.Control);
         if (!materializedFirstFrame)
         {
-            stageInput.Configure(clip, stage, genInfo, startStep);
+            stageInput.Configure(
+                clip,
+                stage,
+                genInfo,
+                StageStartStepPolicy.StartStep(stage.Core.Steps, stage.Core.Control));
         }
         ISet<string> preHostNodeIds =
-            wanBehavior.CapturePreHostNodeIds(stage, genInfo);
+            _wanBehavior?.CapturePreHostNodeIds(stage, genInfo);
         Exception hostConstructionError = null;
         try
         {
@@ -261,7 +235,7 @@ internal sealed class StockHostVideoGenerationSession(
         }
         finally
         {
-            wanBehavior.RunPostHostCleanup(
+            _wanBehavior?.RunPostHostCleanup(
                 preHostNodeIds,
                 hostConstructionError);
         }
@@ -389,8 +363,7 @@ internal sealed class StockHostVideoGenerationSession(
     private void ExecuteWanTextStage(
         ClipPlan clip,
         StagePlan stage,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        WanStockHostVideoBehavior wanBehavior)
+        WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
         WGNodeData ambientAudioVae = g.CurrentAudioVae;
         bool ambientImageToVideo = g.IsImageToVideo;
@@ -402,7 +375,7 @@ internal sealed class StockHostVideoGenerationSession(
             genInfo.PrepModelAndCond(g);
             if (genInfo.VideoEndFrame is not null)
             {
-                wanBehavior.BuildNativeLastFrameConditioning(
+                _wanBehavior.BuildNativeLastFrameConditioning(
                     stage,
                     genInfo,
                     frames);
