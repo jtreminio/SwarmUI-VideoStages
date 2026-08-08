@@ -83,7 +83,10 @@ internal static class VaeDecodePreference
         WGNodeData vae,
         string decodeId)
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        // Counted, because AddDecode mints an id through this bridge: a counter-less one takes
+        // max(workflow id) + 1 without moving g.LastID, which is the id the next g.CreateNode
+        // then writes over in silence.
+        using WorkflowBridge bridge = BridgeSync.For(g);
         INodeOutput targetVae = bridge.ResolvePath(vae.Path);
         INodeOutput latent = bridge.ResolvePath(media.Path);
         if (targetVae is null || latent is null)

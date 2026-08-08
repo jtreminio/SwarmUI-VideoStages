@@ -353,7 +353,7 @@ internal sealed class LtxStageLatentBuilder
             return;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
         if (bridge.Graph.GetNode<LTXVEmptyLatentAudioNode>($"{audioPath[0]}")
             is not LTXVEmptyLatentAudioNode emptyAudio)
         {
