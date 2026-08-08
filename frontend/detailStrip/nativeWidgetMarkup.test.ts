@@ -120,7 +120,7 @@ describe("detail strip native widget markup", () => {
             ]);
         });
 
-        it("(a) emits native SwarmUI `.auto-input` widget markup for every field type", () => {
+        it("emits native SwarmUI `.auto-input` widget markup for every field type", () => {
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
             const modelSelect = fieldByLabel("Model").querySelector("select");
             expect(modelSelect?.classList.contains("auto-dropdown")).toBe(true);
@@ -156,7 +156,7 @@ describe("detail strip native widget markup", () => {
             expect(editor?.classList.contains("auto-text-block")).toBe(true);
         });
 
-        it("(b) leaves field geometry native while adding the scoped outline", () => {
+        it("leaves field geometry native while adding the scoped outline", () => {
             injectHostCss();
             injectDockCss();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
@@ -301,7 +301,7 @@ describe("detail strip native widget markup", () => {
             }
         });
 
-        it("(d) wraps prompt textareas in the host's wide text-field row", () => {
+        it("wraps prompt textareas in the host's wide text-field row", () => {
             injectHostCss();
             injectDockCss();
             const assertNativePrompt = (): void => {
@@ -329,9 +329,7 @@ describe("detail strip native widget markup", () => {
             assertNativePrompt();
         });
 
-        it("(e) uses native groups for both sections and repeatable items", () => {
-            injectHostCss();
-            injectDockCss();
+        it("uses native groups for both sections and repeatable items", () => {
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             const sections = document.querySelectorAll(
                 ".vst-detail-body > .vst-detail-section.input-group",
@@ -344,9 +342,7 @@ describe("detail strip native widget markup", () => {
             ).not.toBeNull();
         });
 
-        it("(c) emits the matching native row variant across every panel", () => {
-            injectHostCss();
-            injectDockCss();
+        it("emits the matching native row variant across every panel", () => {
             const panels: (() => void)[] = [
                 () => setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 }),
                 () => setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 }),
@@ -361,9 +357,11 @@ describe("detail strip native widget markup", () => {
             ];
             for (const select of panels) {
                 select();
-                for (const field of document.querySelectorAll(
-                    ".vst-detail .auto-input",
-                )) {
+                const rows = Array.from(
+                    document.querySelectorAll(".vst-detail .auto-input"),
+                );
+                expect(rows.length).toBeGreaterThan(0);
+                for (const field of rows) {
                     expect(
                         field.classList.contains("auto-slider-box") ||
                             field.classList.contains("auto-file-box") ||
