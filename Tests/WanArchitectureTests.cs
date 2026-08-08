@@ -163,19 +163,6 @@ public class WanArchitectureTests
         Assert.False(WanArchitectureModule.Instance.TryResolveModel(model, out _));
     }
 
-    /// <summary>A class id with no lora token still names a LoRA when core says so.</summary>
-    [Fact]
-    public void Rejects_a_model_class_core_flagged_as_a_lora()
-    {
-        using SwarmUiTestContext context = new();
-        T2IModel model = WanModel(
-            "wan-2_1-image2video-14b",
-            T2IModelClassSorter.CompatWan21_14b.ID);
-        model.ModelClass = model.ModelClass with { IsLora = true };
-
-        Assert.False(WanArchitectureModule.Instance.TryResolveModel(model, out _));
-    }
-
     [Fact]
     public void Catalog_publishes_the_resolved_model_and_the_Wan_architecture()
     {

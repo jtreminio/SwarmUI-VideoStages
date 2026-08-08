@@ -115,7 +115,6 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             || string.IsNullOrWhiteSpace(modelClassId)
             || !(modelClassId.StartsWith("wan-2_1-", StringComparison.OrdinalIgnoreCase)
                 || modelClassId.StartsWith("wan-2_2-", StringComparison.OrdinalIgnoreCase))
-            || modelClass.IsLora
             || HasClassToken(modelClassId, "lora")
             || HasClassToken(modelClassId, "vae")
             || modelClassId.Contains("vace", StringComparison.OrdinalIgnoreCase))
