@@ -272,18 +272,16 @@ public class CrossLanguageMirrorTests
             catalog["architectures"]!.Values<JObject>(),
             item => item.Value<string>("id") == expectedDescriptor.Value<string>("id"));
 
-        JToken normalizedArchitecture = JToken.Parse(architecture.ToString());
         Assert.True(
-            JToken.DeepEquals(expectedDescriptor, normalizedArchitecture),
+            JToken.DeepEquals(expectedDescriptor, architecture),
             $"Serialized LTX descriptor drifted from the complete shared contract."
                 + $"\nExpected: {expectedDescriptor}"
                 + $"\nActual: {architecture}");
 
         JObject expectedModel = (JObject)fixture["model"]!;
         JObject model = Assert.Single(catalog["models"]!.Values<JObject>());
-        JToken normalizedModel = JToken.Parse(model.ToString());
         Assert.True(
-            JToken.DeepEquals(expectedModel, normalizedModel),
+            JToken.DeepEquals(expectedModel, model),
             $"Serialized LTX model drifted from the complete shared contract."
                 + $"\nExpected: {expectedModel}"
                 + $"\nActual: {model}");
