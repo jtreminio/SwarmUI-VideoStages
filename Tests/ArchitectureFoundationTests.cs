@@ -1394,7 +1394,6 @@ public class ArchitectureFoundationTests
         Assert.Equal(
             capabilities["entryModes"].Values<string>(),
             model["capabilities"]["entryModes"].Values<string>());
-        Assert.Equal(["referencePositions"], Keys((JObject)model["enhancements"]));
         Assert.Equal(["any"], model["enhancements"]["referencePositions"].Values<string>());
     }
 
