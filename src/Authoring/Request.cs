@@ -59,7 +59,10 @@ public sealed record FrameRefSpec(
     bool FromEnd,
     string UploadFileName,
     string Data = null
-);
+)
+{
+    internal bool IsOpeningFrame => !FromEnd && Frame == 1;
+}
 
 public sealed record UploadedMediaSpec(
     string Data,

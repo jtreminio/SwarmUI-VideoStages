@@ -182,7 +182,7 @@ internal static class BoundaryPlanCompiler
             return BoundaryFallbackReason.TargetHasNoStage;
         }
         if (constraints.TargetDisallowsInitialReference
-            && HasExplicitFirstFrameReference(authoredTarget))
+            && authoredTarget.FrameRefs?.Any(reference => reference.IsOpeningFrame) == true)
         {
             return BoundaryFallbackReason.TargetHasFirstFrameReference;
         }
@@ -201,9 +201,6 @@ internal static class BoundaryPlanCompiler
         }
         return BoundaryJoinType.Cut;
     }
-
-    private static bool HasExplicitFirstFrameReference(ClipSpec clip) =>
-        clip.FrameRefs?.Any(reference => !reference.FromEnd && reference.Frame == 1) == true;
 
     private static string DescribeFallback(BoundaryFallbackReason fallback) => fallback switch
     {

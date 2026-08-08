@@ -55,7 +55,7 @@ internal static class NativeFrameReferences
 
         foreach (FrameRefSpec reference in clip.FrameRefs ?? [])
         {
-            bool isFirst = !reference.FromEnd && reference.Frame == 1;
+            bool isFirst = reference.IsOpeningFrame;
             bool isLast = reference.FromEnd && reference.Frame == 1;
             if (!isFirst && !isLast)
             {
