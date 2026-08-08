@@ -7,10 +7,10 @@ import {
     detailStripHarness,
     fieldByLabel,
     sliderNumberByLabel,
-} from "../__test_helpers__/detailStrip";
-import { setSelection } from "../selection";
+} from "./__test_helpers__/detailStrip";
+import { setSelection } from "./selection";
 
-describe("detail strip native widget markup", () => {
+describe("detail widgets in the dock", () => {
     const { setup } = detailStripHarness();
 
     it("uses SwarmUI's native full-width flex class for every stage slider", () => {
@@ -74,7 +74,7 @@ describe("detail strip native widget markup", () => {
         const injectDockCss = (): void =>
             injectCss(
                 "vst-probe-css",
-                path.join(__dirname, "..", "..", "Assets", "video-stages.css"),
+                path.join(__dirname, "..", "Assets", "video-stages.css"),
             );
 
         const computed = (el: Element): CSSStyleDeclaration =>
