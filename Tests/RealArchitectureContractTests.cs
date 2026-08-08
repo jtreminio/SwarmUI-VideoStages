@@ -18,7 +18,6 @@ public class RealArchitectureContractTests
 {
     private sealed record FamilyFixture(
         IVideoArchitectureModule Module,
-        T2IModel BaseModel,
         T2IModel Model,
         ModelProfileId ModelProfileId,
         string CloseImpostorClassId)
@@ -210,7 +209,6 @@ public class RealArchitectureContractTests
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
         return new(
             Ltx2ArchitectureModule.Instance,
-            models.BaseModel,
             models.VideoModel,
             new("ltx-2.3"),
             "lightricks-ltx-video-2");
@@ -221,7 +219,6 @@ public class RealArchitectureContractTests
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
         return new(
             WanArchitectureModule.Instance,
-            models.BaseModel,
             models.VideoModel,
             WanArchitectureModule.ImageToVideoProfileId,
             "wan-2_1-image2video-14b");
@@ -232,7 +229,6 @@ public class RealArchitectureContractTests
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
         return new(
             MiniMaxArchitectureModule.Instance,
-            models.BaseModel,
             models.VideoModel,
             MiniMaxArchitectureModule.ProfileId,
             "minimax-h3-refiner");
@@ -243,7 +239,6 @@ public class RealArchitectureContractTests
         TestModelBundle models = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
         return new(
             WanArchitectureModule.Instance,
-            models.BaseModel,
             models.VideoModel,
             WanArchitectureModule.Ti2v5bProfileId,
             $"{WanArchitectureModule.Ti2v5bModelClassId}/lora");
