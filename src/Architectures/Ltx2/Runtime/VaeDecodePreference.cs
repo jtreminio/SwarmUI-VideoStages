@@ -24,16 +24,12 @@ internal static class VaeDecodePreference
         }
         bool decodable = media.DataType == WGNodeData.DT_LATENT_IMAGE
             || media.DataType == WGNodeData.DT_LATENT_VIDEO
-            // Narrower than core's Compat.HasJointAVLatents, which MiniMax also declares: core
-            // would place the LTX-only LTXVSeparateAVLatent on a MiniMax joint latent.
             || (media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO
                 && media.IsCompat(T2IModelClassSorter.CompatLtxv2));
         if (vae is null || !decodable)
         {
-            // No vae, audio-only, or a joint latent from another family: no LTX decode to place, so
-            // a caller that claimed a host decode id does not get to spend it here. Nothing a stage
-            // produces after sampling reaches this, and an unspent claim only leaves core's decode
-            // to be swept.
+            // No vae, audio-only, or another family's joint latent: core decodes it the same way
+            // but under an id of its own, so a claimed host decode id is not spent here.
             return media.AsRawImage(vae);
         }
 
