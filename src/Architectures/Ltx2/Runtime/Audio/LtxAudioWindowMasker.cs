@@ -15,10 +15,6 @@ namespace VideoStages.Architectures.Ltx2.Runtime.Audio;
 /// <summary>
 /// Applies the retake window to both channels of an AV latent. Mask value 1.0 regenerates content;
 /// 0.0 preserves the encoded reference.
-///
-/// The stock node can only merge per-frame scalar video masks. Because
-/// <see cref="LtxVideoRetakeMasker"/> supplies an H×W-resized mask, this node owns the video mask
-/// and starts it at 0.0. Window times use the same latent-frame boundaries as the video mask.
 /// </summary>
 internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
 {
@@ -51,9 +47,6 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
         return new AudioMaskWindow((double)startPixel / fps, (double)endPixel / fps);
     }
 
-    /// <summary>
-    /// Applies the mask and returns false without changing the graph when a prerequisite is absent.
-    /// </summary>
     public bool Apply(WorkflowGenerator.ImageToVideoGenInfo genInfo, StageContext stageContext)
     {
         if (!g.IsLTXV2() || g.CurrentAudioVae?.Path is null || genInfo?.Model?.Path is null || genInfo.Vae?.Path is null)
