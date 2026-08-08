@@ -882,10 +882,9 @@
     z-index: var(--vst-z-overlay);
 }
 
+/* Top mini-row of the audio track; the per-track lanes sit beneath it. The tint
+   is re-set per source kind by .vst-audio-kind-*. */
 .vst-audio-clip {
-    /* Top mini-row of the audio track (per-track lanes sit beneath). Every
-       source kind renders the full-width fake waveform in its own tint (set
-       by .vst-audio-kind-*). */
     --vst-audio-tint: var(--green);
     position: absolute;
     top: 6px;
