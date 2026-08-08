@@ -43,7 +43,7 @@ internal static class PromptRelayPlanCompiler
         };
 
     /// <summary>
-    /// Tiles windows that <see cref="Compile"/> has already filtered and start-ordered, filling
+    /// Tiles the already-filtered, start-ordered windows of a <see cref="PromptRelayPlan"/>, filling
     /// every gap and the tail with an empty-prompt segment — that filler is what turns a single
     /// authored window into the multi-segment relay <see cref="ModeFor"/> looks for.
     /// </summary>

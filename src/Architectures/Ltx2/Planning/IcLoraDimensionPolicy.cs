@@ -36,16 +36,6 @@ internal static class IcLoraDimensionPolicy
             : 1;
     }
 
-    private static string NormalizeModelName(string modelName)
-    {
-        string normalized = $"{modelName}".Trim().Replace('\\', '/');
-        int slash = normalized.LastIndexOf('/');
-        if (slash >= 0)
-        {
-            normalized = normalized[(slash + 1)..];
-        }
-        return normalized.EndsWith(".safetensors", StringComparison.OrdinalIgnoreCase)
-            ? normalized[..^".safetensors".Length]
-            : normalized;
-    }
+    private static string NormalizeModelName(string modelName) =>
+        IcLoraWeights.FileStem($"{modelName}".Trim().Replace('\\', '/'));
 }
