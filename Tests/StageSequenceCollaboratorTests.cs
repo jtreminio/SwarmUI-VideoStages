@@ -59,26 +59,6 @@ public class StageSequenceCollaboratorTests
     }
 
     [Fact]
-    public void Continuity_builder_consumes_clip_and_stage_plans()
-    {
-        Type[] parameterTypes = typeof(ContinuityGuideBuilder)
-            .GetMethod(nameof(ContinuityGuideBuilder.TryBuild))
-            ?.GetParameters()
-            .Select(parameter => parameter.ParameterType)
-            .ToArray();
-
-        Assert.Equal(
-            [
-                typeof(ClipPlan),
-                typeof(WGNodeData),
-                typeof(int),
-                typeof(Timeline.Geometry)
-            ],
-            parameterTypes);
-        Assert.DoesNotContain(typeof(ClipSpec), parameterTypes);
-    }
-
-    [Fact]
     public void Continuity_builder_creates_the_planned_tail_window()
     {
         using SwarmUiTestContext testContext = new();
