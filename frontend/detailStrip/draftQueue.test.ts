@@ -569,7 +569,7 @@ describe("detail strip draft queue", () => {
             h.setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
-            const range = rangeByLabel("Frame Ref R0");
+            const range = rangeByLabel("Keyframe 0");
             // pointerdown latches the drag; streamed inputs sync range → number
             // → our onChange (host enableSliderForBox wiring is live in tests).
             pointer(range, "pointerdown");
@@ -581,7 +581,7 @@ describe("detail strip draft queue", () => {
             // is NOT rebuilt out from under the drag gesture.
             jest.advanceTimersByTime(1000);
             expect(h.saveSpy).not.toHaveBeenCalled();
-            expect(rangeByLabel("Frame Ref R0")).toBe(range);
+            expect(rangeByLabel("Keyframe 0")).toBe(range);
             jest.useRealTimers();
         });
 
@@ -589,7 +589,7 @@ describe("detail strip draft queue", () => {
             h.setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
-            const range = rangeByLabel("Frame Ref R0");
+            const range = rangeByLabel("Keyframe 0");
             pointer(range, "pointerdown");
             range.value = "0.4";
             range.dispatchEvent(new Event("input", { bubbles: true }));
@@ -611,7 +611,7 @@ describe("detail strip draft queue", () => {
             h.setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
-            const range = rangeByLabel("Frame Ref R0");
+            const range = rangeByLabel("Keyframe 0");
             pointer(range, "pointerdown");
             range.value = "0.4";
             range.dispatchEvent(new Event("input", { bubbles: true }));

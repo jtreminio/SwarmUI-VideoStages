@@ -7,7 +7,7 @@ using Image = SwarmUI.Utils.Image;
 
 namespace VideoStages.Execution.StockHost;
 
-/// <summary>An authored frame reference bound for a model's native first/last frame input.</summary>
+/// <summary>An authored keyframe bound for a model's native first/last frame input.</summary>
 internal sealed record NativeFrameReferencePlan(
     string Source,
     string UploadFileName,
@@ -61,10 +61,10 @@ internal static class NativeFrameReferences
             {
                 Ignore(
                     "middle-frame-reference-ignored",
-                    $"Clip {clip.Id} has a {label} frame reference at "
+                    $"Clip {clip.Id} has a {label} keyframe at "
                         + $"{(reference.FromEnd ? "end-relative" : "start-relative")} frame "
                         + $"{reference.Frame}. {label} native conditioning accepts only the first "
-                        + "and final frame. The authored reference remains saved and is ignored "
+                        + "and final frame. The authored keyframe remains saved and is ignored "
                         + "for this generation.");
                 continue;
             }
@@ -73,7 +73,7 @@ internal static class NativeFrameReferences
                 Ignore(
                     "init-video-first-frame-reference-ignored",
                     $"Clip {clip.Id} already enters from init-video video, so its separate "
-                        + "first-frame reference remains saved and is ignored for this "
+                        + "first keyframe remains saved and is ignored for this "
                         + "generation.");
                 continue;
             }
@@ -86,8 +86,8 @@ internal static class NativeFrameReferences
             {
                 Ignore(
                     "first-frame-reference-ignored",
-                    $"Clip {clip.Id}'s first-frame reference is not supported by the selected "
-                        + $"first {label} model '{firstModel}'. The authored reference remains "
+                    $"Clip {clip.Id}'s first keyframe is not supported by the selected "
+                        + $"first {label} model '{firstModel}'. The authored keyframe remains "
                         + "saved and is ignored for this generation.");
                 continue;
             }
@@ -98,10 +98,10 @@ internal static class NativeFrameReferences
             {
                 Ignore(
                     "frame-reference-source-ignored",
-                    $"Clip {clip.Id}'s {label} {(isFirst ? "first" : "final")}-frame reference "
+                    $"Clip {clip.Id}'s {label} {(isFirst ? "first" : "final")} keyframe "
                         + $"uses source '{reference.Source}', but the native {label} "
-                        + "bounded-reference path currently accepts uploaded images. The authored "
-                        + "reference remains saved and is ignored for this generation.");
+                        + "bounded-keyframe path currently accepts uploaded images. The authored "
+                        + "keyframe remains saved and is ignored for this generation.");
                 continue;
             }
             if (isFirst ? first is not null : last is not null)
@@ -109,8 +109,8 @@ internal static class NativeFrameReferences
                 Ignore(
                     "duplicate-frame-reference-ignored",
                     $"Clip {clip.Id} has more than one {label} {(isFirst ? "first" : "last")} "
-                        + "frame reference. The first authored reference remains active; later "
-                        + "references remain saved and are ignored for this generation.");
+                        + "keyframe. The first authored keyframe remains active; later keyframes "
+                        + "remain saved and are ignored for this generation.");
                 continue;
             }
             if (isLast
@@ -122,8 +122,8 @@ internal static class NativeFrameReferences
             {
                 Ignore(
                     "last-frame-reference-ignored",
-                    $"Clip {clip.Id}'s final-frame reference is not supported by the selected "
-                        + $"terminal {label} model '{terminalModel}'. The authored reference "
+                    $"Clip {clip.Id}'s final keyframe is not supported by the selected "
+                        + $"terminal {label} model '{terminalModel}'. The authored keyframe "
                         + "remains saved and is ignored for this generation.");
                 continue;
             }

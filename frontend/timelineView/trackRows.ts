@@ -438,7 +438,7 @@ export const renderReferencesTrackRow = (
                     const thumbnailData = image
                         ? backgroundImageDataAttr(mediaPreviewSrc(image))
                         : "";
-                    const frameLabel = `R ${isEnd ? "-" : ""}${frame}`;
+                    const frameLabel = `K ${isEnd ? "-" : ""}${frame}`;
                     const thumbnailClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
                     const alignClass =
                         frame > REF_EDGE_ALIGN_FRAMES
@@ -454,10 +454,10 @@ export const renderReferencesTrackRow = (
                         ? `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""}` +
                           ` · frame ${frame} · ${formatTimeLabel(time, unit, fps)}` +
                           ` · click to edit, drag to move · Shift+click to delete`
-                        : `Persisted reference ${refIdx} is unsupported by this architecture · click to inspect or Shift+click to delete`;
+                        : `Persisted keyframe ${refIdx} is unsupported by this architecture · click to inspect or Shift+click to delete`;
                     const label = refsSupported
-                        ? `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})`
-                        : `Inspect unsupported persisted reference ${refIdx} for removal`;
+                        ? `Edit keyframe ${refIdx} (${source}${isEnd ? ", from end" : ""})`
+                        : `Inspect unsupported persisted keyframe ${refIdx} for removal`;
                     return (
                         `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}">` +
                         `<span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeHtml(frameLabel)}</span></span>` +
@@ -465,12 +465,12 @@ export const renderReferencesTrackRow = (
                     );
                 })
                 .join("");
-            return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.frameRefs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a frame reference here" : "Frame references are unsupported; existing references can be inspected or removed"}">${marks}</div>`;
+            return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.frameRefs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a keyframe here" : "Keyframes are unsupported; existing keyframes can be inspected or removed"}">${marks}</div>`;
         })
         .join("");
     return (
         `<div class="vst-track-row vst-track-refs">` +
-        renderTrackHead("vst-track-icon-refs", "⧉", "Frame References", "") +
+        renderTrackHead("vst-track-icon-refs", "⧉", "Keyframes", "") +
         `<div class="vst-track-cell">${lanes}</div>` +
         `</div>`
     );

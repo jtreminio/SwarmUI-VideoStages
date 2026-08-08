@@ -1101,7 +1101,7 @@ describe("renderTimeline (DOM)", () => {
         expect(skips[0].disabled).toBe(false);
     });
 
-    it("draws a bare arrow marker on the clip and shows the ref image on the References-track thumbnail", () => {
+    it("draws a bare arrow marker on the clip and shows the keyframe image on the Keyframes track", () => {
         const clip = {
             duration: 2,
             stages: [{}],
@@ -1118,7 +1118,10 @@ describe("renderTimeline (DOM)", () => {
         const dot = body.querySelector<HTMLElement>(".vst-key .vst-key-dot");
         expect(dot).not.toBeNull();
         expect(dot?.getAttribute("style") ?? "").not.toContain("data:image");
-        // The image lives on the References-track thumbnail below the clip.
+        expect(body.querySelector<HTMLElement>(".vst-keys")?.title).toBe(
+            "Keyframe markers",
+        );
+        // The image lives on the Keyframes track thumbnail below the clip.
         const thumb = body.querySelector<HTMLElement>(
             ".vst-track-refs .vst-refs-thumb",
         );
@@ -1183,7 +1186,7 @@ describe("renderTimeline (DOM)", () => {
         ).toBe("51.51515151515152%");
     });
 
-    it("renders the References track between the video and audio tracks", () => {
+    it("renders the Keyframes track between the video and audio tracks", () => {
         renderTimeline(body, [makeClip(2, 1, 1)]);
         const rows = Array.from(
             body.querySelectorAll<HTMLElement>(".vst-track-row"),
@@ -1194,10 +1197,17 @@ describe("renderTimeline (DOM)", () => {
         expect(videoIdx).toBeGreaterThanOrEqual(0);
         expect(refsIdx).toBe(videoIdx + 1);
         expect(audioIdx).toBe(refsIdx + 1);
+        expect(
+            body.querySelector(".vst-track-refs .vst-track-label")?.textContent,
+        ).toBe("Keyframes");
+        expect(
+            body.querySelector<HTMLElement>(".vst-track-refs .vst-refs-lane")
+                ?.title,
+        ).toBe("Click to add a keyframe here");
         expect(body.querySelector(".vst-track-refs .vst-head-tags")).toBeNull();
     });
 
-    it("renders one References mark per ref, flagging primary (cover) and from-end frameRefs", () => {
+    it("renders one Keyframes mark per ref, flagging primary (cover) and from-end frameRefs", () => {
         const clip = {
             duration: 4,
             stages: [{}],
@@ -1215,16 +1225,16 @@ describe("renderTimeline (DOM)", () => {
         expect(marks[0].className).not.toContain("vst-refs-fromend");
         expect(marks[1].className).toContain("vst-refs-fromend");
         expect(marks[1].className).not.toContain("vst-refs-primary");
-        // The marker face shows the signed frame ("R 1"; "R -N" for from-end).
-        expect(marks[0].querySelector(".vst-refs-ph")?.textContent).toBe("R 1");
+        // The marker face shows the signed frame ("K 1"; "K -N" for from-end).
+        expect(marks[0].querySelector(".vst-refs-ph")?.textContent).toBe("K 1");
         expect(marks[1].querySelector(".vst-refs-ph")?.textContent).toBe(
-            "R -6",
+            "K -6",
         );
         expect(marks[0].getAttribute("aria-label")).toBe(
-            "Edit reference 0 (Refiner)",
+            "Edit keyframe 0 (Refiner)",
         );
         expect(marks[1].getAttribute("aria-label")).toBe(
-            "Edit reference 1 (Base, from end)",
+            "Edit keyframe 1 (Base, from end)",
         );
     });
 
@@ -1242,9 +1252,9 @@ describe("renderTimeline (DOM)", () => {
         const marks = body.querySelectorAll<HTMLElement>(
             '.vst-track-refs .vst-refs-mark[data-vst-ref="thumb"]',
         );
-        expect(marks[0].querySelector(".vst-refs-ph")?.textContent).toBe("R 2");
+        expect(marks[0].querySelector(".vst-refs-ph")?.textContent).toBe("K 2");
         expect(marks[1].querySelector(".vst-refs-ph")?.textContent).toBe(
-            "R -2",
+            "K -2",
         );
         expect(marks[0].className).toContain("vst-refs-align-start");
         expect(marks[1].className).toContain("vst-refs-align-end");
@@ -1271,10 +1281,10 @@ describe("renderTimeline (DOM)", () => {
         expect(thumb?.style.backgroundImage).toContain(
             "data:image/png;base64,QQ==",
         );
-        expect(thumb?.querySelector(".vst-refs-ph")?.textContent).toBe("R 3");
+        expect(thumb?.querySelector(".vst-refs-ph")?.textContent).toBe("K 3");
     });
 
-    it("exposes a clickable add-lane per clip in the References track", () => {
+    it("exposes a clickable add-lane per clip in the Keyframes track", () => {
         renderTimeline(body, [makeClip(2, 1, 0), makeClip(3, 1, 0)]);
         const lanes = body.querySelectorAll(
             ".vst-track-refs .vst-refs-lane[data-vst-ref-add]",
@@ -1511,7 +1521,7 @@ describe("unsupported persisted timeline controls", () => {
                 document.body,
                 '.vst-refs-mark[data-clip-idx="0"]',
             ).getAttribute("aria-label"),
-        ).toBe("Inspect unsupported persisted reference 0 for removal");
+        ).toBe("Inspect unsupported persisted keyframe 0 for removal");
         expect(
             requireEl(
                 document.body,

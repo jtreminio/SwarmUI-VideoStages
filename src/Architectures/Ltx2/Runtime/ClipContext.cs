@@ -61,7 +61,7 @@ internal sealed class ClipContext
     /// Skipped for passthrough stages (they regenerate nothing), for retake stages (their per-frame
     /// noise mask owns what regenerates, and an inplace merge would clobber it — so a retake whose
     /// window excludes the head cannot be re-anchored), and for stages that author their own
-    /// first-frame reference, which outranks an implicit boundary guide at every stage index.
+    /// first keyframe, which outranks an implicit boundary guide at every stage index.
     /// </summary>
     public bool ReanchorsContinuityTail(StagePlan stage) =>
         ContinuityTail is not null

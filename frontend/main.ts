@@ -31,7 +31,7 @@ const registerVideoStagesPromptPrefix = (): void => {
         () => [
             "\n<videoclip[0]>the first clip's prompt text — everything until the next <videoclip...> tag.",
             "\n<videoclip[0]:1.5-4>a prompt window on the first clip from 1.5s to 4s.",
-            "\nThe timeline owns these; structured config (stages, refs, audio) rides in the hidden Data param.",
+            "\nThe timeline owns these; structured config (stages, references, keyframes, audio) rides in the hidden Data param.",
         ],
         true,
     );

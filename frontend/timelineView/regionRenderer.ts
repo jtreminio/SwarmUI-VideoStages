@@ -153,7 +153,7 @@ const renderKeyframes = (
             );
         })
         .join("");
-    return `<div class="vst-keys" title="Frame reference markers">${markers}</div>`;
+    return `<div class="vst-keys" title="Keyframe markers">${markers}</div>`;
 };
 
 const renderBadges = (clip: Clip, clipIdx: number): string => {

@@ -538,7 +538,7 @@ const renameKey = (
 };
 
 /**
- * The sole v6→v7 migration: the frame-reference fields gained their "frame"
+ * The sole v6→v7 migration: the keyframe fields gained their "frame"
  * prefix so they no longer read as the position-free references other
  * architectures accept.
  */

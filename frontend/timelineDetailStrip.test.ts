@@ -192,7 +192,7 @@ describe("createTimelineDetailStrip", () => {
         }
     });
 
-    it("uses zero-based Ref labels and opens each newly added reference", () => {
+    it("uses zero-based Keyframe labels and opens each newly added keyframe", () => {
         h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
@@ -206,15 +206,15 @@ describe("createTimelineDetailStrip", () => {
         );
         expect(groups).toHaveLength(2);
         expect(groups[0].querySelector(".header-label")?.textContent).toBe(
-            "Ref0",
+            "Keyframe 0",
         );
         expect(groups[1].querySelector(".header-label")?.textContent).toBe(
-            "Ref1",
+            "Keyframe 1",
         );
         expect(groups[0].classList.contains("input-group-closed")).toBe(true);
         expect(groups[1].classList.contains("input-group-open")).toBe(true);
-        expect(sliderNumberByLabel("Frame Ref R0")).not.toBeNull();
-        expect(sliderNumberByLabel("Frame Ref R1")).not.toBeNull();
+        expect(sliderNumberByLabel("Keyframe 0")).not.toBeNull();
+        expect(sliderNumberByLabel("Keyframe 1")).not.toBeNull();
     });
 
     it("places Count from clip end help before its label", () => {
@@ -732,7 +732,7 @@ describe("createTimelineDetailStrip", () => {
             },
         ]);
         setSelection({ kind: "ref", clipIdx: 0, refIdx: 1 });
-        expect(crumbText()).toBe("Ref1 · Clip 0");
+        expect(crumbText()).toBe("Keyframe 1 · Clip 0");
         expect(document.querySelectorAll(".vst-detail-ref-row")).toHaveLength(
             1,
         );
@@ -1201,8 +1201,14 @@ describe("createTimelineDetailStrip", () => {
             ).toBeTruthy();
             expect(body?.querySelectorAll(".vst-ref-tab")).toHaveLength(2);
             expect(
+                refsHead?.querySelector<HTMLElement>(
+                    ":scope > .input-group-header .header-label",
+                )?.textContent,
+            ).toBe("Keyframes");
+            expect(
                 body?.querySelector(".vst-detail-add-ref")?.textContent,
-            ).toBe("+ Add Frame Reference");
+            ).toBe("+ Add Keyframe");
+            expect(body?.textContent).toContain("Keyframe Strengths");
             expect(
                 body?.querySelector(".vst-detail-delete-ref")?.textContent,
             ).toBe("×");

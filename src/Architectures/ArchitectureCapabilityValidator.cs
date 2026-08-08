@@ -70,7 +70,7 @@ internal static class ArchitectureCapabilityValidator
                 && (clip.FrameRefs is { Count: > 0 }
                     || stages.Any(stage => stage.FrameRefStrengths is { Count: > 0 })),
             ArchitectureFeature.FrameReferences,
-            "image/frame references");
+            "keyframes");
         Warn(
             Unsupported(ArchitectureFeature.PromptRelay)
                 && clip.PromptWindows is { Count: > 0 },

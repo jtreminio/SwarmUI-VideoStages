@@ -74,7 +74,7 @@ internal static class DocumentJson
     private static string GetData(T2IParamInput input) =>
         input.Get(VideoStagesExtension.Data, "");
 
-    /// <summary>The sole v6-&gt;v7 migration: the frame-reference keys gained their "frame" prefix so
+    /// <summary>The sole v6-&gt;v7 migration: the keyframe keys gained their "frame" prefix so
     /// they no longer read as the position-free references other architectures accept.</summary>
     private static void RenameFrameRefKeys(JObject clip)
     {

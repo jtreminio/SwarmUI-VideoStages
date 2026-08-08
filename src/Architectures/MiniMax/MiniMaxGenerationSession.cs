@@ -65,7 +65,7 @@ internal sealed class MiniMaxGenerationSession(
         _referenceFraming = payload.ReferenceFraming;
         _entryFirstFrame = ResolveFrameReference(
             payload.FirstFrameReference,
-            "MiniMax H3 first-frame reference");
+            "MiniMax H3 first keyframe");
         _endFrame = ResolveEndFrame(payload.LastFrameReference);
         if (clip.EntryMode == ArchitectureEntryMode.InitVideo)
         {
@@ -870,7 +870,7 @@ internal sealed class MiniMaxGenerationSession(
     {
         if (authored is not null)
         {
-            return ResolveFrameReference(authored, "MiniMax H3 final-frame reference");
+            return ResolveFrameReference(authored, "MiniMax H3 final keyframe");
         }
         Image global = plan.Clips.Count == 1
             ? g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)

@@ -765,7 +765,7 @@ public class ArchitectureFoundationTests
             plan.Diagnostics,
             diagnostic => diagnostic.Code
                     == "effective-request.unsupported-frame-references-ignored"
-                && diagnostic.Message.Contains("frame references"));
+                && diagnostic.Message.Contains("keyframes"));
         Assert.Equal(1, registry.CompileCounts[new("fake")]);
     }
 

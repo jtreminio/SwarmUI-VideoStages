@@ -112,7 +112,7 @@ export const detailBreadcrumb = (
                 ? `Clip ${selection.clipIdx} · Source only`
                 : `Clip ${selection.clipIdx} · ${stageChipLabel(selection.stageIdx)}`;
         case "ref":
-            return `Ref${selection.refIdx} · Clip ${selection.clipIdx}`;
+            return `Keyframe ${selection.refIdx} · Clip ${selection.clipIdx}`;
         case "clip-ref": {
             const incomingBoundary =
                 fps === undefined || capabilities === undefined

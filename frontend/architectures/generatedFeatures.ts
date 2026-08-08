@@ -2,7 +2,7 @@
 
 export const ARCHITECTURE_FEATURE_LABELS = {
     promptRelay: "Prompt relay",
-    frameReferences: "Frame references",
+    frameReferences: "Keyframes",
     clipReferences: "Clip references",
     referenceFraming: "Reference framing",
     retake: "Retake",
@@ -40,7 +40,7 @@ export const RULE_SUPPORTS = [
 /** Every continue mode the serialized catalog can carry, in declaration order. */
 export const CONTINUE_MODES = ["overlap", "reference"] as const;
 
-/** Every frame reference position the catalog can carry, in declaration order. */
+/** Every keyframe position the catalog can carry, in declaration order. */
 export const FRAME_REFERENCE_POSITIONS = ["first", "last", "any"] as const;
 
 /** Every audio source the catalog can carry, in declaration order. */

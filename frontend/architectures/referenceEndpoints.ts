@@ -60,7 +60,7 @@ export const boundedReferencePositionHelp = (
     policy: FrameReferenceEndpointPolicy,
 ): string | undefined => {
     if (!policy.available) {
-        return "This clip does not accept frame-reference endpoints.";
+        return "This clip does not accept keyframe endpoints.";
     }
     if (!policy.bounded) {
         return undefined;
@@ -78,7 +78,7 @@ export const boundedReferenceToggleHelp = (
     policy: FrameReferenceEndpointPolicy,
 ): string | undefined => {
     if (!policy.available) {
-        return "This clip does not publish a supported frame-reference endpoint.";
+        return "This clip does not publish a supported keyframe endpoint.";
     }
     if (!policy.bounded) {
         return undefined;

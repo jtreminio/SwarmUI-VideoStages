@@ -30,7 +30,7 @@ internal static class Ltx2RequestPreflight
                     if (media.ImageDiagnostic(
                         reference.InlineData,
                         reference.UploadFileName,
-                        $"clip {clip.ClipId} frame reference",
+                        $"clip {clip.ClipId} keyframe",
                         clip.ClipId,
                         stage.StageId) is { } unreadable)
                     {

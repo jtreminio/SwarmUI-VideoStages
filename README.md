@@ -44,9 +44,9 @@ Each clip has a **major prompt** and optional **relay windows** — additional p
 
 A **retake** regenerates only a chosen frame range of an existing video and leaves the rest untouched — useful for fixing one bad moment without redoing the shot. Retakes need a source video (or the global Refine Video source).
 
-## Image references
+## Keyframes
 
-The references track pins images to specific frames of a clip: a first-frame reference to steer where the shot starts, an end-frame reference to steer where it lands, or anything in between.
+The **Keyframes** track pins images to specific frames of a clip: a first keyframe to steer where the shot starts, a final keyframe to steer where it lands, or anything in between.
 
 ## Audio
 

@@ -127,7 +127,7 @@ export const createTimelineReferencesTrack = (
         }
         const ph = mark.querySelector<HTMLElement>(".vst-refs-ph");
         if (ph) {
-            ph.textContent = `R ${fromEnd ? "-" : ""}${frame}`;
+            ph.textContent = `K ${fromEnd ? "-" : ""}${frame}`;
         }
     };
 

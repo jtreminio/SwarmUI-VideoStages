@@ -449,7 +449,7 @@
   // frontend/architectures/generatedFeatures.ts
   var ARCHITECTURE_FEATURE_LABELS = {
     promptRelay: "Prompt relay",
-    frameReferences: "Frame references",
+    frameReferences: "Keyframes",
     clipReferences: "Clip references",
     referenceFraming: "Reference framing",
     retake: "Retake",
@@ -10001,7 +10001,7 @@
       const kindClass = (isEnd ? " vst-key-end" : " vst-key-start") + (isPrimary ? " vst-key-primary" : "");
       return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeHtml(title)}" aria-hidden="true"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
     }).join("");
-    return `<div class="vst-keys" title="Frame reference markers">${markers}</div>`;
+    return `<div class="vst-keys" title="Keyframe markers">${markers}</div>`;
   };
   var renderBadges = (clip, clipIdx) => {
     const firstStage = (clip.stages ?? [])[0];
@@ -11318,7 +11318,7 @@
       built.heading,
       built.section,
       "LoRAs",
-      "Choose the normal LoRA models once for this clip. Each stage sets its own weight below its reference strengths."
+      "Choose the normal LoRA models once for this clip. Each stage sets its own weight below its keyframe strengths."
     );
     return built.section;
   };
@@ -12010,7 +12010,7 @@ ${slot}`;
   };
   var boundedReferencePositionHelp = (policy) => {
     if (!policy.available) {
-      return "This clip does not accept frame-reference endpoints.";
+      return "This clip does not accept keyframe endpoints.";
     }
     if (!policy.bounded) {
       return void 0;
@@ -12025,7 +12025,7 @@ ${slot}`;
   };
   var boundedReferenceToggleHelp = (policy) => {
     if (!policy.available) {
-      return "This clip does not publish a supported frame-reference endpoint.";
+      return "This clip does not publish a supported keyframe endpoint.";
     }
     if (!policy.bounded) {
       return void 0;
@@ -12046,27 +12046,27 @@ ${slot}`;
     const activeRefIdx = clip.frameRefs.length === 0 ? null : clamp(selectedRefIdx ?? 0, 0, clip.frameRefs.length - 1);
     const buildSection = (editorForItem) => buildRepeatingEditor({
       key: "references",
-      label: "Frame References",
+      label: "Keyframes",
       sectionClass: "vst-detail-ref-section",
       open,
       items: clip.frameRefs.map((_, refIdx) => ({
-        label: `Ref${refIdx}`,
+        label: `Keyframe ${refIdx}`,
         focusKey: `reference-tab-${refIdx}`,
-        title: `Edit frame reference ${refIdx}`,
+        title: `Edit keyframe ${refIdx}`,
         active: refIdx === activeRefIdx,
         className: "vst-ref-tab",
         onSelect: () => setSelection({ kind: "ref", clipIdx, refIdx }),
         onDelete: () => ctx.deleteRefEntry(clipIdx, refIdx)
       })),
       add: {
-        title: !decision.supported ? decision.reason : hasSupportedEndpoint ? "Add a frame reference" : "The selected models do not publish a supported frame-reference endpoint.",
-        label: "+ Add Frame Reference",
+        title: !decision.supported ? decision.reason : hasSupportedEndpoint ? "Add a keyframe" : "The selected models do not publish a supported keyframe endpoint.",
+        label: "+ Add Keyframe",
         className: "vst-detail-add-ref",
         disabled: !decision.supported || !hasSupportedEndpoint,
         onClick: () => ctx.addRefEntry(clipIdx)
       },
       remove: {
-        title: activeRefIdx === null ? "No frame reference to delete" : `Delete frame reference ${activeRefIdx}`,
+        title: activeRefIdx === null ? "No keyframe to delete" : `Delete keyframe ${activeRefIdx}`,
         className: "vst-detail-delete-ref"
       },
       editorForItem
@@ -12108,7 +12108,7 @@ ${slot}`;
           "Image Source",
           select2,
           void 0,
-          "Where this reference image comes from — an upload, or another clip's rendered frame. The image guides how the clip looks at its attach frame."
+          "Where this keyframe image comes from — an upload, or another clip's rendered frame. The image guides how the clip looks at its attach frame."
         )
       );
       if (isUpload) {
@@ -12155,7 +12155,7 @@ ${slot}`;
           "Attach at Frame",
           frameInput,
           void 0,
-          boundedReferencePositionHelp(endpointPolicy) ?? (boundedPositions ? "This clip accepts an image only at a bounded endpoint." : "The frame within the clip where this reference is anchored. Frame 1 is the first frame; the image influences the clip most strongly around here.")
+          boundedReferencePositionHelp(endpointPolicy) ?? (boundedPositions ? "This clip accepts an image only at a bounded endpoint." : "The frame within the clip where this keyframe is anchored. Frame 1 is the first frame; the image influences the clip most strongly around here.")
         )
       );
       fields.appendChild(
@@ -12490,7 +12490,7 @@ ${slot}`;
   }) => {
     if (clip.frameRefs.length > 0) {
       const refDecision = context.authoring().capabilities.forClip(clip).decision("frameReferences");
-      appendSectionHeader(fields, "Frame Reference Strengths");
+      appendSectionHeader(fields, "Keyframe Strengths");
       const setRefHover = (refIdx, on) => {
         context.getBoundBody()?.querySelector(
           `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
@@ -12499,7 +12499,7 @@ ${slot}`;
       clip.frameRefs.forEach((ref, refIdx) => {
         const current = refIdx < stage.frameRefStrengths.length ? stage.frameRefStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
         const refSlider = buildSlider(
-          `Frame Ref R${refIdx}`,
+          `Keyframe ${refIdx}`,
           current,
           STAGE_REF_STRENGTH_MIN,
           STAGE_REF_STRENGTH_MAX,
@@ -13652,7 +13652,7 @@ ${slot}`;
       case "clip":
         return clips[selection.clipIdx]?.stages.length === 0 ? `Clip ${selection.clipIdx} · Source only` : `Clip ${selection.clipIdx} · ${stageChipLabel(selection.stageIdx)}`;
       case "ref":
-        return `Ref${selection.refIdx} · Clip ${selection.clipIdx}`;
+        return `Keyframe ${selection.refIdx} · Clip ${selection.clipIdx}`;
       case "clip-ref": {
         const incomingBoundary = fps === void 0 || capabilities === void 0 ? null : incomingReferenceContinueForClip(
           clips,
@@ -15386,7 +15386,7 @@ ${slot}`;
       }
       const ph = mark.querySelector(".vst-refs-ph");
       if (ph) {
-        ph.textContent = `R ${fromEnd ? "-" : ""}${frame}`;
+        ph.textContent = `K ${fromEnd ? "-" : ""}${frame}`;
       }
     };
     const addRefAtFrame = (clipIdx, frame, sourceRevision, authoring = getAuthoring()) => {
@@ -16176,17 +16176,17 @@ ${slot}`;
         const source = refSourceLabel(ref.source ?? "");
         const image = ref.uploadedImage?.data;
         const thumbnailData = image ? backgroundImageDataAttr(mediaPreviewSrc(image)) : "";
-        const frameLabel = `R ${isEnd ? "-" : ""}${frame}`;
+        const frameLabel = `K ${isEnd ? "-" : ""}${frame}`;
         const thumbnailClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
         const alignClass = frame > REF_EDGE_ALIGN_FRAMES ? "" : isEnd ? " vst-refs-align-end" : " vst-refs-align-start";
         const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
-        const title = refsSupported ? `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete` : `Persisted reference ${refIdx} is unsupported by this architecture · click to inspect or Shift+click to delete`;
-        const label = refsSupported ? `Edit reference ${refIdx} (${source}${isEnd ? ", from end" : ""})` : `Inspect unsupported persisted reference ${refIdx} for removal`;
+        const title = refsSupported ? `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete` : `Persisted keyframe ${refIdx} is unsupported by this architecture · click to inspect or Shift+click to delete`;
+        const label = refsSupported ? `Edit keyframe ${refIdx} (${source}${isEnd ? ", from end" : ""})` : `Inspect unsupported persisted keyframe ${refIdx} for removal`;
         return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeHtml(frameLabel)}</span></span></div>`;
       }).join("");
-      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.frameRefs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a frame reference here" : "Frame references are unsupported; existing references can be inspected or removed"}">${marks}</div>`;
+      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.frameRefs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a keyframe here" : "Keyframes are unsupported; existing keyframes can be inspected or removed"}">${marks}</div>`;
     }).join("");
-    return `<div class="vst-track-row vst-track-refs">` + renderTrackHead("vst-track-icon-refs", "⧉", "Frame References", "") + `<div class="vst-track-cell">${lanes}</div></div>`;
+    return `<div class="vst-track-row vst-track-refs">` + renderTrackHead("vst-track-icon-refs", "⧉", "Keyframes", "") + `<div class="vst-track-cell">${lanes}</div></div>`;
   };
 
   // frontend/timelineView.ts
@@ -16743,7 +16743,7 @@ ${slot}`;
       () => [
         "\n<videoclip[0]>the first clip's prompt text — everything until the next <videoclip...> tag.",
         "\n<videoclip[0]:1.5-4>a prompt window on the first clip from 1.5s to 4s.",
-        "\nThe timeline owns these; structured config (stages, refs, audio) rides in the hidden Data param."
+        "\nThe timeline owns these; structured config (stages, references, keyframes, audio) rides in the hidden Data param."
       ],
       true
     );

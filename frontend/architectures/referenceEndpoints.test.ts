@@ -96,10 +96,10 @@ describe("referenceEndpointPolicy", () => {
             supportsLast: false,
         });
         expect(boundedReferencePositionHelp(policy)).toBe(
-            "This clip does not accept frame-reference endpoints.",
+            "This clip does not accept keyframe endpoints.",
         );
         expect(boundedReferenceToggleHelp(policy)).toBe(
-            "This clip does not publish a supported frame-reference endpoint.",
+            "This clip does not publish a supported keyframe endpoint.",
         );
     });
 });

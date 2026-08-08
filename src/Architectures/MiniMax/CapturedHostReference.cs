@@ -4,7 +4,7 @@ using VideoStages.Execution.Graph;
 namespace VideoStages.Architectures.MiniMax;
 
 /// <summary>
-/// A host stage's media captured for use as a keyframe reference, together with the VAE that was
+/// A host stage's media captured for use as a keyframe, together with the VAE that was
 /// current at capture time.
 /// <para>
 /// The base capture runs before the host decodes its base latent, so the captured media is often

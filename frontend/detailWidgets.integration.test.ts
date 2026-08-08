@@ -26,7 +26,7 @@ describe("detail widgets in the dock", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        for (const label of ["Steps", "CFG Scale", "Frame Ref R0"]) {
+        for (const label of ["Steps", "CFG Scale", "Keyframe 0"]) {
             expect(
                 sliderNumberByLabel(label)
                     .closest(".vst-stage-slider")

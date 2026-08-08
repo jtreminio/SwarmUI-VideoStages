@@ -24,7 +24,7 @@ internal sealed class WanStockHostVideoBehavior(
         Image image = NativeFrameReferences.MaterializeUpload(
             generator,
             reference,
-            "WAN first-frame reference");
+            "WAN first keyframe");
         return image is null
             ? null
             : generator.LoadImage(
@@ -46,7 +46,7 @@ internal sealed class WanStockHostVideoBehavior(
         Image authored = NativeFrameReferences.MaterializeUpload(
             generator,
             clip.RequireWanPayload().LastFrameReference,
-            "WAN final-frame reference");
+            "WAN final keyframe");
         if (authored is not null)
         {
             return authored;

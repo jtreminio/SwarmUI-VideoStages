@@ -632,7 +632,7 @@ describe("architecture diagnostics", () => {
             ).toContain("architecture.boundary-unsupported");
         });
 
-        it("blocks a continue into a first-frame reference", () => {
+        it("blocks a continue into a first keyframe", () => {
             expect(
                 codesFor(
                     minimalClip({ frameRefs: [minimalRef({ frame: 1 })] }),

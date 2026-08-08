@@ -22,10 +22,6 @@ import { setSelection } from "../selection";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
 
-/**
- * Stage-style frame-reference child section for the owning clip panel. The
- * rail lists every reference while only the selected reference editor renders.
- */
 export const buildRefSection = (
     ctx: DetailStripContext,
     clipIdx: number,
@@ -48,13 +44,13 @@ export const buildRefSection = (
     ): HTMLElement =>
         buildRepeatingEditor({
             key: "references",
-            label: "Frame References",
+            label: "Keyframes",
             sectionClass: "vst-detail-ref-section",
             open,
             items: clip.frameRefs.map((_, refIdx) => ({
-                label: `Ref${refIdx}`,
+                label: `Keyframe ${refIdx}`,
                 focusKey: `reference-tab-${refIdx}`,
-                title: `Edit frame reference ${refIdx}`,
+                title: `Edit keyframe ${refIdx}`,
                 active: refIdx === activeRefIdx,
                 className: "vst-ref-tab",
                 onSelect: () => setSelection({ kind: "ref", clipIdx, refIdx }),
@@ -64,9 +60,9 @@ export const buildRefSection = (
                 title: !decision.supported
                     ? decision.reason
                     : hasSupportedEndpoint
-                      ? "Add a frame reference"
-                      : "The selected models do not publish a supported frame-reference endpoint.",
-                label: "+ Add Frame Reference",
+                      ? "Add a keyframe"
+                      : "The selected models do not publish a supported keyframe endpoint.",
+                label: "+ Add Keyframe",
                 className: "vst-detail-add-ref",
                 disabled: !decision.supported || !hasSupportedEndpoint,
                 onClick: () => ctx.addRefEntry(clipIdx),
@@ -74,8 +70,8 @@ export const buildRefSection = (
             remove: {
                 title:
                     activeRefIdx === null
-                        ? "No frame reference to delete"
-                        : `Delete frame reference ${activeRefIdx}`,
+                        ? "No keyframe to delete"
+                        : `Delete keyframe ${activeRefIdx}`,
                 className: "vst-detail-delete-ref",
             },
             editorForItem,
@@ -120,7 +116,7 @@ export const buildRefSection = (
                 "Image Source",
                 select,
                 undefined,
-                "Where this reference image comes from — an upload, or another " +
+                "Where this keyframe image comes from — an upload, or another " +
                     "clip's rendered frame. The image guides how the clip looks " +
                     "at its attach frame.",
             ),
@@ -179,7 +175,7 @@ export const buildRefSection = (
                 boundedReferencePositionHelp(endpointPolicy) ??
                     (boundedPositions
                         ? "This clip accepts an image only at a bounded endpoint."
-                        : "The frame within the clip where this reference is anchored. " +
+                        : "The frame within the clip where this keyframe is anchored. " +
                           "Frame 1 is the first frame; the image influences the clip " +
                           "most strongly around here."),
             ),

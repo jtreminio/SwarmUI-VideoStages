@@ -20,7 +20,7 @@ import { buildAudioBody } from "./audioPanel";
 import { buildClipBody } from "./clipPanel";
 import type { DetailStripContext } from "./context";
 
-/** LTX-2 catalog with frame references and upscaling taken away. */
+/** LTX-2 catalog with keyframes and upscaling taken away. */
 const restrictedCatalog = (): ArchitectureModelCatalog => {
     const models = testArchitectureCatalog();
     models.architectures[0].capabilities = testArchitectureCapabilities({
@@ -96,7 +96,7 @@ describe("persisted-but-unsupported repair contract", () => {
         );
         expect(add?.disabled).toBe(true);
         expect(add?.title).toContain(
-            "do not publish a supported frame-reference endpoint",
+            "do not publish a supported keyframe endpoint",
         );
     });
 

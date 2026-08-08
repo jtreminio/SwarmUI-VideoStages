@@ -230,7 +230,7 @@ describe("catalog-backed authoring policy", () => {
         });
     });
 
-    it("keeps retake available alongside frame references", () => {
+    it("keeps retake available alongside keyframes", () => {
         const models = testCombinedCatalog();
         const initVideoClip = minimalClip({ initVideo: initVideoFixture() });
         expect(
@@ -314,7 +314,7 @@ describe("catalog-backed authoring policy", () => {
         );
         expect(
             body.querySelector(".vst-refs-mark")?.getAttribute("aria-label"),
-        ).toContain("Inspect unsupported persisted reference");
+        ).toContain("Inspect unsupported persisted keyframe");
         expect(
             body.querySelector(".vst-audio-clip")?.getAttribute("aria-label"),
         ).toContain("Inspect unsupported persisted audio");

@@ -38,7 +38,7 @@ internal static class FrameReferences
         {
             DocumentJson.Warn(
                 warn,
-                $"VideoStages: Clip {clipIndex} frame reference {refIndex} is missing a Source value; skipping.");
+                $"VideoStages: Clip {clipIndex} keyframe {refIndex} is missing a Source value; skipping.");
             return null;
         }
 

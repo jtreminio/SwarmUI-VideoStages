@@ -137,7 +137,7 @@ export const buildClipLorasSection = (
         built.heading,
         built.section,
         "LoRAs",
-        "Choose the normal LoRA models once for this clip. Each stage sets its own weight below its reference strengths.",
+        "Choose the normal LoRA models once for this clip. Each stage sets its own weight below its keyframe strengths.",
     );
     return built.section;
 };

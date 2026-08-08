@@ -326,7 +326,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
         expect(saveSpy).not.toHaveBeenCalled();
         expect(thumb.style.left).toBe(originalLeft);
-        expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("R 1");
+        expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("K 1");
     });
 
     it("cancels a drag when a catalog refresh changes reference endpoints", () => {
@@ -354,7 +354,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         );
 
         expect(saveSpy).not.toHaveBeenCalled();
-        expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("R 1");
+        expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("K 1");
     });
 
     it("cancels a drag when a catalog repaint detaches its rendered lane", () => {
@@ -452,7 +452,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         });
         expect(
             markEl(body, 0, 0).querySelector(".vst-refs-ph")?.textContent,
-        ).toBe("R -1");
+        ).toBe("K -1");
     });
 
     it("treats a sub-threshold press as a select, not a drag", () => {
@@ -502,7 +502,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
 
         dragThumb(thumb, 0, 60);
 
-        expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("R 61");
+        expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("K 61");
         expect(thumb.style.left).not.toBe(originalLeft);
         expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[0].frame).toBe(61);
     });

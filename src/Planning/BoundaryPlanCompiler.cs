@@ -206,7 +206,7 @@ internal static class BoundaryPlanCompiler
     {
         BoundaryFallbackReason.TargetHasInitVideo => "the next clip is init-video footage",
         BoundaryFallbackReason.TargetHasNoStage => "the next clip has no stage that can consume continuity",
-        BoundaryFallbackReason.TargetHasFirstFrameReference => "the next clip has an explicit first-frame reference",
+        BoundaryFallbackReason.TargetHasFirstFrameReference => "the next clip has an explicit first keyframe",
         BoundaryFallbackReason.TargetHasDerivedDuration => "the next clip's duration is derived at runtime",
         BoundaryFallbackReason.InsufficientFrameBudget => "the adjacent clips are too short for the requested overlap",
         BoundaryFallbackReason.ArchitectureRuleUnsupported => "the clip architecture does not support the requested join",

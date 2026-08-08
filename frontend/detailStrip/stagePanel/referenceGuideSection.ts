@@ -53,7 +53,7 @@ export const appendStageReferenceGuideSection = ({
             .authoring()
             .capabilities.forClip(clip)
             .decision("frameReferences");
-        appendSectionHeader(fields, "Frame Reference Strengths");
+        appendSectionHeader(fields, "Keyframe Strengths");
         const setRefHover = (refIdx: number, on: boolean): void => {
             context
                 .getBoundBody()
@@ -68,7 +68,7 @@ export const appendStageReferenceGuideSection = ({
                     ? stage.frameRefStrengths[refIdx]
                     : STAGE_REF_STRENGTH_MAX;
             const refSlider = buildSlider(
-                `Frame Ref R${refIdx}`,
+                `Keyframe ${refIdx}`,
                 current,
                 STAGE_REF_STRENGTH_MIN,
                 STAGE_REF_STRENGTH_MAX,

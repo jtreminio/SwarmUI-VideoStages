@@ -48,7 +48,7 @@ internal sealed class FrameRefResolver(
             {
                 RequestWarnings.Track(
                     g.UserInput,
-                    $"VideoStages: Stage {stage.StageId} frame reference {i} ({reference.RawSource}) could not be resolved; "
+                    $"VideoStages: Stage {stage.StageId} keyframe {i} ({reference.RawSource}) could not be resolved; "
                     + "skipping.");
                 continue;
             }
@@ -149,7 +149,7 @@ internal sealed class FrameRefResolver(
             {
                 RequestWarnings.Track(
                     g.UserInput,
-                    $"VideoStages: Unsupported or unresolved frame reference source '{reference.RawSource}'.");
+                    $"VideoStages: Unsupported or unresolved keyframe source '{reference.RawSource}'.");
             }
             return null;
         }
@@ -163,7 +163,7 @@ internal sealed class FrameRefResolver(
             g.UserInput,
             reference.InlineData,
             reference.UploadFileName,
-            "frame reference image");
+            "keyframe image");
         return g.LoadImage(img, "${videostagesrefimage}", false);
     }
 }

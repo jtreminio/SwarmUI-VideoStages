@@ -91,7 +91,7 @@ describe("backend-aligned authoring diagnostics", () => {
         expect(codes([initVideoClip])).not.toContain("retake-source-required");
     });
 
-    it("accepts frame references combined with an executable retake", () => {
+    it("accepts keyframes combined with an executable retake", () => {
         expect(
             codes([
                 minimalClip({
