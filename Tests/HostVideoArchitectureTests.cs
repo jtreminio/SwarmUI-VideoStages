@@ -76,34 +76,14 @@ public class HostVideoArchitectureTests
         Assert.True(HostVideoArchitectureModule.Instance.TryResolveModel(
             model,
             out ResolvedVideoModel resolved));
-        StageSpec stage = new(
+        StageSpec stage = SpecFixtures.Stage(
             10,
-            1,
-            1,
-            "pixel-lanczos",
             model.Name,
-            12,
-            4.5,
-            "euler",
-            "normal",
-            "Generated",
-            Loras: [new("text-only.safetensors", 0, 0.8)]);
-        ClipSpec clip = new(
-            0,
-            25,
-            MediaSource.Native,
-            [],
-            false,
-            false,
-            false,
-            false,
-            null,
-            [],
-            [stage]);
+            loras: [new("text-only.safetensors", 0, 0.8)]);
 
         ArchitectureClipCompilation compilation =
             HostVideoArchitectureModule.Instance.ValidateAndCompileClip(
-                clip,
+                SpecFixtures.Clip(0, [stage], frames: 25),
                 new Dictionary<int, ResolvedVideoModel> { [0] = resolved },
                 new(512, 512, 24, ArchitectureEntryMode.ImageToVideo));
 
@@ -140,7 +120,14 @@ public class HostVideoArchitectureTests
                 "unit-test-model",
                 "unit-test-compatibility",
                 LoraTarget.ModelOnly,
-                new(0.5, 10, 4.5, "euler", "normal", new(StageUpscaleMode.Pixel, 1.5, "raw", "lanczos"), [])),
+                new(
+                    0.5,
+                    10,
+                    4.5,
+                    "euler",
+                    "normal",
+                    new(StageUpscaleMode.Pixel, 1.5, "raw", "lanczos"),
+                    [])),
             false);
 
         Assert.Equal(
