@@ -16,6 +16,21 @@ describe("detail strip IC-LoRA panel", () => {
     const h = detailStripHarness();
     const { setup, renderStrip } = h;
 
+    const icLoraSelect = (label: string): HTMLSelectElement => {
+        const select =
+            fieldByLabel(label).querySelector<HTMLSelectElement>("select");
+        if (!select) {
+            throw new Error(`IC-LoRA ${label} select missing`);
+        }
+        return select;
+    };
+
+    const changeIcLoraSelect = (label: string, value: string): void => {
+        const select = icLoraSelect(label);
+        select.value = value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
     const controlNetLabels = (): (string | null)[] =>
         Array.from(
             document.querySelectorAll<HTMLElement>(
@@ -230,22 +245,11 @@ describe("detail strip IC-LoRA panel", () => {
                     ".vst-detail-iclora .vst-detail-field-label",
                 ),
             ).map((el) => el.textContent);
-        const pickPreset = (value: string): void => {
-            const select =
-                fieldByLabel("Preset").querySelector<HTMLSelectElement>(
-                    "select",
-                );
-            if (!select) {
-                throw new Error("preset select missing");
-            }
-            select.value = value;
-            select.dispatchEvent(new Event("change", { bubbles: true }));
-        };
         // Custom (no preset) could be a third-party control LoRA, so Control shows.
         expect(labels()).toContain("Control");
-        pickPreset("deblur");
+        changeIcLoraSelect("Preset", "deblur");
         expect(labels()).not.toContain("Control");
-        pickPreset("union-control");
+        changeIcLoraSelect("Preset", "union-control");
         expect(labels()).toContain("Control");
     });
 
@@ -399,21 +403,6 @@ describe("detail strip IC-LoRA panel", () => {
                 ?.options[1].disabled,
         ).toBe(true);
     });
-
-    const icLoraSelect = (label: string): HTMLSelectElement => {
-        const select =
-            fieldByLabel(label).querySelector<HTMLSelectElement>("select");
-        if (!select) {
-            throw new Error(`IC-LoRA ${label} select missing`);
-        }
-        return select;
-    };
-
-    const changeIcLoraSelect = (label: string, value: string): void => {
-        const select = icLoraSelect(label);
-        select.value = value;
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-    };
 
     it("Apply on lists every stage plus All stages", () => {
         setup([
