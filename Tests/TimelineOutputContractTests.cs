@@ -364,33 +364,34 @@ public class TimelineOutputContractTests
     }
 
     /// <summary>
-    /// <c>donotsave</c> does not change the graph at all: it is honoured above the graph, where
-    /// the API returns a data URI instead of writing to disk. So the image-to-video shape still
-    /// publishes all three stage videos alongside core's base-image save.
+    /// The sole owner of "<c>donotsave</c> does not change the graph": core honours it above the
+    /// graph, where the API returns a data URI instead of writing to disk. Every other output test
+    /// generates without the flag and relies on this.
     /// </summary>
     [Fact]
-    public async Task Do_not_save_publishes_the_timeline_exactly_as_a_saving_request_does()
+    public async Task Do_not_save_generates_the_same_graph_as_a_saving_request()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        JObject document = MakeDocument(MakeClip(
+            1.0,
+            fixture.Stage(steps: 8),
+            fixture.Stage("PreviousStage", control: 0.5, steps: 9),
+            fixture.Stage("PreviousStage", control: 0.5, steps: 10)));
 
-        JObject workflow = await fixture.GenerateImageToVideoAsync(
-            MakeDocument(MakeClip(
-                1.0,
-                fixture.Stage(steps: 8),
-                fixture.Stage("PreviousStage", control: 0.5, steps: 9),
-                fixture.Stage("PreviousStage", control: 0.5, steps: 10))),
+        JObject saving = await fixture.GenerateImageToVideoAsync(
+            document,
+            post => post["outputintermediateimages"] = true);
+        JObject notSaving = await fixture.GenerateImageToVideoAsync(
+            document,
             post =>
             {
                 post["outputintermediateimages"] = true;
                 post["donotsave"] = true;
             });
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        Assert.Equal(3, bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().Count);
-        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveImageWSNode>());
-
-        AssertShippable(bridge, workflow, live, publishedVideoSaves: 3);
+        Assert.True(
+            JToken.DeepEquals(saving, notSaving),
+            "donotsave must generate a byte-identical workflow.");
     }
 
     /// <summary>
@@ -430,24 +431,15 @@ public class TimelineOutputContractTests
     /// The text-to-video shape, where the timeline displaces core's video root entirely and the
     /// root's own save is the only one in the graph: it is retargeted onto whatever the timeline
     /// ends up publishing.
-    /// <para>
-    /// Both <c>donotsave</c> arms assert the same shape. Core honours that request above the graph
-    /// and only drops the save node itself at zero steps, so the flag changes nothing here; the
-    /// second row is kept to record that.
-    /// </para>
     /// </summary>
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task A_displaced_root_retargets_its_own_save(bool doNotSave)
+    [Fact]
+    public async Task A_displaced_root_retargets_its_own_save()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
-                fixture.Post(
-                    MakeDocument(MakeClip(1.0, fixture.Stage(steps: 8))),
-                    post => post["donotsave"] = doNotSave));
+                fixture.Post(MakeDocument(MakeClip(1.0, fixture.Stage(steps: 8)))));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
