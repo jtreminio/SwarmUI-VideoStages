@@ -421,6 +421,24 @@ describe("detail strip IC-LoRA panel", () => {
             ["0", "Stage 0"],
             ["1", "Stage 1"],
         ]);
+        // The whole field set a Custom entry renders, in order.
+        expect(
+            Array.from(
+                document.querySelectorAll(
+                    ".vst-detail-iclora .vst-detail-field-label",
+                ),
+            ).map((el) => el.textContent),
+        ).toEqual([
+            "Preset",
+            "LoRA",
+            "Strength",
+            "Attention",
+            "Control",
+            "Apply on",
+            "Drive data",
+            "Source",
+            "Drive Media",
+        ]);
         // Incoming is disabled because the all-stages target includes a
         // generated stage 0.
         expect(icLoraSelect("Source").options[1].disabled).toBe(true);
