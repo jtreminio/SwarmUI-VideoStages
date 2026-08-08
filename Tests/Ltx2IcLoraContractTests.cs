@@ -1179,12 +1179,15 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
+    /// <summary>The diagnostic text is interpolated per stream and media kind, so the code is what
+    /// identifies the refusal; <see cref="IcLoraDrivePlanTests"/> owns the compiler's side of it.
+    /// </summary>
     [Theory]
-    [InlineData(null, "requires uploaded Audio Drive Media")]
-    [InlineData("data:image/png;base64,QUJD", "cannot consume Audio data from Image media")]
+    [InlineData(null, "ltx2.ic-lora.drive-media-missing")]
+    [InlineData(DriveImage, "ltx2.ic-lora.drive-media-kind-unsupported")]
     public async Task Lipdub_invalid_drive_media_warns_and_drops_the_entry(
         string driveMediaData,
-        string expectedMessage)
+        string expectedCode)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         fixture.InstallModel("LoRA", "UnitTest_IcLoraLipDub.safetensors");
@@ -1202,9 +1205,7 @@ public class Ltx2IcLoraContractTests
         AssertNoIcLoraNodes(bridge);
         Assert.Empty(bridge.Graph.NodesOfType<LTXVSetAudioRefTokensNode>());
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
-        Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains(expectedMessage, StringComparison.Ordinal));
+        Assert.Contains(expectedCode, Diagnostics(generator).Select(entry => entry.Code));
 
         live.AssertAllLive(StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
