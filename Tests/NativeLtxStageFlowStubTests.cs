@@ -38,27 +38,23 @@ public partial class StageFlowTests
         Assert.Equal("204", saveNode.Images.Connection!.Node.Id);
         Assert.Equal(0, saveNode.Images.Connection.SlotIndex);
 
-        SwarmTrimFramesNode trimNode = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmTrimFramesNode>().OrderBy(node => int.Parse(node.Id)));
+        SwarmTrimFramesNode trimNode = Assert.Single(bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
         Assert.Equal("204", trimNode.Id);
 
-        ImageFromBatchNode imageFromBatchNode = Assert.Single(
-            bridge.Graph.NodesOfType<ImageFromBatchNode>().OrderBy(node => int.Parse(node.Id)));
+        ImageFromBatchNode imageFromBatchNode = Assert.Single(bridge.Graph.NodesOfType<ImageFromBatchNode>());
         AssertGuideReferenceResolvesToPreprocessInput(
             workflow,
             WorkflowBridge.ToPath(imageFromBatchNode.Image.Connection!),
             store.Generated);
         Assert.NotEqual("204", imageFromBatchNode.Image.Connection!.Node.Id);
 
-        LTXVPreprocessNode preprocessNode = Assert.Single(
-            bridge.Graph.NodesOfType<LTXVPreprocessNode>().OrderBy(node => int.Parse(node.Id)));
+        LTXVPreprocessNode preprocessNode = Assert.Single(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
         AssertGuideReferenceResolvesToPreprocessInput(
             workflow,
             WorkflowBridge.ToPath(preprocessNode.Image.Connection!),
             store.Generated);
 
-        LTXVImgToVideoInplaceNode imgToVideoNode = Assert.Single(
-            bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>().OrderBy(node => int.Parse(node.Id)));
+        LTXVImgToVideoInplaceNode imgToVideoNode = Assert.Single(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
         Assert.Same(preprocessNode.OutputImage, imgToVideoNode.Image.Connection);
 
         SwarmKSamplerNode sampler = Assert.Single(SamplerNodesOrdered(bridge));
