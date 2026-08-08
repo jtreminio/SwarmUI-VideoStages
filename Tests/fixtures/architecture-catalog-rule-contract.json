@@ -69,5 +69,44 @@
         }
       }
     }
+  },
+  "model": {
+    "modelName": "ltx-video-2.3.safetensors",
+    "architectureId": "ltx2",
+    "modelProfileId": "ltx-2.3",
+    "modelClassId": "lightricks-ltx-video-2-3",
+    "compatibilityClassId": "lightricks-ltx-video-2",
+    "frameGrid": 8,
+    "frameGridOrigin": 1,
+    "capabilities": {
+      "features": [
+        "promptRelay",
+        "frameReferences",
+        "referenceFraming",
+        "retake",
+        "audioBoundaryCarry",
+        "latentUpscale",
+        "latentModelUpscale",
+        "audioReuse",
+        "audioDerivedDuration",
+        "icLora"
+      ],
+      "entryModes": [
+        "text-to-video",
+        "image-to-video",
+        "init-video"
+      ],
+      "audioSourceKinds": [
+        "Native",
+        "Upload",
+        "ControlNet",
+        "AceStepFun"
+      ]
+    },
+    "enhancements": {
+      "referencePositions": [
+        "any"
+      ]
+    }
   }
 }

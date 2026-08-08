@@ -17,7 +17,10 @@ import {
     icLoraLegacyAutoModelName,
 } from "./architectures/ltx2/icLoraPresets";
 import { upscaleModeForMethod } from "./architectures/policy";
-import type { ArchitectureCatalogEntryDto } from "./architectures/types";
+import type {
+    ArchitectureCatalogEntryDto,
+    ArchitectureCatalogModelDto,
+} from "./architectures/types";
 import { canUseClipLengthFromAudio } from "./audioSource";
 import { boundaryPlanForClips } from "./boundaryPlan";
 import { dimensionsFor } from "./dimensionPresets";
@@ -268,17 +271,18 @@ describe("cross-language mirror: LTX IC-LoRA Drive Media contracts", () => {
 });
 
 describe("cross-language mirror: architecture catalog rule contract", () => {
-    interface ArchitectureDescriptorContract {
+    interface ArchitectureCatalogContract {
         descriptor: ArchitectureCatalogEntryDto;
+        model: ArchitectureCatalogModelDto;
     }
 
-    const contract = loadFixture<ArchitectureDescriptorContract>(
+    const contract = loadFixture<ArchitectureCatalogContract>(
         "architecture-catalog-rule-contract.json",
     );
     const parsed = parseVideoArchitectureCatalog({
         schemaVersion: 2,
         architectures: [contract.descriptor],
-        models: [],
+        models: [contract.model],
     });
 
     it("matches the complete backend descriptor through the strict wire parser", () => {
@@ -288,5 +292,13 @@ describe("cross-language mirror: architecture catalog rule contract", () => {
             throw new Error("LTX architecture did not parse");
         }
         expect(architecture).toEqual(contract.descriptor);
+    });
+
+    it("matches the complete backend model through the strict wire parser", () => {
+        const model = parsed?.models[0];
+        if (!model) {
+            throw new Error("LTX model did not parse");
+        }
+        expect(model).toEqual(contract.model);
     });
 });

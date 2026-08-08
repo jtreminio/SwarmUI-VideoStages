@@ -1385,19 +1385,6 @@ public class ArchitectureFoundationTests
         JObject model = Assert.Single(
             ((JArray)catalog["models"]).Values<JObject>(),
             item => item["modelName"]?.ToString() == models.VideoModel.Name);
-        Assert.Equal(
-            [
-                "modelName",
-                "architectureId",
-                "modelProfileId",
-                "modelClassId",
-                "compatibilityClassId",
-                "frameGrid",
-                "frameGridOrigin",
-                "capabilities",
-                "enhancements",
-            ],
-            Keys(model));
         Assert.Equal("ltx2", model["architectureId"]);
         Assert.Equal("ltx-2.3", model["modelProfileId"]);
         Assert.Equal(Ltx2ArchitectureModule.FrameGrid, model["frameGrid"]);

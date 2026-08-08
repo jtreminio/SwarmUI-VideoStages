@@ -278,6 +278,15 @@ public class CrossLanguageMirrorTests
             $"Serialized LTX descriptor drifted from the complete shared contract."
                 + $"\nExpected: {expectedDescriptor}"
                 + $"\nActual: {architecture}");
+
+        JObject expectedModel = (JObject)fixture["model"]!;
+        JObject model = Assert.Single(catalog["models"]!.Values<JObject>());
+        JToken normalizedModel = JToken.Parse(model.ToString());
+        Assert.True(
+            JToken.DeepEquals(expectedModel, normalizedModel),
+            $"Serialized LTX model drifted from the complete shared contract."
+                + $"\nExpected: {expectedModel}"
+                + $"\nActual: {model}");
     }
 
     private sealed class CatalogContractRegistry : IVideoArchitectureRegistry
@@ -285,7 +294,16 @@ public class CrossLanguageMirrorTests
         public IReadOnlyList<VideoArchitectureDescriptor> Catalog =>
             VideoArchitectureRegistry.Production.Catalog;
 
-        public IReadOnlyList<ResolvedVideoModel> ResolvedModels => [];
+        public IReadOnlyList<ResolvedVideoModel> ResolvedModels =>
+        [
+            TestResolvedVideoModel.Create(
+                "ltx-video-2.3.safetensors",
+                Ltx2ArchitectureModule.ProfileId,
+                Ltx2ArchitectureModule.Instance.Descriptor,
+                modelClassId: "lightricks-ltx-video-2-3",
+                compatibilityClassId: "lightricks-ltx-video-2",
+                referencePositions: [FrameReferencePosition.Any]),
+        ];
 
         public IVideoArchitectureModule GetModule(ArchitectureId architectureId) =>
             throw new NotSupportedException();
