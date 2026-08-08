@@ -3,7 +3,6 @@ using VideoStages.Authoring;
 
 namespace VideoStages.Architectures.Ltx2.Planning;
 
-/// <summary>Compiles authored frame-reference positions, strengths, and source intent.</summary>
 internal static class FrameRefPlanCompiler
 {
     internal static ImmutableArray<FrameRefPlan> Compile(ClipSpec clip, StageSpec stage)

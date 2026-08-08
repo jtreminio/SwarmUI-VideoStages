@@ -3,7 +3,6 @@ using VideoStages.Authoring;
 
 namespace VideoStages.Architectures.Ltx2.Planning;
 
-/// <summary>Compiles authored prompt windows into a clip-level relay instruction.</summary>
 internal static class PromptRelayPlanCompiler
 {
     internal static PromptRelayPlan Compile(ClipSpec clip, int framesPerSecond)
