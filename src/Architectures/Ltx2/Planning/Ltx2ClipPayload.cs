@@ -40,3 +40,17 @@ internal sealed record Ltx2ClipPayload(
         return (width, height);
     }
 }
+
+internal static class Ltx2ClipPlanExtensions
+{
+    internal static Ltx2ClipPayload RequireLtx2Payload(this ClipPlan clip)
+    {
+        ArgumentNullException.ThrowIfNull(clip);
+        if (clip.ArchitecturePayload is not Ltx2ClipPayload payload)
+        {
+            throw Invariant.Failure(
+                $"Clip {clip.ClipId} has no LTX architecture payload.");
+        }
+        return payload;
+    }
+}
