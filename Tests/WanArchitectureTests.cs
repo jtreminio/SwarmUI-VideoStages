@@ -28,13 +28,11 @@ public class WanArchitectureTests
     }
 
     [Fact]
-    public void Resolves_host_supported_Wan_image_models_and_rejects_non_model_shapes()
+    public void Resolves_each_exact_Wan_2_2_class_to_its_own_profile()
     {
         using SwarmUiTestContext context = new();
-        TestModelBundle fourteen =
-            TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
-        TestModelBundle five =
-            TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+        TestModelBundle fourteen = TestModelFactory.CreateBaseAndWan22ImageToVideoModels();
+        TestModelBundle five = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
 
         Assert.True(WanArchitectureModule.Instance.TryResolveModel(
             fourteen.VideoModel,
@@ -42,142 +40,150 @@ public class WanArchitectureTests
         Assert.Equal(
             WanArchitectureModule.ImageToVideoProfileId,
             resolvedFourteen.ModelProfileId);
+        Assert.Equal(
+            [FrameReferencePosition.First, FrameReferencePosition.Last],
+            resolvedFourteen.FrameReferencePositions);
         Assert.True(WanArchitectureModule.Instance.TryResolveModel(
             five.VideoModel,
             out ResolvedVideoModel resolvedFive));
         Assert.Equal(WanArchitectureModule.Ti2v5bProfileId, resolvedFive.ModelProfileId);
+        Assert.Equal(
+            [FrameReferencePosition.First],
+            resolvedFive.FrameReferencePositions);
+    }
 
-        T2IModelClass exactFive = five.VideoModel.ModelClass;
-        five.VideoModel.ModelClass = exactFive with
-        {
-            CompatClass = T2IModelClassSorter.CompatWan21_14b,
-        };
-        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
-        T2IModelClass exactFourteen = fourteen.VideoModel.ModelClass;
-        fourteen.VideoModel.ModelClass = exactFourteen with
-        {
-            CompatClass = T2IModelClassSorter.CompatWan22_5b,
-        };
+    [Fact]
+    public void An_exact_class_paired_with_the_other_ones_compatibility_class_is_rejected()
+    {
+        using SwarmUiTestContext context = new();
+        T2IModel template = TestModelFactory.CreateBaseAndWan22Ti2v5bModels().VideoModel;
+
         Assert.False(WanArchitectureModule.Instance.TryResolveModel(
-            fourteen.VideoModel,
+            AddWanModel(
+                template,
+                "UnitTest_Wan5bOn14bCompat.safetensors",
+                WanArchitectureModule.Ti2v5bModelClassId,
+                T2IModelClassSorter.CompatWan21_14b),
             out _));
-        five.VideoModel.ModelClass = exactFive with
-        {
-            ID = $"{WanArchitectureModule.Ti2v5bModelClassId}/lora",
-        };
-        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
-        five.VideoModel.ModelClass = exactFive with
-        {
-            ID = "wan-2_1-image2video-14b",
-            CompatClass = T2IModelClassSorter.CompatWan21_14b,
-        };
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(
+            AddWanModel(
+                template,
+                "UnitTest_Wan14bOn5bCompat.safetensors",
+                WanArchitectureModule.ImageToVideoModelClassId,
+                T2IModelClassSorter.CompatWan22_5b),
+            out _));
+    }
+
+    /// <summary>
+    /// Everything Wan-shaped that is not one of the two exact classes runs through core's ordinary
+    /// image-to-video path, whatever it calls itself — the last row is a class id core does not
+    /// register at all.
+    /// </summary>
+    [Theory]
+    [InlineData("wan-2_1-image2video-14b", "wan-21-14b")]
+    [InlineData("wan-2_1-image2video-1_3b", "wan-21-1_3b")]
+    [InlineData("wan-2_1-flf2v-14b", "wan-21-14b")]
+    [InlineData("wan-2_1-text2video-1_3b", "wan-21-1_3b")]
+    [InlineData("wan-2_1-text2video-14b", "wan-21-14b")]
+    [InlineData("wan-2_2-text2video-14b", "wan-21-14b")]
+    [InlineData("wan-2_1-image2video-valor", "wan-21-14b")]
+    public void Resolves_any_other_Wan_class_to_the_ordinary_image_to_video_profile(
+        string modelClassId,
+        string compatibilityClassId)
+    {
+        using SwarmUiTestContext context = new();
+
         Assert.True(WanArchitectureModule.Instance.TryResolveModel(
-            five.VideoModel,
-            out ResolvedVideoModel ordinary));
+            WanModel(modelClassId, compatibilityClassId),
+            out ResolvedVideoModel resolved));
         Assert.Equal(
             WanArchitectureModule.OrdinaryImageToVideoProfileId,
-            ordinary.ModelProfileId);
-        five.VideoModel.ModelClass = exactFive with
-        {
-            ID = "wan-2_1-vace-14b",
-            CompatClass = T2IModelClassSorter.CompatWan21_14b,
-        };
-        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
+            resolved.ModelProfileId);
+        Assert.Equal(modelClassId, resolved.ModelClassId);
+        Assert.Equal(compatibilityClassId, resolved.CompatibilityClassId);
+    }
 
-        foreach ((string modelClassId, T2IModelCompatClass compatibility) in new[]
-        {
-            ("wan-2_1-image2video-1_3b", T2IModelClassSorter.CompatWan21_1_3b),
-            ("wan-2_1-flf2v-14b", T2IModelClassSorter.CompatWan21_14b),
-        })
-        {
-            five.VideoModel.ModelClass = exactFive with
-            {
-                ID = modelClassId,
-                CompatClass = compatibility,
-            };
-            Assert.True(WanArchitectureModule.Instance.TryResolveModel(
-                five.VideoModel,
-                out ResolvedVideoModel accepted));
-            Assert.Equal(
-                WanArchitectureModule.OrdinaryImageToVideoProfileId,
-                accepted.ModelProfileId);
-            Assert.Equal(compatibility.ID, accepted.CompatibilityClassId);
-        }
-        foreach ((string modelClassId, T2IModelCompatClass compatibility) in new[]
-        {
-            ("wan-2_1-text2video-1_3b", T2IModelClassSorter.CompatWan21_1_3b),
-            ("wan-2_1-text2video-14b", T2IModelClassSorter.CompatWan21_14b),
-            ("wan-2_2-text2video-14b", T2IModelClassSorter.CompatWan21_14b),
-        })
-        {
-            five.VideoModel.ModelClass = exactFive with
-            {
-                ID = modelClassId,
-                CompatClass = compatibility,
-            };
-            Assert.True(WanArchitectureModule.Instance.TryResolveModel(
-                five.VideoModel,
-                out ResolvedVideoModel accepted));
-            Assert.Equal(
-                WanArchitectureModule.OrdinaryImageToVideoProfileId,
-                accepted.ModelProfileId);
-        }
-        foreach (string rejectedClassId in new[]
-        {
-            "wan-2_1-text2video/vae",
-            "wan-2_1-text2video-14b/lora",
-            "wan-2_1-text2video-vace-14b",
-            "wan-2_1-image2video-14b/lora",
-            "wan-2_1-image2video-lora",
-            "wan-2_1-image2video_vae",
-            "wan-2_1-image2video(lora)",
-            "wan-2_1-image2video+vae",
-            "wan-2_1-image2video:lora",
-            "wan-2_1-image2video@vae",
-            "wan-2_1-vace-1_3b",
-            "wan-2_1-vace-14b",
-            "not-wan-image2video",
-        })
-        {
-            five.VideoModel.ModelClass = exactFive with
-            {
-                ID = rejectedClassId,
-                CompatClass = T2IModelClassSorter.CompatWan21_14b,
-            };
-            Assert.False(WanArchitectureModule.Instance.TryResolveModel(
-                five.VideoModel,
-                out _));
-        }
-        five.VideoModel.ModelClass = exactFive with
-        {
-            ID = "wan-2_1-image2video-valor",
-            CompatClass = T2IModelClassSorter.CompatWan21_14b,
-        };
-        Assert.True(WanArchitectureModule.Instance.TryResolveModel(
-            five.VideoModel,
+    /// <summary>
+    /// The lora and vae tokens are matched on alphanumeric boundaries, so every separator a class
+    /// id can use to carry one has to be rejected too.
+    /// </summary>
+    [Theory]
+    [InlineData("wan-2_2-ti2v-5b/lora", "wan-22-5b")]
+    [InlineData("wan-2_1-text2video/vae", "wan-21-14b")]
+    [InlineData("wan-2_1-text2video-14b/lora", "wan-21-14b")]
+    [InlineData("wan-2_1-image2video-14b/lora", "wan-21-14b")]
+    [InlineData("wan-2_1-image2video-lora", "wan-21-14b")]
+    [InlineData("wan-2_1-image2video_vae", "wan-21-14b")]
+    [InlineData("wan-2_1-image2video(lora)", "wan-21-14b")]
+    [InlineData("wan-2_1-image2video+vae", "wan-21-14b")]
+    [InlineData("wan-2_1-image2video:lora", "wan-21-14b")]
+    [InlineData("wan-2_1-image2video@vae", "wan-21-14b")]
+    [InlineData("wan-2_1-text2video-vace-14b", "wan-21-14b")]
+    [InlineData("wan-2_1-vace-1_3b", "wan-21-1_3b")]
+    [InlineData("wan-2_1-vace-14b", "wan-21-14b")]
+    [InlineData("not-wan-image2video", "wan-21-14b")]
+    public void Rejects_a_class_id_that_is_not_a_plain_Wan_checkpoint(
+        string modelClassId,
+        string compatibilityClassId)
+    {
+        using SwarmUiTestContext context = new();
+
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(
+            WanModel(modelClassId, compatibilityClassId),
             out _));
-        five.VideoModel.ModelClass = exactFive with
-        {
-            ID = "wan-2_1-text2video-14b",
-            CompatClass = T2IModelClassSorter.CompatLtxv2,
-        };
-        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
-        five.VideoModel.ModelClass = exactFive with
-        {
-            ID = "wan-2_1-image2video-14b",
-            CompatClass = T2IModelClassSorter.CompatLtxv2,
-        };
-        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
-        five.VideoModel.ModelClass = exactFive with
-        {
-            ID = "wan-2_1-image2video-14b",
-            CompatClass = T2IModelClassSorter.CompatWan21_14b with
+    }
+
+    [Theory]
+    [InlineData("wan-2_1-text2video-14b")]
+    [InlineData("wan-2_1-image2video-14b")]
+    public void Rejects_a_Wan_class_carried_by_another_familys_compatibility_class(
+        string modelClassId)
+    {
+        using SwarmUiTestContext context = new();
+
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(
+            WanModel(modelClassId, T2IModelClassSorter.CompatLtxv2.ID),
+            out _));
+    }
+
+    [Fact]
+    public void Rejects_a_compatibility_class_that_generates_neither_text_nor_image_to_video()
+    {
+        using SwarmUiTestContext context = new();
+        T2IModel model = AddWanModel(
+            TestModelFactory.CreateBaseAndWan22Ti2v5bModels().VideoModel,
+            "UnitTest_WanStill.safetensors",
+            "wan-2_1-image2video-14b",
+            T2IModelClassSorter.CompatWan21_14b with
             {
                 IsImage2Video = false,
                 IsText2Video = false,
-            },
-        };
-        Assert.False(WanArchitectureModule.Instance.TryResolveModel(five.VideoModel, out _));
+            });
+
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(model, out _));
+    }
+
+    /// <summary>A class id with no lora token still names a LoRA when core says so.</summary>
+    [Fact]
+    public void Rejects_a_model_class_core_flagged_as_a_lora()
+    {
+        using SwarmUiTestContext context = new();
+        T2IModel model = WanModel(
+            "wan-2_1-image2video-14b",
+            T2IModelClassSorter.CompatWan21_14b.ID);
+        model.ModelClass = model.ModelClass with { IsLora = true };
+
+        Assert.False(WanArchitectureModule.Instance.TryResolveModel(model, out _));
+    }
+
+    [Fact]
+    public void Catalog_publishes_the_resolved_model_and_the_Wan_architecture()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle five = TestModelFactory.CreateBaseAndWan22Ti2v5bModels();
+        Assert.True(WanArchitectureModule.Instance.TryResolveModel(
+            five.VideoModel,
+            out ResolvedVideoModel resolvedFive));
 
         JObject catalog = ArchitectureCatalogSerializer.Serialize(
             new WanCatalogRegistry(resolvedFive));
@@ -193,17 +199,6 @@ public class WanArchitectureTests
         Assert.Equal(
             ["first"],
             catalogModel["enhancements"]["referencePositions"].Values<string>());
-        // The only multi-position producer: order and multiplicity must survive the enum round trip.
-        Assert.Equal(
-            ["first", "last"],
-            ArchitectureCatalogSerializer
-                .Serialize(new WanCatalogRegistry(ResolvedWan(
-                    "wan-14b.safetensors",
-                    WanArchitectureModule.ImageToVideoProfileId,
-                    WanArchitectureModule.Instance.Descriptor)))["models"]
-                .Values<JObject>()
-                .Single()["enhancements"]["referencePositions"]
-                .Values<string>());
         Assert.Equal(
             ["text-to-video", "image-to-video", "init-video"],
             catalogModel["capabilities"]["entryModes"].Values<string>());
@@ -231,6 +226,24 @@ public class WanArchitectureTests
         Assert.Equal(
             "unsupported",
             architecture["boundaryRules"]["crossfade"].Value<string>("support"));
+    }
+
+    /// <summary>
+    /// The only multi-position producer: order and multiplicity must survive the enum round trip.
+    /// </summary>
+    [Fact]
+    public void Catalog_keeps_the_order_of_a_models_reference_positions()
+    {
+        Assert.Equal(
+            ["first", "last"],
+            ArchitectureCatalogSerializer
+                .Serialize(new WanCatalogRegistry(ResolvedWan(
+                    "wan-14b.safetensors",
+                    WanArchitectureModule.ImageToVideoProfileId,
+                    WanArchitectureModule.Instance.Descriptor)))["models"]
+                .Values<JObject>()
+                .Single()["enhancements"]["referencePositions"]
+                .Values<string>());
     }
 
     [Fact]
@@ -1519,6 +1532,17 @@ public class WanArchitectureTests
                     ? [FrameReferencePosition.First]
                     : [FrameReferencePosition.First, FrameReferencePosition.Last]));
     }
+
+    /// <summary>
+    /// A Wan checkpoint stub carrying exactly the ids named. The compatibility class comes from
+    /// core's own registry so the pairing is not a second copy of core's table.
+    /// </summary>
+    private static T2IModel WanModel(string modelClassId, string compatibilityClassId) =>
+        AddWanModel(
+            TestModelFactory.CreateBaseAndWan22Ti2v5bModels().VideoModel,
+            "UnitTest_WanCandidate.safetensors",
+            modelClassId,
+            T2IModelClassSorter.CompatClasses[compatibilityClassId]);
 
     private static T2IModel AddWanModel(
         T2IModel template,
