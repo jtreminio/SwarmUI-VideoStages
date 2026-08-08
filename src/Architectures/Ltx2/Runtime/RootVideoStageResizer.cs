@@ -31,7 +31,7 @@ internal sealed class RootVideoStageResizer(WorkflowGenerator g)
 
         context.ExecutePrepared(() =>
         {
-            RootVideoStageResizer resizer = Create(genInfo.Generator);
+            RootVideoStageResizer resizer = new(genInfo.Generator);
             if (!resizer.TryGetRootStageResolution(out int width, out int height))
             {
                 return;
@@ -52,16 +52,13 @@ internal sealed class RootVideoStageResizer(WorkflowGenerator g)
 
         context.ExecutePrepared(() =>
         {
-            RootVideoStageResizer resizer = Create(genInfo.Generator);
+            RootVideoStageResizer resizer = new(genInfo.Generator);
             if (resizer.TryGetRootStageResolution(out int width, out int height))
             {
                 resizer.SetCurrentMediaDimensions(width, height);
             }
         });
     }
-
-    private static RootVideoStageResizer Create(WorkflowGenerator g) =>
-        new(g);
 
     private static bool TryGetApplicableContext(
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
