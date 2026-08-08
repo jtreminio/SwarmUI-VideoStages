@@ -89,17 +89,19 @@ public class MiniMaxArchitectureTests
         Assert.Equal(
             ["text-to-video", "image-to-video", "init-video"],
             architecture["capabilities"]["entryModes"].Values<string>());
+        // Features come out in ArchitectureFeatureVocabulary's registry order, which is a display
+        // order no capability claim depends on — the set is the contract.
         Assert.Equal(
             [
-                "frameReferences",
-                "clipReferences",
-                "referenceFraming",
                 "audioBoundaryCarry",
-                "latentUpscale",
-                "audioReuse",
                 "audioDerivedDuration",
+                "audioReuse",
+                "clipReferences",
+                "frameReferences",
+                "latentUpscale",
+                "referenceFraming",
             ],
-            architecture["capabilities"]["features"].Values<string>());
+            architecture["capabilities"]["features"].Values<string>().Order());
         Assert.Equal(
             "supported",
             architecture["boundaryRules"]["cut"].Value<string>("support"));
