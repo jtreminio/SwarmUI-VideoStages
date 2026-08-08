@@ -14,10 +14,11 @@ public class AudioPlanCompilerTests
             clip,
             new(0, 0, 0, ArchitectureEntryMode.ImageToVideo));
 
-    private static Ltx2AudioPlan CompileLtxAudio(ClipSpec clip)
+    private static (Ltx2AudioInjectionPlan Injection, ImmutableArray<PlanDiagnostic> Diagnostics)
+        CompileLtxAudio(ClipSpec clip)
     {
         IcLoraClipPlanCompilation icLoras = CompileIcLoras(clip);
-        return Ltx2AudioPlanCompiler.Compile(
+        return Ltx2AudioInjectionPlanCompiler.Compile(
             clip,
             icLoras.PrimaryControlNetSourceIndex);
     }
@@ -129,13 +130,13 @@ public class AudioPlanCompilerTests
     {
         ClipSpec clip = Clip(controlNetLength: true);
         AudioPlan plan = AudioPlanCompiler.Compile(clip);
-        Ltx2AudioPlan ltx = CompileLtxAudio(clip);
+        (_, ImmutableArray<PlanDiagnostic> ltxDiagnostics) = CompileLtxAudio(clip);
 
         Assert.Equal(AudioLengthOwner.ControlNet, plan.LengthOwner);
         Assert.Null(CompileIcLoras(clip).PrimaryControlNetSourceIndex);
         Assert.DoesNotContain(plan.Diagnostics, diagnostic =>
             diagnostic.Code == "audio.length.controlnet_owner_has_no_source");
-        Assert.Contains(ltx.Diagnostics, diagnostic =>
+        Assert.Contains(ltxDiagnostics, diagnostic =>
             diagnostic.Code == "audio.length.controlnet_owner_has_no_source"
                 && diagnostic.Severity == PlanDiagnosticSeverity.Warning);
     }

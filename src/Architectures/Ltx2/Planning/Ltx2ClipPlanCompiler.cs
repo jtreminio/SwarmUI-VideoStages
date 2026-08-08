@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 using VideoStages.Planning;
@@ -13,14 +14,15 @@ internal static class Ltx2ClipPlanCompiler
     {
         IcLoraClipPlanCompilation icLoras =
             IcLoraPlanCompiler.CompileClip(clip, context);
-        Ltx2AudioPlan audio = Ltx2AudioPlanCompiler.Compile(
-            clip,
-            icLoras.PrimaryControlNetSourceIndex);
+        (Ltx2AudioInjectionPlan audioInjection, ImmutableArray<PlanDiagnostic> audioDiagnostics) =
+            Ltx2AudioInjectionPlanCompiler.Compile(
+                clip,
+                icLoras.PrimaryControlNetSourceIndex);
         PromptRelayPlan relay = PromptRelayPlanCompiler.Compile(
             clip,
             context.FramesPerSecond);
         List<PlanDiagnostic> diagnostics = [
-            .. audio.Diagnostics.Select(diagnostic => diagnostic with { ClipId = clip.Id }),
+            .. audioDiagnostics.Select(diagnostic => diagnostic with { ClipId = clip.Id }),
             .. icLoras.Diagnostics,
         ];
         Dictionary<int, IArchitectureStagePayload> stages = [];
@@ -67,7 +69,7 @@ internal static class Ltx2ClipPlanCompiler
         }
         return new(
             new Ltx2ClipPayload(
-                audio.Injection,
+                audioInjection,
                 icLoras.PrimaryControlNetSourceIndex,
                 clip.ReferenceFraming),
             stages,
