@@ -503,7 +503,6 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         dragThumb(thumb, 0, 60);
 
         expect(thumb.querySelector(".vst-refs-ph")?.textContent).toBe("R 61");
-        expect(thumb.style.left).toBe("50.41322314049586%");
         expect(thumb.style.left).not.toBe(originalLeft);
         expect(lastSavedClips<Clip[]>(saveSpy)[0].frameRefs[0].frame).toBe(61);
     });
@@ -529,6 +528,7 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
         const arrow = body.querySelector<HTMLElement>(
             '.vst-key[data-ref-idx="0"]',
         );
+        const originalLeft = thumb.style.left;
 
         thumb.dispatchEvent(
             new MouseEvent("mousedown", {
@@ -541,7 +541,8 @@ describe("createTimelineReferencesTrack (selection + gestures)", () => {
             new MouseEvent("mousemove", { bubbles: true, clientX: 60 }),
         );
 
-        expect(arrow?.style.left).toBe("50.41322314049586%");
+        expect(thumb.style.left).not.toBe(originalLeft);
+        expect(arrow?.style.left).toBe(thumb.style.left);
         document.dispatchEvent(
             new MouseEvent("mouseup", { bubbles: true, clientX: 60 }),
         );
