@@ -97,14 +97,13 @@ public class RealArchitectureContractTests
     [InlineData("minimax")]
     [InlineData("wan22")]
     [InlineData("wan22-5b")]
-    public void Descriptor_publishes_the_common_executable_contract(string family)
+    public void Every_family_can_be_entered_without_uploaded_footage(string family)
     {
         using SwarmUiTestContext context = new();
         VideoArchitectureDescriptor descriptor = CreateFixture(family).Descriptor;
 
-        // The registry's constructor invariants (non-empty entry modes, a positive frame grid, a
-        // rule per boundary join) are pinned in ArchitectureFoundationTests; the only claim left
-        // here is that every family can be entered by something other than uploaded footage.
+        // The registry's other constructor invariants — non-empty entry modes, a positive frame
+        // grid, a rule per boundary join — are pinned in ArchitectureFoundationTests.
         Assert.Contains(
             descriptor.EntryModes,
             mode => mode != ArchitectureEntryMode.InitVideo);
