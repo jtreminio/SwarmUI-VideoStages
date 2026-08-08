@@ -74,20 +74,6 @@ public class AudioSpanCombinerTests
                 HasConfiguredTrack: true,
                 UploadedMedia: null)).Spans;
 
-    private static int CountClassType(JObject workflow, string classType)
-    {
-        int count = 0;
-        foreach (JProperty prop in workflow.Properties())
-        {
-            if (prop.Value is JObject node
-                && string.Equals(node["class_type"]?.ToString(), classType, StringComparison.Ordinal))
-            {
-                count++;
-            }
-        }
-        return count;
-    }
-
     [Fact]
     public void Combine_NoSegments_ReturnsBaseUnchanged_NoNewNodes()
     {
@@ -105,8 +91,9 @@ public class AudioSpanCombinerTests
 
         Assert.Same(baseAudio, result);
         Assert.Equal(before, workflow.Count);
-        Assert.Equal(0, CountClassType(workflow, "AudioMerge"));
-        Assert.Equal(0, CountClassType(workflow, "TrimAudioDuration"));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        Assert.Empty(bridge.Graph.NodesOfType<AudioMergeNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
     }
 
     [Fact]
@@ -130,17 +117,17 @@ public class AudioSpanCombinerTests
             clipDurationSeconds: 10.0,
             out _);
 
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         // Each span: one upload load + one trim. The offset (start > 0) span adds one silence + concat.
-        Assert.Equal(2, CountClassType(workflow, "SwarmLoadAudioB64"));
-        Assert.Equal(2, CountClassType(workflow, "TrimAudioDuration"));
-        Assert.Equal(1, CountClassType(workflow, "EmptyAudio"));
-        Assert.Equal(1, CountClassType(workflow, "AudioConcat"));
-        Assert.Equal(1, CountClassType(workflow, "AudioAdjustVolume"));
+        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>().Count);
+        Assert.Equal(2, bridge.Graph.NodesOfType<TrimAudioDurationNode>().Count);
+        Assert.Single(bridge.Graph.NodesOfType<EmptyAudioNode>());
+        Assert.Single(bridge.Graph.NodesOfType<AudioConcatNode>());
+        Assert.Single(bridge.Graph.NodesOfType<AudioAdjustVolumeNode>());
         // Base is audio1; each span is mixed over the running accumulator -> two merges.
-        Assert.Equal(2, CountClassType(workflow, "AudioMerge"));
+        Assert.Equal(2, bridge.Graph.NodesOfType<AudioMergeNode>().Count);
 
         // Result points at the final AudioMerge, additively (merge_method="add").
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         INodeOutput output = bridge.ResolvePath(result.Path);
         Assert.NotNull(output);
         Assert.Equal("AudioMerge", output.Node.ClassTypeName);
@@ -258,20 +245,14 @@ public class AudioSpanCombinerTests
             out _);
 
         Assert.NotNull(result);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         // No upload load node — the span reads straight from the decode node, via the length pad.
-        Assert.Equal(0, CountClassType(workflow, "SwarmLoadAudioB64"));
-        Assert.Equal(1, CountClassType(workflow, "TrimAudioDuration"));
-        Assert.Equal(1, CountClassType(workflow, "AudioMerge"));
-        JObject ensure = workflow.Properties()
-            .Select(p => p.Value as JObject)
-            .Single(node => node?["class_type"]?.ToString() == "SwarmEnsureAudio");
-        Assert.Equal("65360", (ensure["inputs"]?["audio"] as JArray)?[0]?.ToString());
-        string ensureId = workflow.Properties()
-            .Single(p => ReferenceEquals(p.Value, ensure)).Name;
-        JObject trim = workflow.Properties()
-            .Select(p => p.Value as JObject)
-            .Single(node => node?["class_type"]?.ToString() == "TrimAudioDuration");
-        Assert.Equal(ensureId, (trim["inputs"]?["audio"] as JArray)?[0]?.ToString());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadAudioB64Node>());
+        Assert.Single(bridge.Graph.NodesOfType<AudioMergeNode>());
+        SwarmEnsureAudioNode ensure = Assert.Single(bridge.Graph.NodesOfType<SwarmEnsureAudioNode>());
+        Assert.Equal("65360", ensure.Audio.Connection?.Node.Id);
+        TrimAudioDurationNode trim = Assert.Single(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Same(ensure, trim.Audio.Connection?.Node);
     }
 
     [Fact]
@@ -289,8 +270,9 @@ public class AudioSpanCombinerTests
             out _);
 
         Assert.NotNull(result);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         // Silent clip-duration bed + silence for the span offset = 2 EmptyAudio nodes.
-        Assert.Equal(2, CountClassType(workflow, "EmptyAudio"));
-        Assert.Equal(1, CountClassType(workflow, "AudioMerge"));
+        Assert.Equal(2, bridge.Graph.NodesOfType<EmptyAudioNode>().Count);
+        Assert.Single(bridge.Graph.NodesOfType<AudioMergeNode>());
     }
 }
