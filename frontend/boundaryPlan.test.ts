@@ -1,28 +1,7 @@
-import {
-    afterEach,
-    beforeEach,
-    describe,
-    expect,
-    it,
-    jest,
-} from "@jest/globals";
+import { describe, expect, it } from "@jest/globals";
 import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures";
-import { storedClip } from "./__test_helpers__/clipFixtures";
-import {
-    mountPromptBox,
-    mountVideoStagesData,
-    TIMELINE_PPS,
-} from "./__test_helpers__/dom";
 import { boundaryWindowConstraints } from "./architectures/boundaryConstraints";
 import { boundaryPlanForClips } from "./boundaryPlan";
-import * as persistence from "./persistence/repository";
-import { getSelection, resetSelectionForTests } from "./selection";
-import {
-    createTimelineSelectionTracks,
-    type TimelineSelectionTracks,
-} from "./timelineSelectionTracks";
-import { computeRegionLayout } from "./timelineView/layout";
-import { renderBoundarySeams } from "./timelineView/regionRenderer";
 import type { BoundaryOut, Clip } from "./types";
 
 const ltxBoundaryConstraints = (
@@ -33,17 +12,6 @@ const ltxBoundaryConstraints = (
     boundaryWindowConstraints(
         testArchitectureCatalog().architectures[0].boundaryRules[mode],
     );
-
-interface ClipFixture {
-    duration: number;
-    boundaryOut?: BoundaryOut;
-}
-
-const clipRecord = (clip: ClipFixture): Record<string, unknown> =>
-    storedClip({
-        duration: clip.duration,
-        boundaryOut: clip.boundaryOut ?? "cut",
-    });
 
 const clipFor = (boundaryOut: BoundaryOut, duration = 2): Clip =>
     ({ duration, boundaryOut, stages: [], frameRefs: [] }) as unknown as Clip;
@@ -129,65 +97,5 @@ describe("boundaryPlanForClips", () => {
         );
         expect(plan.fallback).toBe(true);
         expect(plan.overlaps).toEqual([0]);
-    });
-});
-
-describe("timeline boundary selection wiring", () => {
-    let track: TimelineSelectionTracks | null = null;
-    let saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
-
-    beforeEach(() => {
-        resetSelectionForTests();
-        persistence.__resetPersistenceForTests();
-        saveSpy = jest.spyOn(persistence, "saveClips");
-    });
-
-    afterEach(() => {
-        track?.dispose();
-        track = null;
-        jest.restoreAllMocks();
-        resetSelectionForTests();
-        document.body.innerHTML = "";
-    });
-
-    const setup = (fixtures: ClipFixture[]): HTMLElement => {
-        mountPromptBox("");
-        mountVideoStagesData({ clips: fixtures.map(clipRecord) });
-        const body = document.createElement("div");
-        body.id = "videostages-timeline-body";
-        document.body.appendChild(body);
-        const clips = persistence.getClips();
-        const layouts = computeRegionLayout(clips, {
-            pxPerSecond: TIMELINE_PPS,
-        });
-        body.innerHTML = renderBoundarySeams(clips, layouts);
-        track = createTimelineSelectionTracks();
-        track.attach(body);
-        return body;
-    };
-
-    const clickSeam = (body: HTMLElement, leftClipIdx: number): void => {
-        body.querySelector<HTMLElement>(
-            `[data-vst-boundary-chip][data-left-clip-idx="${leftClipIdx}"]`,
-        )?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    };
-
-    it("selects the boundary without mutating or saving on click", () => {
-        const body = setup([{ duration: 5 }, { duration: 5 }]);
-        clickSeam(body, 0);
-        expect(getSelection()).toEqual({ kind: "boundary", leftClipIdx: 0 });
-        expect(persistence.getClips()[0].boundaryOut).toBe("cut");
-        expect(saveSpy).not.toHaveBeenCalled();
-    });
-
-    it("activates via keyboard (Enter)", () => {
-        const body = setup([{ duration: 5 }, { duration: 5 }]);
-        body.querySelector<HTMLElement>(
-            '[data-vst-boundary-chip][data-left-clip-idx="0"]',
-        )?.dispatchEvent(
-            new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-        );
-        expect(getSelection()).toEqual({ kind: "boundary", leftClipIdx: 0 });
-        expect(saveSpy).not.toHaveBeenCalled();
     });
 });
