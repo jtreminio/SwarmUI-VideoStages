@@ -1,5 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -13,14 +14,16 @@ namespace VideoStages.Tests;
 /// <c>WorkflowGraphCleanup</c> for why reading node inputs directly is wrong.
 /// </para>
 /// </summary>
-internal sealed class WorkflowLivePath
+internal sealed class WorkflowLivePath : IDisposable
 {
     private readonly WorkflowBridge _bridge;
+    private readonly bool _ownsBridge;
     private readonly Dictionary<string, List<ComfyNode>> _downstream;
 
-    private WorkflowLivePath(WorkflowBridge bridge)
+    private WorkflowLivePath(WorkflowBridge bridge, bool ownsBridge)
     {
         _bridge = bridge;
+        _ownsBridge = ownsBridge;
         _downstream = [];
         foreach (ComfyNode node in bridge.Graph.Nodes.Values)
         {
@@ -36,10 +39,43 @@ internal sealed class WorkflowLivePath
         }
     }
 
+    /// <summary>One handle over a generated workflow: it makes the bridge and disposes it.</summary>
+    public static WorkflowLivePath Open(JObject workflow) =>
+        new(WorkflowBridge.Create(workflow), ownsBridge: true);
+
+    /// <summary>A live path over a bridge the caller made and keeps; disposing this leaves that
+    /// bridge open.</summary>
     public static WorkflowLivePath For(WorkflowBridge bridge)
     {
         ArgumentNullException.ThrowIfNull(bridge);
-        return new WorkflowLivePath(bridge);
+        return new WorkflowLivePath(bridge, ownsBridge: false);
+    }
+
+    public WorkflowBridge Bridge => _bridge;
+
+    /// <summary>The workflow document the bridge reads and writes through.</summary>
+    public JObject Json => _bridge.Workflow;
+
+    /// <summary>
+    /// The four whole-graph checks every generated-workflow test closes with: nothing built is
+    /// orphaned, no input references a pruned node, the graph is acyclic, and the video is
+    /// published exactly once. Only <c>outputintermediateimages</c> raises
+    /// <paramref name="publishedVideoSaves"/> above one.
+    /// </summary>
+    public void AssertShippable(int publishedVideoSaves = 1)
+    {
+        AssertNoOrphanNodes();
+        AssertPublishedSaveCount(publishedVideoSaves);
+        TypedWorkflowAssertions.AssertNoDanglingNodeRefs(Json);
+        TypedWorkflowAssertions.AssertAcyclic(_bridge);
+    }
+
+    public void Dispose()
+    {
+        if (_ownsBridge)
+        {
+            _bridge.Dispose();
+        }
     }
 
     /// <summary>

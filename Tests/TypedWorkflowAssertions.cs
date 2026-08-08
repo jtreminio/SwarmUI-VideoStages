@@ -70,10 +70,9 @@ internal static class TypedWorkflowAssertions
     }
 
     /// <summary>
-    /// The four whole-graph checks every generated-workflow test closes with: nothing built is
-    /// orphaned, no input references a pruned node, the graph is acyclic, and the video is
-    /// published exactly once. Only <c>outputintermediateimages</c> raises
-    /// <paramref name="publishedVideoSaves"/> above one.
+    /// <see cref="WorkflowLivePath.AssertShippable"/> under the three-argument call shape: the
+    /// bridge and the workflow are facts <paramref name="live"/> already carries, so all this adds
+    /// is the assertion that the three arguments describe one graph.
     /// </summary>
     public static void AssertShippable(
         WorkflowBridge bridge,
@@ -81,10 +80,9 @@ internal static class TypedWorkflowAssertions
         WorkflowLivePath live,
         int publishedVideoSaves = 1)
     {
-        live.AssertNoOrphanNodes();
-        live.AssertPublishedSaveCount(publishedVideoSaves);
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        Assert.Same(bridge, live.Bridge);
+        Assert.Same(workflow, live.Json);
+        live.AssertShippable(publishedVideoSaves);
     }
 
     /// <summary>
