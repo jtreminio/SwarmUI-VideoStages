@@ -292,16 +292,15 @@ public class AuthoringDocumentContractTests
     }
 
     [Fact]
-    public void OversizedIntegerDocumentFieldsDoNotLeakRawOverflowExceptions()
+    public void OversizedIntegerDocumentFieldsFallBackInsteadOfOverflowing()
     {
         JObject document = JObject.Parse(FixtureJson());
         document["fps"] = JToken.Parse("999999999999999999999999999999");
         T2IParamInput input = new(null);
         Fixtures.SetVideoStagesConfig(input, document.ToString());
 
-        Exception error = Record.Exception(
-            () => RequestReader.Read(input));
+        TimelineSpec spec = RequestReader.Read(input);
 
-        Assert.False(error is OverflowException);
+        Assert.Equal(24, spec.FPS);
     }
 }
