@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -274,7 +275,8 @@ public class WanRuntimeFlowTests
             Assert.Same(ambientAudioVae, captured.CurrentAudioVae);
             Assert.False(captured.IsImageToVideo);
             using WorkflowBridge bridge = WorkflowBridge.Create(captured.Workflow);
-            Assert.Empty(SamplerNodes(bridge));
+            Assert.Empty(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+            Assert.Empty(bridge.Graph.NodesOfType<KSamplerAdvancedNode>());
         }
         finally
         {
@@ -394,7 +396,7 @@ public class WanRuntimeFlowTests
             }
             using WorkflowBridge bridge = WorkflowBridge.Create(info.Generator.Workflow);
             ComfyNode failedLatent = Assert.Single(
-                NodesOfClass(bridge, "Wan22ImageToVideoLatent"),
+                bridge.Graph.NodesOfType<Wan22ImageToVideoLatentNode>(),
                 node => !wan22LatentsBeforeStage.Contains(node.Id));
             failedLatentId = failedLatent.Id;
             ComfyNode hostOwnedInput =
@@ -794,13 +796,6 @@ public class WanRuntimeFlowTests
         WorkflowTestHarness.Template_BaseOnlyImage()
             .Concat([WorkflowTestHarness.CoreImageToVideoStep()])
             .Concat(WorkflowTestHarness.VideoStagesSteps());
-
-    private static IEnumerable<ComfyNode> NodesOfClass(WorkflowBridge bridge, string classType) =>
-        bridge.Graph.Nodes.Values.Where(node => node.ClassTypeName == classType);
-
-    private static IEnumerable<ComfyNode> SamplerNodes(WorkflowBridge bridge) =>
-        NodesOfClass(bridge, "SwarmKSampler")
-            .Concat(NodesOfClass(bridge, "KSamplerAdvanced"));
 
     private sealed record LoraParamState(
         IReadOnlyList<string> Loras,
