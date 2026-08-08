@@ -129,7 +129,7 @@ public class Ltx2AudioContractTests
         }
 
         Assert.True(ReachesUpstream(bridge, published, sampler.Id));
-        live.AssertAllLive(sampler, published);
+        live.AssertAllLive(sampler);
         AssertShippable(bridge, workflow, live);
     }
 
@@ -193,7 +193,7 @@ public class Ltx2AudioContractTests
         LTXVAudioVAEDecodeNode published = PublishedAudioDecode(live);
         Assert.True(ReachesUpstream(bridge, published, upload.Id));
 
-        live.AssertAllLive(lengthToFrames, emptyVideo, StageSampler(bridge, 0), published);
+        live.AssertAllLive(lengthToFrames, emptyVideo, StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
     }
 
@@ -244,7 +244,7 @@ public class Ltx2AudioContractTests
             "The published audio decode does not read this stage's output.");
         Assert.Equal(WGNodeData.DT_VIDEO, generator.CurrentMedia.DataType);
 
-        live.AssertAllLive(stage, encode, mask, published);
+        live.AssertAllLive(stage, encode, mask);
         AssertShippable(bridge, workflow, live);
     }
 
@@ -287,7 +287,7 @@ public class Ltx2AudioContractTests
         Assert.True(ReachesUpstream(bridge, published, upload.Id));
         Assert.True(ReachesUpstream(bridge, published, second.Id));
 
-        live.AssertAllLive(first, second, published);
+        live.AssertAllLive(first, second);
         AssertShippable(bridge, workflow, live);
     }
 
@@ -741,8 +741,9 @@ public class Ltx2AudioContractTests
         Assert.IsType<LTXVEmptyLatentAudioNode>(
             JointLatentOf(sampler).AudioLatent.Connection?.Node);
         Assert.Empty(bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
+        Assert.True(ReachesUpstream(bridge, PublishedAudioDecode(live), sampler.Id));
 
-        live.AssertAllLive(sampler, PublishedAudioDecode(live));
+        live.AssertAllLive(sampler);
         AssertShippable(bridge, workflow, live);
     }
 
@@ -783,8 +784,9 @@ public class Ltx2AudioContractTests
         SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.IsType<LTXVEmptyLatentAudioNode>(
             JointLatentOf(sampler).AudioLatent.Connection?.Node);
+        Assert.True(ReachesUpstream(bridge, PublishedAudioDecode(live), sampler.Id));
 
-        live.AssertAllLive(sampler, PublishedAudioDecode(live));
+        live.AssertAllLive(sampler);
         AssertShippable(bridge, workflow, live);
     }
 }
