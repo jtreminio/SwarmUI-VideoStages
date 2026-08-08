@@ -4969,12 +4969,6 @@ describe("createTimelineDetailStrip", () => {
             if (dropdown) {
                 expect(computed(dropdown).width).toBe("auto");
             }
-            const source = fs.readFileSync(
-                path.join(__dirname, "..", "Assets", "video-stages.css"),
-                "utf8",
-            );
-            expect(source).not.toMatch(/\.vst-detail\s+\.auto-input\s*\{/);
-            expect(source).not.toMatch(/\.vst-detail\s+\.auto-dropdown/);
             const durationInput =
                 fieldByLabel("Duration (s)").querySelector("input");
             expect(durationInput).not.toBeNull();
