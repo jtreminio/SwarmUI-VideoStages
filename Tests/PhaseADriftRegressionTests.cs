@@ -83,14 +83,12 @@ public class PhaseADriftRegressionTests
     [Fact]
     public void Frontend_ic_lora_strength_bounds_match_the_backend()
     {
-        string source = RepoFiles.ReadFrontend("icLoraAuthoring.ts");
-
-        Assert.Contains(
-            $"export const IC_LORA_STRENGTH_MIN = {Loras.IcLoraStrengthMin};",
-            source);
-        Assert.Contains(
-            $"export const IC_LORA_STRENGTH_MAX = {Loras.IcLoraStrengthMax};",
-            source);
+        Assert.Equal<double>(
+            Loras.IcLoraStrengthMin,
+            FrontendConstant("icLoraAuthoring.ts", "IC_LORA_STRENGTH_MIN"));
+        Assert.Equal<double>(
+            Loras.IcLoraStrengthMax,
+            FrontendConstant("icLoraAuthoring.ts", "IC_LORA_STRENGTH_MAX"));
     }
 
     [Fact]
@@ -98,7 +96,7 @@ public class PhaseADriftRegressionTests
     {
         Assert.Equal(
             Constants.DefaultStageRefStrength,
-            FrontendConstant("STAGE_REF_STRENGTH_DEFAULT"));
+            FrontendConstant("constants.ts", "STAGE_REF_STRENGTH_DEFAULT"));
     }
 
     [Fact]
@@ -106,25 +104,31 @@ public class PhaseADriftRegressionTests
     {
         Assert.Equal(
             AuthoringTimeline.MinAudioLength,
-            FrontendConstant("AUDIO_SPAN_MIN_LENGTH"));
+            FrontendConstant("constants.ts", "AUDIO_SPAN_MIN_LENGTH"));
         Assert.Equal(
             AuthoringTimeline.MinAudioVolume,
-            FrontendConstant("AUDIO_SPAN_VOLUME_MIN"));
+            FrontendConstant("constants.ts", "AUDIO_SPAN_VOLUME_MIN"));
         Assert.Equal(
             AuthoringTimeline.MaxAudioVolume,
-            FrontendConstant("AUDIO_SPAN_VOLUME_MAX"));
+            FrontendConstant("constants.ts", "AUDIO_SPAN_VOLUME_MAX"));
     }
 
-    /// <summary>Reads a number out of the hand-written frontend module. Parsing it beats matching
-    /// the rendered text: C# spells 0.00001 as 1E-05, which is the same number and not drift.
-    /// </summary>
-    private static double FrontendConstant(string name)
+    /// <summary>Reads a number out of a hand-written frontend module. Parsing beats matching the
+    /// rendered text, which reads two spellings of one number as drift: C# writes 0.00001 as
+    /// 1E-05, and TypeScript may write 4096 as 4_096. Insisting on exactly one declaration is
+    /// what makes a stale commented-out copy fail rather than mask a drifted live one — a block
+    /// comment leaves its body at the start of a line, where this pattern still matches.</summary>
+    private static double FrontendConstant(string module, string name)
     {
-        Match declaration = Regex.Match(
-            RepoFiles.ReadFrontend("constants.ts"),
+        MatchCollection declarations = Regex.Matches(
+            RepoFiles.ReadFrontend(module),
             $"^export const {name} = (\\S+);$",
             RegexOptions.Multiline);
-        Assert.True(declaration.Success, $"constants.ts declares no {name}.");
-        return double.Parse(declaration.Groups[1].Value, CultureInfo.InvariantCulture);
+        Assert.True(
+            declarations.Count == 1,
+            $"{module} must declare {name} exactly once, not {declarations.Count} times.");
+        return double.Parse(
+            declarations[0].Groups[1].Value.Replace("_", ""),
+            CultureInfo.InvariantCulture);
     }
 }
