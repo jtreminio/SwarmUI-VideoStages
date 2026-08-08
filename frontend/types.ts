@@ -1,4 +1,9 @@
 import type {
+    BOUNDARY_MODES,
+    IC_LORA_CONTROL_TYPES,
+    REFERENCE_FRAMINGS,
+} from "./architectures/generatedFeatures";
+import type {
     ArchitectureModelCatalog,
     ModelProfileId,
     VideoArchitectureId,
@@ -177,12 +182,12 @@ export interface FrameRefImage {
     fromEnd: boolean;
 }
 
-export type BoundaryOut = "cut" | "continue" | "crossfade";
+export type BoundaryOut = (typeof BOUNDARY_MODES)[number];
 
-export type IcLoraControlType = "none" | "canny" | "depth" | "normal";
+export type IcLoraControlType = (typeof IC_LORA_CONTROL_TYPES)[number];
 export type IcLoraDriveData = "none" | "visual" | "audio";
 export type IcLoraDriveMediaKind = "image" | "video" | "audio";
-export type ReferenceFraming = "crop" | "stretch" | "fit" | "fit-green";
+export type ReferenceFraming = (typeof REFERENCE_FRAMINGS)[number];
 
 /**
  * One in-context LoRA on a clip. `lora` is the LoRA model name; `preset` is a

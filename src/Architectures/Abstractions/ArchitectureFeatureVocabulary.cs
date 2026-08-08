@@ -50,9 +50,9 @@ internal static class ArchitectureFeatureVocabulary
 
     internal static string WireName(BoundaryJoinType join) => join switch
     {
-        BoundaryJoinType.Cut => "cut",
-        BoundaryJoinType.Continue => "continue",
-        BoundaryJoinType.Crossfade => "crossfade",
+        BoundaryJoinType.Cut => Constants.BoundaryOutCut,
+        BoundaryJoinType.Continue => Constants.BoundaryOutContinue,
+        BoundaryJoinType.Crossfade => Constants.BoundaryOutCrossfade,
         _ => throw new ArgumentOutOfRangeException(nameof(join)),
     };
 
@@ -155,6 +155,26 @@ internal static class ArchitectureFeatureVocabulary
             [.. Enum.GetValues<AudioSourceKind>()
                 .Where(kind => kind != AudioSourceKind.Unknown)
                 .Select(WireName)]);
+        Line();
+        Line("/** Every reference framing a clip can carry; the first is the fallback. */");
+        StringList(
+            "REFERENCE_FRAMINGS",
+            [
+                Constants.ReferenceFramingCrop,
+                Constants.ReferenceFramingStretch,
+                Constants.ReferenceFramingFit,
+                Constants.ReferenceFramingFitGreen,
+            ]);
+        Line();
+        Line("/** Every IC-LoRA control signal an entry can carry; the first is the fallback. */");
+        StringList(
+            "IC_LORA_CONTROL_TYPES",
+            [
+                Constants.IcLoraControlNone,
+                Constants.IcLoraControlCanny,
+                Constants.IcLoraControlDepth,
+                Constants.IcLoraControlNormal,
+            ]);
 
         // Biome keeps a const array on one line while it fits its 80-column width.
         void StringList(string name, IReadOnlyList<string> values)

@@ -30,6 +30,10 @@ public static class Constants
     public const double DefaultStageControlNetStrength = 0.8;
 
     internal const string ComfyUIFeatureFlag = "comfyui";
+
+    // The wire spellings below are the only ones there are: ArchitectureFeatureVocabulary
+    // projects them into frontend/architectures/generatedFeatures.ts, so the frontend unions
+    // follow an edit here without being touched.
     public const string IcLoraControlNone = "none";
     public const string IcLoraControlCanny = "canny";
     public const string IcLoraControlDepth = "depth";
@@ -41,5 +45,4 @@ public static class Constants
     public const string BoundaryOutCut = "cut";
     public const string BoundaryOutContinue = "continue";
     public const string BoundaryOutCrossfade = "crossfade";
-
 }
