@@ -6,20 +6,22 @@ namespace VideoStages.Authoring;
 
 internal static class PromptSyntax
 {
-    public const string TagName = "videoclip";
+    public const string ClipTagName = "videoclip";
+    public const string ClipTagOpen = $"<{ClipTagName}";
+    public const string StagesTagName = "videostages";
     public const string CidMarker = "//cid=";
     public const int NoMatchCid = -1;
 
     private static readonly Regex WindowMarkerPattern = new(
-        $@"<{TagName}:w\|(\d+)\|([0-9.]+)\|([0-9.]+){Regex.Escape(CidMarker)}-?\d+>",
+        $@"<{ClipTagName}:w\|(\d+)\|([0-9.]+)\|([0-9.]+){Regex.Escape(CidMarker)}-?\d+>",
         RegexOptions.Compiled);
 
     private static readonly Regex StageSectionMarkerPattern = new(
-        $@"<{TagName}:s\|(\d+)\|(\d+){Regex.Escape(CidMarker)}-?\d+>",
+        $@"<{ClipTagName}:s\|(\d+)\|(\d+){Regex.Escape(CidMarker)}-?\d+>",
         RegexOptions.Compiled);
 
     private static readonly Regex SectionMarkerPattern = new(
-        $@"<{TagName}{Regex.Escape(CidMarker)}(-?\d+)>",
+        $@"<{ClipTagName}{Regex.Escape(CidMarker)}(-?\d+)>",
         RegexOptions.Compiled);
 
     public static bool TryParseWindow(string value, out double start, out double end)
@@ -50,26 +52,26 @@ internal static class PromptSyntax
 
     public static string RestoreForMetadata(string prompt)
     {
-        if (string.IsNullOrEmpty(prompt) || !prompt.Contains($"<{TagName}", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(prompt) || !prompt.Contains(ClipTagOpen, StringComparison.OrdinalIgnoreCase))
         {
             return prompt;
         }
         prompt = WindowMarkerPattern.Replace(
             prompt,
-            match => $"<{TagName}[{match.Groups[1].Value}]:{match.Groups[2].Value}-{match.Groups[3].Value}>");
+            match => $"<{ClipTagName}[{match.Groups[1].Value}]:{match.Groups[2].Value}-{match.Groups[3].Value}>");
         prompt = StageSectionMarkerPattern.Replace(
             prompt,
-            match => $"<{TagName}[{match.Groups[1].Value},{match.Groups[2].Value}]>");
+            match => $"<{ClipTagName}[{match.Groups[1].Value},{match.Groups[2].Value}]>");
         return SectionMarkerPattern.Replace(prompt, match =>
         {
             int cid = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
             if (cid == Constants.SectionID_VideoClip)
             {
-                return $"<{TagName}>";
+                return $"<{ClipTagName}>";
             }
             if (cid > Constants.SectionID_VideoClip && cid < Constants.SectionID_VideoClipUnmatched)
             {
-                return $"<{TagName}[{cid - Constants.SectionID_VideoClip - 1}]>";
+                return $"<{ClipTagName}[{cid - Constants.SectionID_VideoClip - 1}]>";
             }
             return match.Value;
         });
@@ -84,7 +86,7 @@ internal static class PromptSyntax
         {
             (prefix, preData) = prefix.BeforeLast(']').BeforeAndAfter('[');
         }
-        return prefix.Equals(TagName, StringComparison.OrdinalIgnoreCase);
+        return prefix.Equals(ClipTagName, StringComparison.OrdinalIgnoreCase);
     }
 
     public static string SanitizeOverrideText(string value) =>
@@ -95,18 +97,18 @@ internal static class PromptSyntax
         value.ToString("0.####", CultureInfo.InvariantCulture);
 
     public static string FormatSectionMarker(int sectionId) =>
-        $"<{TagName}{CidMarker}{Cid(sectionId)}>";
+        $"<{ClipTagName}{CidMarker}{Cid(sectionId)}>";
 
     /// <summary>
     /// The cid a window marker carries is never read back — <see cref="WindowMarkerPattern"/>
     /// matches it without capturing — so every window is the unmatched section.
     /// </summary>
     public static string FormatWindowMarker(int clip, double start, double end) =>
-        $"<{TagName}:w|{clip}|{FormatWindowBound(start)}|{FormatWindowBound(end)}"
+        $"<{ClipTagName}:w|{clip}|{FormatWindowBound(start)}|{FormatWindowBound(end)}"
         + $"{CidMarker}{Cid(Constants.SectionID_VideoClipUnmatched)}>";
 
     public static string FormatStageSectionMarker(int clip, int stage, int sectionId) =>
-        $"<{TagName}:s|{clip}|{stage}{CidMarker}{Cid(sectionId)}>";
+        $"<{ClipTagName}:s|{clip}|{stage}{CidMarker}{Cid(sectionId)}>";
 
     // Markers are parsed back with the invariant culture, so they must be written with it.
     private static string Cid(int sectionId) =>

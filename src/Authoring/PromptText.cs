@@ -20,7 +20,7 @@ internal static class PromptText
     public static bool HasAnySectionForClip(string prompt, int clipIndex)
     {
         if (string.IsNullOrWhiteSpace(prompt)
-            || !prompt.Contains("<videoclip", StringComparison.OrdinalIgnoreCase))
+            || !prompt.Contains(PromptSyntax.ClipTagOpen, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -37,7 +37,7 @@ internal static class PromptText
 
         foreach (PromptRegion.Part part in new PromptRegion(canonical).Parts)
         {
-            if (part.Prefix == PromptSyntax.TagName
+            if (part.Prefix == PromptSyntax.ClipTagName
                 && (part.ContextID == globalCid || part.ContextID == clipCid))
             {
                 return true;
@@ -86,7 +86,7 @@ internal static class PromptText
         {
             return "";
         }
-        if (!prompt.Contains("<videoclip", StringComparison.OrdinalIgnoreCase))
+        if (!prompt.Contains(PromptSyntax.ClipTagOpen, StringComparison.OrdinalIgnoreCase))
         {
             return prompt.Trim();
         }
@@ -109,7 +109,7 @@ internal static class PromptText
         bool sawRelevant = false;
         foreach (PromptRegion.Part part in new PromptRegion(canonical).Parts)
         {
-            if (part.Prefix != PromptSyntax.TagName)
+            if (part.Prefix != PromptSyntax.ClipTagName)
             {
                 continue;
             }
@@ -236,7 +236,7 @@ internal static class PromptText
 
     private static string RemoveAllSections(string canonicalPrompt)
     {
-        if (!canonicalPrompt.Contains("<videoclip", StringComparison.OrdinalIgnoreCase))
+        if (!canonicalPrompt.Contains(PromptSyntax.ClipTagOpen, StringComparison.OrdinalIgnoreCase))
         {
             return canonicalPrompt.Trim();
         }
@@ -259,7 +259,7 @@ internal static class PromptText
                 continue;
             }
             string prefix = ExtractPrefixLower(piece.Tag);
-            if (prefix == PromptSyntax.TagName)
+            if (prefix == PromptSyntax.ClipTagName)
             {
                 inVideoclip = true;
                 continue;

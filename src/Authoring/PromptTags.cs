@@ -39,7 +39,7 @@ internal static class PromptTags
         {
             if (value.Length == 0)
             {
-                context.TrackWarning($"VideoStages: <videoclip[{preData}]> override has no value; ignoring.");
+                context.TrackWarning($"VideoStages: {PromptSyntax.ClipTagOpen}[{preData}]> override has no value; ignoring.");
             }
             else
             {
@@ -53,7 +53,7 @@ internal static class PromptTags
             {
                 return windowMarker;
             }
-            context.TrackWarning($"VideoStages: <videoclip[{preData}]:{value}> is not a valid time window; ignoring.");
+            context.TrackWarning($"VideoStages: {PromptSyntax.ClipTagOpen}[{preData}]:{value}> is not a valid time window; ignoring.");
             return UnmatchedSectionMarker(context);
         }
 
@@ -73,13 +73,13 @@ internal static class PromptTags
         string preData = context.PreData?.Trim() ?? "";
         if (preData.Length == 0)
         {
-            context.TrackWarning("VideoStages: the legacy <videostages> JSON prompt section is no longer supported; discarding it.");
+            context.TrackWarning($"VideoStages: the legacy <{PromptSyntax.StagesTagName}> JSON prompt section is no longer supported; discarding it.");
             return UnmatchedSectionMarker(context);
         }
         string[] tokens = [.. preData.Split(',').Select(token => token.Trim())];
         if (tokens.Length != 1)
         {
-            context.TrackWarning("VideoStages: <videostages> override tag has too many bracket groups; ignoring.");
+            context.TrackWarning($"VideoStages: <{PromptSyntax.StagesTagName}> override tag has too many bracket groups; ignoring.");
             return "";
         }
         string field = tokens[0];
@@ -129,7 +129,7 @@ internal static class PromptTags
         {
             if (!int.TryParse(tokens[0], out int clip))
             {
-                context.TrackWarning($"VideoStages: <videoclip[{string.Join(',', tokens)}]> override has a non-numeric clip index; ignoring.");
+                context.TrackWarning($"VideoStages: {PromptSyntax.ClipTagOpen}[{string.Join(',', tokens)}]> override has a non-numeric clip index; ignoring.");
                 return;
             }
             Directives directives = GetDirectives(context);
@@ -142,7 +142,7 @@ internal static class PromptTags
         {
             if (!int.TryParse(tokens[0], out int clip) || !int.TryParse(tokens[1], out int stage))
             {
-                context.TrackWarning($"VideoStages: <videoclip[{string.Join(',', tokens)}]> override requires numeric clip and stage indices; ignoring.");
+                context.TrackWarning($"VideoStages: {PromptSyntax.ClipTagOpen}[{string.Join(',', tokens)}]> override requires numeric clip and stage indices; ignoring.");
                 return;
             }
             Directives directives = GetDirectives(context);
@@ -151,7 +151,7 @@ internal static class PromptTags
                 PromptSyntax.SanitizeOverrideText(value)));
             return;
         }
-        context.TrackWarning($"VideoStages: <videoclip[{string.Join(',', tokens)}]> override has an unsupported bracket arity; ignoring.");
+        context.TrackWarning($"VideoStages: {PromptSyntax.ClipTagOpen}[{string.Join(',', tokens)}]> override has an unsupported bracket arity; ignoring.");
     }
 
     private static Directives GetDirectives(
@@ -174,13 +174,13 @@ internal static class PromptTags
     private static void ReadWindows(string processedPrompt, Directives directives)
     {
         if (string.IsNullOrEmpty(processedPrompt)
-            || !processedPrompt.Contains("<videoclip", StringComparison.OrdinalIgnoreCase))
+            || !processedPrompt.Contains(PromptSyntax.ClipTagOpen, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
         foreach (PromptRegion.Part part in new PromptRegion(processedPrompt).Parts)
         {
-            if (part.Prefix != PromptSyntax.TagName
+            if (part.Prefix != PromptSyntax.ClipTagName
                 || string.IsNullOrEmpty(part.DataText)
                 || !part.DataText.StartsWith("w|"))
             {
@@ -270,7 +270,7 @@ internal static class PromptTags
         sectionId = Constants.SectionID_VideoClip;
         if (input is null)
         {
-            context.TrackWarning("VideoStages: videoclip[clip,stage] requires prompt input.");
+            context.TrackWarning($"VideoStages: {PromptSyntax.ClipTagName}[clip,stage] requires prompt input.");
             return false;
         }
 
@@ -282,7 +282,7 @@ internal static class PromptTags
         catch (Exception ex)
         {
             context.TrackWarning(
-                $"VideoStages: could not parse Video Stages JSON for videoclip[{clipId},{clipStageIndex}]: "
+                $"VideoStages: could not parse Video Stages JSON for {PromptSyntax.ClipTagName}[{clipId},{clipStageIndex}]: "
                 + $"{ex.Message}");
             return false;
         }
@@ -304,8 +304,8 @@ internal static class PromptTags
         }
 
         context.TrackWarning(
-            "VideoStages: no active stage videoclip["
-            + $"{clipId},{clipStageIndex}] in the current Video Stages configuration.");
+            $"VideoStages: no active stage {PromptSyntax.ClipTagName}"
+            + $"[{clipId},{clipStageIndex}] in the current Video Stages configuration.");
         return false;
     }
 }
