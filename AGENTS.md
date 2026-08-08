@@ -34,11 +34,14 @@ Over a whole run the compile break hides completely — `Test Suites: 1 failed, 
 dropped. A real red carries a non-zero *failed* count there and does not shrink the total.
 `run-tests` is `dotnet test && npm run test`, so a C# build failure means jest never ran at all.
 
-So write the baseline total down before you mutate, and compare it after. Nothing else catches this:
-one unused import has silently dropped a whole 21-test suite while the `Tests:` line read
-`30 passed, 30 total` — no failure, no zero, just a smaller number than the run before it. The trap
-does not need a deleted import to spring; `noUnusedLocals` also fires when your mutation replaces
-the only use of one.
+So compare totals against a known-good run, every time. Nothing else catches this: one unused import
+has silently dropped a whole 21-test suite while the `Tests:` line read `30 passed, 30 total` — no
+failure, no zero, just a smaller number than the run before it. The trap does not need a deleted
+import to spring; `noUnusedLocals` also fires when your mutation replaces the only use of one.
+
+In a worktree that comparison is already on screen: `./run-tests` prints `BASE RUN` under `CURRENT
+RUN`, from the untouched suite captured when the worktree was made. Two totals, side by side. In the
+main checkout there is no baseline, so write the numbers down yourself before you mutate.
 
 Failure detail is suppressed by default, for a plain failed assertion as much as for a compile
 break: run `JEST_VERBOSE=1 npm run test` to see why. Passing `--reporters=default` works too, but the
@@ -75,6 +78,8 @@ If `./run-tests` fails with “No such file or directory”, you are in the wron
 Provision one with `scripts/worktree add <name>`, tear it down with `scripts/worktree rm <name>`. `<name>` is the suffix only — letters, digits and dashes — and always lands at `SwarmUI-VideoStages-<name>` next to the main checkout. Both subcommands only run from the main checkout — if you are working inside a worktree, ask whoever provisioned it to add or remove one for you. Never `git worktree add` by hand: the worktree has to sit at `src/Extensions/<dir>` for the project imports to resolve, and it needs `node_modules` plus a `Directory.Build.rsp` that neither git nor `npm` will put there — without them `./run-tests` cannot run at all.
 
 This is automatic: `scripts/worktree-post-checkout`, installed into `.git/hooks` by `add`, fires on every new worktree — including one a bare `git worktree add` or an agent harness creates. It links `node_modules` and `nonversioned`, copies `AGENTS.dev.md`, writes `Directory.Build.rsp`, and relocates the worktree here if git put it somewhere else, leaving a symlink at the original path so whoever asked for that path still finds it. So a harness worktree under `.claude/worktrees/` works without anyone intervening, and you can keep using the path you were given.
+
+It then runs the suite once and saves it to `.test-baseline` (~25s, gitignored), which is why `./run-tests` prints `BASE RUN` beneath `CURRENT RUN` here and not in the main checkout. That baseline is the untouched suite as of the worktree's first commit — it does not move as you work, and it is not supposed to. Its job is the totals: read them against your current run before you believe a red. `--no-baseline` skips the capture and gives up the comparison.
 
 The relocation is not cosmetic. MSBuild resolves `../../SwarmUI.extension.props` against the project file's *real* path, so two directories above the worktree must literally be SwarmUI's `src/`. That is also why the symlink points the way it does — real directory here, link there. The other direction fails with `MSB4019` looking for `/SwarmUI.extension.props`.
 
