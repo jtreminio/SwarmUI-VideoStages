@@ -43,27 +43,25 @@ internal static class PromptRelayPlanCompiler
             _ => PromptRelayMode.None,
         };
 
+    /// <summary>
+    /// Tiles windows that <see cref="Compile"/> has already filtered and start-ordered, filling
+    /// every gap and the tail with an empty-prompt segment — that filler is what turns a single
+    /// authored window into the multi-segment relay <see cref="ModeFor"/> looks for.
+    /// </summary>
     internal static ImmutableArray<PromptRelaySegmentPlan> Tile(
         IEnumerable<PromptWindowPlan> windows,
         double clipSeconds)
     {
+        PromptWindowPlan[] activeWindows = [.. windows ?? []];
+        if (activeWindows.Length == 0)
+        {
+            return [];
+        }
         const double epsilon = 1e-4;
         double total = Math.Max(0, clipSeconds);
         double cursor = 0;
         ImmutableArray<PromptRelaySegmentPlan>.Builder segments =
             ImmutableArray.CreateBuilder<PromptRelaySegmentPlan>();
-
-        PromptWindowPlan[] activeWindows = (windows ?? [])
-            .Where(window => window is not null
-                && !string.IsNullOrWhiteSpace(window.Prompt)
-                && window.DurationSeconds > 0)
-            .OrderBy(window => window.StartSeconds)
-            .ToArray();
-        if (activeWindows.Length == 0)
-        {
-            return [];
-        }
-
         foreach (PromptWindowPlan window in activeWindows)
         {
             double start = Math.Clamp(window.StartSeconds, 0, total);

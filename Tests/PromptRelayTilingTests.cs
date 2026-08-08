@@ -1,3 +1,4 @@
+using VideoStages.Authoring;
 using Xunit;
 
 namespace VideoStages.Tests;
@@ -8,6 +9,11 @@ public class PromptRelayTilingTests
 {
     private static PromptWindowPlan Window(string prompt, double start, double duration) =>
         new(prompt, start, duration, start + duration);
+
+    private static PromptRelayPlan Compile(int frames, params PromptWindowSpec[] windows) =>
+        PromptRelayPlanCompiler.Compile(
+            SpecFixtures.Clip(1, [], frames: frames) with { PromptWindows = windows },
+            framesPerSecond: 1);
 
     private static List<(string Prompt, double Seconds)> Values(
         IEnumerable<PromptRelaySegmentPlan> segments) =>
@@ -55,25 +61,28 @@ public class PromptRelayTilingTests
     }
 
     [Fact]
-    public void Windows_are_sorted_by_start_regardless_of_input_order()
+    public void Windows_are_sorted_by_start_regardless_of_authored_order()
     {
-        var tiled = PromptRelayPlanCompiler.Tile(
-            [Window("late", start: 2, duration: 1), Window("early", start: 0, duration: 1)],
-            clipSeconds: 4);
+        PromptRelayPlan relay = Compile(
+            frames: 4,
+            new PromptWindowSpec("late", Start: 2, Duration: 1),
+            new PromptWindowSpec("early", Start: 0, Duration: 1));
 
         Assert.Equal(
             [("early", 1.0), ("", 1.0), ("late", 1.0), ("", 1.0)],
-            Values(tiled));
+            Values(relay.Segments));
     }
 
     [Fact]
     public void A_lone_blank_window_leaves_no_active_minor_so_no_tiling()
     {
-        var tiled = PromptRelayPlanCompiler.Tile(
-            [Window("   ", start: 1, duration: 1)],
-            clipSeconds: 4);
+        PromptRelayPlan relay = Compile(
+            frames: 4,
+            new PromptWindowSpec("   ", Start: 1, Duration: 1));
 
-        Assert.Empty(tiled);
+        Assert.Empty(relay.AuthoredWindows);
+        Assert.Empty(relay.Segments);
+        Assert.Equal(PromptRelayMode.None, relay.Mode);
     }
 
     [Fact]
