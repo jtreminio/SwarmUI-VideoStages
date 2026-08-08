@@ -567,6 +567,17 @@ public class RequestReaderTests
         Assert.Equal(MediaSource.Upload, config.Clips[0].AudioSource);
     }
 
+    /// <summary>Runtime audio lanes are registered by sibling extensions, so the reader cannot hold
+    /// a list of valid sources; it trims and passes anything through.</summary>
+    [Fact]
+    public void ReadClips_AudioSource_IsNotValidatedAgainstAKnownList()
+    {
+        ClipSpec parsed = ReadSingleClip(
+            MakeClip(stages: [MakeStage("model-a")], audioSource: " audio7 "));
+
+        Assert.Equal("audio7", parsed.AudioSource);
+    }
+
     [Fact]
     public void ReadDocument_GroupToggleOff_YieldsNoRootDimensionsOrEntries()
     {
