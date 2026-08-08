@@ -894,13 +894,8 @@ public sealed class EffectiveVideoRequestProjectionTests
     private static TimelineSpec Spec(params ClipSpec[] clips) =>
         new(512, 512, 24, false, clips);
 
-    private static ArchitecturePlanningResult ResolveWan(
-        TimelineSpec spec,
-        IVideoArchitectureModule module = null) =>
-        TestPlanCompiler.Resolve(
-            spec,
-            _ => module ?? WanArchitectureModule.Instance,
-            _ => WanArchitectureModule.Instance.Descriptor);
+    private static ArchitecturePlanningResult ResolveWan(TimelineSpec spec) =>
+        TestPlanCompiler.Resolve(spec, _ => WanArchitectureModule.Instance);
 
     private static ArchitecturePlanningResult ResolveMixed(TimelineSpec spec) =>
         TestPlanCompiler.Resolve(
