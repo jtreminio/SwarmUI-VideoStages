@@ -56,6 +56,15 @@ internal static class ArchitectureFeatureVocabulary
         _ => throw new ArgumentOutOfRangeException(nameof(join)),
     };
 
+    internal static string WireName(ReferenceFramingMode framing) => framing switch
+    {
+        ReferenceFramingMode.Crop => Constants.ReferenceFramingCrop,
+        ReferenceFramingMode.Stretch => Constants.ReferenceFramingStretch,
+        ReferenceFramingMode.Fit => Constants.ReferenceFramingFit,
+        ReferenceFramingMode.FitGreen => Constants.ReferenceFramingFitGreen,
+        _ => throw new ArgumentOutOfRangeException(nameof(framing)),
+    };
+
     internal static string WireName(RuleSupport support) => support switch
     {
         RuleSupport.Supported => "supported",
@@ -156,17 +165,12 @@ internal static class ArchitectureFeatureVocabulary
                 .Where(kind => kind != AudioSourceKind.Unknown)
                 .Select(WireName)]);
         Line();
-        Line("/** Every reference framing a clip can carry; the first is the fallback. */");
+        Line("/** Every reference framing a clip can carry, in declaration order. */");
         StringList(
             "REFERENCE_FRAMINGS",
-            [
-                Constants.ReferenceFramingCrop,
-                Constants.ReferenceFramingStretch,
-                Constants.ReferenceFramingFit,
-                Constants.ReferenceFramingFitGreen,
-            ]);
+            [.. Enum.GetValues<ReferenceFramingMode>().Select(WireName)]);
         Line();
-        Line("/** Every IC-LoRA control signal an entry can carry; the first is the fallback. */");
+        Line("/** Every IC-LoRA control signal an entry can carry, in declaration order. */");
         StringList(
             "IC_LORA_CONTROL_TYPES",
             [

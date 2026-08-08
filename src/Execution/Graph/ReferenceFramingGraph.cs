@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
+using VideoStages.Architectures.Abstractions;
 using VideoStages.Generated;
 
 namespace VideoStages.Execution.Graph;
@@ -59,7 +60,7 @@ internal static class ReferenceFramingGraph
                 .ToPath();
         }
 
-        string wireMethod = ToWireValue(method);
+        string wireMethod = ArchitectureFeatureVocabulary.WireName(method);
         SwarmFrameImageNode existing = bridge.Graph
             .NodesOfType<SwarmFrameImageNode>()
             .FirstOrDefault(candidate =>
@@ -100,16 +101,8 @@ internal static class ReferenceFramingGraph
         return bridge.NodeAt<SwarmFrameImageNode>(imagePath) is SwarmFrameImageNode frame
             && frame.Width.LiteralAsInt() == width
             && frame.Height.LiteralAsInt() == height
-            && frame.Method.LiteralAsString() == ToWireValue(method);
+            && frame.Method.LiteralAsString() == ArchitectureFeatureVocabulary.WireName(method);
     }
-
-    private static string ToWireValue(ReferenceFramingMode method) => method switch
-    {
-        ReferenceFramingMode.Stretch => Constants.ReferenceFramingStretch,
-        ReferenceFramingMode.Fit => Constants.ReferenceFramingFit,
-        ReferenceFramingMode.FitGreen => Constants.ReferenceFramingFitGreen,
-        _ => Constants.ReferenceFramingCrop,
-    };
 
     private static bool HasSource(INodeInput input, JArray sourcePath) =>
         input.Connection is INodeOutput source

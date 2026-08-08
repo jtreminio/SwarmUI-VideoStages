@@ -52,7 +52,7 @@ export const AUDIO_SOURCE_KINDS = [
     "AceStepFun",
 ] as const;
 
-/** Every reference framing a clip can carry; the first is the fallback. */
+/** Every reference framing a clip can carry, in declaration order. */
 export const REFERENCE_FRAMINGS = [
     "crop",
     "stretch",
@@ -60,7 +60,7 @@ export const REFERENCE_FRAMINGS = [
     "fit-green",
 ] as const;
 
-/** Every IC-LoRA control signal an entry can carry; the first is the fallback. */
+/** Every IC-LoRA control signal an entry can carry, in declaration order. */
 export const IC_LORA_CONTROL_TYPES = [
     "none",
     "canny",
