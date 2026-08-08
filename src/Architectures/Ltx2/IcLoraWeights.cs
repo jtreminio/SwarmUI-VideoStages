@@ -37,8 +37,9 @@ public static class IcLoraWeights
     };
 
     /// <summary>
-    /// Renders the checked-in TypeScript projection of the auto-model tokens. A backend test
-    /// compares this byte for byte with <c>frontend/architectures/ltx2/generatedIcLora.ts</c>.
+    /// Renders the checked-in TypeScript projection. A backend test compares this byte for byte
+    /// with <c>frontend/architectures/ltx2/generatedIcLora.ts</c>. The presets' labels, notes and
+    /// trigger phrases stay in TypeScript — they are presentation, not vocabulary.
     /// </summary>
     internal static string RenderGeneratedTypeScript()
     {
@@ -52,6 +53,20 @@ public static class IcLoraWeights
         Line();
         Line("/** Where auto-downloaded IC-LoRA weights land under the models root. */");
         Line($"export const IC_LORA_AUTO_FOLDER = \"{AutoModelFolder}\";");
+        Line();
+        Line("/** Every curated preset's weights, in offer order. */");
+        Line("export const IC_LORA_WEIGHTS = [");
+        foreach ((string id, IcLoraWeight weight) in Weights)
+        {
+            Line("    {");
+            Line($"        id: \"{id}\",");
+            // Biome wraps a property onto its own line once it passes its 80-column width.
+            string url = $"        weightsUrl: \"{weight.Url}\",";
+            Line(url.Length <= 80 ? url : $"        weightsUrl:\n            \"{weight.Url}\",");
+            Line($"        dimensionDownscaleFactor: {weight.DimensionDownscaleFactor},");
+            Line("    },");
+        }
+        Line("] as const;");
 
         return result.ToString();
     }
