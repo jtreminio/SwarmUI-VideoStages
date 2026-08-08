@@ -75,16 +75,6 @@ internal sealed class LtxAudioReferenceResolver
             return CloneAudioReference(preparedAudioLatent);
         }
 
-        if (ReferencesCapturedDecodedAudio(currentOutputMedia?.AttachedAudio))
-        {
-            // Reuse the separator's native audio latent instead of decoding and re-encoding it.
-            return new WGNodeData(
-                audioLatentPath?.DeepClone() as JArray,
-                g,
-                WGNodeData.DT_LATENT_AUDIO,
-                ResolveAudioCompat());
-        }
-
         if (IsExplicitUploadAudio(currentOutputMedia?.AttachedAudio))
         {
             JArray currentAudioLatentPath = audioLatentPath?.DeepClone() as JArray;
@@ -126,6 +116,12 @@ internal sealed class LtxAudioReferenceResolver
         if (audio?.DataType != WGNodeData.DT_AUDIO
             || audio.Path is not JArray { Count: 2 } audioPath)
         {
+            return false;
+        }
+        if (ReferencesCapturedDecodedAudio(audio))
+        {
+            // A decode of the latent we already hold still traces back to the upload; take the
+            // latent instead of re-encoding the decoded copy.
             return false;
         }
 

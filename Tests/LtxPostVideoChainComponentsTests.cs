@@ -122,6 +122,44 @@ public class LtxPostVideoChainComponentsTests
     }
 
     [Fact]
+    public void AudioResolverKeepsTheCapturedLatentWhenTheDecodeTracesBackToAnUpload()
+    {
+        JObject workflow = LtxDecodedChainWorkflow.Build();
+        workflow["95"] = new JObject
+        {
+            ["class_type"] = SwarmLoadAudioB64Node.ClassType,
+            ["inputs"] = new JObject { ["audio_base64"] = "RFJJVkU=" }
+        };
+        workflow["97"] = new JObject
+        {
+            ["class_type"] = VAEEncodeAudioNode.ClassType,
+            ["inputs"] = new JObject
+            {
+                ["audio"] = new JArray("95", 0),
+                ["vae"] = new JArray("2", 0)
+            }
+        };
+        WorkflowGenerator generator = CreateGenerator(workflow);
+        WGNodeData current = Video(generator, "5");
+        current.AttachedAudio = new WGNodeData(
+            new JArray("6", 0),
+            generator,
+            WGNodeData.DT_AUDIO,
+            null);
+        LtxAudioReferenceResolver resolver = new(
+            generator,
+            audioReuse: null,
+            current,
+            new JArray("4", 1),
+            useReusedAudioLatent: false);
+
+        WGNodeData result = resolver.CreateSourceAudioReference();
+
+        Assert.Equal(WGNodeData.DT_LATENT_AUDIO, result.DataType);
+        Assert.Equal(new JArray("4", 1), result.Path);
+    }
+
+    [Fact]
     public void MissingStageOutputFailsClosedWithoutGraphMutation()
     {
         JObject workflow = LtxDecodedChainWorkflow.Build();
