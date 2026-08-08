@@ -114,10 +114,11 @@ public class RealArchitectureContractTests
     public void Only_host_video_and_wan_run_on_the_stock_host_sampler()
     {
         Assert.Equal(
-            ["wan22", "host-video"],
+            ["host-video", "wan22"],
             VideoArchitectureManifest.ProductionDescriptors
                 .Where(descriptor => descriptor.RunsOnStockHostSampler)
-                .Select(descriptor => descriptor.Id.Value));
+                .Select(descriptor => descriptor.Id.Value)
+                .Order(StringComparer.Ordinal));
     }
 
     [Fact]
