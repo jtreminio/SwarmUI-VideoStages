@@ -20,11 +20,6 @@ public static class Constants
     public const int SectionID_VideoClipUnmatched = 68823;
     public const int StagedNodeIdReservationFloor = 1_000_000;
 
-    /// <summary>Host root nodes publishing the timeline still had to delete, as <c>id=class,</c>
-    /// entries and possibly empty. Adoption is meant to leave it empty; anything in it is a node
-    /// the timeline built beside rather than on. Covers the two host-root deletions
-    /// <c>RootRuntimeSession</c> performs and no other, so a deletion reaching a host node by some
-    /// other path would go unrecorded. Renumbering a node is not a deletion and is not counted.</summary>
     public const string SweptHostRootNodesKey = "videostages.host-root.swept";
     public const double DefaultStageRefStrength = 0.8;
     public const double DefaultStageControlNetStrength = 0.8;
