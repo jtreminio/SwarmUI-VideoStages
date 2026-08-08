@@ -1110,16 +1110,32 @@ public class Ltx2IcLoraContractTests
     }
 
 
-    [Fact]
-    public async Task Auto_ic_lora_without_a_preset_warns_and_drops_the_entry()
+    /// <summary>What the warning names is whatever the resolver looked for: the preset's own
+    /// downloaded weight name, the preset text when the preset carries none, or a stand-in when no
+    /// preset was authored.</summary>
+    public static TheoryData<string, string> UninstalledAutoWeights() => new()
+    {
+        { null, "[unspecified preset]" },
+        { "deblur", IcLoraWeights.ModelNameFor("deblur") },
+        { "unit-test-never-downloaded", "unit-test-never-downloaded" },
+    };
+
+    [Theory]
+    [MemberData(nameof(UninstalledAutoWeights))]
+    public async Task Auto_ic_lora_without_installed_weights_warns_and_drops_the_entry(
+        string preset,
+        string expectedWeights)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        JObject entry = MakeIcLora(IcLoraWeights.AutoModelToken);
+        if (preset is not null)
+        {
+            entry["preset"] = preset;
+        }
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
-                fixture.Post(MakeDocument(IcLoraClip(
-                    [fixture.Stage()],
-                    MakeIcLora(IcLoraWeights.AutoModelToken)))));
+                fixture.Post(MakeDocument(IcLoraClip([fixture.Stage()], entry))));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -1128,55 +1144,9 @@ public class Ltx2IcLoraContractTests
         Assert.IsType<UNETLoaderNode>(sampler.Model.Connection?.Node);
         Assert.Contains(
             RequestWarnings(generator.UserInput),
-            warning => warning.Contains("[unspecified preset]", StringComparison.Ordinal));
+            warning => warning.Contains(expectedWeights, StringComparison.Ordinal));
 
         live.AssertAllLive(sampler);
-        AssertShippable(bridge, workflow, live);
-    }
-
-    [Fact]
-    public async Task Auto_ic_lora_with_uninstalled_weights_warns_and_drops_the_entry()
-    {
-        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject entry = MakeIcLora(IcLoraWeights.AutoModelToken);
-        entry["preset"] = "deblur";
-
-        (JObject workflow, WorkflowGenerator generator) =
-            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
-                fixture.Post(MakeDocument(IcLoraClip([fixture.Stage()], entry))));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        WorkflowLivePath live = WorkflowLivePath.For(bridge);
-
-        AssertNoIcLoraNodes(bridge);
-        Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains(
-                "LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-deblur-0_9",
-                StringComparison.Ordinal));
-
-        live.AssertAllLive(StageSampler(bridge, 0));
-        AssertShippable(bridge, workflow, live);
-    }
-
-    [Fact]
-    public async Task Auto_ic_lora_with_unknown_preset_warns_and_drops_the_entry()
-    {
-        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject entry = MakeIcLora(IcLoraWeights.AutoModelToken);
-        entry["preset"] = "unit-test-never-downloaded";
-
-        (JObject workflow, WorkflowGenerator generator) =
-            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
-                fixture.Post(MakeDocument(IcLoraClip([fixture.Stage()], entry))));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        WorkflowLivePath live = WorkflowLivePath.For(bridge);
-
-        AssertNoIcLoraNodes(bridge);
-        Assert.Contains(
-            RequestWarnings(generator.UserInput),
-            warning => warning.Contains("unit-test-never-downloaded", StringComparison.Ordinal));
-
-        live.AssertAllLive(StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
     }
 
