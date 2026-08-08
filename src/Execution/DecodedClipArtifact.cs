@@ -13,10 +13,8 @@ internal enum DecodedMediaKind
     Audio,
 }
 
-/// <summary>
-/// A narrow graph-output identity. It carries no model compatibility, VAE, latent, or nested host
-/// media object and is resolved only when the timeline merger builds its final graph.
-/// </summary>
+/// <summary>A bare graph-output pointer: no model compatibility, VAE, latent, or nested host
+/// media object.</summary>
 internal sealed record DecodedOutputHandle(
     string NodeId,
     int SlotIndex,
@@ -68,10 +66,6 @@ internal sealed record DecodedClipArtifact(
         }
     }
 
-    /// <summary>
-    /// Projects this neutral artifact back into the host's media shape. This is the only place a
-    /// decoded clip becomes host state, so publication never has to read ambient media instead.
-    /// </summary>
     internal WGNodeData ToHostMedia(WorkflowGenerator g)
     {
         WGNodeData media = new(Video.ToPath(), g, WGNodeData.DT_VIDEO, null)
