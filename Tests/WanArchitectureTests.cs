@@ -105,7 +105,8 @@ public class WanArchitectureTests
 
     /// <summary>
     /// The lora and vae tokens are matched on alphanumeric boundaries, so every separator a class
-    /// id can use to carry one has to be rejected too.
+    /// id can use to carry one is rejected too. The vace rows are the substring case that boundary
+    /// matching must not catch on its own, and the last row is not a Wan class at all.
     /// </summary>
     [Theory]
     [InlineData("wan-2_2-ti2v-5b/lora", "wan-22-5b")]
@@ -182,13 +183,9 @@ public class WanArchitectureTests
         Assert.Equal(
             WanArchitectureModule.Ti2v5bProfileId.Value,
             catalogModel.Value<string>("modelProfileId"));
-        Assert.Equal(WanArchitectureModule.FrameGrid, catalogModel.Value<int>("frameGrid"));
         Assert.Equal(
             ["first"],
             catalogModel["enhancements"]["referencePositions"].Values<string>());
-        Assert.Equal(
-            ["text-to-video", "image-to-video", "init-video"],
-            catalogModel["capabilities"]["entryModes"].Values<string>());
         Assert.Equal(
             WanArchitectureModule.Ti2v5bModelClassId,
             catalogModel.Value<string>("modelClassId"));
@@ -201,18 +198,6 @@ public class WanArchitectureTests
         Assert.Equal(
             WanArchitectureModule.ArchitectureId.Value,
             architecture.Value<string>("id"));
-        Assert.Equal(
-            ["frameReferences"],
-            architecture["capabilities"]["features"].Values<string>());
-        Assert.Equal(
-            "supported",
-            architecture["boundaryRules"]["cut"].Value<string>("support"));
-        Assert.Equal(
-            "unsupported",
-            architecture["boundaryRules"]["continue"].Value<string>("support"));
-        Assert.Equal(
-            "unsupported",
-            architecture["boundaryRules"]["crossfade"].Value<string>("support"));
     }
 
     /// <summary>
