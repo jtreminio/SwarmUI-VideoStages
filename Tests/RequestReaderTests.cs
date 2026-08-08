@@ -1154,11 +1154,12 @@ public class RequestReaderTests
     }
 
     [Theory]
-    [InlineData("sprite", "Upload")]
-    [InlineData("image", "")]
+    [InlineData("sprite", "Upload", "has unknown kind 'sprite'")]
+    [InlineData("image", "", "is missing a Source value")]
     public void ReadClips_ClipReference_WithoutAKindOrSource_IsSkipped(
         string kind,
-        string source)
+        string source,
+        string warning)
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         clip["references"] = new JArray(
@@ -1171,6 +1172,9 @@ public class RequestReaderTests
             JsonConvert.SerializeObject(new JArray(clip)));
 
         Assert.Empty(RequestReader.Read(input).Clips.Single().References);
+        Assert.Contains(
+            TypedWorkflowAssertions.RequestWarnings(input),
+            tracked => tracked.Contains(warning));
     }
 
     [Fact]
