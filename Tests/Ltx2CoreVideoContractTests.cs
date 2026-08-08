@@ -1180,7 +1180,7 @@ public class Ltx2CoreVideoContractTests
     [Fact]
     public async Task Clip_length_from_an_uncaptured_controlnet_warns_and_keeps_the_authored_length()
     {
-        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        using Ltx2WorkflowFixture fixture = WithControlNetStubs(Ltx2WorkflowFixture.Create());
         JObject clip = IcLoraClip(fixture.Stage());
         clip["duration"] = 2.0;
         clip["clipLengthFromControlNet"] = true;
@@ -1192,6 +1192,10 @@ public class Ltx2CoreVideoContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         Assert.Empty(bridge.Graph.NodesOfType<GetImageSizeNode>());
+        // The LoRA resolved and still patches the model; only the guide it had nothing to drive
+        // from is missing, which is what makes the empty guide the capture's fault and not the
+        // weights'.
+        Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
         Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
         Assert.Equal(
             49,
