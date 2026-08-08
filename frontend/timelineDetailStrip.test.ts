@@ -4834,9 +4834,8 @@ describe("createTimelineDetailStrip", () => {
     });
 
     // ---- #2: native-widget markup + dock-override CSSOM probe -------------
-    // The refactor swapped the dock's custom field markup for SwarmUI's native
-    // `.auto-input` and `.input-group` are the host's own sidebar vocabulary.
-    // The extension intentionally does not override their geometry.
+    // The dock is built from SwarmUI's own `.auto-input` and `.input-group`
+    // markup, and deliberately does not override their geometry.
 
     describe("native sidebar markup (CSSOM probe)", () => {
         // The main checkout reaches host wwwroot at ../../../wwwroot; inside a
@@ -5072,8 +5071,7 @@ describe("createTimelineDetailStrip", () => {
             const outsideDock = document.createElement("div");
             outsideDock.className = "input-group input-group-open";
             document.body.appendChild(outsideDock);
-            // Punked is the theme that forces open groups wider than the dock;
-            // without a floor to override, this test proves nothing.
+            // Punked has a floor to override. Without one this proves nothing.
             const hostMinWidth = computed(outsideDock).minWidth;
             expect(Number.parseFloat(hostMinWidth)).toBeGreaterThan(0);
 
