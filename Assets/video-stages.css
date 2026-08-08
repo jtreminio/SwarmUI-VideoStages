@@ -442,7 +442,7 @@
 .vst-head-tag-active .vst-head-tag-tick {
     background: color-mix(in srgb, var(--emphasis) 45%, var(--vst-hairline));
 }
-/* Blank add-lanes (Audio "+") and single-lane tracks (Refs) read quieter. */
+/* The blank add-lane (Audio "+") reads quieter. */
 .vst-head-tag-muted .vst-head-tag-pill {
     opacity: 0.55;
 }
@@ -482,11 +482,6 @@
 .vst-track-video .vst-head-tag-retake {
     bottom: 6px;
     height: var(--vst-retake-lane-h);
-}
-/* References: the single lane spans the whole row. */
-.vst-track-refs .vst-head-tag-refs {
-    top: 0;
-    bottom: 0;
 }
 /* Audio: source mini-row on top, then one tag per track-lane index via the
    same --vst-audio-lane-idx idiom .vst-audio-track-lane uses. */
