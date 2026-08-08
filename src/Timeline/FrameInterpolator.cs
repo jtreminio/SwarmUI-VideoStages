@@ -29,32 +29,34 @@ internal sealed class FrameInterpolator(WorkflowGenerator g)
             return error is null ? [] : [Refuse(error)];
         }
 
-        List<PlanDiagnostic> diagnostics = [];
+        return UnsupportedReasons(plan, config).Select(WarnAndSkip).ToArray();
+    }
+
+    /// <summary><see cref="Apply"/> skips on any of these, so a warning and a skip can never
+    /// disagree.</summary>
+    private IEnumerable<string> UnsupportedReasons(VideoExecutionPlan plan, Configuration config)
+    {
         if (plan.Clips.Count != 1)
         {
             string boundaryLabel = plan.Boundaries.Count == 1 ? "boundary" : "boundaries";
-            diagnostics.Add(WarnAndSkip(
-                "'Video Frame Interpolation' is request-global and can only be applied to a "
-                + $"single completed clip. This timeline has {plan.Clips.Count} clips joined by "
+            yield return "'Video Frame Interpolation' is request-global and can only be applied to "
+                + $"a single completed clip. This timeline has {plan.Clips.Count} clips joined by "
                 + $"{plan.Boundaries.Count} {boundaryLabel}; interpolating the merged video "
-                + "would synthesize frames across authored boundaries."));
+                + "would synthesize frames across authored boundaries.";
         }
         if (HasDynamicLength(plan))
         {
-            diagnostics.Add(WarnAndSkip(
-                "'Video Frame Interpolation' requires a literal final frame count, but this "
-                    + "timeline derives its duration at runtime."));
+            yield return "'Video Frame Interpolation' requires a literal final frame count, but "
+                + "this timeline derives its duration at runtime.";
         }
         string[] missingFeatures = RequiredFeatures(config.Method)
             .Where(feature => !g.Features.Contains(feature))
             .ToArray();
         if (missingFeatures.Length > 0)
         {
-            diagnostics.Add(WarnAndSkip(
-                $"Video frame interpolation method '{config.Method}' requires backend feature(s) "
-                + $"{string.Join(", ", missingFeatures.Select(feature => $"'{feature}'"))}."));
+            yield return $"Video frame interpolation method '{config.Method}' requires backend "
+                + $"feature(s) {string.Join(", ", missingFeatures.Select(feature => $"'{feature}'"))}.";
         }
-        return diagnostics;
     }
 
     internal RuntimeArtifact Apply(RuntimeArtifact artifact, VideoExecutionPlan plan)
@@ -67,9 +69,7 @@ internal sealed class FrameInterpolator(WorkflowGenerator g)
                 ? artifact
                 : throw Invariant.Failure(error);
         }
-        if (plan.Clips.Count != 1
-            || HasDynamicLength(plan)
-            || RequiredFeatures(config.Method).Any(feature => !g.Features.Contains(feature)))
+        if (UnsupportedReasons(plan, config).Any())
         {
             return artifact;
         }
