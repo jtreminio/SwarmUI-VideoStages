@@ -656,7 +656,9 @@ public class Ltx2AudioContractTests
     /// A retake windows audio and video together through the stock mask-by-time node. It rewrites
     /// five things at once — both conditionings, the joint latent and two blend coefficient sets —
     /// so its mere presence proves nothing: the sampler has to be reading its rewritten outputs.
-    /// Text-to-video, so the sourced clip is the only sampler in the graph.
+    /// Text-to-video, so the sourced clip is the only sampler in the graph. The window arithmetic
+    /// belongs to <see cref="Ltx2GuideAndRetakeContractTests"/>, beside the latent ladder it has to
+    /// agree with.
     /// </summary>
     [Theory]
     [InlineData(true)]
@@ -701,9 +703,6 @@ public class Ltx2AudioContractTests
             Assert.True(inputs["mask_audio"].Value<bool>());
             Assert.Equal(0.0, inputs["mask_init_value_video"].Value<double>(), precision: 6);
             Assert.Equal(0.0, inputs["mask_init_value_audio"].Value<double>(), precision: 6);
-            // Frames [24, 48) of 97 snap to latent frames [3, 6), whose boundary pixels are 17/41.
-            Assert.Equal(17.0 / 24, maskByTime.StartTime.LiteralAsDouble().Value, precision: 6);
-            Assert.Equal(41.0 / 24, maskByTime.EndTime.LiteralAsDouble().Value, precision: 6);
 
             Assert.True(
                 ReachesUpstream(bridge, sampler.LatentImage.Connection?.Node, maskByTime.Id),

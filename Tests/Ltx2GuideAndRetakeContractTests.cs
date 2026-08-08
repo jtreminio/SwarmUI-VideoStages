@@ -308,7 +308,13 @@ public class Ltx2GuideAndRetakeContractTests
         Assert.Single(solids, solid => solid.Value.LiteralAsDouble() == strength);
         Assert.Single(solids, solid => solid.Value.LiteralAsDouble() == 0.0);
 
-        live.AssertAllLive(maskNode);
+        // The joint audio/video window spans the same latent block, whose boundary pixels are 17/41.
+        LTXVSetAudioVideoMaskByTimeNode maskByTime = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVSetAudioVideoMaskByTimeNode>());
+        Assert.Equal(17.0 / 24, maskByTime.StartTime.LiteralAsDouble()!.Value, precision: 6);
+        Assert.Equal(41.0 / 24, maskByTime.EndTime.LiteralAsDouble()!.Value, precision: 6);
+
+        live.AssertAllLive(maskNode, maskByTime);
         AssertShippable(bridge, workflow, live);
     }
 
