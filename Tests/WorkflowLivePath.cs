@@ -43,18 +43,6 @@ internal sealed class WorkflowLivePath
     }
 
     /// <summary>
-    /// A node fed only by literals — an empty latent, a loader — is a root itself and so is its
-    /// own answer here.
-    /// </summary>
-    public IReadOnlyList<ComfyNode> RootsOf(ComfyNode node)
-    {
-        ArgumentNullException.ThrowIfNull(node);
-        return [.. Ancestors(node).Append(node)
-            .Where(candidate => !_bridge.Graph.FindUpstream(candidate).Any())
-            .OrderBy(candidate => candidate.Id)];
-    }
-
-    /// <summary>
     /// The published video save. With per-stage intermediate saves present, the published one is
     /// the save every other save's inputs ultimately feed, so it has the largest ancestor set.
     /// </summary>
@@ -152,6 +140,14 @@ internal sealed class WorkflowLivePath
                 + string.Join("\n  ", orphans));
     }
 
+    /// <summary>
+    /// A node fed only by literals — an empty latent, a loader — is a root itself and so is its
+    /// own answer here.
+    /// </summary>
+    private IReadOnlyList<ComfyNode> RootsOf(ComfyNode node) =>
+        [.. Ancestors(node).Append(node)
+            .Where(candidate => !_bridge.Graph.FindUpstream(candidate).Any())
+            .OrderBy(candidate => candidate.Id)];
 
     private static bool IsOutputNode(ComfyNode node) =>
         node is SwarmSaveAnimationWSNode or SwarmSaveImageWSNode or SaveImageNode or PreviewImageNode;
