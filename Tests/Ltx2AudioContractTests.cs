@@ -134,6 +134,23 @@ public class Ltx2AudioContractTests
     }
 
     /// <summary>
+    /// The rate is all LTX passes to <c>SwarmAudioLengthToFrames</c>: unlike MiniMax it never writes
+    /// the grid, so a clip sized from its audio snaps on whatever that node defaults to. The silent
+    /// coupling is the claim — the default has to stay the grid LTX declares, or such clips land off
+    /// the grid every other part of the architecture snaps to.
+    /// </summary>
+    [Fact]
+    public void Audio_length_node_defaults_to_the_grid_ltx_declares()
+    {
+        SwarmAudioLengthToFramesNode lengthToFrames = new();
+        Assert.Equal(
+            Ltx2ArchitectureModule.FrameGrid,
+            lengthToFrames.FrameGrid.LiteralAsInt());
+        Assert.Equal(1, lengthToFrames.FrameGridOrigin.LiteralAsInt());
+        Assert.Equal(1, lengthToFrames.FrameCountOffset.LiteralAsInt());
+    }
+
+    /// <summary>
     /// <c>clipLengthFromAudio</c> makes the uploaded track decide the clip length: the frame count
     /// is a wire off <c>SwarmAudioLengthToFrames</c> rather than a literal, and both the video
     /// latent and the audio the model conditions on come from that same node so they cannot drift.
@@ -165,17 +182,6 @@ public class Ltx2AudioContractTests
         SwarmAudioLengthToFramesNode lengthToFrames = Assert.Single(
             bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
         Assert.Equal(rate, lengthToFrames.FrameRate.LiteralAsInt());
-        // The rate is all LTX chooses: unlike MiniMax, it never passes a grid, so the 8k+1 snap is
-        // whatever SwarmAudioLengthToFrames itself defaults to. That silent coupling is the claim —
-        // the inherited default must still be the grid LTX declares, or clips sized from audio
-        // land off the grid every other part of the architecture snaps to. (Nothing here can prove
-        // the inputs are honoured, since LTX never writes them; MiniMax's
-        // Uploaded_audio_can_drive_the_entry_joint_latent_length is the control that does.)
-        Assert.Equal(
-            Ltx2ArchitectureModule.FrameGrid,
-            lengthToFrames.FrameGrid.LiteralAsInt());
-        Assert.Equal(1, lengthToFrames.FrameGridOrigin.LiteralAsInt());
-        Assert.Equal(1, lengthToFrames.FrameCountOffset.LiteralAsInt());
 
         // The measured track is the padded one, not the raw upload: measuring the raw upload would
         // report a length the graph never generates at.
