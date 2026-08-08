@@ -45,7 +45,6 @@ public class PromptRelayTilingTests
             clipSeconds: 4);
 
         Assert.Equal([("solo", 4.0)], Values(tiled));
-        Assert.True(tiled.Length < 2, "A full-clip single window must not trigger a relay.");
     }
 
     [Fact]
@@ -116,22 +115,20 @@ public class PromptRelayTilingTests
             clipSeconds: 10);
 
         Assert.Equal([("", 10.0)], Values(tiled));
-        Assert.Equal(10.0, tiled.Sum(t => t.Seconds), 5);
     }
 
     [Fact]
-    public void An_in_bounds_window_plus_an_out_of_bounds_one_still_sum_to_the_clip()
+    public void An_out_of_bounds_window_is_dropped_and_its_span_stays_a_gap()
     {
         var tiled = PromptRelayPlanCompiler.Tile(
             [Window("A", start: 0, duration: 6), Window("B", start: 12, duration: 3)],
             clipSeconds: 10);
 
         Assert.Equal([("A", 6.0), ("", 4.0)], Values(tiled));
-        Assert.Equal(10.0, tiled.Sum(t => t.Seconds), 5);
     }
 
     [Fact]
-    public void Every_tiling_sums_to_the_clip_length()
+    public void Three_windows_with_gaps_at_both_ends_tile_in_order()
     {
         var tiled = PromptRelayPlanCompiler.Tile(
             [
@@ -141,7 +138,9 @@ public class PromptRelayTilingTests
             ],
             clipSeconds: 12);
 
-        Assert.Equal(12.0, tiled.Sum(t => t.Seconds), 5);
+        Assert.Equal(
+            [("", 1.0), ("a", 1.0), ("b", 1.0), ("", 3.0), ("c", 2.0), ("", 4.0)],
+            Values(tiled));
     }
 
     [Fact]
