@@ -20,7 +20,7 @@ internal static class Ltx2BoundaryPolicy
                 "Continue requires adjacent LTX clips and a compatible generated target.",
                 new BoundaryRuleConstraints(
                     FrameStep: Ltx2ArchitectureModule.FrameGrid,
-                    MinFrames: DefaultFrames,
+                    MinFrames: Ltx2ArchitectureModule.FrameGrid,
                     MaxFrames: MaxFrames,
                     DefaultFrames: DefaultFrames,
                     ContinuityExtraFrames: 1,
@@ -32,7 +32,7 @@ internal static class Ltx2BoundaryPolicy
                 "Decoded LTX clips can be crossfaded.",
                 new BoundaryRuleConstraints(
                     FrameStep: Ltx2ArchitectureModule.FrameGrid,
-                    MinFrames: DefaultFrames,
+                    MinFrames: Ltx2ArchitectureModule.FrameGrid,
                     MaxFrames: MaxFrames,
                     DefaultFrames: DefaultFrames,
                     ContinuityExtraFrames: 0,
