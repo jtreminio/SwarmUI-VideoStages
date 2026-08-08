@@ -243,16 +243,11 @@ internal static class TypedWorkflowAssertions
         Assert.Null(lora.FindInput("strength_clip"));
     }
 
-    /// <summary>
-    /// An unconnected input is fine — the reference was dropped — so callers must assert
-    /// connectedness themselves.
-    /// </summary>
     public static void AssertImageSource(ComfyNode source, string inputName)
     {
-        if (source is null)
-        {
-            return;
-        }
+        Assert.True(
+            source is not null,
+            $"{inputName} is connected to nothing, so no image reaches it.");
         Assert.True(
             source.Outputs.Any(output => output.TypeName == ImageType.TypeName),
             $"{inputName} is fed by {source.ClassTypeName} (node {source.Id}), which outputs "
