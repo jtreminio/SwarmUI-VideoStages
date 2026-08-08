@@ -6,6 +6,7 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { storedClip } from "./__test_helpers__/clipFixtures";
 import {
     mountPromptBox,
     mountTimelineBody,
@@ -26,12 +27,6 @@ import { setTimelineAuthoringSetting } from "./timelineAuthoringSettings";
 import { renderTimeline } from "./timelineView";
 import type { AudioTrack, AuthoringDocument } from "./types";
 
-const clipRecord = (duration: number): Record<string, unknown> => ({
-    duration,
-    stages: [{}],
-    frameRefs: [],
-});
-
 describe("timeline-wide audio span gestures", () => {
     let track: TimelineAudioSpanTrack | null = null;
     let router: GestureRouter | null = null;
@@ -41,7 +36,10 @@ describe("timeline-wide audio span gestures", () => {
         withTrack = true,
         withJoin = false,
     ): Record<string, unknown> => {
-        const clips = [clipRecord(3), clipRecord(4)];
+        const clips = [
+            storedClip({ duration: 3 }),
+            storedClip({ duration: 4 }),
+        ];
         if (withJoin) {
             Object.assign(clips[0], {
                 boundaryOut: "crossfade",

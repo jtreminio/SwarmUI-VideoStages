@@ -6,6 +6,7 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { storedClip } from "./__test_helpers__/clipFixtures";
 import {
     firstSavedClips,
     mountPromptBox,
@@ -40,14 +41,6 @@ interface ClipFixture {
     windows?: WindowFixture[];
 }
 
-// Structural fields ride in the Data param; prompt windows ride in the prompt
-// box as <videoclip[N]:S-E> tags (S,E in seconds).
-const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
-    duration: clip.duration,
-    stages: [{}],
-    frameRefs: [],
-});
-
 const promptText = (clips: ClipFixture[]): string => {
     const tags: string[] = [];
     clips.forEach((clip, i) => {
@@ -60,7 +53,9 @@ const promptText = (clips: ClipFixture[]): string => {
 };
 
 const mountPrompt = (clips: ClipFixture[]): HTMLTextAreaElement => {
-    mountVideoStagesData({ clips: clips.map(clipRecord) });
+    mountVideoStagesData({
+        clips: clips.map((clip) => storedClip({ duration: clip.duration })),
+    });
     return mountPromptBox(promptText(clips));
 };
 
