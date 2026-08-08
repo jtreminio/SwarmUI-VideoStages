@@ -117,36 +117,14 @@ internal sealed class AudioTimelineExecutor
 
         if (baseAudio is null
             && spans.IsDefaultOrEmpty
-            && boundaryAudioCarry?.NativeLatent?.Path is JArray carryPath
-            && _generator.CurrentAudioVae is not null)
+            && TryCarryBoundaryAudioAlone(
+                clip,
+                clipContext,
+                currentMedia,
+                boundaryAudioCarry,
+                framesPerSecond))
         {
-            int targetFrames = (clip.Frames ?? 0)
-                + clipContext.IncomingContinueHandleFrames;
-            if (targetFrames > 0 && framesPerSecond > 0)
-            {
-                using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
-                LTXVEmptyLatentAudioNode target = bridge.AddNode(
-                    new LTXVEmptyLatentAudioNode().With(
-                        FramesNumber: targetFrames,
-                        FrameRate: $"{framesPerSecond}",
-                        BatchSize: 1));
-                target.AudioVae.ConnectFromPath(bridge, _generator.CurrentAudioVae.Path);
-                SwarmSetAudioMaskWindowsNode mask = AudioPreserveWindowBuilder.AddMask(
-                    _generator,
-                    bridge,
-                    carryPath,
-                    [(0, boundaryAudioCarry.DurationSeconds)],
-                    clip.ClipId + 1,
-                    target.Latent.ToPath(),
-                    boundaryAudioCarry.SourceStartSeconds);
-                currentMedia.AttachedAudio = new WGNodeData(
-                    mask.Latent.ToPath(),
-                    _generator,
-                    WGNodeData.DT_LATENT_AUDIO,
-                    _generator.CurrentAudioVae.Compat);
-                _generator.CurrentMedia = currentMedia;
-                return;
-            }
+            return;
         }
 
         WGNodeData baseWithBoundaryCarry = boundaryAudioCarry is null
@@ -176,6 +154,51 @@ internal sealed class AudioTimelineExecutor
             combinedAudio,
             generationDuration,
             preserveWindows);
+    }
+
+    /// <summary>The clip's only audio is the previous clip's tail.</summary>
+    private bool TryCarryBoundaryAudioAlone(
+        ClipPlan clip,
+        ClipContext clipContext,
+        WGNodeData currentMedia,
+        LtxBoundaryAudioCarry boundaryAudioCarry,
+        int framesPerSecond)
+    {
+        if (boundaryAudioCarry?.NativeLatent?.Path is not JArray carryPath
+            || _generator.CurrentAudioVae is null)
+        {
+            return false;
+        }
+        int targetFrames = (clip.Frames ?? 0) + clipContext.IncomingContinueHandleFrames;
+        if (targetFrames <= 0 || framesPerSecond <= 0)
+        {
+            return false;
+        }
+
+        using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+        // Core's EnsureHasAudioIfNeeded early-returns on media that already carries audio, and
+        // attaches what it builds; this bed is the mask's target, not the attachment.
+        LTXVEmptyLatentAudioNode target = bridge.AddNode(
+            new LTXVEmptyLatentAudioNode().With(
+                FramesNumber: targetFrames,
+                FrameRate: $"{framesPerSecond}",
+                BatchSize: 1));
+        target.AudioVae.ConnectFromPath(bridge, _generator.CurrentAudioVae.Path);
+        SwarmSetAudioMaskWindowsNode mask = AudioPreserveWindowBuilder.AddMask(
+            _generator,
+            bridge,
+            carryPath,
+            [(0, boundaryAudioCarry.DurationSeconds)],
+            clip.ClipId + 1,
+            target.Latent.ToPath(),
+            boundaryAudioCarry.SourceStartSeconds);
+        currentMedia.AttachedAudio = new WGNodeData(
+            mask.Latent.ToPath(),
+            _generator,
+            WGNodeData.DT_LATENT_AUDIO,
+            _generator.CurrentAudioVae.Compat);
+        _generator.CurrentMedia = currentMedia;
+        return true;
     }
 
     private void AttachClipAudio(
