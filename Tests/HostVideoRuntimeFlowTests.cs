@@ -63,8 +63,10 @@ public class HostVideoRuntimeFlowTests
             diagnostic => diagnostic.Code.StartsWith("host-video.", StringComparison.Ordinal));
     }
 
-    /// <summary>Only a host-video root owns the discarded core pass; under a specialized root the
-    /// isolation is a no-op.</summary>
+    /// <summary>Only a host-video root owns the discarded core pass. The request is prepared and the
+    /// live base model state is present, so the root-owner guard is the only thing left holding the
+    /// isolation off — without it these two assertions see a zeroed start step and a matched model.
+    /// </summary>
     [Fact]
     public void Core_isolation_skips_a_specialized_root_owner()
     {
@@ -78,9 +80,13 @@ public class HostVideoRuntimeFlowTests
         WorkflowGenerator generator = new()
         {
             UserInput = input,
+            Features = [],
+            ModelFolderFormat = "/",
             Workflow = [],
         };
-        generator.RequireVideoExecutionPlanContext();
+        generator.CurrentModel = new(["1", 0], generator, WGNodeData.DT_MODEL, null);
+        generator.CurrentVae = new(["1", 1], generator, WGNodeData.DT_VAE, null);
+        generator.RequireVideoExecutionPlanContext().PrepareRequest();
         WorkflowGenerator.ImageToVideoGenInfo core = new()
         {
             Generator = generator,
@@ -90,10 +96,8 @@ public class HostVideoRuntimeFlowTests
 
         HostVideoCorePassIsolation.Isolate(core);
 
-        // Isolate's own mark, which it sets only after mutating.
-        Assert.False(core.HasMatchedModelData);
-        // A value the test supplied: the isolation would have zeroed it.
         Assert.Equal(4, core.StartStep);
+        Assert.False(core.HasMatchedModelData);
     }
 
     /// <summary>
