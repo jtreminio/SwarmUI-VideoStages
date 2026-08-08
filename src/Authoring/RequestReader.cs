@@ -12,14 +12,11 @@ internal static class RequestReader
     private const double DefaultUpscale = 1.0;
     private const string DefaultUpscaleMethod = "pixel-lanczos";
 
-    private sealed record StageDefaults(
-        int Steps,
-        double CfgScale,
-        string Sampler,
-        string Scheduler);
-
     private sealed record ClipReadContext(
-        StageDefaults StageDefaults,
+        int DefaultSteps,
+        double DefaultCfgScale,
+        string DefaultSampler,
+        string DefaultScheduler,
         bool IsTextToVideoRootWorkflow,
         int Fps,
         PromptTags.Directives Directives,
@@ -60,12 +57,7 @@ internal static class RequestReader
             };
         }
 
-        ClipReadContext context = new(
-            ReadDefaults(input),
-            isTextToVideo,
-            fps,
-            directives,
-            warn);
+        ClipReadContext context = ReadContext(input, isTextToVideo, fps, directives, warn);
 
         List<ClipSpec> clips = [];
         int nextStageId = 0;
@@ -257,7 +249,7 @@ internal static class RequestReader
                 clipStageIndex: stages.Count,
                 frameRefCount: frameRefCount,
                 initVideoClip: initVideoClip,
-                context);
+                context: context);
             if (parsed is not null)
             {
                 stages.Add(parsed);
@@ -313,14 +305,14 @@ internal static class RequestReader
             UpscaleMethod: upscaleMethod,
             Model: model,
             Steps: Math.Max(1, DocumentJson.GetOptionalInt(
-                stage, "steps", context.StageDefaults.Steps, location, context.Warn)),
+                stage, "steps", context.DefaultSteps, location, context.Warn)),
             CfgScale: NormalizeCfgScale(DocumentJson.GetOptionalDouble(
-                stage, "cfgScale", context.StageDefaults.CfgScale, location, context.Warn)),
+                stage, "cfgScale", context.DefaultCfgScale, location, context.Warn)),
             Sampler: DocumentJson.GetOptionalString(
-                stage, "sampler", context.StageDefaults.Sampler, location,
+                stage, "sampler", context.DefaultSampler, location,
                 allowEmpty: false, context.Warn),
             Scheduler: DocumentJson.GetOptionalString(
-                stage, "scheduler", context.StageDefaults.Scheduler, location,
+                stage, "scheduler", context.DefaultScheduler, location,
                 allowEmpty: false, context.Warn),
             ImageReference: NormalizeImageReference(
                 DocumentJson.GetString(stage, "imageReference"),
@@ -339,7 +331,12 @@ internal static class RequestReader
             LoraWeights: Loras.ReadWeights(stage));
     }
 
-    private static StageDefaults ReadDefaults(T2IParamInput input)
+    private static ClipReadContext ReadContext(
+        T2IParamInput input,
+        bool isTextToVideoRootWorkflow,
+        int fps,
+        PromptTags.Directives directives,
+        Action<string> warn)
     {
         int steps = input.TryGet(T2IParamTypes.VideoSteps, out int explicitVideoSteps)
             ? explicitVideoSteps
@@ -360,11 +357,15 @@ internal static class RequestReader
                 "normal",
                 autoFixDefault: true);
 
-        return new StageDefaults(
+        return new ClipReadContext(
             Math.Max(1, steps),
             NormalizeCfgScale(cfgScale),
             sampler,
-            scheduler);
+            scheduler,
+            isTextToVideoRootWorkflow,
+            fps,
+            directives,
+            warn);
     }
 
     private static LegacyVideoSwapRequestSnapshot CaptureLegacyVideoSwap(T2IParamInput input)
