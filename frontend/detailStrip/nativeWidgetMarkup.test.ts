@@ -35,9 +35,8 @@ describe("detail strip native widget markup", () => {
         }
     });
 
-    // ---- #2: native-widget markup + dock-override CSSOM probe -------------
-    // The dock is built from SwarmUI's own `.auto-input` and `.input-group`
-    // markup, and deliberately does not override their geometry.
+    // The dock builds on the host's `.auto-input`/`.input-group` vocabulary and
+    // overrides only min-width, the item outline and its padding.
     describe("CSSOM probe", () => {
         // The main checkout reaches host wwwroot at ../../../wwwroot; inside a
         // git worktree the extension is nested deeper, so walk up for it.
