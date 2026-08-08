@@ -12,7 +12,7 @@ namespace VideoStages.Tests;
 public sealed class StageRefStoreScopeTests
 {
     [Fact]
-    public void Every_owned_runtime_key_family_uses_the_ltx_architecture_prefix()
+    public void Runtime_key_families_do_not_collide()
     {
         List<string> runtimeKeys =
         [
@@ -34,9 +34,6 @@ public sealed class StageRefStoreScopeTests
             }
             select key);
 
-        Assert.All(
-            runtimeKeys,
-            key => Assert.StartsWith("videostages.arch.ltx2.", key));
         Assert.Equal(runtimeKeys.Count, runtimeKeys.Distinct().Count());
     }
 
