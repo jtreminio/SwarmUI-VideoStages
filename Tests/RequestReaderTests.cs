@@ -73,10 +73,8 @@ public class RequestReaderTests
         return input;
     }
 
-    private static T2IParamInput BuildGenerator(string json) => BuildInputWithJson(json);
-
     // ApplyLateSpecialLogic converts authored tags into processed markers.
-    private static T2IParamInput BuildGenerator(string json, string prompt)
+    private static T2IParamInput BuildInputWithPrompt(string json, string prompt)
     {
         T2IParamInput input = BuildInputWithJson(json);
         input.Set(T2IParamTypes.Prompt, prompt);
@@ -97,7 +95,7 @@ public class RequestReaderTests
     private static ClipSpec ReadSingleClip(JObject clip)
     {
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        return Assert.Single(RequestReader.Read(BuildGenerator(json)).Clips);
+        return Assert.Single(RequestReader.Read(BuildInputWithJson(json)).Clips);
     }
 
     [Theory]
@@ -129,7 +127,7 @@ public class RequestReaderTests
             ClipWindowTag("a red car", start: 0.5, duration: 1.0)
             + " " + ClipWindowTag("a blue boat", start: 2.0, duration: 1.0);
 
-        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildGenerator(json, prompt)).Clips);
+        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildInputWithPrompt(json, prompt)).Clips);
 
         Assert.Equal(2, parsed.PromptWindows.Count);
         Assert.Equal("a red car", parsed.PromptWindows[0].Prompt);
@@ -150,7 +148,7 @@ public class RequestReaderTests
             + " <videoclip[0]:1-1> "
             + ClipWindowTag("early", start: 0.0, duration: 0.5);
 
-        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildGenerator(json, prompt)).Clips);
+        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildInputWithPrompt(json, prompt)).Clips);
 
         Assert.Equal(2, parsed.PromptWindows.Count);
         Assert.Equal("early", parsed.PromptWindows[0].Prompt);
@@ -173,7 +171,7 @@ public class RequestReaderTests
             ClipWindowTag("clip wide", start: 4.0, duration: 1.0)
             + " <videoclip[0,1]:0-1>stage one";
 
-        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildGenerator(json, prompt)).Clips);
+        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildInputWithPrompt(json, prompt)).Clips);
 
         PromptWindowSpec clipWindow = Assert.Single(parsed.PromptWindows);
         Assert.Equal("clip wide", clipWindow.Prompt);
@@ -189,7 +187,7 @@ public class RequestReaderTests
             ClipWindowTag("clip late", start: 4.0, duration: 1.0)
             + " " + ClipWindowTag("clip early", start: 0.0, duration: 1.0);
 
-        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildGenerator(json, prompt)).Clips);
+        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildInputWithPrompt(json, prompt)).Clips);
 
         Assert.Equal(
             ["clip early", "clip late"],
@@ -203,7 +201,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         ClipSpec parsed = Assert.Single(
-            RequestReader.Read(BuildGenerator(json, "<videoclip[0,audiosource]:CustomAudio>")).Clips);
+            RequestReader.Read(BuildInputWithPrompt(json, "<videoclip[0,audiosource]:CustomAudio>")).Clips);
 
         Assert.Equal("CustomAudio", parsed.AudioSource);
     }
@@ -215,7 +213,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         ClipSpec parsed = Assert.Single(
-            RequestReader.Read(BuildGenerator(json, "<videoclip[0,0,steps]:20>")).Clips);
+            RequestReader.Read(BuildInputWithPrompt(json, "<videoclip[0,0,steps]:20>")).Clips);
 
         Assert.Equal(20, parsed.Stages[0].Steps);
     }
@@ -228,7 +226,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [MakeStage("model-a"), skipped])));
 
-        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildGenerator(
+        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildInputWithPrompt(
             json,
             "<videoclip[0,1,skipped]:false>")).Clips);
 
@@ -251,7 +249,7 @@ public class RequestReaderTests
             string json = JsonConvert.SerializeObject(new JArray(clip));
             string prompt = "<videoclip[0,duration]:5.5> <videoclip[0,0,cfgscale]:5.5>";
 
-            TimelineSpec spec = RequestReader.Read(BuildGenerator(json, prompt));
+            TimelineSpec spec = RequestReader.Read(BuildInputWithPrompt(json, prompt));
             ClipSpec parsed = Assert.Single(spec.Clips);
 
             Assert.Equal(5.5, parsed.Stages[0].CfgScale);
@@ -270,7 +268,7 @@ public class RequestReaderTests
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0, audioSource: MediaSource.Native);
         string json = JsonConvert.SerializeObject(new JArray(clip));
         T2IParamInput input =
-            BuildGenerator(json, "<videoclip[0,bogusfield]:whatever>");
+            BuildInputWithPrompt(json, "<videoclip[0,bogusfield]:whatever>");
 
         ClipSpec parsed = Assert.Single(
             RequestReader.Read(input).Clips);
@@ -290,7 +288,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
         IReadOnlyList<ClipSpec> clips = RequestReader.Read(
-            BuildGenerator(json, "<videoclip[5,audiosource]:X> <videoclip[0,5,steps]:99>")).Clips;
+            BuildInputWithPrompt(json, "<videoclip[5,audiosource]:X> <videoclip[0,5,steps]:99>")).Clips;
 
         ClipSpec parsed = Assert.Single(clips);
         Assert.Equal(MediaSource.Native, parsed.AudioSource);
@@ -324,7 +322,7 @@ public class RequestReaderTests
                 stages: [MakeStage("model-b"), MakeStage("model-c")],
                 duration: 6.0)
         ));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         IReadOnlyList<ClipSpec> clips = RequestReader.Read(input).Clips;
 
@@ -381,7 +379,7 @@ public class RequestReaderTests
                 icLoras: new JArray(icLora))));
 
         ClipSpec clip = Assert.Single(
-            RequestReader.Read(BuildGenerator(json)).Clips);
+            RequestReader.Read(BuildInputWithJson(json)).Clips);
         IcLoraSpec parsed = Assert.Single(clip.IcLoras);
 
         Assert.Equal("lipdub", parsed.Preset);
@@ -414,7 +412,7 @@ public class RequestReaderTests
                 icLoras: new JArray(entry))));
 
         IcLoraSpec parsed = Assert.Single(
-            Assert.Single(RequestReader.Read(BuildGenerator(json)).Clips).IcLoras);
+            Assert.Single(RequestReader.Read(BuildInputWithJson(json)).Clips).IcLoras);
 
         Assert.Equal(IcLoraDriveData.None, parsed.DriveData);
         Assert.Null(parsed.DriveMediaKinds);
@@ -434,7 +432,7 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 icLoras: new JArray(entry))));
 
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
         IcLoraSpec parsed = Assert.Single(
             Assert.Single(RequestReader.Read(input).Clips).IcLoras);
 
@@ -459,7 +457,7 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 icLoras: new JArray(entry))));
 
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
         IcLoraSpec parsed = Assert.Single(
             Assert.Single(RequestReader.Read(input).Clips).IcLoras);
 
@@ -479,7 +477,7 @@ public class RequestReaderTests
             ["driveData"] = nameof(IcLoraDriveData.Visual),
             ["driveMediaKinds"] = new JArray(123, "Image", "image", "future"),
         };
-        T2IParamInput input = BuildGenerator(JsonConvert.SerializeObject(new JArray(
+        T2IParamInput input = BuildInputWithJson(JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [MakeStage("model-a")],
                 icLoras: new JArray(entry)))));
@@ -510,7 +508,7 @@ public class RequestReaderTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        T2IParamInput input = BuildGenerator(
+        T2IParamInput input = BuildInputWithPrompt(
             json,
             "<videoclip[0,controlnetlora]:legacy-lora> "
             + "<videoclip[0,controlnetsource]:ControlNet 2>");
@@ -534,7 +532,7 @@ public class RequestReaderTests
                     stages: [MakeStage("model-a")],
                     audioSource: MediaSource.Upload)
             ]));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         TimelineSpec config = RequestReader.Read(input);
 
@@ -579,7 +577,7 @@ public class RequestReaderTests
                 audioSource: MediaSource.Upload,
                 uploadedAudio: UploadedAudio(fileName: "second.wav"))
         ));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         IReadOnlyList<ClipSpec> clips = RequestReader.Read(input).Clips;
 
@@ -609,7 +607,7 @@ public class RequestReaderTests
                     ["data"] = "inputs/_comfy1/clip_part02.wav",
                     ["fileName"] = "clip_part02.wav",
                 })));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         ClipSpec clip = RequestReader.Read(input).Clips.Single();
 
@@ -634,7 +632,7 @@ public class RequestReaderTests
             MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")]),
             MakeClip(stages: [MakeStage("model-c")])
         ));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         List<StageSpec> stages = FlattenedActiveStages(input);
 
@@ -661,7 +659,7 @@ public class RequestReaderTests
             MakeClip(stages: [clipZeroStageZero, clipZeroStageOne]),
             MakeClip(stages: [clipOneStageZero])
         ));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         List<StageSpec> stages = FlattenedActiveStages(input);
 
@@ -682,7 +680,7 @@ public class RequestReaderTests
             MakeClip( stages: [MakeStage("model-skipped-clip")], skipped: true),
             MakeClip( stages: [MakeStage("model-c")])
         ));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         List<StageSpec> stages = FlattenedActiveStages(input);
 
@@ -754,7 +752,7 @@ public class RequestReaderTests
                     clipLengthFromAudio: true,
                     clipLengthFromControlNet: true)
             ]));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         TimelineSpec spec = RequestReader.Read(input);
 
@@ -815,7 +813,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip( stages: [brokenStage, MakeStage("model-a")])
         ));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         ClipSpec clip = Assert.Single(RequestReader.Read(input).Clips);
 
@@ -840,7 +838,7 @@ public class RequestReaderTests
             ]),
             MakeClip(stages: [MakeStage("model-c")])));
 
-        TimelineSpec spec = RequestReader.Read(BuildGenerator(json));
+        TimelineSpec spec = RequestReader.Read(BuildInputWithJson(json));
 
         Assert.Collection(
             spec.Clips[0].Stages,
@@ -866,7 +864,7 @@ public class RequestReaderTests
                     ["driveSource"] = MediaSource.Upload,
                 }))
         ));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         ClipSpec clip = Assert.Single(RequestReader.Read(input).Clips);
 
@@ -880,7 +878,7 @@ public class RequestReaderTests
         {
             ["model"] = "model-a"
         }));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         Assert.Empty(RequestReader.Read(input).Clips);
         Assert.Contains(
@@ -893,7 +891,7 @@ public class RequestReaderTests
     {
         JObject skipped = new() { ["skipped"] = true };
         JObject malformed = new() { ["model"] = "unused" };
-        T2IParamInput input = BuildGenerator(JsonConvert.SerializeObject(
+        T2IParamInput input = BuildInputWithJson(JsonConvert.SerializeObject(
             new JArray(MakeClip(stages: [MakeStage("model-a")]), skipped, malformed)));
 
         TimelineSpec spec = RequestReader.Read(input);
@@ -905,7 +903,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadClips_EmptyJson_ReturnsEmpty()
     {
-        T2IParamInput input = BuildGenerator("[]");
+        T2IParamInput input = BuildInputWithJson("[]");
         Assert.Empty(RequestReader.Read(input).Clips);
         Assert.Empty(FlattenedActiveStages(input));
     }
@@ -913,7 +911,7 @@ public class RequestReaderTests
     [Fact]
     public void ReadClips_InvalidJson_ThrowsUserError()
     {
-        T2IParamInput input = BuildGenerator("not json at all");
+        T2IParamInput input = BuildInputWithJson("not json at all");
         SwarmUserErrorException ex = Assert.Throws<SwarmUserErrorException>(
             () => RequestReader.Read(input));
         Assert.Contains("Could not parse Video Stages JSON", ex.Message);
@@ -928,7 +926,7 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 refs: [brokenRef, MakeRef("Base")])
         ));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         IReadOnlyList<ClipSpec> clips = RequestReader.Read(input).Clips;
 
@@ -995,7 +993,7 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         ClipSpec clip = RequestReader.Read(input).Clips.Single();
         Assert.Equal("Upload", clip.FrameRefs[0].Source);
@@ -1020,7 +1018,7 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         ClipSpec clip = RequestReader.Read(input).Clips.Single();
         FrameRefSpec r = clip.FrameRefs[0];
@@ -1047,7 +1045,7 @@ public class RequestReaderTests
                 stages: [MakeStage("model-a")],
                 refs: [uploadRef])
         ));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         FrameRefSpec r = RequestReader.Read(input).Clips.Single().FrameRefs[0];
         Assert.Equal("data:image/png;base64,TkVTVA==", r.Data);
@@ -1085,7 +1083,7 @@ public class RequestReaderTests
                     ["fileName"] = "voice.wav",
                 },
             });
-        T2IParamInput input = BuildGenerator(
+        T2IParamInput input = BuildInputWithJson(
             JsonConvert.SerializeObject(new JArray(clip)));
 
         IReadOnlyList<ClipReferenceSpec> references =
@@ -1122,7 +1120,7 @@ public class RequestReaderTests
                     ["fileName"] = "motion.mp4",
                 },
             });
-        T2IParamInput input = BuildGenerator(
+        T2IParamInput input = BuildInputWithJson(
             JsonConvert.SerializeObject(new JArray(clip)));
 
         Assert.Equal(
@@ -1144,7 +1142,7 @@ public class RequestReaderTests
                 ["kind"] = kind,
                 ["source"] = source,
             });
-        T2IParamInput input = BuildGenerator(
+        T2IParamInput input = BuildInputWithJson(
             JsonConvert.SerializeObject(new JArray(clip)));
 
         Assert.Empty(RequestReader.Read(input).Clips.Single().References);
@@ -1160,7 +1158,7 @@ public class RequestReaderTests
                 stages: [stage],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 9)])));
 
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         ClipSpec clip = Assert.Single(RequestReader.Read(input).Clips);
         StageSpec flattened = Assert.Single(clip.Stages);
@@ -1178,7 +1176,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [stage])));
 
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         StageSpec flattened = Assert.Single(FlattenedActiveStages(input));
         Assert.Equal(0.35, flattened.ControlNetStrength);
@@ -1192,7 +1190,7 @@ public class RequestReaderTests
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [stage])));
 
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         StageSpec flattened = Assert.Single(FlattenedActiveStages(input));
         Assert.Equal([0.25, 0.75], flattened.IcLoraStrengths);
@@ -1207,7 +1205,7 @@ public class RequestReaderTests
                 stages: [stage],
                 refs: [MakeRef("Base", frame: 1), MakeRef("Refiner", frame: 2)])));
 
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         StageSpec flattened = Assert.Single(FlattenedActiveStages(input));
         Assert.Equal(2, flattened.FrameRefStrengths.Count);
@@ -1291,7 +1289,7 @@ public class RequestReaderTests
             ["clips"] = new JArray(MakeClip(stages: [MakeStage("model-a")])),
         };
         string json = JsonConvert.SerializeObject(root);
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         TimelineSpec spec = RequestReader.Read(input);
 
@@ -1305,7 +1303,7 @@ public class RequestReaderTests
     {
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(stages: [MakeStage("model-a"), MakeStage("model-b")])));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         TimelineSpec spec = RequestReader.Read(input);
 
@@ -1327,7 +1325,7 @@ public class RequestReaderTests
             ["startSeconds"] = 0.0,
         };
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         TimelineSpec spec = RequestReader.Read(input);
 
@@ -1347,7 +1345,7 @@ public class RequestReaderTests
             ["startSeconds"] = 1e20,
         };
 
-        T2IParamInput input = BuildGenerator(JsonConvert.SerializeObject(new JArray(clip)));
+        T2IParamInput input = BuildInputWithJson(JsonConvert.SerializeObject(new JArray(clip)));
 
         ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips);
 
@@ -1392,7 +1390,7 @@ public class RequestReaderTests
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         clip["boundaryOut"] = raw;
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         ClipSpec parsed = RequestReader.Read(input).Clips.Single();
 
@@ -1404,7 +1402,7 @@ public class RequestReaderTests
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         ClipSpec parsed = RequestReader.Read(input).Clips.Single();
 
@@ -1421,7 +1419,7 @@ public class RequestReaderTests
         clip["boundaryOut"] = Constants.BoundaryOutCrossfade;
         clip["boundaryOutCarryAudio"] = true;
         string json = JsonConvert.SerializeObject(new JArray(clip));
-        T2IParamInput input = BuildGenerator(json);
+        T2IParamInput input = BuildInputWithJson(json);
 
         ClipSpec parsed = RequestReader.Read(input).Clips.Single();
 
@@ -1438,7 +1436,7 @@ public class RequestReaderTests
         JObject clip = MakeClip(stages: [MakeStage("model-a")]);
         clip["boundaryOutReferenceScale"] = rawScale;
         clip["boundaryOutReferenceIncludeSoundtrack"] = false;
-        T2IParamInput input = BuildGenerator(
+        T2IParamInput input = BuildInputWithJson(
             JsonConvert.SerializeObject(new JArray(clip)));
 
         ClipSpec parsed = RequestReader.Read(input).Clips.Single();
@@ -1460,7 +1458,7 @@ public class RequestReaderTests
                 ["startSeconds"] = 0.0,
             };
         }
-        return BuildGenerator(JsonConvert.SerializeObject(clips));
+        return BuildInputWithJson(JsonConvert.SerializeObject(clips));
     }
 
     private static JObject MakeRetake(double startSeconds, double lengthSeconds, double? strength = null)
@@ -1582,7 +1580,7 @@ public class RequestReaderTests
         clip["retake"] = MakeRetake(startSeconds: 1.0, lengthSeconds: 2.0);
         string json = JsonConvert.SerializeObject(new JArray(clip));
 
-        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildGenerator(json)).Clips);
+        ClipSpec parsed = Assert.Single(RequestReader.Read(BuildInputWithJson(json)).Clips);
 
         Assert.All(parsed.Stages, stage => Assert.Null(stage.RetakeWindow));
     }
@@ -1649,7 +1647,7 @@ public class RequestReaderTests
         ((JObject)((JArray)root["clips"])[0])["id"] = "clip-a";
 
         TimelineSpec parsed = RequestReader.Read(
-            BuildGenerator(root.ToString(Formatting.None)));
+            BuildInputWithJson(root.ToString(Formatting.None)));
         TimelineAudioSpanSpec parsedSpan = Assert.Single(parsed.TimelineAudioSpans);
 
         Assert.Equal("track-dialogue", parsedSpan.Id);
@@ -1678,7 +1676,7 @@ public class RequestReaderTests
                 ["audioTracks"] = new JArray(tracks.Cast<object>().ToArray()),
             };
             ((JObject)((JArray)root["clips"])[0])["id"] = "clip-a";
-            return RequestReader.Read(BuildGenerator(root.ToString(Formatting.None)));
+            return RequestReader.Read(BuildInputWithJson(root.ToString(Formatting.None)));
         }
 
         IReadOnlyList<TimelineAudioSpanSpec> combined = ReadWithTracks(
