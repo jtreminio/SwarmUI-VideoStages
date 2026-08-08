@@ -767,6 +767,10 @@
     gap: 4px;
     z-index: var(--vst-z-overlay);
 }
+/* Rides the host's `basic-button small-button`; the pressed state is the shared
+   `.vst-btn-skip-active`. Only the fixed square and the oversized hit area are
+   track-specific, and the zeroed padding/margin undo the host's own — they would
+   break the 20px box and shift the flex row's gap. */
 .vst-region-btn {
     position: relative;
     width: 20px;
@@ -775,15 +779,8 @@
     align-items: center;
     justify-content: center;
     padding: 0;
-    font-size: var(--vst-font-sm);
+    margin: 0;
     line-height: 1;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid var(--vst-hairline);
-    color: var(--text-soft);
-    background: var(--vst-panel);
-    cursor: pointer;
-    transition: border-color var(--vst-ease), color var(--vst-ease),
-        background var(--vst-ease);
 }
 .vst-region-btn::before {
     content: "";
@@ -793,18 +790,10 @@
     height: 24px;
     transform: translate(-50%, -50%);
 }
-.vst-region-btn:hover {
-    border-color: var(--emphasis);
-    color: var(--text);
-}
+/* The host stylesheet carries no :focus-visible rule to inherit. */
 .vst-region-btn:focus-visible {
     outline: 2px solid var(--emphasis);
     outline-offset: 1px;
-}
-.vst-region-btn-active {
-    color: var(--text);
-    border-color: color-mix(in srgb, var(--emphasis) 55%, transparent);
-    background: color-mix(in srgb, var(--emphasis) 18%, var(--background));
 }
 /* Shared edge-resize handle chrome; widgets override offsets/stacking below. */
 .vst-region-resize,

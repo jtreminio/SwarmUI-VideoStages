@@ -335,7 +335,7 @@ const renderRegions = (
             const controls = firstClip
                 ? ""
                 : `<div class="vst-region-controls">` +
-                  `<button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button>` +
+                  `<button type="button" class="basic-button small-button vst-region-btn${layout.skipped ? " vst-btn-skip-active" : ""}" data-vst-region-action="skip" aria-pressed="${layout.skipped}" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button>` +
                   `</div>`;
             const resizeGrip = lengthDerived(clip)
                 ? ""

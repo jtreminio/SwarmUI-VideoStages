@@ -10105,7 +10105,7 @@
     const skipLabel = skipTitle("clip", layout.skipped);
     const skipMark = skipGlyph(layout.skipped);
     const firstClip = layout.index === 0;
-    const controls = firstClip ? "" : `<div class="vst-region-controls"><button type="button" class="vst-region-btn${layout.skipped ? " vst-region-btn-active" : ""}" data-vst-region-action="skip" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button></div>`;
+    const controls = firstClip ? "" : `<div class="vst-region-controls"><button type="button" class="basic-button small-button vst-region-btn${layout.skipped ? " vst-btn-skip-active" : ""}" data-vst-region-action="skip" aria-pressed="${layout.skipped}" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button></div>`;
     const resizeGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
     const width = clipInnerWidth(layout.widthPx);
     const retakeDecision = capabilities?.forClip(clip).decision("retake");
