@@ -80,15 +80,11 @@ describe("detail strip draft queue", () => {
         expect(h.saveSpy).not.toHaveBeenCalled();
     });
 
-    // ---- value-only commits never rebuild the dock (focus survives) -------
-    //
     // In production a value save commits through the store, whose notification
     // drives videoStagesTimeline.renderAll(meta) → detailStrip.render(meta)
     // SYNCHRONOUSLY. A rebuild there would innerHTML-wipe the dock and drop the
     // caret; the value primitives mark their saves valueOnly, which arrives as
-    // meta.hint === "value-only" and holds the dock DOM. These tests reproduce
-    // that wiring faithfully — a store subscription that calls render(meta) —
-    // and assert the edited field's node (and focus) survives untouched.
+    // meta.hint === "value-only" and holds the dock DOM.
     describe("value-only commits keep the dock DOM", () => {
         it("keeps focus and the same node on a first Begin/End change, and repaints", () => {
             setup([
@@ -325,15 +321,11 @@ describe("detail strip draft queue", () => {
         });
     });
 
-    // ---- contextual-clamp write-back (value-only, no rebuild) -------------
-    //
-    // A value-only commit skips the dock rebuild that used to re-display fields.
-    // For a field whose commit mutator applies a clamp its static min/max can't
-    // express (a relay window's neighbour bound; a segment/retake length capped
-    // by its start), the input would keep showing the raw typed value while the
-    // data holds the clamped one. buildClampedNumber's readBack corrects the
-    // DISPLAYED value in place after the flush — same node, focus intact, no
-    // rebuild. These tests reproduce the verifier-confirmed defects.
+    // A value-only commit skips the dock rebuild, so for a field whose commit
+    // mutator applies a clamp its static min/max can't express (a relay
+    // window's neighbour bound; a segment/retake length capped by its start),
+    // buildClampedNumber's readBack corrects the DISPLAYED value in place after
+    // the flush — same node, focus intact, no rebuild.
     describe("contextual-clamp write-back", () => {
         it("re-displays a relay Begin clamped by the neighbouring window", () => {
             setup([
