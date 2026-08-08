@@ -82,8 +82,8 @@ public class Ltx2InitVideoContractTests
             scale => ReferenceEquals(scale.Image.Connection?.Node, window));
 
     /// <summary>
-    /// The conform chain's own audio trim, told apart from any trim applied downstream of it by
-    /// the upload's audio split it reads.
+    /// The conform chain's own audio trim. A graph can carry later trims too, so this one is named
+    /// by the upload's audio split it reads rather than by count.
     /// </summary>
     private static TrimAudioDurationNode ConformAudioTrimOf(WorkflowBridge bridge)
     {

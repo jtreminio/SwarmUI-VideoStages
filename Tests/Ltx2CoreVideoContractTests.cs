@@ -168,8 +168,8 @@ public class Ltx2CoreVideoContractTests
     }
 
     /// <summary>
-    /// Core's single-frame unwrap of the guide video, sitting between the stage's resize and the
-    /// image input of whichever apply node core's branch chose.
+    /// Core's single-frame unwrap of the guide video. The apply node it feeds differs per branch,
+    /// so callers pass its image input rather than the node.
     /// </summary>
     private static ImageFromBatchNode AssertCoreUnwrapsFirstFrame(
         JObject workflow,
@@ -681,8 +681,7 @@ public class Ltx2CoreVideoContractTests
         Assert.Same(BaseImage(bridge), FramingOf(preprocess).Image.Connection?.Node);
         LTXVImgToVideoInplaceNode guide = Assert.Single(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
-        // Full strength is also the codegen default, the guide is extension-built (so the shipped
-        // JSON carries the default regardless), and an implicit guide cannot be authored otherwise;
+        // Also the node's codegen default, so this catches a wrong strength but not a missing write;
         // A_frame_one_base_ref_reuses_the_root_framing_at_its_authored_strength is the control that
         // an authored value reaches this input at all.
         Assert.Equal(1.0, guide.Strength.LiteralAsDouble());
@@ -1194,9 +1193,8 @@ public class Ltx2CoreVideoContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         Assert.Empty(bridge.Graph.NodesOfType<GetImageSizeNode>());
-        // The LoRA resolved and still patches the model; only the guide it had nothing to drive
-        // from is missing, which is what makes the empty guide the capture's fault and not the
-        // weights'.
+        // The LoRA resolved and still patches the model, so the missing guide is the capture's
+        // fault rather than uninstalled weights.
         Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
         Assert.Empty(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>());
         Assert.Equal(
