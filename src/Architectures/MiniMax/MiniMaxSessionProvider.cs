@@ -78,7 +78,7 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
     /// <summary>
     /// A capture pins the host node it names for the rest of the request, which is why an unwanted
     /// one is not free: it denies that node to anything that would otherwise take it over. Only
-    /// capture what some clip actually asked to keyframe from.
+    /// capture a source some clip names, whether as a keyframe or as a clip reference.
     /// </summary>
     private static bool AnyClipReferences(VideoExecutionPlan plan, string source) =>
         plan.Clips
