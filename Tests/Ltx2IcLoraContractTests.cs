@@ -3,6 +3,7 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
+using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Authoring;
 using VideoStages.Generated;
 using Xunit;
@@ -328,6 +329,7 @@ public class Ltx2IcLoraContractTests
     [Fact]
     public async Task Uploaded_drive_media_is_resized_to_stage_dimensions()
     {
+        const int upscale = 2;
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         fixture.InstallModel("LoRA", "UnitTest_IcLoraA.safetensors");
 
@@ -335,15 +337,15 @@ public class Ltx2IcLoraContractTests
         entry["stage"] = 1;
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(IcLoraClip(
-            [fixture.Stage(), fixture.Stage(upscale: 2.0)],
+            [fixture.Stage(), fixture.Stage(upscale: upscale)],
             entry)));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         LTXAddVideoICLoRAGuideNode guide = OnlyGuide(bridge);
         ImageScaleNode resize = Assert.IsType<ImageScaleNode>(GuideFraming(guide));
-        Assert.Equal(1024, resize.Width.LiteralAsInt());
-        Assert.Equal(1024, resize.Height.LiteralAsInt());
+        Assert.Equal(VideoStagesWorkflowFixture.Width * upscale, resize.Width.LiteralAsInt());
+        Assert.Equal(VideoStagesWorkflowFixture.Height * upscale, resize.Height.LiteralAsInt());
         Assert.Equal("center", resize.Crop.LiteralAsString());
 
         live.AssertAllLive(guide, resize, StageSampler(bridge, 1));
@@ -746,7 +748,7 @@ public class Ltx2IcLoraContractTests
 
         RepeatImageBatchNode repeat = Assert.Single(
             bridge.Graph.NodesOfType<RepeatImageBatchNode>());
-        Assert.Equal(25, repeat.Amount.LiteralAsInt());
+        Assert.Equal(fixture.ExpectedGeneratedFrames, repeat.Amount.LiteralAsInt());
         LTXAddVideoICLoRAGuideNode guide = OnlyGuide(bridge);
         Assert.Same(repeat, guide.Image.Connection?.Node);
 
@@ -786,11 +788,17 @@ public class Ltx2IcLoraContractTests
         Assert.Equal(2, guides.Length);
         ImageFromBatchNode[] guideTrims = [.. guides.Select(
             guide => Assert.IsType<ImageFromBatchNode>(guide.Image.Connection?.Node))];
-        Assert.All(guideTrims, trim => Assert.Equal(25, trim.Length.LiteralAsInt()));
+        // 0.6s at 24 fps snaps up to 17 frames, and each guide covers those plus the handle ahead
+        // of them. Neither clip authors an overlap, so the handle is the architecture's default.
+        Assert.All(
+            guideTrims,
+            trim => Assert.Equal(
+                17 + Ltx2BoundaryPolicy.DefaultFrames,
+                trim.Length.LiteralAsInt()));
 
         RepeatImageBatchNode handle = Assert.Single(
             bridge.Graph.NodesOfType<RepeatImageBatchNode>());
-        Assert.Equal(8, handle.Amount.LiteralAsInt());
+        Assert.Equal(Ltx2BoundaryPolicy.DefaultFrames, handle.Amount.LiteralAsInt());
         ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
             handle.Image.Connection?.Node);
         Assert.Equal(0, firstFrame.BatchIndex.LiteralAsInt());
