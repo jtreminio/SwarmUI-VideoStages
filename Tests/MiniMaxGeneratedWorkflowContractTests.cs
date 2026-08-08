@@ -42,9 +42,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.Equal(39, latent.Length.LiteralAsInt());
 
         live.AssertAllLive(latent, sampler, audioDecode);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -82,9 +80,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
 
         live.AssertAllLive(joint, audioMask, solidMask, refine);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -143,9 +139,7 @@ public class MiniMaxGeneratedWorkflowContractTests
                 "An intermediate save reads the trimmed output; only the final one should."));
 
         live.AssertAllLive(first, second, third, trim);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 3);
     }
 
     /// <summary>
@@ -430,9 +424,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.Equal(MiniMaxWorkflowFixture.Steps, refine.Steps.LiteralAsInt());
 
         live.AssertLive(refine);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -484,9 +476,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.Single(bridge.Graph.NodesOfType<VAEDecodeAudioNode>());
 
         live.AssertLive(latent);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -521,8 +511,6 @@ public class MiniMaxGeneratedWorkflowContractTests
             AssertImageSource(framed.ImagesInput.Connection?.Node, "SwarmFrameImage.images");
         }
 
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 }

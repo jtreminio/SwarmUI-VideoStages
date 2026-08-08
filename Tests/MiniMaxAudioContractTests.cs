@@ -99,9 +99,7 @@ public class MiniMaxAudioContractTests
         Assert.Same(joint, sampler.LatentImage.Connection?.Node);
 
         live.AssertAllLive(upload, encode, mask, joint, sampler);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -183,9 +181,7 @@ public class MiniMaxAudioContractTests
         Assert.Same(thirdMask.Samples.Connection, decode.Samples.Connection);
 
         live.AssertAllLive(third, fourth, decode);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>

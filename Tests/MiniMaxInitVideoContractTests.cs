@@ -73,9 +73,7 @@ public class MiniMaxInitVideoContractTests
         Assert.Equal(2, bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>().Count());
 
         live.AssertAllLive(window, scale, sourceAudio, first, second);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -152,8 +150,6 @@ public class MiniMaxInitVideoContractTests
         SwarmLoadImageB64Node upload = Assert.Single(
             bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
         live.AssertLive(upload);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 }

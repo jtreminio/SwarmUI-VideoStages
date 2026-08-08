@@ -49,9 +49,7 @@ public class MiniMaxUpscaleContractTests
         Assert.Equal(MiniMaxWorkflowFixture.Height, latent.Height.LiteralAsInt());
 
         live.AssertAllLive(sampler, latent);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
@@ -84,9 +82,7 @@ public class MiniMaxUpscaleContractTests
             node => node.Width.LiteralAsInt() == 768);
 
         live.AssertLive(scale);
-        live.AssertNoOrphanNodes();
-        AssertNoDanglingNodeRefs(workflow);
-        AssertAcyclic(bridge);
+        AssertShippable(bridge, workflow, live);
     }
 
     /// <summary>
