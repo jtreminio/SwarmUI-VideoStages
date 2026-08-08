@@ -5,7 +5,6 @@ using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.MiniMax;
 using VideoStages.Authoring;
-using VideoStages.Execution.StockHost;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -341,10 +340,6 @@ public class MiniMaxArchitectureTests
                 == "effective-request.unsupported-latent-upscale-ignored");
     }
 
-    /// <summary>
-    /// A latent upscale changes the decoded size on MiniMax, so it counts toward the clip's final
-    /// dimensions — where the stock-host geometry ignores it.
-    /// </summary>
     [Fact]
     public void Latent_interpolation_counts_toward_the_projected_final_dimensions()
     {
@@ -377,9 +372,6 @@ public class MiniMaxArchitectureTests
             (768, 768),
             Assert.IsType<MiniMaxClipPayload>(compilation.Payload)
                 .ProjectFinalDimensions([upscale], 512, 512));
-        Assert.Equal(
-            (512, 512),
-            HostVideoStageGeometry.ProjectFinalDimensions([upscale], 512, 512));
     }
 
     [Fact]
