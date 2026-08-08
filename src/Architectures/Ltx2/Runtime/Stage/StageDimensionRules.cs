@@ -38,7 +38,6 @@ internal static class StageDimensionRules
         return (targetWidth, targetHeight);
     }
 
-    // IC-LoRA reference downscaling raises the grid requirement to MinimumMultiple×factor.
     public static (int Width, int Height) SnapForIcLora(StagePlan stage, int width, int height)
     {
         ArgumentNullException.ThrowIfNull(stage);
@@ -56,6 +55,7 @@ internal static class StageDimensionRules
         return snapped;
     }
 
+    // IC-LoRA reference downscaling raises the grid requirement to MinimumMultiple×factor.
     internal static int RequiredMultiple(IEnumerable<IcLoraPlan> icLoras)
     {
         int factor = (icLoras ?? [])
@@ -94,8 +94,14 @@ internal static class StageDimensionRules
     {
         int multiple = RequiredMultiple(icLoras);
         snapped = DimensionSnap.Snap(width, height, multiple);
+        if (snapped == (width, height))
+        {
+            reason = null;
+            return false;
+        }
+
         reason = SnapReason(multiple);
-        return snapped != (width, height);
+        return true;
     }
 
     private static string SnapReason(int multiple) =>

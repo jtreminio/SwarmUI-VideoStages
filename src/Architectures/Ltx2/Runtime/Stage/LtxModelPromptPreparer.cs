@@ -94,6 +94,7 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
         {
             retileWindows = promptRelay.AuthoredWindows;
         }
+
         if (retileWindows is not null)
         {
             segments = PromptRelayPlanCompiler.Tile(

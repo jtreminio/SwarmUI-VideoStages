@@ -57,7 +57,8 @@ internal class StageRunner
         if (stage.IsPassthrough
             && !clipContext.Plan.Root.StageClaimsTextToVideoRoot(stage, clip))
         {
-            _contextBuilder.PublishStageInput(
+            // Resolving the source republishes g.CurrentMedia, which is all a passthrough does.
+            _contextBuilder.ResolveStageSource(
                 stage,
                 sectionId,
                 clipContext,
@@ -295,5 +296,4 @@ internal class StageRunner
         && _guideMediaResolver.IsLiveCurrentOutputReference(guideReference?.Media, postVideoChain)
         && !string.IsNullOrWhiteSpace(guideReference?.Vae?.Compat?.ID)
         && guideReference.Vae.Compat.ID == genInfo.VideoModel?.ModelClass?.CompatClass?.ID;
-
 }

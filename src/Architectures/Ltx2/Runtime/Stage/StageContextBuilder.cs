@@ -26,7 +26,7 @@ internal sealed class StageContextBuilder(
         bool claimsTextToVideoRoot = clipContext.Plan.Root.StageClaimsTextToVideoRoot(
             stage,
             clipContext.PlannedClip);
-        (LtxPostVideoChain postVideoChain, WGNodeData sourceMedia) = PublishStageInput(
+        (LtxPostVideoChain postVideoChain, WGNodeData sourceMedia) = ResolveStageSource(
             stage,
             sectionId,
             clipContext,
@@ -54,11 +54,7 @@ internal sealed class StageContextBuilder(
             requiresDedicatedOutput);
     }
 
-    /// <summary>
-    /// Resolves the stage's source media and writes it to <c>g.CurrentMedia</c>. This is all a
-    /// passthrough stage does.
-    /// </summary>
-    public (LtxPostVideoChain Chain, WGNodeData SourceMedia) PublishStageInput(
+    public (LtxPostVideoChain Chain, WGNodeData SourceMedia) ResolveStageSource(
         StagePlan stage,
         int sectionId,
         ClipContext clipContext,
