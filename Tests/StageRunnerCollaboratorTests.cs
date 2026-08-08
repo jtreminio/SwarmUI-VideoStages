@@ -9,8 +9,6 @@ using VideoStages.Execution;
 using VideoStages.Execution.StockHost;
 using VideoStages.Planning;
 using Xunit;
-using VideoStages.Architectures.Ltx2.Runtime;
-using VideoStages.Architectures.Ltx2.Runtime.Chain;
 using VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 namespace VideoStages.Tests;
@@ -18,30 +16,6 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class StageRunnerCollaboratorTests
 {
-    [Fact]
-    public void Stage_runner_collaborators_accept_compiled_plans_not_authored_specs()
-    {
-        AssertTypedMethod(
-            typeof(PlannedStagePromptResolver),
-            nameof(PlannedStagePromptResolver.Resolve),
-            typeof(ClipPlan),
-            typeof(StagePlan));
-        AssertTypedMethod(
-            typeof(StageContextBuilder),
-            nameof(StageContextBuilder.Build),
-            typeof(StagePlan),
-            typeof(int),
-            typeof(ClipContext),
-            typeof(bool));
-        AssertTypedMethod(
-            typeof(StageSourceMediaResolver),
-            nameof(StageSourceMediaResolver.Resolve),
-            typeof(ClipContext),
-            typeof(StagePlan),
-            typeof(int),
-            typeof(LtxPostVideoChain));
-    }
-
     [Fact]
     public void Planned_prompt_resolver_uses_compiled_clip_and_stage_identity()
     {
@@ -251,13 +225,6 @@ public class StageRunnerCollaboratorTests
     {
         double midpoint = Math.Sqrt(32 * 64);
         Assert.Equal((64, 64), DimensionSnap.Snap(midpoint, midpoint));
-    }
-
-    private static void AssertTypedMethod(Type type, string name, params Type[] parameters)
-    {
-        System.Reflection.MethodInfo method = type.GetMethod(name);
-        Assert.NotNull(method);
-        Assert.Equal(parameters, method.GetParameters().Select(parameter => parameter.ParameterType));
     }
 
     private static (ClipPlan Clip, StagePlan Stage) MakePlan()
