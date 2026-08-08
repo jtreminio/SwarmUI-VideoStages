@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
@@ -89,5 +91,26 @@ public class PhaseADriftRegressionTests
         Assert.Contains(
             $"export const IC_LORA_STRENGTH_MAX = {Loras.IcLoraStrengthMax};",
             source);
+    }
+
+    [Fact]
+    public void Frontend_stage_ref_strength_default_matches_the_backend()
+    {
+        Assert.Equal(
+            Constants.DefaultStageRefStrength,
+            FrontendConstant("STAGE_REF_STRENGTH_DEFAULT"));
+    }
+
+    /// <summary>Reads a number out of the hand-written frontend module. Parsing it beats matching
+    /// the rendered text: C# spells 0.00001 as 1E-05, which is the same number and not drift.
+    /// </summary>
+    private static double FrontendConstant(string name)
+    {
+        Match declaration = Regex.Match(
+            RepoFiles.ReadFrontend("constants.ts"),
+            $"^export const {name} = (\\S+);$",
+            RegexOptions.Multiline);
+        Assert.True(declaration.Success, $"constants.ts declares no {name}.");
+        return double.Parse(declaration.Groups[1].Value, CultureInfo.InvariantCulture);
     }
 }
