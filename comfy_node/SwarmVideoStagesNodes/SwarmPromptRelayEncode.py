@@ -77,8 +77,6 @@ class SwarmPromptRelayEncode(io.ComfyNode):
                     "epsilon", default=0.001, min=0.0001, max=0.99, step=0.0001,
                     tooltip="Penalty decay. <~0.1 gives sharp boundaries (paper default 0.001); higher softens.",
                 ),
-                # The SwarmUI backend leaves this unconnected and declares latentFrames
-                # in the windows payload instead; it is for hand-built Comfy graphs.
                 io.Latent.Input(
                     "latent", optional=True,
                     tooltip="Optional. Connect the sampling latent for exact frame geometry.",
