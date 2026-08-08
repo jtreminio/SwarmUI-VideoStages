@@ -1,5 +1,10 @@
 import type { CapabilityViewResolver } from "../architectures/policy";
-import { isAceStepFunAudioSource } from "../audioSource";
+import {
+    AUDIO_SOURCE_ACE_STEP_FUN,
+    AUDIO_SOURCE_NATIVE,
+    AUDIO_SOURCE_UPLOAD,
+    audioSourceKind,
+} from "../audioSource";
 import { mediaPreviewSrc } from "../constants";
 import { escapeHtml } from "../renderUtils";
 import {
@@ -179,7 +184,7 @@ const audioFlagChips = (clip: Clip): string => {
 
 /** Audio the clip carries itself, which stays removable after its architecture stops offering it. */
 const persistedClipAudio = (clip: Clip): boolean =>
-    clip.audioSource !== "Native" ||
+    audioSourceKind(clip.audioSource ?? "") !== AUDIO_SOURCE_NATIVE ||
     clip.uploadedAudio !== null ||
     clip.reuseAudio === true ||
     clip.clipLengthFromAudio === true ||
@@ -292,15 +297,16 @@ export const renderAudioTrackRow = (
                 clipCapabilities?.clipAudio.supported ?? true;
             const persistedAudio = persistedClipAudio(clip);
             const audioOperable = clipAudioSupported || persistedAudio;
-            const native = badge.label === "Native";
+            const kind = audioSourceKind(clip.audioSource ?? "");
+            const native = kind === AUDIO_SOURCE_NATIVE;
             const width = clipInnerWidth(layout.widthPx);
             const kindClass = native
                 ? " vst-audio-native vst-audio-kind-native"
-                : isAceStepFunAudioSource(clip.audioSource ?? "")
+                : kind === AUDIO_SOURCE_ACE_STEP_FUN
                   ? " vst-audio-kind-ace"
                   : " vst-audio-kind-upload";
             const upload =
-                !native && clip.audioSource === "Upload"
+                kind === AUDIO_SOURCE_UPLOAD
                     ? clip.uploadedAudio?.fileName
                     : null;
             const labelText = upload
