@@ -80,23 +80,25 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
         IReadOnlyList<PromptRelaySegmentPlan> segments = promptRelay.Segments;
         PromptRelayMode mode = promptRelay.Mode;
         int incomingHandleFrames = stageContext.ClipContext.IncomingContinueHandleFrames;
+        IEnumerable<PromptWindowPlan> retileWindows = null;
         if (incomingHandleFrames > 0)
         {
             double handleSeconds = incomingHandleFrames / (double)Math.Max(1, fps);
-            PromptWindowPlan[] shifted = [.. promptRelay.AuthoredWindows.Select(window =>
-                window with
-                {
-                    StartSeconds = window.StartSeconds + handleSeconds,
-                    EndSeconds = window.EndSeconds + handleSeconds,
-                })];
-            double clipSeconds = frameCount / (double)Math.Max(1, fps);
-            segments = PromptRelayPlanCompiler.Tile(shifted, clipSeconds);
-            mode = PromptRelayPlanCompiler.ModeFor(segments);
+            retileWindows = promptRelay.AuthoredWindows.Select(window => window with
+            {
+                StartSeconds = window.StartSeconds + handleSeconds,
+                EndSeconds = window.EndSeconds + handleSeconds,
+            });
         }
         else if (promptRelay.Mode == PromptRelayMode.RequiresRuntimeLength)
         {
-            double clipSeconds = frameCount / (double)Math.Max(1, fps);
-            segments = PromptRelayPlanCompiler.Tile(promptRelay.AuthoredWindows, clipSeconds);
+            retileWindows = promptRelay.AuthoredWindows;
+        }
+        if (retileWindows is not null)
+        {
+            segments = PromptRelayPlanCompiler.Tile(
+                retileWindows,
+                frameCount / (double)Math.Max(1, fps));
             mode = PromptRelayPlanCompiler.ModeFor(segments);
         }
 
