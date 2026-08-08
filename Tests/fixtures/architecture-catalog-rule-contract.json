@@ -8,7 +8,7 @@
         "frameReferences",
         "referenceFraming",
         "retake",
-          "audioBoundaryCarry",
+        "audioBoundaryCarry",
         "latentUpscale",
         "latentModelUpscale",
         "audioReuse",
