@@ -210,6 +210,31 @@ public class MiniMaxArchitectureTests
         Assert.Equal("minimax.stage-control.quantized-zero", refusal.Code);
     }
 
+    /// <summary>
+    /// A quoted "NaN" survives both the document reader's parse and the clamp that normalizes
+    /// control, and floor(steps * (1 - NaN)) is int.MinValue — a malformed start step rather than
+    /// an out-of-range one, so the quantized-zero rule never sees it.
+    /// </summary>
+    [Fact]
+    public void A_non_finite_control_is_refused()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject refine = MakeStage(
+            models.VideoModel.Name,
+            "Generated",
+            steps: 8,
+            cfgScale: 1);
+        refine["control"] = "NaN";
+
+        PlanDiagnostic refusal = Assert.Single(CompileDiagnostics(
+            models,
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
+            refine));
+        Assert.Equal(PlanDiagnosticSeverity.Error, refusal.Severity);
+        Assert.Equal("minimax.stage-control.invalid", refusal.Code);
+    }
+
     [Fact]
     public void A_guided_cfg_warns_without_blocking_the_clip()
     {

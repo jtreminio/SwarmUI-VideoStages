@@ -155,9 +155,21 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             // Assignments are resolver-vetted; a missing key is a caller contract violation.
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool passthrough = StagePassthroughPolicy.IsPassthrough(stage, Descriptor);
-            if ((context.EntryMode == ArchitectureEntryMode.InitVideo
-                    || stage.ClipStageIndex > 0)
-                && !passthrough
+            bool decodedInput = !passthrough
+                && (context.EntryMode == ArchitectureEntryMode.InitVideo
+                    || stage.ClipStageIndex > 0);
+            if (decodedInput && !double.IsFinite(stage.Control))
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "minimax.stage-control.invalid",
+                    $"Clip {clip.Id}: stage {stage.Id} decoded-input control must be a finite "
+                        + "number.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
+            if (decodedInput
                 && StageStartStepPolicy.PartialControlRoundsToZero(
                     stage.Steps,
                     stage.Control))
