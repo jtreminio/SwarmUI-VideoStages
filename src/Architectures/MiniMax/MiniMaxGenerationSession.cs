@@ -862,7 +862,10 @@ internal sealed class MiniMaxGenerationSession(
             $"VideoStages: {descriptor} source '{source}' was not available; "
                 + "ignoring it for this generation.");
 
-    /// <summary>Uses the global final frame only when one clip has no authored reference.</summary>
+    /// <summary>
+    /// Falls back to the request-global final frame only on a single-clip timeline that authored
+    /// no reference of its own; more clips leave it no unambiguous target.
+    /// </summary>
     private WGNodeData ResolveEndFrame(NativeFrameReferencePlan authored)
     {
         if (authored is not null)
