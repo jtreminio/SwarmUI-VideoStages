@@ -263,9 +263,7 @@ internal sealed class LtxPostVideoChain
         LTXVSeparateAVLatentNode newSeparate)
     {
         INodeOutput oldImageOutput = oldDecode.Outputs[0];
-        // The id survives so paths already handed out still resolve, but the samples behind it
-        // change, so core's dedup entry for the old inputs has to go: it would otherwise hand the
-        // next caller asking for that decode a node that now decodes this stage's output.
+        // The id survives so paths already handed out still resolve; its samples do not.
         VideoGraphHelpers.RemoveNode(generator, bridge, oldDecode.Id);
 
         ComfyNode newDecode = LtxPostChainRebuilder.AddDecode(
