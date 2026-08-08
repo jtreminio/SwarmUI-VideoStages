@@ -22,23 +22,15 @@ internal sealed class StageContextBuilder(
         ClipContext clipContext,
         bool requiresDedicatedOutput)
     {
-        ArgumentNullException.ThrowIfNull(stage);
-        ArgumentNullException.ThrowIfNull(clipContext);
-
-        WGNodeData currentMedia = g.CurrentMedia
-            ?? throw Invariant.Failure(
-                $"stage {stage.StageId} has no input media.");
-        JArray priorOutputPath = CopyPath(currentMedia.Path);
-        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
+        JArray priorOutputPath = CopyPath(g.CurrentMedia.Path);
         bool claimsTextToVideoRoot = clipContext.Plan.Root.StageClaimsTextToVideoRoot(
             stage,
             clipContext.PlannedClip);
-        LtxPostVideoChain postVideoChain = claimsTextToVideoRoot
-            ? null
-            : LtxPostVideoChain.TryCapture(g, clipContext, stage);
-        WGNodeData sourceMedia = claimsTextToVideoRoot
-            ? CloneMedia(g.CurrentMedia)
-            : sourceMediaResolver.Resolve(clipContext, stage, sectionId, postVideoChain);
+        (LtxPostVideoChain postVideoChain, WGNodeData sourceMedia) = PublishStageInput(
+            stage,
+            sectionId,
+            clipContext,
+            claimsTextToVideoRoot);
         if (sourceMedia is null)
         {
             throw Invariant.Failure(
@@ -60,6 +52,26 @@ internal sealed class StageContextBuilder(
             sourceMedia,
             genInfo,
             requiresDedicatedOutput);
+    }
+
+    /// <summary>
+    /// Resolves the stage's source media and writes it to <c>g.CurrentMedia</c>. This is all a
+    /// passthrough stage does.
+    /// </summary>
+    public (LtxPostVideoChain Chain, WGNodeData SourceMedia) PublishStageInput(
+        StagePlan stage,
+        int sectionId,
+        ClipContext clipContext,
+        bool claimsTextToVideoRoot)
+    {
+        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
+        LtxPostVideoChain postVideoChain = claimsTextToVideoRoot
+            ? null
+            : LtxPostVideoChain.TryCapture(g, clipContext, stage);
+        WGNodeData sourceMedia = claimsTextToVideoRoot
+            ? CloneMedia(g.CurrentMedia)
+            : sourceMediaResolver.Resolve(clipContext, stage, sectionId, postVideoChain);
+        return (postVideoChain, sourceMedia);
     }
 
     private WorkflowGenerator.ImageToVideoGenInfo BuildGenInfo(

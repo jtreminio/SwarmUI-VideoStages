@@ -8,7 +8,6 @@ using VideoStages.Planning;
 using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Architectures.Ltx2.Runtime.Chain;
 using VideoStages.Architectures.Ltx2.Runtime.Guide;
-using VideoStages.Architectures.Ltx2.Runtime.Audio;
 
 namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
@@ -18,7 +17,6 @@ internal class StageRunner
     private readonly LtxStageExecutor _stageExecutor;
     private readonly LtxStageGuideMediaResolver _guideMediaResolver;
     private readonly FrameRefResolver _frameRefResolver;
-    private readonly StageSourceMediaResolver _sourceMediaResolver;
     private readonly StageContextBuilder _contextBuilder;
 
     public StageRunner(
@@ -33,10 +31,9 @@ internal class StageRunner
             ?? throw new ArgumentNullException(nameof(guideMediaResolver));
         _frameRefResolver = frameRefResolver
             ?? throw new ArgumentNullException(nameof(frameRefResolver));
-        _sourceMediaResolver = new StageSourceMediaResolver(generator);
         _contextBuilder = new StageContextBuilder(
             generator,
-            _sourceMediaResolver,
+            new StageSourceMediaResolver(generator),
             new PlannedStagePromptResolver(generator));
     }
 
@@ -60,7 +57,11 @@ internal class StageRunner
         if (stage.IsPassthrough
             && !clipContext.Plan.Root.StageClaimsTextToVideoRoot(stage, clip))
         {
-            RunPassthroughStage(stage, sectionId, clipContext);
+            _contextBuilder.PublishStageInput(
+                stage,
+                sectionId,
+                clipContext,
+                claimsTextToVideoRoot: false);
             return;
         }
 
@@ -294,16 +295,5 @@ internal class StageRunner
         && _guideMediaResolver.IsLiveCurrentOutputReference(guideReference?.Media, postVideoChain)
         && !string.IsNullOrWhiteSpace(guideReference?.Vae?.Compat?.ID)
         && guideReference.Vae.Compat.ID == genInfo.VideoModel?.ModelClass?.CompatClass?.ID;
-
-    private void RunPassthroughStage(
-        StagePlan stage,
-        int sectionId,
-        ClipContext clipContext)
-    {
-        LtxAudioReuseState.PrepareReusableAudio(_generator, clipContext, stage);
-        LtxPostVideoChain postVideoChain =
-            LtxPostVideoChain.TryCapture(_generator, clipContext, stage);
-        _ = _sourceMediaResolver.Resolve(clipContext, stage, sectionId, postVideoChain);
-    }
 
 }
