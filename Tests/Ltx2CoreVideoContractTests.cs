@@ -167,6 +167,23 @@ public class Ltx2CoreVideoContractTests
         return encode;
     }
 
+    /// <summary>
+    /// Core's single-frame unwrap of the guide video, sitting between the stage's resize and the
+    /// image input of whichever apply node core's branch chose.
+    /// </summary>
+    private static ImageFromBatchNode AssertCoreUnwrapsFirstFrame(
+        JObject workflow,
+        ResizeImageMaskNodeNode guideResize,
+        INodeInput applyImage)
+    {
+        ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
+            applyImage.Connection?.Node);
+        Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
+        AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
+        AssertShippedLiteral(workflow, firstFrame, "length", 1);
+        return firstFrame;
+    }
+
     /// <summary>The IC-LoRA guide's frame batch, whatever drives its length.</summary>
     private static ImageFromBatchNode GuideFramesOf(WorkflowBridge bridge) =>
         Assert.IsType<ImageFromBatchNode>(
@@ -1011,15 +1028,8 @@ public class Ltx2CoreVideoContractTests
         ResizeImageMaskNodeNode guideResize = GuideResizeOverCorePreprocessor(bridge);
         ControlNetApplyAdvancedNode apply = Assert.Single(
             bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>());
-        ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
-            apply.Image.Connection?.Node);
-        Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        // Core builds this wrap as a raw JObject, so an input it never wrote would be absent
-        // entirely — reading the shipped JSON is what tells a configured slice apart from a bare
-        // one. (The same read on an extension-built node would prove nothing: those serialize
-        // every constructor default.)
-        AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
-        AssertShippedLiteral(workflow, firstFrame, "length", 1);
+        ImageFromBatchNode firstFrame =
+            AssertCoreUnwrapsFirstFrame(workflow, guideResize, apply.Image);
 
         ImageFromBatchNode guideFrames = GuideFramesOf(bridge);
         Assert.Same(guideResize.Resized, guideFrames.Image.Connection);
@@ -1092,16 +1102,10 @@ public class Ltx2CoreVideoContractTests
         Assert.Equal(64, guideResize.ExtraInputs?["resize_type.multiple"]?.Value<int>());
         Assert.IsType<ImageScaleNode>(guideResize.Input.Connection?.Node);
 
-        ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
-            Assert.Single(bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>())
-                .Image.Connection?.Node);
-        Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        // Core builds this wrap as a raw JObject, so an input it never wrote would be absent
-        // entirely — reading the shipped JSON is what tells a configured slice apart from a bare
-        // one. (The same read on an extension-built node would prove nothing: those serialize
-        // every constructor default.)
-        AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
-        AssertShippedLiteral(workflow, firstFrame, "length", 1);
+        AssertCoreUnwrapsFirstFrame(
+            workflow,
+            guideResize,
+            Assert.Single(bridge.Graph.NodesOfType<ControlNetApplyAdvancedNode>()).Image);
 
         GetImageSizeNode size = Assert.Single(bridge.Graph.NodesOfType<GetImageSizeNode>());
         Assert.Same(guideResize.Resized, size.Image.Connection);
@@ -1414,15 +1418,7 @@ public class Ltx2CoreVideoContractTests
         Assert.Empty(bridge.Graph.NodesOfType<ControlNetLoaderNode>());
 
         ResizeImageMaskNodeNode guideResize = GuideResizeOverCorePreprocessor(bridge);
-        ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
-            apply.Image.Connection?.Node);
-        Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        // Core builds this wrap as a raw JObject, so an input it never wrote would be absent
-        // entirely — reading the shipped JSON is what tells a configured slice apart from a bare
-        // one. (The same read on an extension-built node would prove nothing: those serialize
-        // every constructor default.)
-        AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
-        AssertShippedLiteral(workflow, firstFrame, "length", 1);
+        AssertCoreUnwrapsFirstFrame(workflow, guideResize, apply.Image);
 
         // Each stage guides off the full-length resize, which only holds because the normalizer
         // peels core's single-frame wrap before inserting it.
@@ -1496,15 +1492,7 @@ public class Ltx2CoreVideoContractTests
         }
 
         ResizeImageMaskNodeNode guideResize = GuideResizeOverCorePreprocessor(bridge);
-        ImageFromBatchNode firstFrame = Assert.IsType<ImageFromBatchNode>(
-            apply.Image.Connection?.Node);
-        Assert.Same(guideResize.Resized, firstFrame.Image.Connection);
-        // Core builds this wrap as a raw JObject, so an input it never wrote would be absent
-        // entirely — reading the shipped JSON is what tells a configured slice apart from a bare
-        // one. (The same read on an extension-built node would prove nothing: those serialize
-        // every constructor default.)
-        AssertShippedLiteral(workflow, firstFrame, "batch_index", 0);
-        AssertShippedLiteral(workflow, firstFrame, "length", 1);
+        AssertCoreUnwrapsFirstFrame(workflow, guideResize, apply.Image);
 
         ImageFromBatchNode guideFrames = GuideFramesOf(bridge);
         Assert.Same(guideResize.Resized, guideFrames.Image.Connection);
