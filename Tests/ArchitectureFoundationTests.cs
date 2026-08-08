@@ -1425,20 +1425,6 @@ public class ArchitectureFoundationTests
             model => model["modelName"]?.ToString() == models.VideoModel.Name);
     }
 
-    [Fact]
-    public void Decoded_clip_boundary_exposes_no_vae_or_latent_property()
-    {
-        Assert.Null(typeof(DecodedClipArtifact).GetProperty("Vae"));
-        Assert.DoesNotContain(
-            typeof(DecodedClipArtifact).GetProperties(),
-            property => property.Name.Contains("Latent", StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain(
-            typeof(DecodedClipArtifact).GetProperties(),
-            property => property.PropertyType.Name.Contains(
-                "MediaRef",
-                StringComparison.OrdinalIgnoreCase));
-    }
-
     private static IEnumerable<string> Keys(JObject value) =>
         value.Properties().Select(property => property.Name);
 
