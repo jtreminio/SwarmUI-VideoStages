@@ -401,16 +401,17 @@ public class HostVideoContractTests
                 "effective-request.unsupported-stage-reference-ignored",
             ],
             Diagnostics(generator).Select(diagnostic => diagnostic.Code).Order());
-        List<string> warnings = RequestWarnings(generator.UserInput);
-        foreach (string parameter in new[]
-        {
-            "'Video2Video Creativity'", "'Prompt Audios'", "'Prompt Videos'",
-        })
-        {
-            Assert.Contains(
-                warnings,
-                warning => warning.Contains(parameter, StringComparison.Ordinal));
-        }
+        // Request-global settings warn at preflight, which never enters the compiled plan above.
+        Assert.Equal(
+            [
+                "host-video.audio-reference.ignored",
+                "host-video.creativity.ignored",
+                "host-video.video-reference.ignored",
+            ],
+            generator.RequireVideoExecutionPlanContext()
+                .PreflightDiagnostics
+                .Select(diagnostic => diagnostic.Code)
+                .Order());
 
         // Two stages ran; nothing any of the dropped settings would have built is in the graph.
         Assert.Equal(2, bridge.Graph.NodesOfType<HunyuanVideo15ImageToVideoNode>().Count);
@@ -441,7 +442,7 @@ public class HostVideoContractTests
             bridge.Graph.NodesOfType<ImageUpscaleWithModelNode>());
         Assert.Same(upscaleLoader, upscale.UpscaleModel.Connection?.Node);
         Assert.DoesNotContain(
-            warnings,
+            RequestWarnings(generator.UserInput),
             warning => warning.Contains("upscale", StringComparison.OrdinalIgnoreCase));
 
         ClipSpec authored = Assert.Single(generator.GetTimelineSpec().Clips);
