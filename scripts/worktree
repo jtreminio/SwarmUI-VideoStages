@@ -22,9 +22,10 @@ EXTENSIONS="$(dirname "$MAIN")"
 usage() {
     cat <<EOF
 Usage:
-  scripts/worktree add [--resume] <name> [start-point]   provision $EXTENSIONS/$REPO-<name>
-  scripts/worktree rm  [--keep-branch] <name>            remove it and its build output
-  scripts/worktree ls                                    list worktrees of this repo
+  scripts/worktree add [--resume] [--no-baseline] <name> [start-point]
+                                              provision $EXTENSIONS/$REPO-<name>
+  scripts/worktree rm  [--keep-branch] <name> remove it and its build output
+  scripts/worktree ls                         list worktrees of this repo
 
 <name> is the suffix only: letters, digits and dashes, not starting with a dash.
 \`add\` and \`rm\` only run from $MAIN itself, never from inside a worktree.
@@ -33,6 +34,9 @@ Usage:
 exists it refuses, because silently resuming someone else's commits under a fresh-looking
 worktree is how an agent ends up building on work it cannot see — pass --resume when
 continuing it is what you meant.
+
+\`add\` also runs the suite once and saves it to <name>/.test-baseline, which \`./run-tests\`
+then prints under every later run. --no-baseline skips it, at the cost of the comparison.
 
 \`rm\` deletes branch <name> once every one of its commits is in HEAD, compared by patch
 id, so a branch harvested with cherry-pick still counts as done. Otherwise it keeps the
@@ -85,16 +89,17 @@ install_hook() {
 
 cmd_add() {
     require_main_checkout add
-    local resume=0
+    local resume=0 baseline=1
     while [ $# -gt 0 ]; do
         case "$1" in
             --resume) resume=1; shift ;;
+            --no-baseline) baseline=0; shift ;;
             --) shift; break ;;
             -*) die "unknown option: $1" ;;
             *) break ;;
         esac
     done
-    [ $# -le 2 ] || die "add takes only [--resume] <name> [start-point]"
+    [ $# -le 2 ] || die "add takes only [--resume] [--no-baseline] <name> [start-point]"
     local name="${1-}" start="${2:-HEAD}"
     check_name "$name"
     [ "$resume" = 0 ] || [ $# -le 1 ] || die "--resume continues branch $name; it takes no start-point"
@@ -115,6 +120,8 @@ cmd_add() {
     # come through this script.
     install_hook
 
+    # Read by the hook, which is what actually captures the baseline.
+    export VST_WORKTREE_BASELINE="$baseline"
     if git -C "$MAIN" show-ref --quiet --verify "refs/heads/$name"; then
         [ "$resume" = 1 ] || die "branch $name already exists at $(git -C "$MAIN" log --oneline -1 "$name")
 a worktree on it would start with those commits already applied — pass --resume if that is
@@ -166,7 +173,7 @@ cmd_rm() {
     admin="$(git -C "$path" rev-parse --absolute-git-dir 2>/dev/null || true)"
     [ -z "$admin" ] || [ ! -f "$admin/relocated-from" ] || relocated_from="$(<"$admin/relocated-from")"
 
-    rm -f "$path/node_modules" "$path/nonversioned" "$path/Directory.Build.rsp"
+    rm -f "$path/node_modules" "$path/nonversioned" "$path/Directory.Build.rsp" "$path/.test-baseline"
     git -C "$MAIN" worktree remove "$path"
     rm -rf "$(artifacts_path "$name")"
     echo "removed $path"

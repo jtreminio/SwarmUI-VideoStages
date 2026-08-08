@@ -108,7 +108,28 @@ fi
 [ -f "$WORKTREE/Directory.Build.rsp" ] || printf -- '-p:UseArtifactsOutput=true\n-p:ArtifactsPath=%s\n' \
     "/tmp/swarmui-msbuild/wt-${NAME#"$(basename "$MAIN")-"}" > "$WORKTREE/Directory.Build.rsp"
 
-# Quiet on an ordinary branch switch, where this only repairs what is missing. A worktree made
-# before this hook existed gets provisioned the first time anyone checks out in it.
-[ "$IS_NEW_WORKTREE" = 1 ] && echo "provisioned $NAME — ./run-tests will work here"
+if [ "$IS_NEW_WORKTREE" = 0 ]; then
+    # Quiet on an ordinary branch switch, where this only repairs what is missing. A worktree made
+    # before this hook existed gets provisioned the first time anyone checks out in it.
+    exit 0
+fi
+echo "provisioned $NAME — ./run-tests will work here"
+
+# Capture what the suite looks like before anyone touches this worktree, so `./run-tests` can print
+# it underneath every later run. Synchronous on purpose: a baseline that might not have landed yet
+# is worse than none, because the first run reads "no baseline" and carries on. The cold build this
+# pays for would happen on the agent's first run anyway.
+[ "${VST_WORKTREE_BASELINE:-1}" = 1 ] || exit 0
+[ -x "$WORKTREE/run-tests" ] || exit 0
+echo "capturing its test baseline (cold build, ~25s) — scripts/worktree add --no-baseline skips this"
+{
+    echo "# $(git -C "$WORKTREE" rev-parse --short HEAD), captured before any work in this worktree"
+    # Unset git's per-command environment: it points at the *index and gitdir of this checkout*, and
+    # anything the suite shells out to would inherit it and operate on the wrong worktree.
+    (cd "$WORKTREE" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX && ./run-tests 2>&1)
+} > "$WORKTREE/.test-baseline" || true
+grep -E "^(Passed!|Failed!|Test Suites:|Tests:)" "$WORKTREE/.test-baseline" | sed 's/^/  /' || true
+if grep -qE "^(Failed!|Tests:.*failed)" "$WORKTREE/.test-baseline"; then
+    echo "  NOTE: the baseline is red. That is the honest starting point, not a break you caused."
+fi
 exit 0

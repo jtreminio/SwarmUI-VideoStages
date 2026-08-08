@@ -18,6 +18,9 @@ Properties/
 **/Directory.Build.local.props
 Directory.Build.rsp
 
+# A worktree's first test run, kept so ./run-tests can print it beside every later one.
+.test-baseline
+
 # Node / TypeScript
 node_modules/
 *.js.map

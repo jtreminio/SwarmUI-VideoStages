@@ -1,3 +1,22 @@
 #! /bin/bash
+# Run the suite. Where a baseline exists, print it underneath so the totals can be compared.
+#
+# The baseline is this worktree's own first run, captured by scripts/worktree-post-checkout before
+# anyone touched anything. The totals are the point: a suite that stops compiling prints no failure,
+# it prints a *smaller total*, and that is invisible with nothing to hold it against.
 
+BASELINE="$(dirname "$0")/.test-baseline"
+
+if [ ! -f "$BASELINE" ]; then
+    dotnet test "SwarmUI-VideoStages.Tests.sln" && npm run test
+    exit
+fi
+
+echo "CURRENT RUN:"
 dotnet test "SwarmUI-VideoStages.Tests.sln" && npm run test
+status=$?
+
+printf '\nBASE RUN:\n'
+cat "$BASELINE"
+printf '\nCompare the totals, not just the pass/fail. A total that shrank is a suite that stopped\ncompiling — jest reports that as a smaller number, never as a failure.\n'
+exit "$status"
