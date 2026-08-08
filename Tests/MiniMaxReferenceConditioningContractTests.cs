@@ -13,6 +13,11 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class MiniMaxReferenceConditioningContractTests
 {
+    /// <summary>The global end-frame param rejects anything that is not a decodable image.</summary>
+    private const string OnePixelPng =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+        + "AAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
     /// <summary>
     /// Two references resolving to the same media at the same stage resolution share one framing
     /// node, so both keyframe slots read the same output — the reuse must not drop one of them.
@@ -156,6 +161,34 @@ public class MiniMaxReferenceConditioningContractTests
         }
 
         Assert.Same(referenceNode, StageSampler(bridge, 0).Positive.Connection?.Node);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// The request-global end-frame image falls back into the only clip's last-frame slot; the
+    /// multi-clip case is refused in preflight (<see cref="MiniMaxRuntimeFlowTests"/>).
+    /// </summary>
+    [Fact]
+    public async Task A_global_end_frame_fills_the_only_clips_last_keyframe()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+
+        JObject workflow = await fixture.GenerateAsync(
+            MakeDocument(clip),
+            post => post["videoendimage"] = OnePixelPng);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmLoadImageB64Node upload = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
+        Assert.Null(keyframes.FirstFrame.Connection);
+        Assert.True(ReachesUpstream(bridge, keyframes.LastFrame.Connection?.Node, upload.Id));
+
+        live.AssertAllLive(upload, keyframes);
         AssertShippable(bridge, workflow, live);
     }
 
