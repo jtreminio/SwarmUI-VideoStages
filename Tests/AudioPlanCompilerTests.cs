@@ -237,6 +237,8 @@ public class AudioPlanCompilerTests
             AudioSpanPlanCompiler.Compile(
                 [
                     new(AudioSourceKind.Upload, null, -1, 0, 1, null),
+                    new(AudioSourceKind.Upload, null, double.NaN, 0, 1, null),
+                    new(AudioSourceKind.Upload, null, 0, 0, double.PositiveInfinity, null),
                     new(AudioSourceKind.Upload, null, 0, 0, 1, null),
                 ],
                 Base(hasConfiguredTrack: false));
@@ -244,6 +246,8 @@ public class AudioPlanCompilerTests
         Assert.Empty(result.Spans);
         Assert.Equal(
         [
+            "audio.span.ignored_invalid_window",
+            "audio.span.ignored_invalid_window",
             "audio.span.ignored_invalid_window",
             "audio.span.ignored_no_source",
         ],

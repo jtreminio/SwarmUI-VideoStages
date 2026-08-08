@@ -25,9 +25,9 @@ internal static class AudioSpanPlanCompiler
                 diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SpanIgnoredNoSource, "An audio track has no source and was ignored."));
                 continue;
             }
-            if (double.IsNaN(span.StartSeconds) || double.IsInfinity(span.StartSeconds)
-                || double.IsNaN(span.TrimStartSeconds) || double.IsInfinity(span.TrimStartSeconds)
-                || double.IsNaN(span.LengthSeconds) || double.IsInfinity(span.LengthSeconds)
+            if (!double.IsFinite(span.StartSeconds)
+                || !double.IsFinite(span.TrimStartSeconds)
+                || !double.IsFinite(span.LengthSeconds)
                 || span.StartSeconds < 0 || span.TrimStartSeconds < 0 || span.LengthSeconds <= 0)
             {
                 diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SpanIgnoredInvalidWindow, "An audio track has an invalid time window and was ignored."));
