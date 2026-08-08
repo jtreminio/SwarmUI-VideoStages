@@ -220,23 +220,60 @@ internal sealed class LtxPostVideoChain
         {
             return;
         }
-        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutput(
-            bridge,
-            MediaRef.FromWGNodeData(CurrentOutputMedia, bridge),
-            bridge.Graph.GetNode(videoDecodeNodeId),
-            bridge.Graph.GetNode<LTXVSeparateAVLatentNode>($"{audioLatentPath[0]}"),
-            audioDecode,
-            MediaRef.FromWGNodeData(generator.CurrentMedia, bridge),
-            MediaRef.FromWGNodeData(vae, bridge)
-                ?? MediaRef.FromWGNodeData(generator.CurrentVae, bridge),
-            LtxDecodeConfig.From(generator));
-
-        if (result is not null)
+        MediaRef captured = MediaRef.FromWGNodeData(CurrentOutputMedia, bridge);
+        MediaRef stageOutput = MediaRef.FromWGNodeData(generator.CurrentMedia, bridge);
+        MediaRef spliceVae = MediaRef.FromWGNodeData(vae, bridge)
+            ?? MediaRef.FromWGNodeData(generator.CurrentVae, bridge);
+        ComfyNode decode = bridge.Graph.GetNode(videoDecodeNodeId);
+        LTXVSeparateAVLatentNode oldSeparate =
+            bridge.Graph.GetNode<LTXVSeparateAVLatentNode>($"{audioLatentPath[0]}");
+        if (captured is null
+            || stageOutput is null
+            || spliceVae is null
+            || oldSeparate is null
+            || decode is not IVaeDecode vaeDecode
+            || decode.Outputs.Count == 0
+            || vaeDecode.Samples.Connection?.Node?.Id != oldSeparate.Id
+            || (audioDecode is not null
+                && audioDecode.FindInput("samples")?.Connection?.Node?.Id != oldSeparate.Id))
         {
-            generator.CurrentMedia = result.ToWGNodeData(generator);
-            AttachSourceAudio(generator.CurrentMedia);
-            isSpliced = true;
+            return;
         }
+
+        LTXVSeparateAVLatentNode newSeparate = bridge.AddNode(new LTXVSeparateAVLatentNode());
+        newSeparate.AvLatent.ConnectToUntyped(stageOutput.Output);
+        ReplaceVideoDecode(bridge, decode, spliceVae.Output, newSeparate);
+        if (audioDecode is not null)
+        {
+            bridge.Graph.RetargetConnections(
+                oldSeparate.AudioLatent,
+                newSeparate.AudioLatent,
+                (node, input) => node.Id == audioDecode.Id && input.Name == "samples");
+        }
+
+        generator.CurrentMedia = captured.ToWGNodeData(generator);
+        AttachSourceAudio(generator.CurrentMedia);
+        isSpliced = true;
+    }
+
+    private void ReplaceVideoDecode(
+        WorkflowBridge bridge,
+        ComfyNode oldDecode,
+        INodeOutput vaeOutput,
+        LTXVSeparateAVLatentNode newSeparate)
+    {
+        INodeOutput oldImageOutput = oldDecode.Outputs[0];
+        // Keep the decode id so existing consumers and cached references stay valid.
+        bridge.RemoveNode(oldDecode.Id);
+
+        ComfyNode newDecode = LtxPostChainRebuilder.AddDecode(
+            bridge,
+            vaeOutput,
+            newSeparate.VideoLatent,
+            LtxDecodeConfig.From(generator),
+            preserveId: oldDecode.Id);
+
+        bridge.Graph.RetargetConnections(oldImageOutput, newDecode.Outputs[0]);
     }
 
     public void SpliceCurrentOutputToDedicatedBranch(
@@ -252,24 +289,49 @@ internal sealed class LtxPostVideoChain
         }
 
         using WorkflowBridge bridge = BridgeSync.For(generator);
-        MediaRef result = LtxPostChainRebuilder.SpliceCurrentOutputToDedicatedBranch(
-            bridge,
-            MediaRef.FromWGNodeData(CurrentOutputMedia, bridge),
-            bridge.ResolvePath(audioVaePath),
-            MediaRef.FromWGNodeData(generator.CurrentMedia, bridge),
-            MediaRef.FromWGNodeData(vae, bridge)
-                ?? MediaRef.FromWGNodeData(generator.CurrentVae, bridge),
-            LtxDecodeConfig.From(generator),
-            outputWidth,
-            outputHeight,
-            outputFrames,
-            outputFps);
-
-        if (result is not null)
+        MediaRef captured = MediaRef.FromWGNodeData(CurrentOutputMedia, bridge);
+        MediaRef stageOutput = MediaRef.FromWGNodeData(generator.CurrentMedia, bridge);
+        MediaRef spliceVae = MediaRef.FromWGNodeData(vae, bridge)
+            ?? MediaRef.FromWGNodeData(generator.CurrentVae, bridge);
+        INodeOutput audioVaeSource = bridge.ResolvePath(audioVaePath);
+        if (captured is null
+            || stageOutput is null
+            || spliceVae is null
+            || audioVaeSource is null)
         {
-            generator.CurrentMedia = result.ToWGNodeData(generator);
-            isSpliced = true;
+            return;
         }
+
+        LTXVSeparateAVLatentNode newSeparate = bridge.AddNode(new LTXVSeparateAVLatentNode());
+        newSeparate.AvLatent.ConnectToUntyped(stageOutput.Output);
+        ComfyNode dedicatedDecode = LtxPostChainRebuilder.AddDecode(
+            bridge,
+            spliceVae.Output,
+            newSeparate.VideoLatent,
+            LtxDecodeConfig.From(generator));
+
+        MediaRef result = new()
+        {
+            Output = dedicatedDecode.Outputs[0],
+            DataType = WGNodeData.DT_VIDEO,
+            Compat = spliceVae.Compat ?? captured.Compat,
+            Width = outputWidth,
+            Height = outputHeight,
+            Frames = outputFrames ?? captured.Frames,
+            FPS = outputFps ?? captured.FPS,
+        };
+        LtxPostChainRebuilder.AttachDecodedLtxAudio(
+            bridge,
+            result,
+            new MediaRef
+            {
+                Output = audioVaeSource,
+                DataType = WGNodeData.DT_AUDIOVAE,
+                Compat = captured.Compat
+            });
+
+        generator.CurrentMedia = result.ToWGNodeData(generator);
+        isSpliced = true;
     }
 
     private static WGNodeData CloneMedia(
