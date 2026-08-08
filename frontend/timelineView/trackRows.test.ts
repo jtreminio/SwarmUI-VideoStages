@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from "@jest/globals";
-import { storedClip } from "./__test_helpers__/clipFixtures";
+import { storedClip } from "../__test_helpers__/clipFixtures";
 import {
     mountPromptBox,
     mountVideoStagesData,
     TIMELINE_PPS,
-} from "./__test_helpers__/dom";
-import { getClips } from "./persistence/repository";
-import { resetSelectionForTests } from "./selection";
-import { computeRegionLayout } from "./timelineView/layout";
-import { renderAudioTrackRow } from "./timelineView/trackRows";
+} from "../__test_helpers__/dom";
+import { getClips } from "../persistence/repository";
+import { resetSelectionForTests } from "../selection";
+import { computeRegionLayout } from "./layout";
+import { renderAudioTrackRow } from "./trackRows";
 
 describe("renderAudioTrackRow (timeline audio lanes)", () => {
     afterEach(() => {
