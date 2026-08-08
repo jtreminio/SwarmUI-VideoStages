@@ -195,13 +195,14 @@ public class Ltx2IcLoraContractTests
 
         LTXICLoRALoaderModelOnlyNode loader = Assert.Single(
             bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
-        Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count);
 
         SwarmKSamplerNode[] stages = [StageSampler(bridge, 0), StageSampler(bridge, 1)];
         Assert.All(stages, stage => Assert.Same(loader, stage.Model.Connection?.Node));
-        Assert.Equal(
-            2,
-            stages.Select(stage => stage.Positive.Connection?.Node?.Id).Distinct().Count());
+        LTXAddVideoICLoRAGuideNode[] guides = [.. stages.Select(stage =>
+            Assert.IsType<LTXAddVideoICLoRAGuideNode>(stage.Positive.Connection?.Node))];
+        // One guide each, and no third stacked anywhere in the graph.
+        Assert.Equal(2, guides.Distinct().Count());
+        Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count);
 
         live.AssertAllLive([loader, .. stages]);
         AssertShippable(bridge, workflow, live);
