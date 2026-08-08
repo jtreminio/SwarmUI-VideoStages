@@ -1703,9 +1703,6 @@ public class ArchitectureFoundationTests
                     []);
             }
         }
-
-        private sealed record FakeClipPayload(
-            ArchitectureId ArchitectureId) : IArchitectureClipPayload;
     }
 
     private static VideoArchitectureDescriptor Descriptor(string id) =>
@@ -1771,14 +1768,14 @@ public class ArchitectureFoundationTests
             IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
             ArchitectureClipCompileContext context) =>
             new(
-                new FakePayload(descriptor.Id),
+                new FakeClipPayload(descriptor.Id),
                 (clip.Stages ?? []).ToDictionary(
                     stage => stage.ClipStageRawIndex,
                     _ => (IArchitectureStagePayload)new FakeStagePayload(descriptor.Id)),
                 []);
     }
 
-    private sealed record FakePayload(
+    private sealed record FakeClipPayload(
         ArchitectureId ArchitectureId) : IArchitectureClipPayload;
 
     private sealed record FakeStagePayload(
