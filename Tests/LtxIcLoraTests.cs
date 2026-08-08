@@ -138,10 +138,10 @@ public sealed class LtxIcLoraTests
             warning => warning.Contains("none is available for the selected model"));
     }
 
-    /// <summary>
-    /// Invalid drive audio is a blocking preflight error, and the runtime path it guards treats
-    /// reaching it with the same payload as a bug rather than dropping the reference.
-    /// </summary>
+    /// <summary>Calls <c>AudioDiagnostic</c> without the stage id production passes it, so the
+    /// refusal the diagnostic drives is
+    /// <see cref="Ltx2IcLoraContractTests.An_unreadable_drive_upload_refuses_the_request"/>'s
+    /// claim, not this one's.</summary>
     [Fact]
     public void Invalid_uploaded_audio_is_a_blocking_diagnostic_the_runtime_treats_as_a_bug()
     {
