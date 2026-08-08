@@ -568,13 +568,18 @@ public class DecisionOwnerRegressionTests
         TimelineRunner host = new(
             generator,
             plan,
-            innerProviders.Select(provider => new LifecycleTestProvider(provider)));
+            innerProviders.Select(provider => new NoPreflightProvider(provider)));
         VideoExecutionPlanContext request = new(plan, () => host);
         request.PrepareRequest();
         return request;
     }
 
-    private sealed class LifecycleTestProvider(
+    /// <summary>
+    /// Forwards every member except <c>PreflightRequest</c>, which falls through to the interface
+    /// default. The plans here are hand-built and carry no architecture stage payloads, so a real
+    /// preflight throws before the decision under test runs.
+    /// </summary>
+    private sealed class NoPreflightProvider(
         IArchitectureGenerationSessionProvider inner) :
         IArchitectureGenerationSessionProvider
     {
