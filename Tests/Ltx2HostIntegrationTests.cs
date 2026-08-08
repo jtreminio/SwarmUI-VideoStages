@@ -10,8 +10,6 @@ public class Ltx2HostIntegrationTests
     [Fact]
     public void Ltx_custom_nodes_all_require_the_ltxvideo_feature()
     {
-        _ = WorkflowTestHarness.VideoStagesSteps();
-
         // Set equality, not a spot check: a node registered without the flag and a new
         // registration missing from this list both have to fail.
         Assert.Equal(
