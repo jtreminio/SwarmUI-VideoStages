@@ -54,8 +54,6 @@ internal sealed record DecodedClipArtifact(
     ArchitectureId ArchitectureId,
     int ClipId)
 {
-    internal bool HasVideo => Video is not null;
-
     internal void ValidateDecoded()
     {
         if (Video?.Kind != DecodedMediaKind.Video
