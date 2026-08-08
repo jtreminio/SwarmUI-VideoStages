@@ -209,7 +209,9 @@ internal sealed class AudioTimelineExecutor
             currentMedia.AttachedAudio = null;
         }
         else if (overlaysOverNoBase
-            && _audioInjector.TryBuildPreserveWindowedAudioLatent(
+            && _generator.IsLTXV2()
+            && AudioPreserveWindowBuilder.TryBuild(
+                _generator,
                 combinedAudio,
                 preserveWindows,
                 stableIdSlot: clip.ClipId + 1) is WGNodeData windowedLatent)

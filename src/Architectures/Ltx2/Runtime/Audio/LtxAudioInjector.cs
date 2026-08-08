@@ -75,32 +75,6 @@ internal sealed class LtxAudioInjector(
         return true;
     }
 
-    /// <summary>
-    /// Encodes <paramref name="audio"/> and applies the preserve-windows noise mask WITHOUT touching any
-    /// concat — for clips whose AV latent is built later from <c>AttachedAudio</c>: core
-    /// <c>AsSamplingLatent</c> concats a pre-encoded audio latent as-is, keeping this mask, whereas raw
-    /// attached audio would be baked fully-preserved (locking silent-bed gaps). Returns null when the
-    /// graph state can't support it (not LTXV2 / no audio VAE / no windows).
-    /// </summary>
-    public WGNodeData TryBuildPreserveWindowedAudioLatent(
-        WGNodeData audio,
-        IReadOnlyList<(double Start, double End)> preserveWindows,
-        int stableIdSlot)
-    {
-        if (audio is null
-            || preserveWindows is not { Count: > 0 }
-            || !g.IsLTXV2()
-            || g.CurrentAudioVae is null)
-        {
-            return null;
-        }
-        return AudioPreserveWindowBuilder.TryBuild(
-            g,
-            audio,
-            preserveWindows,
-            stableIdSlot);
-    }
-
     private static (List<string> ConcatIds, HashSet<string> RemovableSourceIds)
         FindConcatsToReplace(WorkflowBridge bridge)
     {

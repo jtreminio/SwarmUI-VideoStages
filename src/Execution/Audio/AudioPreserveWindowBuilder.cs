@@ -9,6 +9,12 @@ namespace VideoStages.Execution.Audio;
 /// <summary>Builds audio latents that preserve only authored time windows.</summary>
 internal static class AudioPreserveWindowBuilder
 {
+    /// <summary>
+    /// Encodes <paramref name="audio"/> and masks it WITHOUT touching any concat, for clips whose AV
+    /// latent is built later from <c>AttachedAudio</c>: core's <c>AsSamplingLatent</c> concats a
+    /// pre-encoded audio latent as-is and keeps this mask, whereas raw attached audio would be baked
+    /// fully preserved, locking the silent-bed gaps.
+    /// </summary>
     internal static WGNodeData TryBuild(
         WorkflowGenerator g,
         WGNodeData audio,
