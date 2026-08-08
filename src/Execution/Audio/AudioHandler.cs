@@ -14,7 +14,6 @@ public sealed class AudioHandler(WorkflowGenerator g)
     public static string MakeAceStepFunDecodeId(int trackIndex) =>
         (AceStepFunDecodeIdBase + trackIndex * AceStepFunTrackIdStride).ToString();
 
-    /// <summary>Resolves a compiled AceStepFun track identity without reparsing its legacy source text.</summary>
     public WGNodeData DetectAceStepFunAudio(int trackIndex)
     {
         using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
@@ -27,7 +26,8 @@ public sealed class AudioHandler(WorkflowGenerator g)
         {
             return null;
         }
-        VAEDecodeAudioNode decode = FindAceStepFunDecode(bridge, trackIndex);
+        VAEDecodeAudioNode decode = bridge.Graph.GetNode<VAEDecodeAudioNode>(
+            MakeAceStepFunDecodeId(trackIndex));
         return decode is null ? null : CreateAudioNode(decode.AUDIO);
     }
 
@@ -64,7 +64,8 @@ public sealed class AudioHandler(WorkflowGenerator g)
             {
                 continue;
             }
-            VAEDecodeAudioNode decode = FindAceStepFunDecode(bridge, trackIndex);
+            VAEDecodeAudioNode decode = bridge.Graph.GetNode<VAEDecodeAudioNode>(
+                MakeAceStepFunDecodeId(trackIndex));
             if (decode is not null)
             {
                 PruneDownstreamSaveAudio(bridge, decode);
@@ -93,27 +94,6 @@ public sealed class AudioHandler(WorkflowGenerator g)
         {
             VideoGraphHelpers.RemoveNode(g, bridge, node.Id);
         }
-    }
-
-    private static VAEDecodeAudioNode FindAceStepFunDecode(WorkflowBridge bridge, int trackIndex)
-    {
-        foreach (VAEDecodeAudioNode decode in bridge.Graph.NodesOfType<VAEDecodeAudioNode>())
-        {
-            if (IsAceStepFunDecodeNodeForTrack(decode.Id, trackIndex))
-            {
-                return decode;
-            }
-        }
-        return null;
-    }
-
-    private static bool IsAceStepFunDecodeNodeForTrack(string nodeId, int trackIndex)
-    {
-        if (!long.TryParse(nodeId, out long numericId))
-        {
-            return false;
-        }
-        return numericId == AceStepFunDecodeIdBase + (long)trackIndex * AceStepFunTrackIdStride;
     }
 
     private WGNodeData CreateAudioNode(INodeOutput output) =>

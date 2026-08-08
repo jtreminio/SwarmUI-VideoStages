@@ -91,7 +91,7 @@ public class AudioHandlerTests
     /// These ids are minted by a different extension. SwarmUI-AceStepFun's
     /// <c>AudioWorkflow.GetTrackNodeId</c> feeds <c>GetStableDynamicID(64100 + branch*1000 +
     /// track*100 + 60, 0)</c>, and that helper returns <c>1000 + index</c> — so branch 0's decode
-    /// lands on 65160 + track*100, which is what <see cref="AudioHandler"/> recomputes to find it.
+    /// lands on 65160 + track*100, which is the id <see cref="AudioHandler"/> looks the decode up by.
     /// Every other test here seeds through <c>MakeAceStepFunDecodeId</c>, so a drifted base would
     /// seed the drifted value and still pass while real AceStepFun audio stopped being found.
     /// Pinning the literal once is the only thing that catches that.
