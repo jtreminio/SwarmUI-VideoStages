@@ -69,8 +69,7 @@ internal static class TypedWorkflowAssertions
         }
     }
 
-    /// <summary>Discards its first two arguments; they stay in the signature only until the
-    /// call-site sweep collapses the three-argument shape.</summary>
+    /// <summary>The first two parameters exist only until the call-site sweep.</summary>
     public static void AssertShippable(
         WorkflowBridge bridge,
         JObject workflow,
