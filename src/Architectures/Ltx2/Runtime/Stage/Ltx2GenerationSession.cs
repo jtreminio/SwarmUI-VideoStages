@@ -147,8 +147,7 @@ internal sealed class Ltx2GenerationSession(
             guideRef,
             store,
             clipContext,
-            requiresDedicatedOutput,
-            session.Plan.Root);
+            requiresDedicatedOutput);
         guideReferences.CaptureStageOutput(stage);
     }
 

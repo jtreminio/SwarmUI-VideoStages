@@ -32,8 +32,7 @@ public class StageRunnerCollaboratorTests
             typeof(StagePlan),
             typeof(int),
             typeof(ClipContext),
-            typeof(bool),
-            typeof(RootPlan));
+            typeof(bool));
         AssertTypedMethod(
             typeof(StageSourceMediaResolver),
             nameof(StageSourceMediaResolver.Resolve),

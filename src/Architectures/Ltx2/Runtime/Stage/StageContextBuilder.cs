@@ -20,19 +20,17 @@ internal sealed class StageContextBuilder(
         StagePlan stage,
         int sectionId,
         ClipContext clipContext,
-        bool requiresDedicatedOutput,
-        RootPlan root)
+        bool requiresDedicatedOutput)
     {
         ArgumentNullException.ThrowIfNull(stage);
         ArgumentNullException.ThrowIfNull(clipContext);
-        ArgumentNullException.ThrowIfNull(root);
 
         WGNodeData currentMedia = g.CurrentMedia
             ?? throw Invariant.Failure(
                 $"stage {stage.StageId} has no input media.");
         JArray priorOutputPath = CopyPath(currentMedia.Path);
         LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
-        bool claimsTextToVideoRoot = root.StageClaimsTextToVideoRoot(
+        bool claimsTextToVideoRoot = clipContext.Plan.Root.StageClaimsTextToVideoRoot(
             stage,
             clipContext.PlannedClip);
         LtxPostVideoChain postVideoChain = claimsTextToVideoRoot

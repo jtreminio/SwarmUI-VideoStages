@@ -46,12 +46,10 @@ internal class StageRunner
         StageRefStore.StageRef guideReference,
         StageRefStore refStore,
         ClipContext clipContext,
-        bool requiresDedicatedOutput,
-        RootPlan root)
+        bool requiresDedicatedOutput)
     {
         ArgumentNullException.ThrowIfNull(stage);
         ArgumentNullException.ThrowIfNull(clipContext);
-        ArgumentNullException.ThrowIfNull(root);
         if (_generator.CurrentMedia is null)
         {
             throw Invariant.Failure(
@@ -60,7 +58,7 @@ internal class StageRunner
 
         ClipPlan clip = clipContext.PlannedClip;
         if (stage.IsPassthrough
-            && !root.StageClaimsTextToVideoRoot(stage, clip))
+            && !clipContext.Plan.Root.StageClaimsTextToVideoRoot(stage, clip))
         {
             RunPassthroughStage(stage, sectionId, clipContext);
             return;
@@ -76,8 +74,7 @@ internal class StageRunner
             stage,
             sectionId,
             clipContext,
-            requiresDedicatedOutput,
-            root);
+            requiresDedicatedOutput);
         RunLtxStage(guideReference, refStore, stageContext);
     }
 
