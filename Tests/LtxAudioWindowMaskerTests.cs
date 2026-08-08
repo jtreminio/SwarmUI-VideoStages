@@ -3,7 +3,8 @@ using VideoStages.Architectures.Ltx2.Runtime.Audio;
 
 namespace VideoStages.Tests;
 
-public partial class StageFlowTests
+[Collection("VideoStagesTests")]
+public sealed class LtxAudioWindowMaskerTests
 {
     [Fact]
     public void Audio_retake_window_seconds_are_deterministic()
