@@ -173,7 +173,7 @@ internal sealed class MiniMaxGenerationSession(
                     core.Steps,
                     core.Control);
             }
-            SampleNatively(
+            SampleJointLatent(
                 clip,
                 stage,
                 genInfo,
@@ -267,7 +267,7 @@ internal sealed class MiniMaxGenerationSession(
             (previous.Frames - windowFrames) / (double)previous.FramesPerSecond;
     }
 
-    private void SampleNatively(
+    private void SampleJointLatent(
         ClipPlan clip,
         StagePlan stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -320,7 +320,6 @@ internal sealed class MiniMaxGenerationSession(
         }
     }
 
-    /// <summary>Prepares the model and prompt without host keyframe attachment.</summary>
     private void PrepModelAndPrompt(
         ClipPlan clip,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -549,7 +548,6 @@ internal sealed class MiniMaxGenerationSession(
         return combinedAudio;
     }
 
-    /// <summary>Decodes the latent audio required by the clip artifact.</summary>
     private void AttachDecodedAudio()
     {
         if (g.CurrentMedia?.AttachedAudio is not WGNodeData attached
