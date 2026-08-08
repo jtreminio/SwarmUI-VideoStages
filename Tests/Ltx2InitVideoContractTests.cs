@@ -650,16 +650,16 @@ public class Ltx2InitVideoContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         SwarmFrameWindowNode window = Assert.Single(bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
-        IReadOnlyList<ImageFromBatchNode> tailSlices = [.. bridge.Graph.NodesOfType<ImageFromBatchNode>()
-            .Where(slice => slice.BatchIndex.LiteralAsInt() == SampledFrames - BlendFrames
+        ImageFromBatchNode tailSlice = Assert.Single(
+            bridge.Graph.NodesOfType<ImageFromBatchNode>(),
+            slice => slice.BatchIndex.LiteralAsInt() == SampledFrames - BlendFrames
                 && slice.Length.LiteralAsInt() == BlendFrames
-                && ReachesUpstream(bridge, slice, window.Id))];
-        Assert.NotEmpty(tailSlices);
+                && ReachesUpstream(bridge, slice, window.Id));
 
         LTXVImgToVideoInplaceNode context = Assert.IsType<LTXVImgToVideoInplaceNode>(
             JointLatentOf(StageSampler(bridge, 1)).VideoLatent.Connection?.Node);
         Assert.Equal(1.0, context.Strength.LiteralAsDouble());
-        Assert.Contains(tailSlices, slice => ReachesUpstream(bridge, context, slice.Id));
+        Assert.True(ReachesUpstream(bridge, context, tailSlice.Id));
 
         SwarmRampMaskBatchNode ramp = Assert.Single(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
         Assert.Equal(BlendFrames, ramp.Frames.LiteralAsInt());
