@@ -1,4 +1,5 @@
 import { describe, expect, it, jest } from "@jest/globals";
+import { initVideoFixture } from "../../__test_helpers__/clipFixtures";
 import {
     committedClips,
     detail,
@@ -485,14 +486,11 @@ describe("detail strip IC-LoRA panel", () => {
             {
                 duration: 4,
                 stages: [{}, {}],
-                initVideo: {
-                    data: "data:video/mp4;base64,AA==",
+                initVideo: initVideoFixture({
                     fileName: "clip.mp4",
-                    fps: 24,
                     durationSeconds: 4,
-                    startSeconds: 0,
                     lengthSeconds: 4,
-                },
+                }),
                 icLoras: [{ lora: "lora-x.safetensors" }],
             },
         ]);
@@ -508,14 +506,11 @@ describe("detail strip IC-LoRA panel", () => {
             {
                 duration: 4,
                 stages: [{}, {}],
-                initVideo: {
-                    data: "data:video/mp4;base64,AA==",
+                initVideo: initVideoFixture({
                     fileName: "clip.mp4",
-                    fps: 24,
                     durationSeconds: 4,
-                    startSeconds: 0,
                     lengthSeconds: 4,
-                },
+                }),
                 icLoras: [
                     {
                         lora: "lora-x.safetensors",

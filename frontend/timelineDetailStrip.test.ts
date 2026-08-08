@@ -1,4 +1,5 @@
 import { describe, expect, it, jest } from "@jest/globals";
+import { initVideoFixture } from "./__test_helpers__/clipFixtures";
 import {
     activeRailLabel,
     committedClips,
@@ -341,14 +342,11 @@ describe("createTimelineDetailStrip", () => {
         setup([
             {
                 duration: 4,
-                initVideo: {
-                    data: "data:video/mp4;base64,AA==",
+                initVideo: initVideoFixture({
                     fileName: "source.mp4",
-                    fps: 24,
                     durationSeconds: 4,
-                    startSeconds: 0,
                     lengthSeconds: 4,
-                },
+                }),
                 stages: [],
             },
         ]);
@@ -512,14 +510,11 @@ describe("createTimelineDetailStrip", () => {
     });
 
     describe("init-video clip stage 0 refine params", () => {
-        const INIT_VIDEO = {
-            data: "data:video/mp4;base64,AA==",
+        const INIT_VIDEO = initVideoFixture({
             fileName: "clip.mp4",
-            fps: 24,
             durationSeconds: 4,
-            startSeconds: 0,
             lengthSeconds: 4,
-        };
+        });
         const fields = (): HTMLElement | null =>
             document.querySelector<HTMLElement>(".vst-detail-fields");
         const note = (): string =>

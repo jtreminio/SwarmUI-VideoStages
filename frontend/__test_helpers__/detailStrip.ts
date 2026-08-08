@@ -10,12 +10,13 @@ import {
     type TimelineDetailStrip,
 } from "../timelineDetailStrip";
 import { renderTimeline } from "../timelineView";
-import type { Clip, ClipReference } from "../types";
+import type { Clip, ClipReference, InitVideo } from "../types";
 import { resetArchitectureCatalogForTests } from "./architectureCatalog";
 import {
     testArchitectureCatalog,
     testArchitectureCatalogDto,
 } from "./architectureFixtures";
+import { initVideoFixture } from "./clipFixtures";
 import {
     mountPromptBox,
     mountSelect,
@@ -59,14 +60,7 @@ export interface ClipFixture {
         lengthSeconds: number;
         strength: number;
     };
-    initVideo?: {
-        data: string;
-        fileName: string;
-        fps: number;
-        durationSeconds: number;
-        startSeconds: number;
-        lengthSeconds: number;
-    };
+    initVideo?: InitVideo;
     references?: Partial<ClipReference>[];
 }
 
@@ -228,14 +222,10 @@ export const retakeFieldByLabel = (label: string): HTMLElement =>
     fieldByLabel(label, ".vst-detail-retake-col");
 
 /** Retakes are only authorable on a initVideoClip clip (`retake-source-required`). */
-export const RETAKE_SOURCE = {
-    data: "data:video/mp4;base64,AA==",
-    fileName: "base.mp4",
-    fps: 24,
+export const RETAKE_SOURCE = initVideoFixture({
     durationSeconds: 10,
-    startSeconds: 0,
     lengthSeconds: 10,
-};
+});
 
 /** A spinner click / Enter: a `change` while the field still owns focus. */
 export const commitNumber = (input: HTMLInputElement, value: string): void => {
