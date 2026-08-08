@@ -13,23 +13,16 @@ internal sealed class LtxConditioningPipeline(
         WorkflowGenerator g,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         StageContext stageContext,
-        LtxGuidePreprocessReuse guidePreprocessReuse)
+        LtxGuidePreprocessReuse guidePreprocessReuse,
+        WGNodeData stageLatent)
 {
-    private WGNodeData stageLatent;
-
-    public LtxConditioningPipeline WithLatent(WGNodeData stageLatent)
-    {
-        this.stageLatent = stageLatent;
-        return this;
-    }
-
-    public LtxConditioningPipeline WithUpscaleIfNeeded(WGNodeData sourceMedia)
+    public void UpscaleLatentIfPlanned(WGNodeData sourceMedia)
     {
         StagePlan stage = stageContext.Stage;
         StageUpscalePlan upscale = stage.Core.Upscale;
         if (upscale.Mode is not (StageUpscaleMode.LatentModel or StageUpscaleMode.Latent))
         {
-            return this;
+            return;
         }
 
         int baseWidth = Math.Max(sourceMedia?.Width ?? g.UserInput.GetImageWidth(), 16);
@@ -43,11 +36,10 @@ internal sealed class LtxConditioningPipeline(
         stageContext.ClipContext.Dimensions.Width = width;
         stageContext.ClipContext.Dimensions.Height = height;
         stageContext.ClipContext.Dimensions.HasLatentUpscale = true;
-        return this;
     }
 
     // In-place references affect only their own latent frames, preserving the rest of a retake mask.
-    public LtxConditioningPipeline WithInplaceMerges(IReadOnlyList<ResolvedFrameRef> frameRefs)
+    public void MergeOpeningFrameGuides(IReadOnlyList<ResolvedFrameRef> frameRefs)
     {
         foreach (ResolvedFrameRef frameRef in frameRefs)
         {
@@ -61,40 +53,29 @@ internal sealed class LtxConditioningPipeline(
                 frameRef.Image.Path,
                 frameRef.Strength);
         }
-
-        return this;
     }
 
-    public LtxConditioningPipeline BindToCurrentMedia(
-        WGNodeData guideMedia,
-        double guideMergeStrength)
+    public void BindToCurrentMedia(WGNodeData guideMedia, double guideMergeStrength)
     {
-        if (guideMedia is null || guideMergeStrength <= 0)
-        {
-            g.CurrentMedia = stageLatent;
-            return this;
-        }
-
-        g.CurrentMedia = MergeGuideIntoLatent(stageLatent, guideMedia.Path, guideMergeStrength);
-        return this;
+        g.CurrentMedia = guideMedia is null || guideMergeStrength <= 0
+            ? stageLatent
+            : MergeGuideIntoLatent(stageLatent, guideMedia.Path, guideMergeStrength);
     }
 
-    // Apply a continue tail last so it takes precedence over other head conditioning.
-    public LtxConditioningPipeline WithContinuityAnchor()
+    public void MergeContinuityAnchor()
     {
         if (stageContext.ContinuityAnchor is null)
         {
-            return this;
+            return;
         }
 
         g.CurrentMedia = MergeGuideIntoLatent(
             g.CurrentMedia,
             stageContext.ContinuityAnchor.Path,
             strength: 1.0);
-        return this;
     }
 
-    public LtxConditioningPipeline WithLtxvConditioning()
+    public void AddLtxvConditioning()
     {
         using WorkflowBridge bridge = BridgeSync.For(g);
         LTXVConditioningNode cond = bridge.AddNode(new LTXVConditioningNode());
@@ -105,10 +86,9 @@ internal sealed class LtxConditioningPipeline(
         cond.ConnectConditioning(bridge, genInfo);
 
         genInfo.SetConditioning(cond);
-        return this;
     }
 
-    public LtxConditioningPipeline WithGuideAdditions(IReadOnlyList<ResolvedFrameRef> frameRefs)
+    public void AddGuideConditioning(IReadOnlyList<ResolvedFrameRef> frameRefs)
     {
         foreach (ResolvedFrameRef frameRef in frameRefs)
         {
@@ -138,8 +118,6 @@ internal sealed class LtxConditioningPipeline(
                 WGNodeData.DT_LATENT_VIDEO,
                 genInfo.Model.Compat);
         }
-
-        return this;
     }
 
     private WGNodeData ApplyLatentUpscale(string method, double scaleBy, int width, int height)

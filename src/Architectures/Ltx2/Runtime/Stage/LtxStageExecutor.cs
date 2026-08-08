@@ -89,25 +89,24 @@ internal sealed class LtxStageExecutor
                 // Must stay below the latent build: defaulting Frames here would make the builder's
                 // "no frame count" branch — the one that lands on PrepFullCond — unreachable.
                 ApplyStageRuntimeDefaults(genInfo, effectiveSourceMedia);
-                new LtxConditioningPipeline(
+                LtxConditioningPipeline conditioning = new(
+                    g,
+                    genInfo,
+                    stageContext,
+                    new LtxGuidePreprocessReuse(
                         g,
-                        genInfo,
-                        stageContext,
-                        new LtxGuidePreprocessReuse(
-                            g,
-                            rootVideoStageResizer,
-                            stageContext.ClipContext.PlannedClip
-                                .RequireLtx2Payload()
-                                .ReferenceFraming))
-                    .WithLatent(stageLatent)
-                    .WithUpscaleIfNeeded(effectiveSourceMedia)
-                    .WithInplaceMerges(frameRefs)
-                    .BindToCurrentMedia(
-                        guideMedia,
-                        guideMergeStrength)
-                    .WithContinuityAnchor()
-                    .WithLtxvConditioning()
-                    .WithGuideAdditions(frameRefs);
+                        rootVideoStageResizer,
+                        stageContext.ClipContext.PlannedClip
+                            .RequireLtx2Payload()
+                            .ReferenceFraming),
+                    stageLatent);
+                conditioning.UpscaleLatentIfPlanned(effectiveSourceMedia);
+                conditioning.MergeOpeningFrameGuides(frameRefs);
+                conditioning.BindToCurrentMedia(guideMedia, guideMergeStrength);
+                // The continue tail merges after the other head conditioning so it wins.
+                conditioning.MergeContinuityAnchor();
+                conditioning.AddLtxvConditioning();
+                conditioning.AddGuideConditioning(frameRefs);
             }
             genInfo.VideoCFG ??= genInfo.DefaultCFG;
             WGNodeData incomingMedia = ResolveIcLoraStageInput(stageContext);
