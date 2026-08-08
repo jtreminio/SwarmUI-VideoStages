@@ -28,8 +28,8 @@ internal static class VaeDecodePreference
                 && media.IsCompat(T2IModelClassSorter.CompatLtxv2));
         if (vae is null || !decodable)
         {
-            // No vae, audio-only, or another family's joint latent: core decodes it the same way
-            // but under an id of its own, so a claimed host decode id is not spent here.
+            // Core takes it from here, with no id override, so a claimed host decode id goes
+            // unspent.
             return media.AsRawImage(vae);
         }
 
