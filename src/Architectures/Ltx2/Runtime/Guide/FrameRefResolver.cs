@@ -111,8 +111,8 @@ internal sealed class FrameRefResolver(
             return false;
         }
 
-        if (WorkflowBridge.Create(g.Workflow).NodeAt<ImageScaleNode>(sourcePath)
-            is not ImageScaleNode scale
+        using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
+        if (bridge.NodeAt<ImageScaleNode>(sourcePath) is not ImageScaleNode scale
             || scale.Image.Connection is not INodeOutput scaleSource)
         {
             return false;

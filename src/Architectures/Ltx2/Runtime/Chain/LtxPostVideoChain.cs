@@ -78,7 +78,7 @@ internal sealed class LtxPostVideoChain
             return null;
         }
 
-        WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         MediaRef currentMedia = MediaRef.FromWGNodeData(generator.CurrentMedia, bridge);
         if (currentMedia?.Output?.Node is not ComfyNode mediaNode)
         {
@@ -368,7 +368,7 @@ internal sealed class LtxPostVideoChain
 
     private JArray ResolveReusableVideoLatentRoute()
     {
-        WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         if (bridge.ResolvePath(avLatentPath)?.Node is LTXVConcatAVLatentNode concat
             && concat.VideoLatent.Connection is INodeOutput concatVideo)
         {
