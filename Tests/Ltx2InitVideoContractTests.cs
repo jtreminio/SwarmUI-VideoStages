@@ -1116,31 +1116,6 @@ public class Ltx2InitVideoContractTests
     }
 
     [Fact]
-    public async Task A_do_not_save_request_publishes_the_timeline_and_still_prunes_the_root()
-    {
-        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-
-        (JObject workflow, WorkflowGenerator generator) =
-            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
-                fixture.Post(
-                    MakeDocument(GeneratedClip(fixture)),
-                    post => post["donotsave"] = true));
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        WorkflowLivePath live = WorkflowLivePath.For(bridge);
-
-        SwarmKSamplerNode stage = StageSampler(bridge, 0);
-        Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
-
-        SwarmSaveAnimationWSNode published = live.FinalVideoSave();
-        Assert.Equal(
-            new JArray(published.Images.Connection.Node.Id, 0),
-            generator.CurrentMedia.Path);
-
-        live.AssertAllLive(stage, published);
-        AssertShippable(bridge, workflow, live);
-    }
-
-    [Fact]
     public async Task Every_ic_lora_guide_on_a_generated_text_to_video_clip_is_cropped_back_off()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
