@@ -55,6 +55,9 @@ public class LtxAudioReuseStateTests
     private static VideoExecutionPlan Plan(ClipSpec clip) =>
         TestPlanCompiler.Compile(new TimelineSpec(512, 512, 24, false, [clip]));
 
+    private static StagePlan StageDoing(ClipPlan clip, StageAudioAction action) =>
+        clip.Stages.Single(stage => stage.RequireLtx2Payload().AudioAction == action);
+
     private static WGNodeData MakeVideoMedia(WorkflowGenerator g, JArray attachedAudioPath = null)
     {
         WGNodeData media = new(new JArray("100", 0), g, WGNodeData.DT_VIDEO, T2IModelClassSorter.CompatLtxv2);
@@ -67,7 +70,7 @@ public class LtxAudioReuseStateTests
     }
 
     [Fact]
-    public void Stage1_RemembersAudioPathWithoutReplacingAttachedAudio()
+    public void Capture_for_reuse_remembers_the_path_without_replacing_attached_audio()
     {
         using SwarmUiTestContext _ = new();
         WorkflowGenerator g = BuildGenerator();
@@ -81,7 +84,8 @@ public class LtxAudioReuseStateTests
         WGNodeData mediaBefore = g.CurrentMedia;
         WGNodeData attachedBefore = g.CurrentMedia.AttachedAudio;
 
-        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, plannedClip.Stages[1]);
+        LtxAudioReuseState.PrepareReusableAudio(
+            g, clipContext, StageDoing(plannedClip, StageAudioAction.CaptureForReuse));
 
         Assert.True(clipContext.AudioReuse.TryGetPath(out JArray remembered));
         Assert.Equal("200", $"{remembered[0]}");
@@ -92,7 +96,7 @@ public class LtxAudioReuseStateTests
     }
 
     [Fact]
-    public void Stage0_ClearsCarriedOverRememberedPath()
+    public void Audio_action_none_clears_a_carried_over_remembered_path()
     {
         using SwarmUiTestContext _ = new();
         WorkflowGenerator g = BuildGenerator();
@@ -104,13 +108,14 @@ public class LtxAudioReuseStateTests
         ClipContext clipContext = new(plan, plannedClip, sourceMedia: null, sourceVae: null);
         clipContext.AudioReuse.Remember(new JArray("999", 0));
 
-        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, plannedClip.Stages[0]);
+        LtxAudioReuseState.PrepareReusableAudio(
+            g, clipContext, StageDoing(plannedClip, StageAudioAction.None));
 
         Assert.False(clipContext.AudioReuse.TryGetPath(out JArray _));
     }
 
     [Fact]
-    public void Stage2_AppliesRememberedPathToAttachedAudio()
+    public void Reuse_captured_applies_the_remembered_path_as_attached_audio()
     {
         using SwarmUiTestContext _ = new();
         WorkflowGenerator g = BuildGenerator();
@@ -122,7 +127,8 @@ public class LtxAudioReuseStateTests
         ClipContext clipContext = new(plan, plannedClip, sourceMedia: null, sourceVae: null);
         clipContext.AudioReuse.Remember(new JArray("200", 0));
 
-        LtxAudioReuseState.PrepareReusableAudio(g, clipContext, plannedClip.Stages[2]);
+        LtxAudioReuseState.PrepareReusableAudio(
+            g, clipContext, StageDoing(plannedClip, StageAudioAction.ReuseCaptured));
 
         Assert.NotNull(g.CurrentMedia.AttachedAudio);
         JArray applied = (JArray)g.CurrentMedia.AttachedAudio.Path;
@@ -132,7 +138,7 @@ public class LtxAudioReuseStateTests
     }
 
     [Fact]
-    public void Stage1_CompletesCaptureFromPostVideoChainThroughSingleStateOwner()
+    public void Post_video_chain_capture_stores_a_copy_of_the_audio_latent_path()
     {
         using SwarmUiTestContext _ = new();
         ClipSpec clip = MakeReusableAudioClip();
@@ -143,7 +149,7 @@ public class LtxAudioReuseStateTests
 
         LtxAudioReuseState.CompletePostVideoChainCapture(
             audioReuse,
-            plannedClip.Stages[1],
+            StageDoing(plannedClip, StageAudioAction.CaptureForReuse),
             capturedAudioPath);
 
         Assert.True(audioReuse.TryGetPath(out JArray remembered));
