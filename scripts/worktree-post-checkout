@@ -122,12 +122,15 @@ echo "provisioned $NAME — ./run-tests will work here"
 [ "${VST_WORKTREE_BASELINE:-1}" = 1 ] || exit 0
 [ -x "$WORKTREE/run-tests" ] || exit 0
 echo "capturing its test baseline (cold build, ~25s) — scripts/worktree add --no-baseline skips this"
+# Via a temp file, then move: redirecting straight at .test-baseline creates it before the suite
+# starts, and `run-tests` would find it and record its own baseline-comparison output as the baseline.
 {
     echo "# $(git -C "$WORKTREE" rev-parse --short HEAD), captured before any work in this worktree"
     # Unset git's per-command environment: it points at the *index and gitdir of this checkout*, and
     # anything the suite shells out to would inherit it and operate on the wrong worktree.
     (cd "$WORKTREE" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX && ./run-tests 2>&1)
-} > "$WORKTREE/.test-baseline" || true
+} > "$WORKTREE/.test-baseline.part" || true
+mv "$WORKTREE/.test-baseline.part" "$WORKTREE/.test-baseline"
 grep -E "^(Passed!|Failed!|Test Suites:|Tests:)" "$WORKTREE/.test-baseline" | sed 's/^/  /' || true
 if grep -qE "^(Failed!|Tests:.*failed)" "$WORKTREE/.test-baseline"; then
     echo "  NOTE: the baseline is red. That is the honest starting point, not a break you caused."

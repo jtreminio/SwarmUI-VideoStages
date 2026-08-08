@@ -173,7 +173,7 @@ cmd_rm() {
     admin="$(git -C "$path" rev-parse --absolute-git-dir 2>/dev/null || true)"
     [ -z "$admin" ] || [ ! -f "$admin/relocated-from" ] || relocated_from="$(<"$admin/relocated-from")"
 
-    rm -f "$path/node_modules" "$path/nonversioned" "$path/Directory.Build.rsp" "$path/.test-baseline"
+    rm -f "$path/node_modules" "$path/nonversioned" "$path/Directory.Build.rsp" "$path/.test-baseline" "$path/.test-baseline.part"
     git -C "$MAIN" worktree remove "$path"
     rm -rf "$(artifacts_path "$name")"
     echo "removed $path"

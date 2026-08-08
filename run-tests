@@ -7,7 +7,7 @@
 
 BASELINE="$(dirname "$0")/.test-baseline"
 
-if [ ! -f "$BASELINE" ]; then
+if [ ! -s "$BASELINE" ]; then
     dotnet test "SwarmUI-VideoStages.Tests.sln" && npm run test
     exit
 fi

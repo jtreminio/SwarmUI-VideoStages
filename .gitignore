@@ -20,6 +20,7 @@ Directory.Build.rsp
 
 # A worktree's first test run, kept so ./run-tests can print it beside every later one.
 .test-baseline
+.test-baseline.part
 
 # Node / TypeScript
 node_modules/
