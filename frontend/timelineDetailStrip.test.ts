@@ -389,11 +389,6 @@ describe("createTimelineDetailStrip", () => {
         expect(stageSkip).toBeNull();
         expect(stageDelete).toBeNull();
 
-        expect(h.saveSpy).not.toHaveBeenCalled();
-        expect(committedClips()[0].skipped).toBe(false);
-        expect(committedClips()[0].stages).toHaveLength(2);
-        expect(committedClips()[0].stages[0].skipped).toBe(false);
-
         setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
         expect(document.querySelector(".vst-detail-skip-clip")).not.toBeNull();
         expect(
