@@ -31,48 +31,36 @@ export const snapPoint = (
     nearestTarget(value, fallbackTargets, threshold) ??
     value;
 
+/** The moved start that puts whichever edge snaps closer onto its target. */
+const snapStartAgainst = (
+    start: number,
+    length: number,
+    targets: readonly number[],
+    threshold: number,
+): number | null => {
+    const nearStart = nearestTarget(start, targets, threshold);
+    const nearEnd = nearestTarget(start + length, targets, threshold);
+    if (nearStart === null) {
+        return nearEnd === null ? null : nearEnd - length;
+    }
+    if (nearEnd === null) {
+        return nearStart;
+    }
+    return Math.abs(nearStart - start) <= Math.abs(nearEnd - (start + length))
+        ? nearStart
+        : nearEnd - length;
+};
+
 export const snapMovedStart = (
     start: number,
     length: number,
     primaryTargets: readonly number[],
     fallbackTargets: readonly number[],
     threshold: number,
-): number => {
-    const primaryStart = nearestTarget(start, primaryTargets, threshold);
-    const primaryEnd = nearestTarget(start + length, primaryTargets, threshold);
-    if (primaryStart !== null || primaryEnd !== null) {
-        if (primaryStart === null) {
-            return (primaryEnd as number) - length;
-        }
-        if (primaryEnd === null) {
-            return primaryStart;
-        }
-        return Math.abs(primaryStart - start) <=
-            Math.abs(primaryEnd - (start + length))
-            ? primaryStart
-            : primaryEnd - length;
-    }
-
-    const fallbackStart = nearestTarget(start, fallbackTargets, threshold);
-    const fallbackEnd = nearestTarget(
-        start + length,
-        fallbackTargets,
-        threshold,
-    );
-    if (fallbackStart === null && fallbackEnd === null) {
-        return start;
-    }
-    if (fallbackStart === null) {
-        return (fallbackEnd as number) - length;
-    }
-    if (fallbackEnd === null) {
-        return fallbackStart;
-    }
-    return Math.abs(fallbackStart - start) <=
-        Math.abs(fallbackEnd - (start + length))
-        ? fallbackStart
-        : fallbackEnd - length;
-};
+): number =>
+    snapStartAgainst(start, length, primaryTargets, threshold) ??
+    snapStartAgainst(start, length, fallbackTargets, threshold) ??
+    start;
 
 export const timelineClipEdges = (
     clips: readonly Clip[],

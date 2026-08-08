@@ -6978,35 +6978,18 @@
     return nearest;
   };
   var snapPoint = (value, primaryTargets, fallbackTargets, threshold) => nearestTarget(value, primaryTargets, threshold) ?? nearestTarget(value, fallbackTargets, threshold) ?? value;
-  var snapMovedStart = (start, length, primaryTargets, fallbackTargets, threshold) => {
-    const primaryStart = nearestTarget(start, primaryTargets, threshold);
-    const primaryEnd = nearestTarget(start + length, primaryTargets, threshold);
-    if (primaryStart !== null || primaryEnd !== null) {
-      if (primaryStart === null) {
-        return primaryEnd - length;
-      }
-      if (primaryEnd === null) {
-        return primaryStart;
-      }
-      return Math.abs(primaryStart - start) <= Math.abs(primaryEnd - (start + length)) ? primaryStart : primaryEnd - length;
+  var snapStartAgainst = (start, length, targets, threshold) => {
+    const nearStart = nearestTarget(start, targets, threshold);
+    const nearEnd = nearestTarget(start + length, targets, threshold);
+    if (nearStart === null) {
+      return nearEnd === null ? null : nearEnd - length;
     }
-    const fallbackStart = nearestTarget(start, fallbackTargets, threshold);
-    const fallbackEnd = nearestTarget(
-      start + length,
-      fallbackTargets,
-      threshold
-    );
-    if (fallbackStart === null && fallbackEnd === null) {
-      return start;
+    if (nearEnd === null) {
+      return nearStart;
     }
-    if (fallbackStart === null) {
-      return fallbackEnd - length;
-    }
-    if (fallbackEnd === null) {
-      return fallbackStart;
-    }
-    return Math.abs(fallbackStart - start) <= Math.abs(fallbackEnd - (start + length)) ? fallbackStart : fallbackEnd - length;
+    return Math.abs(nearStart - start) <= Math.abs(nearEnd - (start + length)) ? nearStart : nearEnd - length;
   };
+  var snapMovedStart = (start, length, primaryTargets, fallbackTargets, threshold) => snapStartAgainst(start, length, primaryTargets, threshold) ?? snapStartAgainst(start, length, fallbackTargets, threshold) ?? start;
   var timelineClipEdges = (clips, timing) => {
     if (timing) {
       const boundaryAfter = new Map(
