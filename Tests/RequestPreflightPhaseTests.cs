@@ -116,7 +116,7 @@ public sealed class RequestPreflightPhaseTests
     // entry only warns and is dropped, as Ltx2IcLoraContractTests generates end to end. That is
     // also why this cannot move to the API harness, which unions the feature flag into every POST.
     [Fact]
-    public void Preflight_does_not_fire_when_the_video_stages_group_is_disabled()
+    public void A_disabled_video_stages_group_emits_no_nodes_of_its_own()
     {
         using SwarmUiTestContext _ = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndLtxv2VideoModels();
