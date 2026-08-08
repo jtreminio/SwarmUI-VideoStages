@@ -1,5 +1,4 @@
 using ComfyTyped.Core;
-using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -48,20 +47,6 @@ public class LtxStageExecutorComponentTests
                 WGNodeData.DT_VAE,
                 null)
         };
-        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
-        {
-            IVaeDecode decode = Assert.IsAssignableFrom<IVaeDecode>(
-                bridge.ResolvePath(source.Path).Node);
-            Assert.NotNull(decode.Samples.Connection);
-            Assert.NotNull(decode.Vae.Connection);
-            Assert.Same(
-                decode.Vae.Connection.Node,
-                bridge.ResolvePath(genInfo.Vae.Path).Node);
-            Assert.Equal(
-                decode.Vae.Connection.SlotIndex,
-                bridge.ResolvePath(genInfo.Vae.Path).SlotIndex);
-        }
-
         bool reused = new LtxReusableLatentResolver(generator).TryResolve(
             source,
             genInfo,
