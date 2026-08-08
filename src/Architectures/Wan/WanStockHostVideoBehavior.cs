@@ -109,9 +109,8 @@ internal sealed class WanStockHostVideoBehavior(
                 Height: height,
                 Length: frames,
                 BatchSize: 1,
-                EndImage: scaled.IMAGE));
-        conditioning.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
-        conditioning.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
+                EndImage: scaled.IMAGE))
+            .ConnectConditioning(bridge, genInfo);
         conditioning.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
         if (NeedsClipVisionEndFrame(stage, genInfo))
         {
@@ -130,8 +129,7 @@ internal sealed class WanStockHostVideoBehavior(
                     Crop: CLIPVisionEncodeNode.CropValues.Center));
             conditioning.ClipVisionEndImage.ConnectTo(encoded.CLIPVISIONOUTPUT);
         }
-        genInfo.PosCond = conditioning.Positive.ToPath();
-        genInfo.NegCond = conditioning.Negative.ToPath();
+        genInfo.SetConditioning(conditioning);
         generator.CurrentMedia = new(
             conditioning.Latent.ToPath(),
             generator,
