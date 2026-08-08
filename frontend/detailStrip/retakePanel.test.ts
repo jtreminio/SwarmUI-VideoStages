@@ -15,10 +15,9 @@ import type { Clip } from "../types";
 
 describe("detail strip retake panel", () => {
     const h = detailStripHarness();
-    const { setup } = h;
 
     it("shows a + Retake button on a clip without a retake and creates+selects one", () => {
-        setup([{ duration: 4, stages: [{}], initVideo: RETAKE_SOURCE }]);
+        h.setup([{ duration: 4, stages: [{}], initVideo: RETAKE_SOURCE }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const addBtn = document.querySelector<HTMLElement>(
             ".vst-detail-add-retake",
@@ -35,7 +34,7 @@ describe("detail strip retake panel", () => {
     });
 
     it("shows no second Retake add action once a retake exists", () => {
-        setup([
+        h.setup([
             {
                 duration: 10,
                 stages: [{}],
@@ -50,7 +49,7 @@ describe("detail strip retake panel", () => {
     });
 
     it("renders the retake editor with the breadcrumb, fields, note and remove", () => {
-        setup([
+        h.setup([
             {
                 duration: 10,
                 stages: [{}],
@@ -82,7 +81,7 @@ describe("detail strip retake panel", () => {
     });
 
     it("live-applies a retake Start edit through the debounce", () => {
-        setup([
+        h.setup([
             {
                 duration: 10,
                 stages: [{}],
@@ -108,7 +107,7 @@ describe("detail strip retake panel", () => {
     });
 
     it("a retake selection opens the CLIP panel with its Retake section", () => {
-        setup([
+        h.setup([
             {
                 duration: 10,
                 stages: [{}],
@@ -143,7 +142,7 @@ describe("detail strip retake panel", () => {
     });
 
     it("removes the retake without leaving or collapsing its section", () => {
-        setup([
+        h.setup([
             {
                 duration: 10,
                 stages: [{}],
@@ -174,7 +173,7 @@ describe("detail strip retake panel", () => {
     });
 
     it("keeps the empty single-instance Retake section selectable", () => {
-        setup([{ duration: 4, stages: [{}], initVideo: RETAKE_SOURCE }]);
+        h.setup([{ duration: 4, stages: [{}], initVideo: RETAKE_SOURCE }]);
         setSelection({ kind: "retake", clipIdx: 0 });
         expect(crumbText()).toBe("Retake · Clip 0");
         expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });

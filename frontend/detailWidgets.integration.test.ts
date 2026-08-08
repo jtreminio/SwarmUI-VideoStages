@@ -11,10 +11,10 @@ import {
 import { setSelection } from "./selection";
 
 describe("detail widgets in the dock", () => {
-    const { setup } = detailStripHarness();
+    const h = detailStripHarness();
 
     it("uses SwarmUI's native full-width flex class for every stage slider", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 frameRefs: [{ source: "Upload", frame: 0 }],
@@ -100,7 +100,7 @@ describe("detail widgets in the dock", () => {
         };
 
         beforeEach(() => {
-            setup([
+            h.setup([
                 {
                     duration: 10,
                     stages: [

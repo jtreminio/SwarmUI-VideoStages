@@ -1,7 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { initVideoFixture } from "./__test_helpers__/clipFixtures";
 import {
-    activeRailLabel,
     committedClips,
     crumbText,
     detail,
@@ -12,7 +11,6 @@ import {
     minorEditor,
     minorRows,
     RETAKE_SOURCE,
-    railChips,
     refRow,
     sliderNumberByLabel,
 } from "./__test_helpers__/detailStrip";
@@ -24,10 +22,40 @@ import type { Clip } from "./types";
 
 describe("createTimelineDetailStrip", () => {
     const h = detailStripHarness();
-    const { setup, renderStrip, clickRegionStageChip } = h;
+
+    const railChips = (): HTMLElement[] =>
+        Array.from(
+            document.querySelectorAll<HTMLElement>(
+                ".vst-detail .vst-stage-tab",
+            ),
+        );
+
+    const activeRailLabel = (): string | undefined =>
+        document
+            .querySelector<HTMLElement>(
+                '.vst-detail .vst-stage-tab[aria-pressed="true"] .header-label',
+            )
+            ?.textContent?.replace(/^Stage /, "") ?? undefined;
+
+    const clickRegionStageChip = (
+        body: HTMLElement,
+        clipIdx: number,
+        stageIdx: number,
+        shift = false,
+    ): void => {
+        const chip = body.querySelector<HTMLElement>(
+            `[data-vst-stage][data-clip-idx="${clipIdx}"][data-stage-idx="${stageIdx}"]`,
+        );
+        if (!chip) {
+            throw new Error(`stage chip not found: ${clipIdx}/${stageIdx}`);
+        }
+        chip.dispatchEvent(
+            new MouseEvent("click", { bubbles: true, shiftKey: shift }),
+        );
+    };
 
     it("renders the timeline settings panel when nothing is selected", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         expect(detail()).not.toBeNull();
         expect(crumbText()).toBe("Timeline settings");
         expect(detail()?.querySelector(".vst-detail-settings")).not.toBeNull();
@@ -58,7 +86,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("honors inert rendering when reattached to the same body and dock", () => {
-        const body = setup([{ duration: 4, stages: [{}] }]);
+        const body = h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const dock = dockHost(body);
         const rendered = dock.querySelector(".vst-detail-body");
@@ -71,7 +99,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("renders the clip/stage columns when a stage chip is clicked", () => {
-        const body = setup([{ duration: 4, stages: [{}, {}] }]);
+        const body = h.setup([{ duration: 4, stages: [{}, {}] }]);
         clickRegionStageChip(body, 0, 1);
         expect(crumbText()).toBe("Clip 0 · S1");
         expect(activeRailLabel()).toBe("S1");
@@ -90,7 +118,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("opens every empty addable repeater so its Add action is visible", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -128,7 +156,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("switches the active stage when a rail chip is clicked", () => {
-        setup([{ duration: 4, stages: [{ steps: 5 }, { steps: 9 }] }]);
+        h.setup([{ duration: 4, stages: [{ steps: 5 }, { steps: 9 }] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(activeRailLabel()).toBe("S0");
         expect(sliderNumberByLabel("Steps").value).toBe("5");
@@ -141,7 +169,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("omits help popovers from the basic stage sampling fields", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         for (const text of [
             "Model",
@@ -165,7 +193,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("uses zero-based Ref labels and opens each newly added reference", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
             .querySelector<HTMLButtonElement>(".vst-detail-add-ref")
@@ -190,7 +218,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("places Count from clip end help before its label", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -213,7 +241,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("places the init-video explanation at the top of its group", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const content = detailBody()?.querySelector<HTMLElement>(
             ".vst-detail-source-col",
@@ -229,7 +257,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("shows Control/Upscale only on refine stages", () => {
-        setup([{ duration: 4, stages: [{}, {}] }]);
+        h.setup([{ duration: 4, stages: [{}, {}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(
             document.querySelector(".vst-detail .auto-input-name"),
@@ -256,7 +284,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("clears the selection to none on Escape", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(crumbText()).toBe("Clip 0 · S0");
         detail()?.dispatchEvent(
@@ -267,7 +295,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("keeps the selection when Escape fires inside a .sui-popover", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const popover = document.createElement("div");
         popover.className = "sui-popover";
@@ -281,14 +309,14 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("shift+clicking a region stage chip deletes the stage", () => {
-        const body = setup([{ duration: 4, stages: [{}, {}] }]);
+        const body = h.setup([{ duration: 4, stages: [{}, {}] }]);
         clickRegionStageChip(body, 0, 1, true);
         expect(h.saveSpy).toHaveBeenCalledTimes(1);
         expect(lastSavedClips<Clip[]>(h.saveSpy)[0].stages).toHaveLength(1);
     });
 
     it("remaps IC-LoRA stage targets when a stage is deleted", () => {
-        const body = setup([
+        const body = h.setup([
             {
                 duration: 4,
                 stages: [{}, {}, {}],
@@ -315,7 +343,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("adds a stage from the rail's Add button and selects it", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         // Stage 0 is permanent, so it has no delete affordance.
         const del = document.querySelector<HTMLButtonElement>(
@@ -339,7 +367,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("adds the first architecture stage to a zero-stage source-only clip", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 initVideo: initVideoFixture({
@@ -364,7 +392,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("omits skip and delete controls for the first clip and first stage", () => {
-        setup([
+        h.setup([
             { duration: 4, stages: [{}, {}] },
             { duration: 4, stages: [{}, {}] },
         ]);
@@ -402,7 +430,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("shows adjacent skip/delete actions for Clip 1+ and selects a survivor after delete", () => {
-        setup([
+        h.setup([
             { duration: 2, stages: [{}] },
             { duration: 3, stages: [{}] },
             { duration: 4, stages: [{}] },
@@ -439,7 +467,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("mutes the stage params and persists Skip this stage", () => {
-        setup([{ duration: 4, stages: [{}, {}] }]);
+        h.setup([{ duration: 4, stages: [{}, {}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
         const fields =
             document.querySelector<HTMLElement>(".vst-detail-fields");
@@ -460,7 +488,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("persists clip skip and restore cascades through the detail dock", () => {
-        setup([
+        h.setup([
             { duration: 2, stages: [{}] },
             { duration: 3, stages: [{}] },
             { duration: 4, stages: [{}] },
@@ -487,7 +515,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("persists stage skip and restore cascades through the detail dock", () => {
-        setup([{ duration: 4, stages: [{}, {}, {}] }]);
+        h.setup([{ duration: 4, stages: [{}, {}, {}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
         document
             .querySelector<HTMLButtonElement>(
@@ -522,7 +550,7 @@ describe("createTimelineDetailStrip", () => {
                 ?.textContent ?? "";
 
         it("renders enabled refine params and a footage note on init-video stage 0", () => {
-            setup([
+            h.setup([
                 {
                     duration: 4,
                     stages: [{ control: 0.5, upscale: 2 }, {}],
@@ -554,7 +582,7 @@ describe("createTimelineDetailStrip", () => {
         });
 
         it("leaves stage 0 of an non-init-video clip without refine params or note", () => {
-            setup([{ duration: 4, stages: [{}] }]);
+            h.setup([{ duration: 4, stages: [{}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             expect(
                 fields()?.classList.contains("vst-stage-fields-passthrough"),
@@ -566,7 +594,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("commits a clip Duration edit through applyClipDurationResize", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
         const dur =
@@ -584,7 +612,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("disables the Duration field when clip length is derived from audio", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 audioSource: "Upload",
@@ -601,7 +629,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("deletes the current stage from the rail's Delete stage button", () => {
-        setup([{ duration: 4, stages: [{}, {}] }]);
+        h.setup([{ duration: 4, stages: [{}, {}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
         const deleteBtn = document.querySelector<HTMLElement>(
             '.vst-stage-tab[aria-pressed="true"] .vst-detail-delete-stage',
@@ -613,7 +641,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("replaces Clear/collapse with a gear modal and persists its toggles", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(detail()?.querySelector(".vst-detail-clear")).toBeNull();
         expect(detail()?.querySelector(".vst-detail-collapse")).toBeNull();
@@ -647,7 +675,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("degrades a removed clip's selection to the nearest surviving clip", () => {
-        const body = setup([
+        const body = h.setup([
             { duration: 4, stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -657,7 +685,7 @@ describe("createTimelineDetailStrip", () => {
         const clips = persistence.getClips().slice(0, 1);
         persistence.saveClips(clips, { notifyDomChange: false });
         renderTimeline(body, persistence.getClips());
-        renderStrip();
+        h.renderStrip();
         expect(getSelection()).toEqual({
             kind: "clip",
             clipIdx: 0,
@@ -667,18 +695,18 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("drops the selection when the last clip is removed", () => {
-        const body = setup([{ duration: 4, stages: [{}] }]);
+        const body = h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
 
         persistence.saveClips([], { notifyDomChange: false });
         renderTimeline(body, persistence.getClips());
-        renderStrip();
+        h.renderStrip();
         expect(getSelection().kind).toBe("none");
         expect(crumbText()).toBe("Timeline settings");
     });
 
     it("adds and selects a reference from the clip sidebar rail", () => {
-        setup([{ duration: 5, stages: [{}] }]);
+        h.setup([{ duration: 5, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
             .querySelector<HTMLButtonElement>(".vst-detail-add-ref")
@@ -693,7 +721,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("lists every ref in a rail and edits only the selected one", () => {
-        setup([
+        h.setup([
             {
                 duration: 5,
                 stages: [{}],
@@ -761,7 +789,7 @@ describe("createTimelineDetailStrip", () => {
             value: reveal,
         });
         try {
-            setup([
+            h.setup([
                 {
                     duration: 5,
                     stages: [{}],
@@ -800,7 +828,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("deleting the LAST ref falls back to the owning clip's panel", () => {
-        setup([
+        h.setup([
             {
                 duration: 5,
                 stages: [{}],
@@ -820,7 +848,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("switches the active reference editor from the reference rail", () => {
-        setup([
+        h.setup([
             {
                 duration: 5,
                 stages: [{}],
@@ -843,7 +871,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("clamps an edited ref frame and writes it through saveClips", () => {
-        setup([
+        h.setup([
             {
                 duration: 5,
                 stages: [{}],
@@ -872,7 +900,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("renders the audio editor and live-applies source + flags", () => {
-        setup([
+        h.setup([
             {
                 duration: 5,
                 stages: [{}, {}, {}],
@@ -922,7 +950,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("offers captured-stage audio reuse below three active stages", () => {
-        setup([{ duration: 5, stages: [{}, {}, { skipped: true }] }]);
+        h.setup([{ duration: 5, stages: [{}, {}, { skipped: true }] }]);
         setSelection({ kind: "audio", clipIdx: 0 });
         const row = fieldByLabel("Reuse Captured Stage Audio");
         const reuse = row.querySelector<HTMLInputElement>("input");
@@ -934,7 +962,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("shows + Add segment in the audio editor and creates+selects a segment", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "audio", clipIdx: 0 });
         const addBtn = document.querySelector<HTMLElement>(
             ".vst-audio-track-add",
@@ -956,7 +984,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("filters timeline-wide segments to the selected clip audio window", () => {
-        setup([
+        h.setup([
             { duration: 3, stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -1030,7 +1058,7 @@ describe("createTimelineDetailStrip", () => {
     });
 
     it("hovering a Reference Strength row highlights that ref's timeline mark", () => {
-        const body = setup([
+        const body = h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -1064,7 +1092,7 @@ describe("createTimelineDetailStrip", () => {
 
     describe("dock groups & collapse", () => {
         it("keeps Clip fields visible above progressive native accordion sections", () => {
-            setup([
+            h.setup([
                 {
                     duration: 4,
                     stages: [{}, {}, {}],
@@ -1144,7 +1172,7 @@ describe("createTimelineDetailStrip", () => {
         });
 
         it("lists references above IC-LoRAs using the shared selector rails", () => {
-            setup([
+            h.setup([
                 {
                     duration: 10,
                     stages: [{}],
@@ -1236,7 +1264,7 @@ describe("createTimelineDetailStrip", () => {
         });
 
         it("adds references at unique rounded ten-percent frame intervals before wrapping", () => {
-            setup([{ duration: 5, stages: [{}], frameRefs: [] }]);
+            h.setup([{ duration: 5, stages: [{}], frameRefs: [] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
 
             for (let index = 0; index < 12; index++) {
@@ -1262,7 +1290,7 @@ describe("createTimelineDetailStrip", () => {
             };
             expect(typeof globals.getCookie).toBe("function");
             jest.spyOn(globals, "getCookie").mockImplementation(() => "closed");
-            setup([{ duration: 4, stages: [{}] }]);
+            h.setup([{ duration: 4, stages: [{}] }]);
             const body = detailBody();
             expect(body?.querySelector(".vst-detail-settings")).not.toBeNull();
             const settings = body?.querySelector<HTMLElement>(
@@ -1273,7 +1301,7 @@ describe("createTimelineDetailStrip", () => {
         });
 
         it("keeps only one top-level section open at a time", () => {
-            setup([{ duration: 4, stages: [{}] }]);
+            h.setup([{ duration: 4, stages: [{}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             const hostDelegatedToggle = jest.fn();
             document.addEventListener("click", hostDelegatedToggle);
@@ -1304,7 +1332,7 @@ describe("createTimelineDetailStrip", () => {
         });
 
         it("keeps other sections open when Auto-collapse is disabled", () => {
-            setup([{ duration: 4, stages: [{}] }]);
+            h.setup([{ duration: 4, stages: [{}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             detail()
                 ?.querySelector<HTMLButtonElement>(
@@ -1339,7 +1367,7 @@ describe("createTimelineDetailStrip", () => {
             expect(source?.classList.contains("input-group-open")).toBe(true);
             expect(stages?.classList.contains("input-group-open")).toBe(true);
 
-            renderStrip();
+            h.renderStrip();
             expect(
                 detailBody()
                     ?.querySelector('[data-vst-repeater-key="stages"]')
@@ -1353,7 +1381,7 @@ describe("createTimelineDetailStrip", () => {
         });
 
         it("keeps previously selected repeating item editors open when Auto-collapse is disabled", () => {
-            setup([{ duration: 4, stages: [{}, {}] }]);
+            h.setup([{ duration: 4, stages: [{}, {}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             detail()
                 ?.querySelector<HTMLButtonElement>(
@@ -1399,7 +1427,7 @@ describe("createTimelineDetailStrip", () => {
                 ),
             ).toHaveLength(2);
 
-            renderStrip();
+            h.renderStrip();
             expect(
                 stageGroups().every((group) =>
                     group.classList.contains("input-group-open"),
@@ -1413,7 +1441,7 @@ describe("createTimelineDetailStrip", () => {
         });
 
         it("places every info popover button before its field or section label", () => {
-            setup([{ duration: 4, stages: [{}, {}] }]);
+            h.setup([{ duration: 4, stages: [{}, {}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
             const buttons = Array.from(
                 detailBody()?.querySelectorAll<HTMLElement>(
@@ -1427,7 +1455,7 @@ describe("createTimelineDetailStrip", () => {
         });
 
         it("keeps the permanent Clip fields visible when its skip button changes", () => {
-            setup([
+            h.setup([
                 { duration: 4, stages: [{}] },
                 { duration: 4, stages: [{}] },
             ]);
@@ -1461,7 +1489,7 @@ describe("createTimelineDetailStrip", () => {
 
     describe("scroll + targeted updates", () => {
         it("preserves dock-body scrollTop across a value-change render", () => {
-            setup([{ duration: 4, stages: [{}, {}] }]);
+            h.setup([{ duration: 4, stages: [{}, {}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             const body = detailBody();
             if (!body) {
@@ -1469,14 +1497,14 @@ describe("createTimelineDetailStrip", () => {
             }
             body.scrollTop = 140;
             // A full re-render rebuilds .vst-detail-body's innerHTML.
-            renderStrip();
+            h.renderStrip();
             const rebuilt = detailBody();
             expect(rebuilt).not.toBe(body); // proves a rebuild happened
             expect(rebuilt?.scrollTop).toBe(140); // ...yet scroll is preserved
         });
 
         it("rebuilds the selected relay editor when its rail tab changes", () => {
-            setup([
+            h.setup([
                 {
                     duration: 12,
                     stages: [{}],

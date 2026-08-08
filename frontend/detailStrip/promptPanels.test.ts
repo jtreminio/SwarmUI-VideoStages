@@ -15,10 +15,9 @@ import type { Clip } from "../types";
 
 describe("detail strip prompt panels", () => {
     const h = detailStripHarness();
-    const { setup, renderStrip } = h;
 
     it("edits the clip's major prompt (debounced) through saveClips", () => {
-        setup([{ duration: 5, stages: [{}] }]);
+        h.setup([{ duration: 5, stages: [{}] }]);
         setSelection({ kind: "prompt-major", clipIdx: 0 });
         expect(crumbText()).toBe("Prompts · Clip 0");
         jest.useFakeTimers();
@@ -40,7 +39,7 @@ describe("detail strip prompt panels", () => {
     });
 
     it("auto-focuses the major prompt textarea (caret at end) on a timeline-origin selection", () => {
-        setup([{ duration: 5, stages: [{}], prompt: "existing text" }]);
+        h.setup([{ duration: 5, stages: [{}], prompt: "existing text" }]);
         // A timeline click selects the major prompt while focus is OUTSIDE the
         // dock (nothing in the dock is focused yet).
         setSelection({ kind: "prompt-major", clipIdx: 0 });
@@ -55,7 +54,7 @@ describe("detail strip prompt panels", () => {
     });
 
     it("adds and selects a relay prompt from the combined prompt sidebar", () => {
-        setup([{ duration: 5, stages: [{}] }]);
+        h.setup([{ duration: 5, stages: [{}] }]);
         setSelection({ kind: "prompt-major", clipIdx: 0 });
         document
             .querySelector<HTMLButtonElement>(".vst-detail-add-relay")
@@ -70,7 +69,7 @@ describe("detail strip prompt panels", () => {
     });
 
     it("does not steal focus / snap the caret when the major prompt is re-rendered in place", () => {
-        setup([{ duration: 5, stages: [{}], prompt: "existing text" }]);
+        h.setup([{ duration: 5, stages: [{}], prompt: "existing text" }]);
         setSelection({ kind: "prompt-major", clipIdx: 0 });
         const before =
             document.querySelector<HTMLTextAreaElement>(".vst-detail-prompt");
@@ -83,7 +82,7 @@ describe("detail strip prompt panels", () => {
         before.setSelectionRange(3, 3);
         // A self-triggered re-render must preserve the caret, not snap it back
         // to the end via auto-focus.
-        renderStrip();
+        h.renderStrip();
         const after =
             document.querySelector<HTMLTextAreaElement>(".vst-detail-prompt");
         if (!after) {
@@ -95,7 +94,7 @@ describe("detail strip prompt panels", () => {
     });
 
     it("lists every relay in a rail and renders only the selected editor", () => {
-        setup([
+        h.setup([
             {
                 duration: 12,
                 stages: [{}],
@@ -131,7 +130,7 @@ describe("detail strip prompt panels", () => {
     });
 
     it("switches the active relay editor from the relay rail", () => {
-        setup([
+        h.setup([
             {
                 duration: 12,
                 stages: [{}],
@@ -163,7 +162,7 @@ describe("detail strip prompt panels", () => {
     });
 
     it("flushes one relay edit before switching to another relay", () => {
-        setup([
+        h.setup([
             {
                 duration: 12,
                 stages: [{}],
@@ -203,7 +202,7 @@ describe("detail strip prompt panels", () => {
     });
 
     it("flushes a held prompt edit on a press outside the dock (timeline click)", () => {
-        const body = setup([
+        const body = h.setup([
             {
                 duration: 12,
                 stages: [{}],
@@ -236,7 +235,7 @@ describe("detail strip prompt panels", () => {
     });
 
     it("deletes the active relay window via the rail Delete button", () => {
-        setup([
+        h.setup([
             {
                 duration: 12,
                 stages: [{}],
@@ -262,7 +261,7 @@ describe("detail strip prompt panels", () => {
     });
 
     it("edits a relay window's begin/end with clamping and repaints the timeline", () => {
-        setup([
+        h.setup([
             {
                 duration: 12,
                 stages: [{}],
@@ -313,7 +312,7 @@ describe("detail strip prompt panels", () => {
     });
 
     it("bounds a relay window's begin/end inputs at its neighbours", () => {
-        setup([
+        h.setup([
             {
                 duration: 12,
                 stages: [{}],
@@ -360,7 +359,7 @@ describe("detail strip prompt panels", () => {
     });
 
     it("renders major and relay prompts in one sidebar", () => {
-        setup([
+        h.setup([
             {
                 duration: 10,
                 stages: [{}],

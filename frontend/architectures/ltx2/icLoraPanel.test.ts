@@ -15,7 +15,6 @@ import { IC_LORA_AUTO } from "./icLoraPresets";
 
 describe("detail strip IC-LoRA panel", () => {
     const h = detailStripHarness();
-    const { setup, renderStrip } = h;
 
     const icLoraSelect = (label: string): HTMLSelectElement => {
         const select =
@@ -40,13 +39,13 @@ describe("detail strip IC-LoRA panel", () => {
         ).map((el) => el.textContent);
 
     it("hides IC-LoRA strengths when the clip has no IC-LoRAs", () => {
-        setup([{ duration: 4, stages: [{}], controlNetLora: "" }]);
+        h.setup([{ duration: 4, stages: [{}], controlNetLora: "" }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(document.querySelector(".vst-stage-iclora-strength")).toBeNull();
     });
 
     it("shows a zero-based strength for each IC-LoRA in the stage", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -102,7 +101,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("labels IC-LoRA guide strengths by preset, or by model for Custom", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -129,7 +128,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("persists IC-LoRA strengths independently by zero-based entry index", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -155,7 +154,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("adds an IC-LoRA entry with defaults via the add button", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const addBtn = document.querySelector<HTMLButtonElement>(
             ".vst-detail-add-iclora",
@@ -185,7 +184,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("add IC-LoRA starts on a curated preset and hides its internal model", () => {
-        setup(
+        h.setup(
             [{ duration: 4, stages: [{}] }],
             ["(None)", "lora-x.safetensors"],
         );
@@ -207,7 +206,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("applying a preset selects its [AUTO] weights and seeds its settings", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -232,7 +231,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("shows the Control select only for Custom and Union Control presets", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -255,7 +254,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("gives LipDub Upload or Incoming audio without visual-guide controls", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}, {}],
@@ -301,7 +300,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("lets Custom choose Audio and uses the same generic audio contract", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}, {}],
@@ -340,7 +339,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("lets Custom choose a model-only patch and clears hidden drive media", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -378,7 +377,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("uses persisted image-only Drive Media kinds for Upload and Incoming gating", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}, {}],
@@ -413,7 +412,7 @@ describe("detail strip IC-LoRA panel", () => {
                 },
             },
         };
-        setup(
+        h.setup(
             [
                 {
                     duration: 4,
@@ -441,7 +440,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("Apply on lists every stage plus All stages", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}, {}],
@@ -481,7 +480,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("refine-stage placement offers Incoming and swaps the upload row for a hint", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}, {}],
@@ -502,7 +501,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("moving an Incoming entry to an unavailable scope resets it to Upload", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}, {}],
@@ -525,7 +524,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("init-video clip renders the IC-LoRA Source select and footage-drive hint on an all-stages entry", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}, {}],
@@ -545,7 +544,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("init-video clip Incoming entry shows its data source at stage 0", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}, {}],
@@ -573,7 +572,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("non-init-video clip disables Incoming on a stage-0/all entry", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}, {}],
@@ -586,7 +585,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("does not mistake a skipped authored stage for prior-stage Incoming media", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{ skipped: true }, {}],
@@ -604,7 +603,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("repairs Incoming to Upload when skipping its targeted later stage", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}, {}],
@@ -634,7 +633,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("repairs a later clip's Incoming source when its prior clip is skipped", () => {
-        setup([
+        h.setup([
             { duration: 4, stages: [{}] },
             { duration: 4, stages: [{}] },
             {
@@ -659,7 +658,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("disables Incoming after the first skipped clip truncates the sequence", () => {
-        setup([
+        h.setup([
             { duration: 4, stages: [{}] },
             { duration: 4, skipped: true, stages: [{}] },
             {
@@ -679,7 +678,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("does not treat a skipped earlier clip as Incoming output", () => {
-        setup([
+        h.setup([
             { duration: 4, skipped: true, stages: [{}] },
             {
                 duration: 4,
@@ -698,7 +697,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("shows only actual models in the Custom IC-LoRA dropdown", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -714,7 +713,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("shows the model dropdown only after choosing Custom", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -738,7 +737,7 @@ describe("detail strip IC-LoRA panel", () => {
 
     it("selecting a preset hides the model dropdown and starts its download", () => {
         swarmGlobals.makeWSRequest = jest.fn();
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -771,7 +770,7 @@ describe("detail strip IC-LoRA panel", () => {
     it("repairs legacy Custom + [AUTO] and downloads the default preset", () => {
         swarmGlobals.makeWSRequest = jest.fn();
         swarmGlobals.refreshParameterValues = jest.fn();
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -803,7 +802,7 @@ describe("detail strip IC-LoRA panel", () => {
 
     it("shows the transfer progress from current_percent, not the 0.2 step marker", () => {
         swarmGlobals.makeWSRequest = jest.fn();
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -828,7 +827,7 @@ describe("detail strip IC-LoRA panel", () => {
         "Download was cancelled.",
     ])("shows terminal downloader failure %s and retries only after preset reselection", (message) => {
         swarmGlobals.makeWSRequest = jest.fn();
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],
@@ -849,7 +848,7 @@ describe("detail strip IC-LoRA panel", () => {
         ).toContain(`Download failed: ${message}`);
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
 
-        renderStrip();
+        h.renderStrip();
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
 
         changeIcLoraSelect("Preset", "custom");
@@ -861,7 +860,7 @@ describe("detail strip IC-LoRA panel", () => {
 
     it("skips the [AUTO] download when the preset weights are already installed", () => {
         swarmGlobals.makeWSRequest = jest.fn();
-        setup(
+        h.setup(
             [
                 {
                     duration: 4,
@@ -883,7 +882,7 @@ describe("detail strip IC-LoRA panel", () => {
 
     it("accepts weights installed under the legacy dotted download name", () => {
         swarmGlobals.makeWSRequest = jest.fn();
-        setup(
+        h.setup(
             [
                 {
                     duration: 4,
@@ -901,7 +900,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("offers IC-LoRAs with [AUTO] even when no LoRAs are installed", () => {
-        setup([{ duration: 4, stages: [{}] }], []);
+        h.setup([{ duration: 4, stages: [{}] }], []);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const addBtn = document.querySelector<HTMLButtonElement>(
             ".vst-detail-add-iclora",
@@ -916,7 +915,7 @@ describe("detail strip IC-LoRA panel", () => {
     });
 
     it("removes an IC-LoRA entry via the rail Delete button", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [{}],

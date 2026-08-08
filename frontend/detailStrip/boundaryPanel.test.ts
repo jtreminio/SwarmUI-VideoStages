@@ -20,7 +20,6 @@ import type { Clip } from "../types";
 
 describe("detail strip boundary panel", () => {
     const h = detailStripHarness();
-    const { setup, renderStrip } = h;
 
     const boundarySelect = (): HTMLSelectElement => {
         const select = detailBody()?.querySelector<HTMLSelectElement>("select");
@@ -62,7 +61,7 @@ describe("detail strip boundary panel", () => {
     };
 
     it("renders a breadcrumb and join select for the seam", () => {
-        setup([
+        h.setup([
             { duration: 4, stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -83,7 +82,7 @@ describe("detail strip boundary panel", () => {
     });
 
     it("live-applies the join mode through saveClips", () => {
-        setup([
+        h.setup([
             { duration: 4, stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -98,7 +97,7 @@ describe("detail strip boundary panel", () => {
     });
 
     it("shows an Overlap selector and plan-aware info for a continue boundary", () => {
-        setup([
+        h.setup([
             { duration: 4, boundaryOut: "continue", stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -110,7 +109,7 @@ describe("detail strip boundary panel", () => {
     });
 
     it("shows tenths-rounded frame arithmetic for both clips and the shared join", () => {
-        setup([
+        h.setup([
             {
                 duration: 3,
                 boundaryOut: "continue",
@@ -143,7 +142,7 @@ describe("detail strip boundary panel", () => {
     });
 
     it("reports the normalized Continue selection in its arithmetic note", () => {
-        setup([
+        h.setup([
             {
                 duration: 3,
                 boundaryOut: "continue",
@@ -160,7 +159,7 @@ describe("detail strip boundary panel", () => {
     });
 
     it("commits a chosen overlap to boundaryOutOverlap", () => {
-        setup([
+        h.setup([
             { duration: 4, boundaryOut: "continue", stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -177,7 +176,7 @@ describe("detail strip boundary panel", () => {
     });
 
     it("offers opt-in outgoing audio carry for an overlapped boundary", () => {
-        setup([
+        h.setup([
             { duration: 4, boundaryOut: "continue", stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -216,7 +215,7 @@ describe("detail strip boundary panel", () => {
         });
         await loadAuthoritativeArchitectureCatalog();
 
-        setup([
+        h.setup([
             { duration: 4, boundaryOut: "continue", stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -243,7 +242,7 @@ describe("detail strip boundary panel", () => {
         });
         await loadAuthoritativeArchitectureCatalog();
 
-        setup([
+        h.setup([
             { duration: 4, boundaryOut: "continue", stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -254,7 +253,7 @@ describe("detail strip boundary panel", () => {
     });
 
     it("disables audio continuation when the next clip has no generation stage", () => {
-        setup([
+        h.setup([
             { duration: 4, boundaryOut: "crossfade", stages: [{}] },
             { duration: 4, stages: [] },
         ]);
@@ -264,7 +263,7 @@ describe("detail strip boundary panel", () => {
     });
 
     it("shows an Overlap selector and dissolve info for a crossfade boundary", () => {
-        setup([
+        h.setup([
             { duration: 4, boundaryOut: "crossfade", stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -276,7 +275,7 @@ describe("detail strip boundary panel", () => {
     });
 
     it("shows no Overlap selector and no LTX-2 note for a cut boundary", () => {
-        setup([
+        h.setup([
             { duration: 4, boundaryOut: "cut", stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -287,7 +286,7 @@ describe("detail strip boundary panel", () => {
     });
 
     it("clamps a boundary selection to none when its right clip is deleted", () => {
-        setup([
+        h.setup([
             { duration: 4, stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
@@ -298,7 +297,7 @@ describe("detail strip boundary panel", () => {
         clips.splice(1, 1);
         persistence.saveClips(clips);
         // A re-render re-clamps the now-invalid selection to none.
-        renderStrip();
+        h.renderStrip();
         expect(getSelection()).toEqual({ kind: "none" });
     });
 });

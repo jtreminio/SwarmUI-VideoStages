@@ -27,7 +27,6 @@ import type { Clip } from "../types";
 
 describe("detail strip draft queue", () => {
     const h = detailStripHarness();
-    const { setup, renderStrip } = h;
 
     // Emulate the prod render trigger a save produces: a rebuild WOULD be
     // visible here if the value-only hint leaked, because the node would swap.
@@ -38,7 +37,7 @@ describe("detail strip draft queue", () => {
     };
 
     it("live-applies a discrete model command through the document store", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const select =
             fieldByLabel("Model").querySelector<HTMLSelectElement>("select");
@@ -53,7 +52,7 @@ describe("detail strip draft queue", () => {
     });
 
     it("debounces a continuous slider change and flushes it through saveClips", () => {
-        setup([{ duration: 4, stages: [{ steps: 8 }] }]);
+        h.setup([{ duration: 4, stages: [{ steps: 8 }] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
         const steps = sliderNumberByLabel("Steps");
@@ -66,7 +65,7 @@ describe("detail strip draft queue", () => {
     });
 
     it("drops a pending change when the carrier went stale", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const select =
             fieldByLabel("Model").querySelector<HTMLSelectElement>("select");
@@ -87,7 +86,7 @@ describe("detail strip draft queue", () => {
     // meta.hint === "value-only" and holds the dock DOM.
     describe("value-only commits keep the dock DOM", () => {
         it("keeps focus and the same node on a first Begin/End change, and repaints", () => {
-            setup([
+            h.setup([
                 {
                     duration: 12,
                     stages: [{}],
@@ -125,7 +124,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("keeps focus and the same node on a first Duration change", () => {
-            setup([{ duration: 4, stages: [{}] }]);
+            h.setup([{ duration: 4, stages: [{}] }]);
             wireLiveRenders();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             const dur =
@@ -144,7 +143,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("keeps focus and the same node on a first Steps change", () => {
-            setup([{ duration: 4, stages: [{ steps: 8 }] }]);
+            h.setup([{ duration: 4, stages: [{ steps: 8 }] }]);
             wireLiveRenders();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             const steps = sliderNumberByLabel("Steps");
@@ -178,7 +177,7 @@ describe("detail strip draft queue", () => {
                 requestJson: async () => testArchitectureCatalogDto(catalog),
             });
             await loadAuthoritativeArchitectureCatalog();
-            setup([
+            h.setup([
                 {
                     duration: 4,
                     boundaryOut: "continue",
@@ -266,7 +265,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("syncs the upscale-method gate live without rebuilding the method select", () => {
-            setup([{ duration: 4, stages: [{}, { upscale: 2 }] }]);
+            h.setup([{ duration: 4, stages: [{}, { upscale: 2 }] }]);
             wireLiveRenders();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
             const method =
@@ -284,7 +283,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("still REBUILDS on a structure-affecting commit (ref source → Upload)", () => {
-            setup([
+            h.setup([
                 {
                     duration: 4,
                     stages: [{}],
@@ -308,13 +307,13 @@ describe("detail strip draft queue", () => {
         });
 
         it("fully rebuilds on an external (non-flush) render — the handshake never leaks", () => {
-            setup([{ duration: 4, stages: [{}] }]);
+            h.setup([{ duration: 4, stages: [{}] }]);
             wireLiveRenders();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             const before = fieldByLabel("Duration (s)").querySelector("input");
             // An external carrier change arriving as a plain render (no flush in
             // flight) must rebuild the dock, replacing the node.
-            renderStrip();
+            h.renderStrip();
             expect(
                 fieldByLabel("Duration (s)").querySelector("input"),
             ).not.toBe(before);
@@ -328,7 +327,7 @@ describe("detail strip draft queue", () => {
     // the flush — same node, focus intact, no rebuild.
     describe("contextual-clamp write-back", () => {
         it("re-displays a relay Begin clamped by the neighbouring window", () => {
-            setup([
+            h.setup([
                 {
                     duration: 10,
                     stages: [{}],
@@ -362,7 +361,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("re-displays a relay End clamped to the minimum duration", () => {
-            setup([
+            h.setup([
                 {
                     duration: 10,
                     stages: [{}],
@@ -393,7 +392,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("re-displays a retake Length capped by its start", () => {
-            setup([
+            h.setup([
                 {
                     duration: 10,
                     stages: [{}],
@@ -430,7 +429,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("does NOT write back mid-typing (no flush, no clamp, keeps typed text)", () => {
-            setup([
+            h.setup([
                 {
                     duration: 10,
                     stages: [{}],
@@ -468,7 +467,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("does NOT rewrite a non-clamped field (Steps) that was already valid", () => {
-            setup([{ duration: 4, stages: [{ steps: 8 }] }]);
+            h.setup([{ duration: 4, stages: [{ steps: 8 }] }]);
             wireLiveRenders();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             const steps = sliderNumberByLabel("Steps");
@@ -485,7 +484,7 @@ describe("detail strip draft queue", () => {
     });
 
     it("persists both fields when two debounced sliders change within one window", () => {
-        setup([{ duration: 4, stages: [{ steps: 8 }] }]);
+        h.setup([{ duration: 4, stages: [{ steps: 8 }] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
         const steps = sliderNumberByLabel("Steps");
@@ -503,7 +502,7 @@ describe("detail strip draft queue", () => {
     });
 
     it("flushes a pending edit exactly once when the selection switches mid-window", () => {
-        setup([
+        h.setup([
             { duration: 4, stages: [{ steps: 8 }] },
             { duration: 4, stages: [{ steps: 8 }] },
         ]);
@@ -525,7 +524,7 @@ describe("detail strip draft queue", () => {
     });
 
     it("does not write when a selection change merely re-renders the strip", () => {
-        setup([{ duration: 4, stages: [{ steps: 8 }] }]);
+        h.setup([{ duration: 4, stages: [{ steps: 8 }] }]);
         jest.useFakeTimers();
         // Selecting a clip builds native sliders; enableSlidersIn fires
         // synthetic input events which must NOT schedule a commit.
@@ -567,7 +566,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("holds the debounced edit through a drag (no mid-drag save or rebuild)", () => {
-            setup([refClip()]);
+            h.setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
             const range = rangeByLabel("Frame Ref R0");
@@ -587,7 +586,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("commits exactly once on pointer release", () => {
-            setup([refClip()]);
+            h.setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
             const range = rangeByLabel("Frame Ref R0");
@@ -609,7 +608,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("clears the latch on pointercancel (no stray hold afterward)", () => {
-            setup([refClip()]);
+            h.setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
             const range = rangeByLabel("Frame Ref R0");
@@ -632,7 +631,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("removes the document-level pointer listeners on dispose", () => {
-            setup([refClip()]);
+            h.setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             const removeSpy = jest.spyOn(document, "removeEventListener");
             h.disposeStrip();
@@ -656,7 +655,7 @@ describe("detail strip draft queue", () => {
         };
 
         it("holds a major-prompt edit while focused and flushes on blur out", () => {
-            setup([{ duration: 5, stages: [{}] }]);
+            h.setup([{ duration: 5, stages: [{}] }]);
             setSelection({ kind: "prompt-major", clipIdx: 0 });
             jest.useFakeTimers();
             const editor =
@@ -680,7 +679,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("flushes the held edit on dispose", () => {
-            setup([{ duration: 5, stages: [{}] }]);
+            h.setup([{ duration: 5, stages: [{}] }]);
             setSelection({ kind: "prompt-major", clipIdx: 0 });
             jest.useFakeTimers();
             const editor =
@@ -704,7 +703,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("keeps holding when focus moves to another dock field, not out", () => {
-            setup([{ duration: 5, stages: [{}] }]);
+            h.setup([{ duration: 5, stages: [{}] }]);
             setSelection({ kind: "prompt-major", clipIdx: 0 });
             jest.useFakeTimers();
             const editor =
@@ -733,7 +732,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("commits a number spinner change live even while the field is focused", () => {
-            setup([{ duration: 5, stages: [{}] }]);
+            h.setup([{ duration: 5, stages: [{}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
             const dur =
@@ -757,7 +756,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("does NOT force focus back into a textarea the user tabbed away from", () => {
-            setup([{ duration: 5, stages: [{}], prompt: "existing" }]);
+            h.setup([{ duration: 5, stages: [{}], prompt: "existing" }]);
             setSelection({ kind: "prompt-major", clipIdx: 0 });
             const editor =
                 document.querySelector<HTMLTextAreaElement>(
@@ -771,7 +770,7 @@ describe("detail strip draft queue", () => {
             editor.dispatchEvent(new Event("input", { bubbles: true }));
             blurOutOfDock(editor);
             // A later refresh/render must NOT yank focus back into the prompt.
-            renderStrip();
+            h.renderStrip();
             const after =
                 document.querySelector<HTMLTextAreaElement>(
                     ".vst-detail-prompt",
@@ -781,7 +780,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("flushes the active relay before switching editors within the dock", () => {
-            setup([
+            h.setup([
                 {
                     duration: 12,
                     stages: [{}],
@@ -814,7 +813,7 @@ describe("detail strip draft queue", () => {
         });
 
         it("flushes the held edit before a subsequent carrier read (Generate ordering)", () => {
-            setup([{ duration: 5, stages: [{}] }]);
+            h.setup([{ duration: 5, stages: [{}] }]);
             setSelection({ kind: "prompt-major", clipIdx: 0 });
             const editor =
                 document.querySelector<HTMLTextAreaElement>(

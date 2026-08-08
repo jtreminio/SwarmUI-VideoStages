@@ -10,10 +10,9 @@ import type { Clip } from "../types";
 
 describe("detail strip clip LoRA panel", () => {
     const h = detailStripHarness();
-    const { setup } = h;
 
     it("adds and persists a LoRA row", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
             .querySelector<HTMLElement>(
@@ -48,7 +47,7 @@ describe("detail strip clip LoRA panel", () => {
                 },
             },
         };
-        setup([{ duration: 4, stages: [{}] }], ["weighted-lora.safetensors"]);
+        h.setup([{ duration: 4, stages: [{}] }], ["weighted-lora.safetensors"]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
             .querySelector<HTMLButtonElement>(".vst-detail-add-lora")
@@ -70,7 +69,7 @@ describe("detail strip clip LoRA panel", () => {
         modelGlobals.loraHelper = {
             loraWeightPref: { "weighted-lora.safetensors": "0.55" },
         };
-        setup([{ duration: 4, stages: [{}] }], ["weighted-lora.safetensors"]);
+        h.setup([{ duration: 4, stages: [{}] }], ["weighted-lora.safetensors"]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
             .querySelector<HTMLButtonElement>(".vst-detail-add-lora")
@@ -82,7 +81,7 @@ describe("detail strip clip LoRA panel", () => {
     });
 
     it("uses zero-based LoRA labels and opens the newly added LoRA", () => {
-        setup(
+        h.setup(
             [
                 {
                     duration: 4,
@@ -119,7 +118,7 @@ describe("detail strip clip LoRA panel", () => {
     });
 
     it("renders clip LoRA model rows and flat numeric stage weights", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [
@@ -161,7 +160,7 @@ describe("detail strip clip LoRA panel", () => {
     });
 
     it("debounces a LoRA weight edit through the keyed pending map", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [
@@ -189,7 +188,7 @@ describe("detail strip clip LoRA panel", () => {
     });
 
     it("allows a negative LoRA weight through the number input", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [
@@ -212,7 +211,7 @@ describe("detail strip clip LoRA panel", () => {
     });
 
     it("removes a LoRA row (flush-first) through saveClips", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [
@@ -251,7 +250,7 @@ describe("detail strip clip LoRA panel", () => {
     });
 
     it("copies every LoRA and weight into a newly added stage", () => {
-        setup([
+        h.setup([
             {
                 duration: 4,
                 stages: [

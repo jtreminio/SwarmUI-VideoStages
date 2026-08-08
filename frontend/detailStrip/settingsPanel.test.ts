@@ -8,10 +8,9 @@ import {
 
 describe("detail strip timeline settings panel", () => {
     const h = detailStripHarness();
-    const { setup } = h;
 
     it("uses SwarmUI POT stops and updates side-length dimensions live", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         const ratio =
             fieldByLabel("Aspect Ratio").querySelector<HTMLSelectElement>(
                 "select",
@@ -49,7 +48,7 @@ describe("detail strip timeline settings panel", () => {
     });
 
     it("applies aspect ratio plus side length and reveals dimensions only for Custom", () => {
-        setup([{ duration: 4, stages: [{}] }]);
+        h.setup([{ duration: 4, stages: [{}] }]);
         const select =
             fieldByLabel("Aspect Ratio").querySelector<HTMLSelectElement>(
                 "select",

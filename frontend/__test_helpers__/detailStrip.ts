@@ -172,18 +172,6 @@ export const crumbText = (): string | undefined =>
     detail()?.querySelector<HTMLElement>(".vst-detail-crumb")?.textContent ??
     undefined;
 
-export const railChips = (): HTMLElement[] =>
-    Array.from(
-        document.querySelectorAll<HTMLElement>(".vst-detail .vst-stage-tab"),
-    );
-
-export const activeRailLabel = (): string | undefined =>
-    document
-        .querySelector<HTMLElement>(
-            '.vst-detail .vst-stage-tab[aria-pressed="true"] .header-label',
-        )
-        ?.textContent?.replace(/^Stage /, "") ?? undefined;
-
 export const sliderNumberByLabel = (label: string): HTMLInputElement => {
     const box = Array.from(
         document.querySelectorAll<HTMLElement>(".vst-detail .vst-stage-slider"),
@@ -264,12 +252,6 @@ export interface DetailStripHarness {
     /** Mounts the fixtures, renders the timeline and attaches a fresh strip. */
     setup(fixtures: ClipFixture[], loras?: string[]): HTMLElement;
     renderStrip(): void;
-    clickRegionStageChip(
-        body: HTMLElement,
-        clipIdx: number,
-        stageIdx: number,
-        shift?: boolean,
-    ): void;
     readonly strip: TimelineDetailStrip;
     readonly saveSpy: jest.SpiedFunction<typeof persistence.saveClips>;
     /**
@@ -354,17 +336,6 @@ export const detailStripHarness = (): DetailStripHarness => {
             return body;
         },
         renderStrip: () => requireStrip().render(),
-        clickRegionStageChip: (body, clipIdx, stageIdx, shift = false) => {
-            const chip = body.querySelector<HTMLElement>(
-                `[data-vst-stage][data-clip-idx="${clipIdx}"][data-stage-idx="${stageIdx}"]`,
-            );
-            if (!chip) {
-                throw new Error(`stage chip not found: ${clipIdx}/${stageIdx}`);
-            }
-            chip.dispatchEvent(
-                new MouseEvent("click", { bubbles: true, shiftKey: shift }),
-            );
-        },
         get strip() {
             return requireStrip();
         },
