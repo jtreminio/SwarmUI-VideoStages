@@ -1287,72 +1287,55 @@ public class WanArchitectureTests
             Assert.Single(sampled.Clips).Stages[0].Core.Loras);
     }
 
+    /// <summary>
+    /// Every one of these ships the same <c>wan22.option.unsupported</c> code, so the rule that
+    /// fired is only identifiable from the option text and the stage the diagnostic names.
+    /// </summary>
     [Fact]
     public void Compiler_refuses_invalid_decoded_controls_and_quantized_schedules()
     {
-        StageSpec stage = Stage(10, "wan-model");
+        const string outOfRange = "decoded-input control outside the finite range [0, 1]";
+        const string quantizesToZero =
+            "decoded-input partial control that quantizes to sampler start step 0";
+        const string laterStageInput = "a later-stage input other than 'PreviousStage'";
+        StageSpec first = Stage(10, "wan-model");
+        ClipSpec LaterStage(StageSpec later) => GeneratedClip(
+            0,
+            first,
+            later with
+            {
+                Id = 11,
+                ClipStageIndex = 1,
+                ClipStageRawIndex = 1,
+            });
 
         AssertRefused(
-            GeneratedClip(
-                0,
-                stage,
-                stage with
-                {
-                    Id = 11,
-                    Control = -0.1,
-                    ImageReference = "PreviousStage",
-                    ClipStageIndex = 1,
-                    ClipStageRawIndex = 1,
-                }),
-            "finite range [0, 1]");
+            LaterStage(first with { Control = -0.1, ImageReference = "PreviousStage" }),
+            11,
+            outOfRange);
         AssertWarnedAndNormalized(
-            GeneratedClip(
-                0,
-                stage,
-                stage with
-                {
-                    Id = 11,
-                    Control = 0.5,
-                    ClipStageIndex = 1,
-                    ClipStageRawIndex = 1,
-                }),
-            "later-stage input");
+            LaterStage(first with { Control = 0.5 }),
+            11,
+            laterStageInput);
         AssertRefused(
-            GeneratedClip(
-                0,
-                stage,
-                stage with
-                {
-                    Id = 11,
-                    Control = 1.1,
-                    ImageReference = "PreviousStage",
-                    ClipStageIndex = 1,
-                    ClipStageRawIndex = 1,
-                }),
-            "finite range [0, 1]");
+            LaterStage(first with { Control = 1.1, ImageReference = "PreviousStage" }),
+            11,
+            outOfRange);
         AssertRefused(
-            GeneratedClip(
-                0,
-                stage,
-                stage with
-                {
-                    Id = 11,
-                    Control = 0.9,
-                    Steps = 8,
-                    ImageReference = "PreviousStage",
-                    ClipStageIndex = 1,
-                    ClipStageRawIndex = 1,
-                }),
-            "quantizes to sampler start step 0");
+            LaterStage(first with
+            {
+                Control = 0.9,
+                Steps = 8,
+                ImageReference = "PreviousStage",
+            }),
+            11,
+            quantizesToZero);
+        AssertRefused(InitVideoClip(0, first with { Control = 1.1 }), 10, outOfRange);
+        AssertRefused(InitVideoClip(0, first with { Control = double.NaN }), 10, outOfRange);
         AssertRefused(
-            InitVideoClip(0, stage with { Control = 1.1 }),
-            "decoded-input control outside the finite range [0, 1]");
-        AssertRefused(
-            InitVideoClip(0, stage with { Control = double.NaN }),
-            "decoded-input control outside the finite range [0, 1]");
-        AssertRefused(
-            InitVideoClip(0, stage with { Control = 0.9, Steps = 8 }),
-            "quantizes to sampler start step 0");
+            InitVideoClip(0, first with { Control = 0.9, Steps = 8 }),
+            10,
+            quantizesToZero);
     }
 
     [Fact]
@@ -1376,34 +1359,34 @@ public class WanArchitectureTests
         Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
-    private static void AssertRefused(ClipSpec clip, string expectedOption) =>
-        AssertBlocked(Compile(clip), "wan22.option.unsupported", expectedOption);
+    private static void AssertRefused(ClipSpec clip, int stageId, string expectedOption)
+    {
+        VideoExecutionPlan plan = Compile(clip);
+        Assert.Contains(
+            plan.Diagnostics,
+            item => item.Code == "wan22.option.unsupported"
+                && item.Severity == PlanDiagnosticSeverity.Error
+                && item.StageId == stageId
+                && item.Message.Contains(expectedOption));
+        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
+    }
 
-    private static void AssertWarnedAndNormalized(ClipSpec clip, string expectedOption)
+    private static void AssertWarnedAndNormalized(
+        ClipSpec clip,
+        int stageId,
+        string expectedOption)
     {
         VideoExecutionPlan plan = Compile(clip);
         Assert.Contains(
             plan.Diagnostics,
             item => item.Code == "wan22.option.unsupported"
                 && item.Severity == PlanDiagnosticSeverity.Warning
+                && item.StageId == stageId
                 && item.Message.Contains(expectedOption));
         Assert.DoesNotContain(
             plan.Diagnostics,
             item => item.Severity == PlanDiagnosticSeverity.Error);
         Assert.NotNull(Assert.Single(plan.Clips).ArchitecturePayload);
-    }
-
-    private static void AssertBlocked(
-        VideoExecutionPlan plan,
-        string code,
-        string expectedOption)
-    {
-        Assert.Contains(
-            plan.Diagnostics,
-            item => item.Code == code
-                && item.Severity == PlanDiagnosticSeverity.Error
-                && item.Message.Contains(expectedOption));
-        Assert.Null(Assert.Single(plan.Clips).ArchitecturePayload);
     }
 
     private static VideoExecutionPlan Compile(ClipSpec clip)
