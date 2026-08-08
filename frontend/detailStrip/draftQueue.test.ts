@@ -7,6 +7,7 @@ import {
 } from "../__test_helpers__/architectureFixtures";
 import {
     type ClipFixture,
+    commitNumber,
     crumbText,
     detailStripHarness,
     fieldByLabel,
@@ -27,6 +28,14 @@ import type { Clip } from "../types";
 describe("detail strip draft queue", () => {
     const h = detailStripHarness();
     const { setup, renderStrip } = h;
+
+    // Emulate the prod render trigger a save produces: a rebuild WOULD be
+    // visible here if the value-only hint leaked, because the node would swap.
+    const wireLiveRenders = (): void => {
+        persistence
+            .getTimelineStore()
+            .subscribe((_state, meta) => h.strip.render(meta));
+    };
 
     it("live-applies a discrete model command through the document store", () => {
         setup([{ duration: 4, stages: [{}] }]);
@@ -81,20 +90,6 @@ describe("detail strip draft queue", () => {
     // that wiring faithfully — a store subscription that calls render(meta) —
     // and assert the edited field's node (and focus) survives untouched.
     describe("value-only commits keep the dock DOM", () => {
-        // Emulate the prod render trigger a save produces.
-        const wireLiveRenders = (): void => {
-            persistence
-                .getTimelineStore()
-                .subscribe((_state, meta) => h.strip.render(meta));
-        };
-        // A spinner click / Enter: a `change` while the field still owns focus.
-        const commitNumber = (input: HTMLInputElement, value: string): void => {
-            input.focus();
-            input.value = value;
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-            input.dispatchEvent(new Event("change", { bubbles: true }));
-        };
-
         it("keeps focus and the same node on a first Begin/End change, and repaints", () => {
             setup([
                 {
@@ -340,22 +335,6 @@ describe("detail strip draft queue", () => {
     // DISPLAYED value in place after the flush — same node, focus intact, no
     // rebuild. These tests reproduce the verifier-confirmed defects.
     describe("contextual-clamp write-back", () => {
-        // Faithfully reproduce the prod render trigger a value save fires, so a
-        // rebuild WOULD be visible if the value-only hint leaked (the node
-        // would swap).
-        const wireLiveRenders = (): void => {
-            persistence
-                .getTimelineStore()
-                .subscribe((_state, meta) => h.strip.render(meta));
-        };
-        // A spinner click / Enter: a `change` while the field still owns focus.
-        const commitNumber = (input: HTMLInputElement, value: string): void => {
-            input.focus();
-            input.value = value;
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-            input.dispatchEvent(new Event("change", { bubbles: true }));
-        };
-
         it("re-displays a relay Begin clamped by the neighbouring window", () => {
             setup([
                 {

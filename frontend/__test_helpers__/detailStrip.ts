@@ -237,6 +237,14 @@ export const RETAKE_SOURCE = {
     lengthSeconds: 10,
 };
 
+/** A spinner click / Enter: a `change` while the field still owns focus. */
+export const commitNumber = (input: HTMLInputElement, value: string): void => {
+    input.focus();
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+};
+
 export const refRow = (idx: number): HTMLElement => {
     const row = document.querySelector<HTMLElement>(
         `.vst-detail-ref-row[data-vst-ref-index="${idx}"]`,

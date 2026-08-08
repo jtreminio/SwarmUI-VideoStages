@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
+    commitNumber,
     committedClips,
     crumbText,
     detail,
@@ -282,12 +283,6 @@ describe("detail strip prompt panels", () => {
             );
         // A `change` while the number field is focused (spinner / Enter) commits
         // the held edit live.
-        const commitNumber = (input: HTMLInputElement, value: string): void => {
-            input.focus();
-            input.value = value;
-            input.dispatchEvent(new Event("input", { bubbles: true }));
-            input.dispatchEvent(new Event("change", { bubbles: true }));
-        };
 
         // Move the end out to 4s: end held-fixed rule keeps start=1, duration=3.
         const end = endInput();
