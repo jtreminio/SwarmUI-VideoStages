@@ -44,8 +44,8 @@ public class Ltx2AudioContractTests
         return clip;
     }
 
-    /// <summary>A 10s clip with no base track under one 2s timeline segment opening at 1s. The two
-    /// segment tests differ only in the root the segment has to reach.</summary>
+    /// <summary>The subject of both segment tests, which differ only in the root the segment has
+    /// to reach.</summary>
     private static JObject SegmentDocument(Ltx2WorkflowFixture fixture)
     {
         JObject document = MakeDocument(AudioClip(
@@ -134,10 +134,9 @@ public class Ltx2AudioContractTests
     }
 
     /// <summary>
-    /// The rate is all LTX passes to <c>SwarmAudioLengthToFrames</c>: unlike MiniMax it never writes
-    /// the grid, so a clip sized from its audio snaps on whatever that node defaults to. The silent
-    /// coupling is the claim — the default has to stay the grid LTX declares, or such clips land off
-    /// the grid every other part of the architecture snaps to.
+    /// Unlike MiniMax, LTX never writes these inputs, so a clip sized from its audio snaps on
+    /// whatever <c>SwarmAudioLengthToFrames</c> defaults to. They have to stay the grid LTX
+    /// declares, or such clips land off the grid every other part of the architecture snaps to.
     /// </summary>
     [Fact]
     public void Audio_length_node_defaults_to_the_grid_ltx_declares()
