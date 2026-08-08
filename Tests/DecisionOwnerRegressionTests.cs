@@ -120,7 +120,16 @@ public class DecisionOwnerRegressionTests
         VAEDecodeTiledNode extension = Ltx2TiledDecode(
             models,
             SetTiling,
-            (generator, latent, vae) => VaeDecodePreference.AsRawImage(generator, latent, vae));
+            (generator, latent, vae) =>
+            {
+                using WorkflowBridge bridge = BridgeSync.For(generator);
+                LtxPostChainRebuilder.AddDecode(
+                    bridge,
+                    bridge.ResolvePath(vae.Path),
+                    bridge.ResolvePath(latent.Path),
+                    LtxDecodeConfig.From(generator));
+                return latent;
+            });
 
         Assert.Equal(core.TileSize.LiteralAsInt(), extension.TileSize.LiteralAsInt());
         Assert.Equal(core.Overlap.LiteralAsInt(), extension.Overlap.LiteralAsInt());
