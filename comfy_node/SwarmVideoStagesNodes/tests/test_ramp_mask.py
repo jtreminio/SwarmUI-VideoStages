@@ -20,12 +20,10 @@ def test_ramp_runs_white_to_black_strictly_decreasing() -> None:
     assert all(b < a for a, b in zip(values, values[1:]))
 
 
-def test_matches_the_merger_formula() -> None:
-    # Mirrors MultiClipParallelMerger's per-frame value: 1 - j/(k-1).
-    k = 25
-    values = ramp_mask_values(k)
-    for j, value in enumerate(values):
-        assert abs(value - (1.0 - j / (k - 1))) < 1e-9
+def test_ramp_is_linear_between_the_endpoints() -> None:
+    values = ramp_mask_values(25)
+    steps = [b - a for a, b in zip(values, values[1:])]
+    assert all(abs(step - steps[0]) < 1e-9 for step in steps)
 
 
 def test_rejects_non_positive_frame_counts() -> None:
