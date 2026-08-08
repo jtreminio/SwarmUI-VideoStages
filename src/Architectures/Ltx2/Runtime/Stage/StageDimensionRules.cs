@@ -27,25 +27,33 @@ internal static class StageDimensionRules
             multiple);
         if (targetWidth != alignedWidth || targetHeight != alignedHeight)
         {
-            LogSnap(stage.StageId, multiple, alignedWidth, alignedHeight, targetWidth, targetHeight);
+            LogSnap(
+                stage.StageId,
+                SnapReason(multiple),
+                alignedWidth,
+                alignedHeight,
+                targetWidth,
+                targetHeight);
         }
         return (targetWidth, targetHeight);
     }
 
-    // IC-LoRA reference downscaling raises the /32 grid requirement to 32×factor.
+    // IC-LoRA reference downscaling raises the grid requirement to MinimumMultiple×factor.
     public static (int Width, int Height) SnapForIcLora(StagePlan stage, int width, int height)
     {
         ArgumentNullException.ThrowIfNull(stage);
-        IReadOnlyList<IcLoraPlan> icLoras = stage.RequireLtx2Payload().IcLoras;
-        int multiple = RequiredMultiple(icLoras);
-        (int snappedWidth, int snappedHeight) = DimensionSnap.Snap(width, height, multiple);
-        if (snappedWidth == width && snappedHeight == height)
+        if (!TrySnap(
+                stage.RequireLtx2Payload().IcLoras,
+                width,
+                height,
+                out (int Width, int Height) snapped,
+                out string reason))
         {
             return (width, height);
         }
 
-        LogSnap(stage.StageId, multiple, width, height, snappedWidth, snappedHeight);
-        return (snappedWidth, snappedHeight);
+        LogSnap(stage.StageId, reason, width, height, snapped.Width, snapped.Height);
+        return snapped;
     }
 
     internal static int RequiredMultiple(IEnumerable<IcLoraPlan> icLoras)
@@ -64,39 +72,45 @@ internal static class StageDimensionRules
         int width,
         int height)
     {
-        int multiple = RequiredMultiple(icLoras);
-        (int snappedWidth, int snappedHeight) = DimensionSnap.Snap(width, height, multiple);
-        if (snappedWidth == width && snappedHeight == height)
+        if (!TrySnap(icLoras, width, height, out (int Width, int Height) snapped, out string reason))
         {
             return null;
         }
 
-        int factor = multiple / DimensionSnap.MinimumMultiple;
-        string reason = factor > 1
-            ? $"IC-LoRA ×{factor} requires multiples of {multiple}"
-            : "VideoStages requires multiples of 32";
         return new(
             PlanDiagnosticSeverity.Info,
             "ltx.dimension_snapped",
-            $"dimensions {width}x{height} will snap to {snappedWidth}x{snappedHeight}; {reason}",
+            $"dimensions {width}x{height} will snap to {snapped.Width}x{snapped.Height}; {reason}",
             clipId,
             stageId);
     }
 
+    private static bool TrySnap(
+        IEnumerable<IcLoraPlan> icLoras,
+        int width,
+        int height,
+        out (int Width, int Height) snapped,
+        out string reason)
+    {
+        int multiple = RequiredMultiple(icLoras);
+        snapped = DimensionSnap.Snap(width, height, multiple);
+        reason = SnapReason(multiple);
+        return snapped != (width, height);
+    }
+
+    private static string SnapReason(int multiple) =>
+        multiple > DimensionSnap.MinimumMultiple
+            ? $"the active IC-LoRA's reference downscale factor requires multiples of {multiple}"
+            : $"the VideoStages pixel grid requires multiples of {DimensionSnap.MinimumMultiple}";
+
     private static void LogSnap(
         int stageId,
-        int multiple,
+        string reason,
         int width,
         int height,
         int snappedWidth,
-        int snappedHeight)
-    {
-        int factor = multiple / DimensionSnap.MinimumMultiple;
-        string reason = factor > 1
-            ? $"the active IC-LoRA's reference downscale factor requires multiples of {multiple}"
-            : "the VideoStages pixel grid requires multiples of 32";
+        int snappedHeight) =>
         Logs.Info(
             $"VideoStages: stage {stageId} dims {width}x{height} snapped to "
             + $"{snappedWidth}x{snappedHeight} — {reason}.");
-    }
 }
