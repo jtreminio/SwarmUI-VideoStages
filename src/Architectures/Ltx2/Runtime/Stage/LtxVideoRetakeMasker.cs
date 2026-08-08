@@ -11,13 +11,10 @@ using VideoStages.Architectures.Ltx2.Planning;
 namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 /// <summary>
-/// Builds the "retake" sub-graph: attaches a per-latent-frame noise mask to a VAE-encoded base-video
-/// latent so only frames inside the retake window regenerate while the rest stay locked to the base
-/// encoding. Built from stock graph primitives (no custom ComfyUI nodes): one 1×1 <c>SolidMask</c> per
-/// frame block (0 = frozen, retake strength = window), which <see cref="LTXVSetVideoLatentNoiseMasksNode"/>
-/// bilinear-resizes to the latent's H×W. Core ComfyUI applies it per step as
-/// <c>x = x*mask + base*(1-mask)</c> (sampler-generic). Mirrors LTX Director's hand-rolled
-/// <c>noise_mask</c> tensor, expressed as graph nodes.
+/// Attaches a per-latent-frame noise mask to a VAE-encoded base-video latent so only frames inside
+/// the retake window regenerate. Deliberately stock primitives, no custom node: 1×1
+/// <c>SolidMask</c> blocks that <see cref="LTXVSetVideoLatentNoiseMasksNode"/> resizes to the
+/// latent's H×W, which core applies per step as <c>x = x*mask + base*(1-mask)</c>.
 /// </summary>
 internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
 {
@@ -33,7 +30,6 @@ internal sealed class LtxVideoRetakeMasker(WorkflowGenerator g)
 
     private const int DefaultFrameCount = LtxStageRuntimeSettings.DefaultFrameCount;
 
-    /// <summary>The three latent-frame block counts of a retake mask, in order.</summary>
     internal readonly record struct LatentWindow(int Prefix, int Window, int Suffix)
     {
         public int LatentLength => Prefix + Window + Suffix;

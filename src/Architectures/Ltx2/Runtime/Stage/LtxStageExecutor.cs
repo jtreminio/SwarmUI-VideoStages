@@ -132,6 +132,8 @@ internal sealed class LtxStageExecutor
                 handler(genInfo);
             }
 
+            // When this stage re-encoded the chain's own decoded pixels, splicing its output back
+            // onto that decode in place would wire the decode to its own downstream encode.
             bool forceDedicatedOutput = false;
             if (!canReuseLatent
                 && postVideoChain is { HasPostDecodeWrappers: false }
