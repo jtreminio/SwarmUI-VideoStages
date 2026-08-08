@@ -8,8 +8,8 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
 /// <summary>
-/// Builds the opening guide frames for a planned continue boundary. The guide keeps the previous
-/// clip's resolution; each consuming stage performs its own spatial conform.
+/// The carried tail keeps the previous clip's resolution; each consuming stage performs its own
+/// spatial conform.
 /// </summary>
 internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)
 {
@@ -64,10 +64,6 @@ internal sealed class ContinuityGuideBuilder(WorkflowGenerator g)
             nextGeometry);
     }
 
-    /// <summary>
-    /// Conforms the carried tail to the next clip's frame rate. Spatial conform remains with each
-    /// consuming stage, preserving source resolution until then.
-    /// </summary>
     private WGNodeData ConformTail(
         WorkflowBridge bridge,
         INodeOutput tail,
