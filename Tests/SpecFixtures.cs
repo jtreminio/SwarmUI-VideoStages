@@ -76,6 +76,6 @@ internal static class SpecFixtures
             InitVideo: initVideo);
 
     /// <summary>A clip that refines uploaded footage instead of generating from noise.</summary>
-    internal static ClipSpec SourcedClip(int id, IReadOnlyList<StageSpec> stages) =>
-        Clip(id, stages, initVideo: new InitVideoSpec("data", "source.mp4", StartSeconds: 0));
+    internal static ClipSpec SourcedClip(int id, IReadOnlyList<StageSpec> stages, int? frames = 49) =>
+        Clip(id, stages, frames, initVideo: new InitVideoSpec("data", "source.mp4", StartSeconds: 0));
 }
