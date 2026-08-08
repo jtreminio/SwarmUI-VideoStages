@@ -184,7 +184,7 @@ const audioFlagChips = (clip: Clip): string => {
 
 /** Audio the clip carries itself, which stays removable after its architecture stops offering it. */
 const persistedClipAudio = (clip: Clip): boolean =>
-    audioSourceKind(clip.audioSource ?? "") !== AUDIO_SOURCE_NATIVE ||
+    audioSourceKind(clip.audioSource) !== AUDIO_SOURCE_NATIVE ||
     clip.uploadedAudio !== null ||
     clip.reuseAudio === true ||
     clip.clipLengthFromAudio === true ||
@@ -291,13 +291,13 @@ export const renderAudioTrackRow = (
             if (!clip || !clipLane(clip)) {
                 return "";
             }
-            const badge = audioSourceBadge(clip.audioSource ?? "");
+            const badge = audioSourceBadge(clip.audioSource);
             const clipCapabilities = capabilities?.forClip(clip);
             const clipAudioSupported =
                 clipCapabilities?.clipAudio.supported ?? true;
             const persistedAudio = persistedClipAudio(clip);
             const audioOperable = clipAudioSupported || persistedAudio;
-            const kind = audioSourceKind(clip.audioSource ?? "");
+            const kind = audioSourceKind(clip.audioSource);
             const native = kind === AUDIO_SOURCE_NATIVE;
             const width = clipInnerWidth(layout.widthPx);
             const kindClass = native

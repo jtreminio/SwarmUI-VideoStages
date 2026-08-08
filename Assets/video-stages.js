@@ -16040,7 +16040,7 @@ ${slot}`;
     }
     return chips.length === 0 ? "" : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
   };
-  var persistedClipAudio = (clip) => audioSourceKind(clip.audioSource ?? "") !== AUDIO_SOURCE_NATIVE || clip.uploadedAudio !== null || clip.reuseAudio === true || clip.clipLengthFromAudio === true || clip.saveAudioTrack === true;
+  var persistedClipAudio = (clip) => audioSourceKind(clip.audioSource) !== AUDIO_SOURCE_NATIVE || clip.uploadedAudio !== null || clip.reuseAudio === true || clip.clipLengthFromAudio === true || clip.saveAudioTrack === true;
   var clipAudioLaneVisible = (clip, capabilities) => {
     const view = capabilities?.forClip(clip);
     return view === void 0 || view.clipAudio.supported || persistedClipAudio(clip);
@@ -16093,12 +16093,12 @@ ${slot}`;
       if (!clip || !clipLane(clip)) {
         return "";
       }
-      const badge = audioSourceBadge(clip.audioSource ?? "");
+      const badge = audioSourceBadge(clip.audioSource);
       const clipCapabilities = capabilities?.forClip(clip);
       const clipAudioSupported = clipCapabilities?.clipAudio.supported ?? true;
       const persistedAudio = persistedClipAudio(clip);
       const audioOperable = clipAudioSupported || persistedAudio;
-      const kind = audioSourceKind(clip.audioSource ?? "");
+      const kind = audioSourceKind(clip.audioSource);
       const native = kind === AUDIO_SOURCE_NATIVE;
       const width = clipInnerWidth(layout.widthPx);
       const kindClass = native ? " vst-audio-native vst-audio-kind-native" : kind === AUDIO_SOURCE_ACE_STEP_FUN ? " vst-audio-kind-ace" : " vst-audio-kind-upload";
