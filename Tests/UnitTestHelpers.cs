@@ -32,8 +32,6 @@ internal static class TestResolvedVideoModel
 
 internal static class UnitTestStubs
 {
-    /// <summary>A generator carrying only what graph-shaping code reads off it: the workflow to
-    /// edit and a param input to look parameters up in. Everything else stays at its default.</summary>
     public static WorkflowGenerator StubGenerator(JObject workflow) =>
         new()
         {
