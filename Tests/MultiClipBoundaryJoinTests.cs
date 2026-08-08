@@ -133,7 +133,7 @@ public class MultiClipBoundaryJoinTests
     }
 
     [Fact]
-    public void Cut_MultiClip_ProducesExactlyTodaysGraphShape_NoCrossfadeNodes()
+    public void Absent_boundary_outs_generate_the_same_graph_as_explicit_cuts()
     {
         (WorkflowGenerator gA, List<WGNodeData> clipsA) =
             BuildClips([17, 17, 17], T2IModelClassSorter.CompatLtxv2);
@@ -144,7 +144,8 @@ public class MultiClipBoundaryJoinTests
         MergeAndPublish(gB, Artifacts(clipsB), PlansFor(clipsB, ["cut", "cut", "cut"]));
 
         Assert.True(JToken.DeepEquals(gA.Workflow, gB.Workflow),
-            "All-cut boundaryOuts must produce the identical graph to the pre-Stage-D signature.");
+            "An absent boundaryOut list and an explicit all-cut list must generate "
+                + "byte-identical workflows.");
 
         using WorkflowBridge bridge = WorkflowBridge.Create(gB.Workflow);
         Assert.Equal(1, CountOf<BatchImagesNodeNode>(bridge));
