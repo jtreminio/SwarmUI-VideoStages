@@ -485,13 +485,12 @@ public class MiniMaxArchitectureTests
     }
 
     [Theory]
-    [InlineData("video", "Base", "minimax.clip-reference.source-ignored")]
-    [InlineData("audio", "Refiner", "minimax.clip-reference.source-ignored")]
-    [InlineData("video", "audio0", "minimax.clip-reference.source-ignored")]
+    [InlineData("video", "Base")]
+    [InlineData("audio", "Refiner")]
+    [InlineData("video", "audio0")]
     public void A_clip_reference_from_an_unreadable_source_is_warned_and_dropped(
         string kind,
-        string source,
-        string expectedCode)
+        string source)
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
@@ -508,7 +507,7 @@ public class MiniMaxArchitectureTests
 
         PlanDiagnostic warning = Assert.Single(compilation.Diagnostics);
         Assert.Equal(PlanDiagnosticSeverity.Warning, warning.Severity);
-        Assert.Equal(expectedCode, warning.Code);
+        Assert.Equal("minimax.clip-reference.source-ignored", warning.Code);
         Assert.Empty(Assert.IsType<MiniMaxClipPayload>(compilation.Payload).References);
     }
 
