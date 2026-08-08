@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Utils;
-using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Authoring;
 using VideoStages.Generated;
 using Xunit;
@@ -1116,7 +1115,6 @@ public class Ltx2IcLoraContractTests
         live.AssertAllLive([.. refTokens, .. guides, .. stages]);
         AssertShippable(bridge, workflow, live);
     }
-
 
     /// <summary>What the warning names is whatever the resolver looked for: the preset's own
     /// downloaded weight name, the preset text when the preset carries none, or a stand-in when no
