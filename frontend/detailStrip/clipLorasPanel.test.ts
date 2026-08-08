@@ -2,7 +2,6 @@ import { describe, expect, it, jest } from "@jest/globals";
 import {
     detailBody,
     detailStripHarness,
-    fieldByLabel,
     modelGlobals,
 } from "../__test_helpers__/detailStrip";
 import { lastSavedClips } from "../__test_helpers__/dom";
@@ -80,41 +79,6 @@ describe("detail strip clip LoRA panel", () => {
         expect(
             lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].loraWeights,
         ).toEqual([0.55]);
-    });
-
-    it("resets per-stage IC-LoRA strengths from the selected model default", () => {
-        modelGlobals.sdLoraBrowser = {
-            models: {
-                "weighted-ic.safetensors": {
-                    data: { lora_default_weight: "0.4" },
-                },
-            },
-        };
-        setup(
-            [
-                {
-                    duration: 4,
-                    stages: [{}],
-                    icLoras: [
-                        {
-                            lora: "lora-x.safetensors",
-                            driveData: "visual",
-                        },
-                    ],
-                },
-            ],
-            ["lora-x.safetensors", "weighted-ic.safetensors"],
-        );
-        setSelection({ kind: "ic-lora", clipIdx: 0, entryIdx: 0 });
-        const select =
-            fieldByLabel("LoRA").querySelector<HTMLSelectElement>("select");
-        if (!select) throw new Error("IC-LoRA model select missing");
-        select.value = "weighted-ic.safetensors";
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-
-        expect(
-            lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].icLoraStrengths,
-        ).toEqual([0.4]);
     });
 
     it("uses zero-based LoRA labels and opens the newly added LoRA", () => {

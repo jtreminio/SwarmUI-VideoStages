@@ -5,12 +5,13 @@ import {
     detail,
     detailStripHarness,
     fieldByLabel,
+    modelGlobals,
     swarmGlobals,
 } from "../../__test_helpers__/detailStrip";
 import { lastSavedClips } from "../../__test_helpers__/dom";
-import { IC_LORA_AUTO } from "../../architectures/ltx2/icLoraPresets";
 import { setSelection } from "../../selection";
 import type { Clip } from "../../types";
+import { IC_LORA_AUTO } from "./icLoraPresets";
 
 describe("detail strip IC-LoRA panel", () => {
     const h = detailStripHarness();
@@ -402,6 +403,41 @@ describe("detail strip IC-LoRA panel", () => {
             fieldByLabel("Source").querySelector<HTMLSelectElement>("select")
                 ?.options[1].disabled,
         ).toBe(true);
+    });
+
+    it("resets per-stage IC-LoRA strengths from the selected model default", () => {
+        modelGlobals.sdLoraBrowser = {
+            models: {
+                "weighted-ic.safetensors": {
+                    data: { lora_default_weight: "0.4" },
+                },
+            },
+        };
+        setup(
+            [
+                {
+                    duration: 4,
+                    stages: [{}],
+                    icLoras: [
+                        {
+                            lora: "lora-x.safetensors",
+                            driveData: "visual",
+                        },
+                    ],
+                },
+            ],
+            ["lora-x.safetensors", "weighted-ic.safetensors"],
+        );
+        setSelection({ kind: "ic-lora", clipIdx: 0, entryIdx: 0 });
+        const select =
+            fieldByLabel("LoRA").querySelector<HTMLSelectElement>("select");
+        if (!select) throw new Error("IC-LoRA model select missing");
+        select.value = "weighted-ic.safetensors";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+
+        expect(
+            lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].icLoraStrengths,
+        ).toEqual([0.4]);
     });
 
     it("Apply on lists every stage plus All stages", () => {
