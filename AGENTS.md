@@ -34,6 +34,12 @@ Over a whole run the compile break hides completely — `Test Suites: 1 failed, 
 dropped. A real red carries a non-zero *failed* count there and does not shrink the total.
 `run-tests` is `dotnet test && npm run test`, so a C# build failure means jest never ran at all.
 
+So write the baseline total down before you mutate, and compare it after. Nothing else catches this:
+one unused import has silently dropped a whole 21-test suite while the `Tests:` line read
+`30 passed, 30 total` — no failure, no zero, just a smaller number than the run before it. The trap
+does not need a deleted import to spring; `noUnusedLocals` also fires when your mutation replaces
+the only use of one.
+
 Failure detail is suppressed by default, for a plain failed assertion as much as for a compile
 break: run `JEST_VERBOSE=1 npm run test` to see why. Passing `--reporters=default` works too, but the
 flag is variadic — put it after any file path or it swallows the path as a second reporter.
