@@ -186,27 +186,11 @@ internal static class Loras
         return kinds;
     }
 
-    private static string NormalizeDriveMediaKind(JToken token)
-    {
-        if (token.Type != JTokenType.String)
-        {
-            return null;
-        }
-        string compact = StringUtils.Compact(token.Value<string>());
-        if (StringUtils.Equals(compact, "image"))
-        {
-            return "image";
-        }
-        if (StringUtils.Equals(compact, "video"))
-        {
-            return "video";
-        }
-        if (StringUtils.Equals(compact, "audio"))
-        {
-            return "audio";
-        }
-        return null;
-    }
+    private static string NormalizeDriveMediaKind(JToken token) =>
+        token.Type == JTokenType.String
+            && ClipReferences.TryParseKind(token.Value<string>(), out ClipReferenceKind kind)
+            ? ClipReferences.WireName(kind)
+            : null;
 
     private static double SanitizeWeight(double value, double fallback) =>
         double.IsFinite(value) ? value : fallback;

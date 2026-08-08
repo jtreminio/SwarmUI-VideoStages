@@ -15,14 +15,7 @@ internal static class ClipReferences
         for (int index = 0; index < raw.Count; index++)
         {
             string rawKind = DocumentJson.GetString(raw[index], "kind")?.Trim();
-            ClipReferenceKind? kind = rawKind?.ToLowerInvariant() switch
-            {
-                "image" => ClipReferenceKind.Image,
-                "video" => ClipReferenceKind.Video,
-                "audio" => ClipReferenceKind.Audio,
-                _ => null,
-            };
-            if (kind is null)
+            if (!TryParseKind(rawKind, out ClipReferenceKind kind))
             {
                 DocumentJson.Warn(
                     warn,
@@ -48,12 +41,31 @@ internal static class ClipReferences
                 $"Clip {clipIndex} reference {index}",
                 warn);
             references.Add(new ClipReferenceSpec(
-                kind.Value,
+                kind,
                 source.Trim(),
                 media,
                 DocumentJson.GetOptionalBool(raw[index], "includeSoundtrack", false),
                 ReferenceScale.Normalize(scale)));
         }
         return references;
+    }
+
+    /// <summary>The enum names are the wire tokens; IC-LoRA drive media kinds spell them the
+    /// same way.</summary>
+    public static string WireName(ClipReferenceKind kind) => kind.ToString().ToLowerInvariant();
+
+    public static bool TryParseKind(string raw, out ClipReferenceKind kind)
+    {
+        string compact = StringUtils.Compact(raw);
+        foreach (ClipReferenceKind candidate in Enum.GetValues<ClipReferenceKind>())
+        {
+            if (StringUtils.Equals(compact, WireName(candidate)))
+            {
+                kind = candidate;
+                return true;
+            }
+        }
+        kind = default;
+        return false;
     }
 }
