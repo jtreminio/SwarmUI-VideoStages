@@ -11,7 +11,7 @@ using static VideoStages.Tests.Fixtures;
 namespace VideoStages.Tests;
 
 [Collection("VideoStagesTests")]
-public class LtxControlNetAudioSourceTests
+public class ControlNetCoreMediaCaptureTests
 {
     private static WorkflowGenerator CreateGenerator(JObject workflow)
     {
@@ -63,7 +63,7 @@ public class LtxControlNetAudioSourceTests
     }
 
     [Fact]
-    public void TryGetCapturedControlNetAudio_returns_audio_when_captured()
+    public void TryGetCapturedAudio_returns_audio_when_captured()
     {
         JObject workflow = [];
         WorkflowGenerator generator = CreateGenerator(workflow);
@@ -78,7 +78,7 @@ public class LtxControlNetAudioSourceTests
     }
 
     [Fact]
-    public void TryGetCapturedControlNetAudio_returns_false_when_no_capture_exists()
+    public void TryGetCapturedAudio_returns_false_when_no_capture_exists()
     {
         JObject workflow = [];
         WorkflowGenerator generator = CreateGenerator(workflow);
@@ -91,7 +91,7 @@ public class LtxControlNetAudioSourceTests
     }
 
     [Fact]
-    public void TryGetCapturedControlNetAudio_returns_false_when_referenced_node_was_pruned()
+    public void TryGetCapturedAudio_returns_false_when_referenced_node_was_pruned()
     {
         JObject workflow = [];
         WorkflowGenerator generator = CreateGenerator(workflow);
@@ -105,7 +105,7 @@ public class LtxControlNetAudioSourceTests
     }
 
     [Fact]
-    public void TryGetCapturedControlNetAudio_resolves_per_index_for_each_controlnet_source()
+    public void TryGetCapturedAudio_resolves_per_index_for_each_controlnet_source()
     {
         JObject workflow = [];
         WorkflowGenerator generator = CreateGenerator(workflow);
