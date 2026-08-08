@@ -12,7 +12,7 @@ internal sealed class ClipEntryMedia(
 {
     private readonly InitVideoClipInstaller _installer = new(g);
 
-    /// <summary>The clip's init-video footage, conformed to the timeline's dimensions.</summary>
+    /// <summary>Conforms the footage to the timeline's dimensions, not the clip's own.</summary>
     internal WGNodeData InstallInitVideo(
         ClipPlan clip,
         (int Width, int Height) dimensions,
@@ -34,7 +34,6 @@ internal sealed class ClipEntryMedia(
                 $"clip {clip.ClipId} source video could not be installed.");
     }
 
-    /// <summary>Sets the entry media for a clip that generates footage rather than refining it.</summary>
     internal void SelectGenerated(ClipPlan clip, WGNodeData authoredFirstFrame)
     {
         if (authoredFirstFrame is not null)

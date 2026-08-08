@@ -172,8 +172,9 @@ internal sealed class StockHostVideoGenerationSession(
         string positive,
         string negative)
     {
-        // Core wires Prompt Audios into the families whose reference encode takes them. WAN's path
-        // leaves the parameter in place.
+        // The strip is what makes preflight's host-video.audio-reference.ignored promise true: the
+        // fallback accepts any model core recognizes, LTX-2 and H3 included, and core feeds those
+        // two Prompt Audios. A WAN stage can only resolve a WAN-compat model, which core never does.
         using ParamSnapshot ignoredAudioReference = _wanBehavior is null
             ? ParamSnapshot.Of(g.UserInput, T2IParamTypes.PromptAudios.Type)
             : null;

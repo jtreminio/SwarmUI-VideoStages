@@ -14,11 +14,6 @@ internal sealed record StockHostVideoStagePayload(
 {
     public bool ContinuesSamplingFromPreviousStage { get; init; }
 
-    /// <summary>
-    /// Compiles the stage payload every stock-host architecture shares. <paramref name="loraTarget"/>
-    /// is passed rather than read off <paramref name="resolved"/> because WAN pins one target for
-    /// every compat class.
-    /// </summary>
     internal static StockHostVideoStagePayload Compile(
         ArchitectureId architectureId,
         ClipSpec clip,
