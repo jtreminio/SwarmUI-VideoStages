@@ -76,15 +76,10 @@ public class BoundaryPolicyOwnershipTests
             BoundaryPlanCompiler.Compile(spec.Clips, planned).Boundaries);
 
         Assert.Equal(BoundaryJoinType.Continue, boundary.EffectiveJoin);
-        Assert.Equal(
-            BoundaryPlanCompiler.NormalizeWindow(continueMode, 22),
-            boundary.OverlapFrames);
         Assert.Equal(20, boundary.OverlapFrames);
         Assert.Equal(continueMode.Constraints.FrameStep, boundary.FrameStep);
         Assert.Equal(continueMode.Constraints.MinFrames, boundary.MinFrames);
-        Assert.Equal(
-            boundary.OverlapFrames + continueMode.Constraints.ContinuityExtraFrames,
-            boundary.ContinuityWindowFrames);
+        Assert.Equal(23, boundary.ContinuityWindowFrames);
     }
 
     private static StageSpec Stage(int id) =>
