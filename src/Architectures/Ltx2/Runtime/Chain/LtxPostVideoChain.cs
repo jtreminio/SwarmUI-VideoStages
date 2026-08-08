@@ -24,7 +24,6 @@ internal sealed class LtxPostVideoChain
 
     public WGNodeData CurrentOutputMedia { get; }
     public JArray AvLatentPath => CopyPath(avLatentPath);
-    public JArray DecodeOutputPath => new(videoDecodeNodeId, 0);
     public string VideoDecodeNodeId => videoDecodeNodeId;
     public bool HasPostDecodeWrappers { get; }
 
@@ -163,7 +162,7 @@ internal sealed class LtxPostVideoChain
     public bool ReferencesOutput(WGNodeData media) =>
         media?.Path is JArray mediaPath
         && (JToken.DeepEquals(mediaPath, CurrentOutputMedia?.Path)
-            || JToken.DeepEquals(mediaPath, DecodeOutputPath));
+            || JToken.DeepEquals(mediaPath, new JArray(videoDecodeNodeId, 0)));
 
     public WGNodeData CreateDetachedGuideMedia(WGNodeData vae)
     {
