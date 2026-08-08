@@ -44,8 +44,7 @@ internal static class IcLoraPlanCompiler
                 IcLoraDriveMediaKinds.AcceptedFor(entry.DriveData, entry.DriveMediaKinds);
             ValidateDriveMediaKinds(clip, entry, index, entryDiagnostics);
             string normalizedSource = NormalizeDriveSource(entry.DriveSource);
-            IcLoraMediaSourceKind authoredSource =
-                ResolveSourceKind(normalizedSource);
+            IcLoraMediaSourceKind authoredSource = ResolveSourceKind(normalizedSource);
             IcLoraControlMode controlMode =
                 CompileControlMode(entry.ControlType);
             int dimensionDownscaleFactor =
@@ -424,18 +423,17 @@ internal static class IcLoraPlanCompiler
         return IcLoraControlMode.Unknown;
     }
 
-    private static IcLoraMediaSourceKind ResolveSourceKind(string source)
+    private static IcLoraMediaSourceKind ResolveSourceKind(string normalizedSource)
     {
-        string normalized = NormalizeDriveSource(source);
-        if (StringUtils.Equals(normalized, MediaSource.Upload))
+        if (StringUtils.Equals(normalizedSource, MediaSource.Upload))
         {
             return IcLoraMediaSourceKind.Upload;
         }
-        if (StringUtils.Equals(normalized, MediaSource.Incoming))
+        if (StringUtils.Equals(normalizedSource, MediaSource.Incoming))
         {
             return IcLoraMediaSourceKind.Incoming;
         }
-        return MediaSource.TryParseControlNetIndex(normalized, out _)
+        return MediaSource.TryParseControlNetIndex(normalizedSource, out _)
             ? IcLoraMediaSourceKind.ControlNet
             : IcLoraMediaSourceKind.Unknown;
     }
