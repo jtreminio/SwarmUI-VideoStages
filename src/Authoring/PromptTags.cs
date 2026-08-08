@@ -39,7 +39,7 @@ internal static class PromptTags
         {
             if (value.Length == 0)
             {
-                context.TrackWarning($"VideoStages: {PromptSyntax.ClipTagOpen}[{preData}]> override has no value; ignoring.");
+                context.TrackWarning($"VideoStages: <{PromptSyntax.ClipTagName}[{preData}]> override has no value; ignoring.");
             }
             else
             {
@@ -53,7 +53,7 @@ internal static class PromptTags
             {
                 return windowMarker;
             }
-            context.TrackWarning($"VideoStages: {PromptSyntax.ClipTagOpen}[{preData}]:{value}> is not a valid time window; ignoring.");
+            context.TrackWarning($"VideoStages: <{PromptSyntax.ClipTagName}[{preData}]:{value}> is not a valid time window; ignoring.");
             return UnmatchedSectionMarker(context);
         }
 
@@ -129,7 +129,7 @@ internal static class PromptTags
         {
             if (!int.TryParse(tokens[0], out int clip))
             {
-                context.TrackWarning($"VideoStages: {PromptSyntax.ClipTagOpen}[{string.Join(',', tokens)}]> override has a non-numeric clip index; ignoring.");
+                context.TrackWarning($"VideoStages: <{PromptSyntax.ClipTagName}[{string.Join(',', tokens)}]> override has a non-numeric clip index; ignoring.");
                 return;
             }
             Directives directives = GetDirectives(context);
@@ -142,7 +142,7 @@ internal static class PromptTags
         {
             if (!int.TryParse(tokens[0], out int clip) || !int.TryParse(tokens[1], out int stage))
             {
-                context.TrackWarning($"VideoStages: {PromptSyntax.ClipTagOpen}[{string.Join(',', tokens)}]> override requires numeric clip and stage indices; ignoring.");
+                context.TrackWarning($"VideoStages: <{PromptSyntax.ClipTagName}[{string.Join(',', tokens)}]> override requires numeric clip and stage indices; ignoring.");
                 return;
             }
             Directives directives = GetDirectives(context);
@@ -151,7 +151,7 @@ internal static class PromptTags
                 PromptSyntax.SanitizeOverrideText(value)));
             return;
         }
-        context.TrackWarning($"VideoStages: {PromptSyntax.ClipTagOpen}[{string.Join(',', tokens)}]> override has an unsupported bracket arity; ignoring.");
+        context.TrackWarning($"VideoStages: <{PromptSyntax.ClipTagName}[{string.Join(',', tokens)}]> override has an unsupported bracket arity; ignoring.");
     }
 
     private static Directives GetDirectives(
