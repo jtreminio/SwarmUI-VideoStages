@@ -23,7 +23,7 @@ public class WanRuntimeFlowTests
     private const double WanInitVideoDuration = 0.6;
     private const double WanInitVideoStartSeconds = 1;
     private static readonly string[] WanSourceFeatures =
-        [Ltx2HostIntegration.FeatureFlag, "variation_seed", "comfy_loadimage_b64"];
+        ["variation_seed", "comfy_loadimage_b64"];
 
     [Fact]
     public void Legacy_Wan_swap_fields_are_preserved_and_warned_about()
