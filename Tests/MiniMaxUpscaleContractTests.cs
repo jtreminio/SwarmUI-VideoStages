@@ -31,7 +31,7 @@ public class MiniMaxUpscaleContractTests
                 "PreviousStage",
                 control: 0,
                 upscale: 1.5,
-                upscaleMethod: Fixtures.LtxV23SpatialUpscaler));
+                upscaleMethod: "latentmodel-unit-upscaler.safetensors"));
         clip["duration"] = 1.0;
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
