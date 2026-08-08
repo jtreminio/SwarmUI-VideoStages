@@ -31,6 +31,22 @@ public class Ltx2GuideAndRetakeContractTests
     }
 
     /// <summary>
+    /// The mask block lengths in the order <c>LtxVideoRetakeMasker</c> appends them — prefix,
+    /// window, suffix. Only the batch node's own input list carries that order; node ids are
+    /// allocation order.
+    /// </summary>
+    private static int[] RetakeMaskBlocks(LTXVSetVideoLatentNoiseMasksNode maskNode)
+    {
+        ImageToMaskNode toMask = Assert.IsType<ImageToMaskNode>(maskNode.Masks.Connection?.Node);
+        ComfyNode masked = toMask.Image.Connection?.Node;
+        IEnumerable<ComfyNode> blocks = masked is BatchImagesNodeNode batch
+            ? batch.Images.Items.Select(image => image.Connection?.Node)
+            : [masked];
+        return [.. blocks.Select(block =>
+            Assert.IsType<RepeatImageBatchNode>(block).Amount.LiteralAsInt() ?? 0)];
+    }
+
+    /// <summary>
     /// The clip's framing mode replaces the plain <c>ImageScale</c> that fits a root reference to
     /// the clip resolution.
     /// </summary>
@@ -281,11 +297,7 @@ public class Ltx2GuideAndRetakeContractTests
         LTXVSetVideoLatentNoiseMasksNode maskNode = Assert.Single(
             bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
 
-        int[] amounts = [.. bridge.Graph.NodesOfType<RepeatImageBatchNode>()
-            .Where(repeat => ReachesUpstream(bridge, maskNode, repeat.Id))
-            .OrderBy(repeat => int.Parse(repeat.Id))
-            .Select(repeat => repeat.Amount.LiteralAsInt() ?? 0)];
-        Assert.Equal([3, 3, 7], amounts);
+        Assert.Equal([3, 3, 7], RetakeMaskBlocks(maskNode));
 
         // Exactly the window block carries the retake strength; the frozen blocks are value 0, and
         // one zero mask serves both of them because a mask of the same size and value is the same
@@ -367,12 +379,8 @@ public class Ltx2GuideAndRetakeContractTests
 
         LTXVSetVideoLatentNoiseMasksNode maskNode = Assert.Single(
             bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
-        int[] amounts = [.. bridge.Graph.NodesOfType<RepeatImageBatchNode>()
-            .Where(repeat => ReachesUpstream(bridge, maskNode, repeat.Id))
-            .OrderBy(repeat => int.Parse(repeat.Id))
-            .Select(repeat => repeat.Amount.LiteralAsInt() ?? 0)];
         // Latents [6, 13) of 13 regenerate: prefix 6, window 7, and NO frozen suffix block.
-        Assert.Equal([6, 7], amounts);
+        Assert.Equal([6, 7], RetakeMaskBlocks(maskNode));
 
         // The joint audio/video window runs to the aligned video end, past the authored 4.0s.
         LTXVSetAudioVideoMaskByTimeNode maskByTime = Assert.Single(
