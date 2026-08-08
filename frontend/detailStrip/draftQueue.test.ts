@@ -687,6 +687,30 @@ describe("detail strip draft queue", () => {
             jest.useRealTimers();
         });
 
+        it("flushes the held edit on dispose", () => {
+            setup([{ duration: 5, stages: [{}] }]);
+            setSelection({ kind: "prompt-major", clipIdx: 0 });
+            jest.useFakeTimers();
+            const editor =
+                document.querySelector<HTMLTextAreaElement>(
+                    ".vst-detail-prompt",
+                );
+            if (!editor) {
+                throw new Error("prompt textarea missing");
+            }
+            editor.focus();
+            editor.value = "typed then torn down";
+            editor.dispatchEvent(new Event("input", { bubbles: true }));
+            jest.advanceTimersByTime(1000);
+            expect(h.saveSpy).not.toHaveBeenCalled();
+
+            h.disposeStrip();
+            expect(lastSavedClips<Clip[]>(h.saveSpy)[0].prompt).toBe(
+                "typed then torn down",
+            );
+            jest.useRealTimers();
+        });
+
         it("keeps holding when focus moves to another dock field, not out", () => {
             setup([{ duration: 5, stages: [{}] }]);
             setSelection({ kind: "prompt-major", clipIdx: 0 });
