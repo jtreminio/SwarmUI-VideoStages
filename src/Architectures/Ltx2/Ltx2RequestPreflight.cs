@@ -16,7 +16,7 @@ internal static class Ltx2RequestPreflight
     {
         List<PlanDiagnostic> diagnostics = [];
         UploadedMediaPreflight media = new(generator.UserInput);
-        bool nodesAvailable = Ltx2HostIntegration.IsAvailable(generator.Features);
+        bool nodesAvailable = generator.Features.Contains(Ltx2HostIntegration.FeatureFlag);
         bool reportedMissingNodes = false;
         foreach (ClipPlan clip in plan.Clips.Where(
             clip => clip.Architecture.Id == Ltx2ArchitectureModule.ArchitectureId))

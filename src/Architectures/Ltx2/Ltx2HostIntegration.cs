@@ -41,7 +41,4 @@ internal static class Ltx2HostIntegration
             ComfyUISelfStartBackend.FoldersToForwardInComfyPath.Add("geometry_estimation");
         }
     }
-
-    internal static bool IsAvailable(IReadOnlyCollection<string> features) =>
-        features.Contains(FeatureFlag);
 }
