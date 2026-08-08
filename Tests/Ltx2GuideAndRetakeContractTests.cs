@@ -404,7 +404,7 @@ public class Ltx2GuideAndRetakeContractTests
     /// it to 0, which is why the stage cannot be authored at control 1.0 here.
     /// </summary>
     [Fact]
-    public async Task Retake_disabled_when_length_zero_leaves_graph_unchanged()
+    public async Task Zero_length_retake_adds_no_mask_and_keeps_the_authored_start_step()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         JObject clip = RetakeClip(
@@ -456,9 +456,12 @@ public class Ltx2GuideAndRetakeContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         Assert.Empty(bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVSetAudioVideoMaskByTimeNode>());
         Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
-        // Positive control: start_at_step cannot serve — the parser forces stage 0 of a non-sourced
-        // clip to control 1.0, so it is 0 for the same reason an active retake would make it 0.
+        // Positive control that this sampler is the authored stage — 10 is not the fixture's
+        // default. start_at_step cannot serve as that control: the parser forces stage 0 of a
+        // non-sourced clip to control 1.0, so it is 0 for the same reason an active retake would
+        // make it 0.
         SwarmKSamplerNode sampler = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
         Assert.Equal(10, sampler.Steps.LiteralAsInt());
 
