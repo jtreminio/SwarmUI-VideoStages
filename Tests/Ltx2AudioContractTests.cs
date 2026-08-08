@@ -44,6 +44,23 @@ public class Ltx2AudioContractTests
         return clip;
     }
 
+    /// <summary>A 10s clip with no base track under one 2s timeline segment opening at 1s. The two
+    /// segment tests differ only in the root the segment has to reach.</summary>
+    private static JObject SegmentDocument(Ltx2WorkflowFixture fixture)
+    {
+        JObject document = MakeDocument(AudioClip(
+            MediaSource.Upload,
+            duration: 10.0,
+            uploadedAudio: null,
+            fixture.Stage(control: 0.5)));
+        document["audioTracks"] = new JArray(
+            AudioTrack("track-seg", volume: 0.5, fileName: "timeline.wav", AudioSpan(
+                timelineStartSeconds: 1.0,
+                timelineLengthSeconds: 2.0,
+                sourceStartSeconds: 0.5)));
+        return document;
+    }
+
     private static LTXVAudioVAEDecodeNode PublishedAudioDecode(WorkflowLivePath live) =>
         Assert.IsType<LTXVAudioVAEDecodeNode>(live.PublishedAudio());
 
@@ -418,18 +435,8 @@ public class Ltx2AudioContractTests
     public async Task Timeline_segment_over_no_base_track_conditions_generation_through_a_window_mask()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
-        JObject document = MakeDocument(AudioClip(
-            MediaSource.Upload,
-            duration: 10.0,
-            uploadedAudio: null,
-            fixture.Stage(control: 0.5)));
-        document["audioTracks"] = new JArray(
-            AudioTrack("track-seg", volume: 0.5, fileName: "timeline.wav", AudioSpan(
-                timelineStartSeconds: 1.0,
-                timelineLengthSeconds: 2.0,
-                sourceStartSeconds: 0.5)));
 
-        JObject workflow = await fixture.GenerateImageToVideoAsync(document);
+        JObject workflow = await fixture.GenerateImageToVideoAsync(SegmentDocument(fixture));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
@@ -467,18 +474,8 @@ public class Ltx2AudioContractTests
     public async Task A_text_root_clips_timeline_segment_conditions_the_stage_that_replaces_the_root()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        JObject document = MakeDocument(AudioClip(
-            MediaSource.Upload,
-            duration: 10.0,
-            uploadedAudio: null,
-            fixture.Stage(control: 0.5)));
-        document["audioTracks"] = new JArray(
-            AudioTrack("track-seg", volume: 0.5, fileName: "timeline.wav", AudioSpan(
-                timelineStartSeconds: 1.0,
-                timelineLengthSeconds: 2.0,
-                sourceStartSeconds: 0.5)));
 
-        JObject workflow = await fixture.GenerateAsync(document);
+        JObject workflow = await fixture.GenerateAsync(SegmentDocument(fixture));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
