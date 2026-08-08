@@ -5,6 +5,7 @@ using VideoStages.Architectures.Abstractions;
 using VideoStages.Architectures.HostVideo;
 using VideoStages.Architectures.MiniMax;
 using VideoStages.Authoring;
+using VideoStages.Execution.StockHost;
 using VideoStages.Planning;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
@@ -338,8 +339,12 @@ public class MiniMaxArchitectureTests
                 == "effective-request.unsupported-latent-upscale-ignored");
     }
 
+    /// <summary>
+    /// A latent upscale changes the decoded size on MiniMax, so it counts toward the clip's final
+    /// dimensions — where the stock-host geometry ignores it.
+    /// </summary>
     [Fact]
-    public void Latent_interpolation_projects_cross_clip_geometry()
+    public void Latent_interpolation_counts_toward_the_projected_final_dimensions()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
@@ -365,30 +370,14 @@ public class MiniMaxArchitectureTests
             false,
             compilation.StagePayloads[authoredUpscale.ClipStageRawIndex],
             IsIntermediateStage: false);
-        ClipPlan scaled = new(
-            0,
-            49,
-            ArchitectureEntryMode.ImageToVideo,
-            null,
-            [upscale],
-            AudioPlanCompiler.Compile(authored),
-            SavesAudioTrack: false)
-        {
-            ArchitecturePayload = compilation.Payload,
-        };
-        ClipPlan plain = scaled with
-        {
-            ClipId = 1,
-            Stages = [],
-        };
 
-        PlanDiagnostic diagnostic = Assert.Single(
-            ClipGeometryValidator.Validate([scaled, plain], 512, 512),
-            entry => entry.Code == "clip-geometry-will-conform");
-
-        Assert.Equal(0, diagnostic.ClipId);
-        Assert.Contains("768x768", diagnostic.Message);
-        Assert.Contains("512x512", diagnostic.Message);
+        Assert.Equal(
+            (768, 768),
+            Assert.IsType<MiniMaxClipPayload>(compilation.Payload)
+                .ProjectFinalDimensions([upscale], 512, 512));
+        Assert.Equal(
+            (512, 512),
+            HostVideoStageGeometry.ProjectFinalDimensions([upscale], 512, 512));
     }
 
     [Fact]
