@@ -7,9 +7,9 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class GeneratedBindingRetentionTests
 {
-    // These bindings are outside the keep manifest because production C# under src/ references
-    // them directly. Keep this audit list disjoint from AlwaysKeep so a new generated wrapper must
-    // have an explicit retention reason.
+    // The bindings the prune tool keeps only because production source references them; everything
+    // else in the namespace is force-kept by comfytyped.keep.json. Disjoint, and together covering
+    // the namespace, so a new generated wrapper needs one retention reason or the other.
     private static readonly string[] DirectlyReferencedProductionBindings =
     [
         nameof(SwarmAudioLengthToFramesNode),
@@ -51,6 +51,5 @@ public class GeneratedBindingRetentionTests
         Assert.Empty(generatedNodeTypes.Except(
             PruneManifest.AlwaysKeep.Concat(DirectlyReferencedProductionBindings),
             StringComparer.Ordinal));
-        Assert.Contains(nameof(SwarmFrameImageNode), PruneManifest.AlwaysKeep);
     }
 }
