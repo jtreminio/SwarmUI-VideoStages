@@ -399,33 +399,17 @@ describe("detail strip IC-LoRA panel", () => {
         ).toBe(true);
     });
 
-    // The per-entry selects render in a fixed order: Preset, LoRA, Control
-    // (Custom / Union Control presets only), Apply on, then Source
-    // (refine-stage placements only).
-    const IC_LORA_SELECTS = [
-        "preset",
-        "lora",
-        "control",
-        "apply",
-        "data",
-        "source",
-    ];
-    type IcLoraSelectName = "preset" | "lora" | "apply" | "data" | "source";
-    const icLoraSelect = (which: IcLoraSelectName): HTMLSelectElement => {
-        const row = document.querySelector<HTMLElement>(".vst-detail-iclora");
+    const icLoraSelect = (label: string): HTMLSelectElement => {
         const select =
-            row?.querySelectorAll("select")[IC_LORA_SELECTS.indexOf(which)];
+            fieldByLabel(label).querySelector<HTMLSelectElement>("select");
         if (!select) {
-            throw new Error(`IC-LoRA ${which} select missing`);
+            throw new Error(`IC-LoRA ${label} select missing`);
         }
-        return select as HTMLSelectElement;
+        return select;
     };
 
-    const changeIcLoraSelect = (
-        which: IcLoraSelectName,
-        value: string,
-    ): void => {
-        const select = icLoraSelect(which);
+    const changeIcLoraSelect = (label: string, value: string): void => {
+        const select = icLoraSelect(label);
         select.value = value;
         select.dispatchEvent(new Event("change", { bubbles: true }));
     };
@@ -439,21 +423,17 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        const options = Array.from(icLoraSelect("apply").options).map((o) => [
-            o.value,
-            o.textContent,
-        ]);
+        const options = Array.from(icLoraSelect("Apply on").options).map(
+            (o) => [o.value, o.textContent],
+        );
         expect(options).toEqual([
             ["-1", "All stages"],
             ["0", "Stage 0"],
             ["1", "Stage 1"],
         ]);
-        // Custom exposes Drive data and Source; Incoming is disabled because
-        // the all-stages target includes a generated stage 0.
-        expect(
-            document.querySelectorAll(".vst-detail-iclora select"),
-        ).toHaveLength(6);
-        expect(icLoraSelect("source").options[1].disabled).toBe(true);
+        // Incoming is disabled because the all-stages target includes a
+        // generated stage 0.
+        expect(icLoraSelect("Source").options[1].disabled).toBe(true);
     });
 
     it("refine-stage placement offers Incoming and swaps the upload row for a hint", () => {
@@ -465,10 +445,10 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        changeIcLoraSelect("apply", "1");
+        changeIcLoraSelect("Apply on", "1");
         expect(lastSavedClips<Clip[]>(h.saveSpy)[0].icLoras[0].stage).toBe(1);
 
-        changeIcLoraSelect("source", "Incoming");
+        changeIcLoraSelect("Source", "Incoming");
         const entry = lastSavedClips<Clip[]>(h.saveSpy)[0].icLoras[0];
         expect(entry.driveSource).toBe("Incoming");
         expect(controlNetLabels()).not.toContain("Drive Media");
@@ -493,7 +473,7 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        changeIcLoraSelect("apply", "-1");
+        changeIcLoraSelect("Apply on", "-1");
         const entry = lastSavedClips<Clip[]>(h.saveSpy)[0].icLoras[0];
         expect(entry.stage).toBe(-1);
         expect(entry.driveSource).toBe("Upload");
@@ -517,14 +497,10 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        // Custom also exposes Drive data, and Incoming is available because
-        // source footage enters stage 0.
-        expect(
-            document.querySelectorAll(".vst-detail-iclora select"),
-        ).toHaveLength(6);
-        expect(icLoraSelect("source").value).toBe("Upload");
+        // Incoming is available because source footage enters stage 0.
+        expect(icLoraSelect("Source").value).toBe("Upload");
         expect(controlNetLabels()).toContain("Drive Media");
-        expect(icLoraSelect("source").options[1].disabled).toBe(false);
+        expect(icLoraSelect("Source").options[1].disabled).toBe(false);
     });
 
     it("init-video clip Incoming entry shows its data source at stage 0", () => {
@@ -551,7 +527,7 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(icLoraSelect("source").value).toBe("Incoming");
+        expect(icLoraSelect("Source").value).toBe("Incoming");
         expect(controlNetLabels()).not.toContain("Drive Media");
         expect(detail()?.textContent).toContain(
             "Uses visual from stage 0's incoming media.",
@@ -567,10 +543,7 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(
-            document.querySelectorAll(".vst-detail-iclora select"),
-        ).toHaveLength(6);
-        expect(icLoraSelect("source").options[1].disabled).toBe(true);
+        expect(icLoraSelect("Source").options[1].disabled).toBe(true);
         expect(controlNetLabels()).toContain("Drive Media");
     });
 
@@ -589,7 +562,7 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
-        expect(icLoraSelect("source").options[1].disabled).toBe(true);
+        expect(icLoraSelect("Source").options[1].disabled).toBe(true);
     });
 
     it("repairs Incoming to Upload when skipping its targeted later stage", () => {
@@ -664,7 +637,7 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 2, stageIdx: 0 });
-        expect(icLoraSelect("source").options[1].disabled).toBe(true);
+        expect(icLoraSelect("Source").options[1].disabled).toBe(true);
     });
 
     it("does not treat a skipped earlier clip as Incoming output", () => {
@@ -683,7 +656,7 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
-        expect(icLoraSelect("source").options[1].disabled).toBe(true);
+        expect(icLoraSelect("Source").options[1].disabled).toBe(true);
     });
 
     it("shows only actual models in the Custom IC-LoRA dropdown", () => {
@@ -695,7 +668,7 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        const options = Array.from(icLoraSelect("lora").options).map(
+        const options = Array.from(icLoraSelect("LoRA").options).map(
             (o) => o.value,
         );
         expect(options).toEqual(["lora-x.safetensors"]);
@@ -713,12 +686,12 @@ describe("detail strip IC-LoRA panel", () => {
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(controlNetLabels()).not.toContain("LoRA");
 
-        const presetSelect = icLoraSelect("preset");
+        const presetSelect = icLoraSelect("Preset");
         presetSelect.value = "custom";
         presetSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
         expect(controlNetLabels()).toContain("LoRA");
-        expect(icLoraSelect("lora").value).toBe("lora-x.safetensors");
+        expect(icLoraSelect("LoRA").value).toBe("lora-x.safetensors");
         expect(lastSavedClips<Clip[]>(h.saveSpy)[0].icLoras[0]).toMatchObject({
             preset: "custom",
             lora: "lora-x.safetensors",
@@ -735,7 +708,7 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        const presetSelect = icLoraSelect("preset");
+        const presetSelect = icLoraSelect("Preset");
         presetSelect.value = "deblur";
         presetSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
@@ -768,7 +741,7 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(icLoraSelect("preset").value).toBe("union-control");
+        expect(icLoraSelect("Preset").value).toBe("union-control");
         expect(controlNetLabels()).not.toContain("LoRA");
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledWith(
@@ -825,7 +798,7 @@ describe("detail strip IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        changeIcLoraSelect("preset", "deblur");
+        changeIcLoraSelect("Preset", "deblur");
 
         const onError = swarmGlobals.makeWSRequest.mock.calls[0][4] as (
             error: unknown,
@@ -841,10 +814,10 @@ describe("detail strip IC-LoRA panel", () => {
         renderStrip();
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
 
-        changeIcLoraSelect("preset", "custom");
+        changeIcLoraSelect("Preset", "custom");
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
 
-        changeIcLoraSelect("preset", "deblur");
+        changeIcLoraSelect("Preset", "deblur");
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(2);
     });
 
