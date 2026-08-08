@@ -20,11 +20,7 @@ public sealed class LtxIcLoraTests
     [Fact]
     public void Unknown_control_mode_leaves_drive_images_unmodified()
     {
-        WorkflowGenerator generator = new()
-        {
-            UserInput = new T2IParamInput(null),
-            Workflow = new JObject(),
-        };
+        WorkflowGenerator generator = RuntimeGenerator();
         using WorkflowBridge bridge = BridgeSync.For(generator);
         UnknownNode drive = bridge
             .AddStub("UnitTest_UnknownControlDrive", "201")
@@ -62,13 +58,7 @@ public sealed class LtxIcLoraTests
     public void Incoming_latent_audio_is_reused_without_decode_encode_or_ensure_churn()
     {
         using SwarmUiTestContext testContext = new();
-        WorkflowGenerator generator = new()
-        {
-            UserInput = new T2IParamInput(null),
-            Features = [],
-            ModelFolderFormat = "/",
-            Workflow = new JObject(),
-        };
+        WorkflowGenerator generator = RuntimeGenerator();
         WGNodeData latentAudio;
         using (WorkflowBridge bridge = BridgeSync.For(generator))
         {
@@ -234,5 +224,4 @@ public sealed class LtxIcLoraTests
             ControlNetIndex: null),
         DimensionDownscaleFactor: 1,
         GuideStrength: 1);
-
 }
