@@ -277,7 +277,7 @@ public class RequestReaderTests
 
         Assert.Equal(MediaSource.Native, parsed.AudioSource);
         Assert.Contains(
-            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            TypedWorkflowAssertions.RequestWarnings(input),
             warning => warning.Contains(
                 "ignoring unknown or non-overridable clip 0 field 'bogusfield'",
                 StringComparison.Ordinal));
@@ -440,7 +440,7 @@ public class RequestReaderTests
 
         Assert.Equal(IcLoraDriveData.None, parsed.DriveData);
         Assert.Contains(
-            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            TypedWorkflowAssertions.RequestWarnings(input),
             warning => warning.Contains("unsupported DriveData 'future-stream'"));
     }
 
@@ -465,7 +465,7 @@ public class RequestReaderTests
 
         Assert.Null(parsed.DriveMediaKinds);
         Assert.Contains(
-            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            TypedWorkflowAssertions.RequestWarnings(input),
             warning => warning.Contains("DriveMediaKinds must be an array"));
     }
 
@@ -486,8 +486,7 @@ public class RequestReaderTests
 
         IcLoraSpec parsed = Assert.Single(
             Assert.Single(RequestReader.Read(input).Clips).IcLoras);
-        List<string> warnings =
-            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]);
+        List<string> warnings = TypedWorkflowAssertions.RequestWarnings(input);
 
         Assert.Equal<ClipReferenceKind>([ClipReferenceKind.Image], parsed.DriveMediaKinds);
         Assert.Equal(3, warnings.Count(warning => warning.Contains("DriveMediaKinds")));
@@ -826,7 +825,7 @@ public class RequestReaderTests
         Assert.Equal(0, stage.ClipStageIndex);
         Assert.True(clip.AuthoredStages[0].Skipped);
         Assert.Contains(
-            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            TypedWorkflowAssertions.RequestWarnings(input),
             warning => warning.Contains("Clip 0 stage 0 has no model and was ignored"));
     }
 
@@ -885,7 +884,7 @@ public class RequestReaderTests
 
         Assert.Empty(RequestReader.Read(input).Clips);
         Assert.Contains(
-            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            TypedWorkflowAssertions.RequestWarnings(input),
             warning => warning.Contains("Entry 0 has no stages array and was ignored"));
     }
 
@@ -900,7 +899,7 @@ public class RequestReaderTests
         TimelineSpec spec = RequestReader.Read(input);
 
         Assert.Single(spec.Clips);
-        Assert.False(input.ExtraMeta.ContainsKey("parser_warnings"));
+        Assert.Empty(TypedWorkflowAssertions.RequestWarnings(input));
     }
 
     [Fact]
@@ -1354,7 +1353,7 @@ public class RequestReaderTests
 
         Assert.Null(parsed.InitVideo);
         Assert.Contains(
-            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            TypedWorkflowAssertions.RequestWarnings(input),
             warning => warning.Contains("InitVideo start")
                 && warning.Contains("representable frame range"));
     }
@@ -1490,7 +1489,7 @@ public class RequestReaderTests
 
         Assert.Null(parsed.Frames);
         Assert.Contains(
-            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            TypedWorkflowAssertions.RequestWarnings(input),
             warning => warning.Contains("duration must be finite and non-negative")
                 && warning.Contains("ignoring it"));
     }
@@ -1508,7 +1507,7 @@ public class RequestReaderTests
 
         Assert.Null(parsed.Frames);
         Assert.Contains(
-            Assert.IsType<List<string>>(input.ExtraMeta["parser_warnings"]),
+            TypedWorkflowAssertions.RequestWarnings(input),
             warning => warning.Contains("duration at 24 fps exceeds")
                 && warning.Contains("was ignored"));
     }
