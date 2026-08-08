@@ -53,7 +53,7 @@ internal static class AuthoringTimeline
         JObject container = DocumentJson.GetObject(clipObject, UploadContainers.ClipInitVideo);
         double start = DocumentJson.GetOptionalDouble(
             container, "startSeconds", 0, $"Clip {clipIndex} InitVideo", warn);
-        if (!IsFinite(start) || start < 0)
+        if (!double.IsFinite(start) || start < 0)
         {
             start = 0;
         }
@@ -87,7 +87,7 @@ internal static class AuthoringTimeline
             retake, "startSeconds", 0, location, warn);
         double lengthSeconds = DocumentJson.GetOptionalDouble(
             retake, "lengthSeconds", 0, location, warn);
-        if (!IsFinite(startSeconds) || !IsFinite(lengthSeconds)
+        if (!double.IsFinite(startSeconds) || !double.IsFinite(lengthSeconds)
             || startSeconds < 0 || lengthSeconds <= 0)
         {
             return null;
@@ -119,7 +119,7 @@ internal static class AuthoringTimeline
 
         double strength = DocumentJson.GetOptionalDouble(
             retake, "strength", 1.0, location, warn);
-        strength = IsFinite(strength) ? Math.Clamp(strength, 0.0, 1.0) : 1.0;
+        strength = double.IsFinite(strength) ? Math.Clamp(strength, 0.0, 1.0) : 1.0;
         return new RetakeWindowSpec(startFrame, lengthFrames, strength);
     }
 
@@ -286,13 +286,9 @@ internal static class AuthoringTimeline
         return double.IsFinite(value) && value >= 0 ? value : null;
     }
 
-    private static bool IsFinite(double value) =>
-        !double.IsNaN(value) && !double.IsInfinity(value);
-
     private static bool IsRepresentableNonNegativeFrame(double value) =>
-        IsFinite(value) && value >= 0 && value <= int.MaxValue;
+        double.IsFinite(value) && value >= 0 && value <= int.MaxValue;
 
     private static double RoundTenth(double value) =>
         Math.Round(value * 10) / 10;
-
 }

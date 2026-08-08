@@ -614,7 +614,7 @@ internal static class RequestReader
         windows is not { Count: > 0 } ? [] : [.. windows.OrderBy(window => window.Start)];
 
     private static double ClampUnitOrDefault(double value, double fallback) =>
-        IsFinite(value) ? Math.Clamp(value, 0.0, 1.0) : fallback;
+        double.IsFinite(value) ? Math.Clamp(value, 0.0, 1.0) : fallback;
 
     private static string NormalizeBoundaryOut(string raw)
     {
@@ -644,7 +644,4 @@ internal static class RequestReader
         double factor = Math.Pow(10, decimals);
         return Math.Truncate(value * factor) / factor;
     }
-
-    private static bool IsFinite(double value) =>
-        !double.IsNaN(value) && !double.IsInfinity(value);
 }

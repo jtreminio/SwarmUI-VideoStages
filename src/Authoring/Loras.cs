@@ -209,7 +209,7 @@ internal static class Loras
     }
 
     private static double SanitizeWeight(double value, double fallback) =>
-        IsFinite(value) ? value : fallback;
+        double.IsFinite(value) ? value : fallback;
 
     private static string NormalizeLoraName(string raw)
     {
@@ -222,8 +222,4 @@ internal static class Loras
         string squeezed = new([.. trimmed.Where(character => !char.IsWhiteSpace(character))]);
         return StringUtils.Equals(squeezed, "(none)") ? "" : trimmed;
     }
-
-    private static bool IsFinite(double value) =>
-        !double.IsNaN(value) && !double.IsInfinity(value);
-
 }
