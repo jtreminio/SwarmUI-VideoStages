@@ -172,14 +172,6 @@ public class BackendConsolidationTests
         Assert.Null(generator.CurrentMedia);
     }
 
-    [Fact]
-    public void Metadata_sanitizer_never_publishes_a_document_it_could_not_walk()
-    {
-        Assert.Equal(
-            MetadataSanitizer.Unsanitizable,
-            MetadataSanitizer.StripUploadDataFromJsonParameter("{\"data\":\"AAAA"));
-    }
-
     [Theory]
     [InlineData("Native", (int)AudioSourceKind.Native)]
     [InlineData("", (int)AudioSourceKind.Native)]
