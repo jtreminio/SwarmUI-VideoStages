@@ -110,12 +110,12 @@ public class HostVideoArchitectureTests
         int expected)
     {
         StagePlan stage = new(
-            0,
-            0,
-            0,
-            (StageInputKind)input,
-            false,
-            new StockHostVideoStagePayload(
+            StageId: 0,
+            ClipStageIndex: 0,
+            ClipStageRawIndex: 0,
+            Input: (StageInputKind)input,
+            IsPassthrough: false,
+            ArchitecturePayload: new StockHostVideoStagePayload(
                 HostVideoArchitectureModule.ArchitectureId,
                 "unit-test-model",
                 "unit-test-compatibility",
@@ -128,7 +128,7 @@ public class HostVideoArchitectureTests
                     "normal",
                     new(StageUpscaleMode.Pixel, 1.5, "raw", "lanczos"),
                     [])),
-            false);
+            IsIntermediateStage: false);
 
         Assert.Equal(
             (expected, expected),

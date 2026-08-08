@@ -120,8 +120,8 @@ internal sealed class VideoStageRunner : IDisposable
     private void ApplyUpscale(StagePlan stage)
     {
         StageUpscalePlan upscale = stage.Core.Upscale;
-        // Native text entry has no decoded pixels to resize.
         if (!HostVideoStageGeometry.ResizesDecodedPixels(upscale)
+            // Native text entry has no decoded pixels to resize.
             || _generator.CurrentMedia is null)
         {
             return;

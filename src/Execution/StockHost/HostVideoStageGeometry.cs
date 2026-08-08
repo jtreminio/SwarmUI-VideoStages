@@ -4,8 +4,8 @@ namespace VideoStages.Execution.StockHost;
 
 internal static class HostVideoStageGeometry
 {
-    /// <summary>The modes <see cref="VideoStageRunner"/> resizes for; the rest are latent-side or
-    /// unsupported and never reach the pixel resize.</summary>
+    /// <summary>The one owner of "does this upscale resize decoded pixels", for the projection below
+    /// and for the runtime that has to agree with it.</summary>
     internal static bool ResizesDecodedPixels(StageUpscalePlan upscale) =>
         upscale is { Mode: StageUpscaleMode.Pixel or StageUpscaleMode.Model };
 
