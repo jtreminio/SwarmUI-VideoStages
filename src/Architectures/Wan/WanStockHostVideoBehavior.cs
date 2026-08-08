@@ -1,5 +1,6 @@
 using ComfyTyped.Core;
-using Newtonsoft.Json.Linq;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using SwarmUI.Utils;
@@ -93,76 +94,69 @@ internal sealed class WanStockHostVideoBehavior(
             genInfo.VideoEndFrame,
             "${videostageswanlastframe}",
             false);
-        string scaled = generator.CreateNode("ImageScale", new JObject
+        int width = (int)genInfo.Width;
+        int height = (int)genInfo.Height;
+        using WorkflowBridge bridge = BridgeSync.For(generator);
+        ImageScaleNode scaled = ImageScaleReuse.Create(
+            bridge,
+            endFrame.Path,
+            width,
+            height,
+            crop: "disabled");
+        WanFirstLastFrameToVideoNode conditioning = bridge.AddNode(
+            new WanFirstLastFrameToVideoNode().With(
+                Width: width,
+                Height: height,
+                Length: frames,
+                BatchSize: 1,
+                EndImage: scaled.IMAGE));
+        conditioning.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
+        conditioning.NegativeInput.ConnectFromPath(bridge, genInfo.NegCond);
+        conditioning.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
+        if (NeedsClipVisionEndFrame(stage, genInfo))
         {
-            ["image"] = endFrame.Path,
-            ["width"] = genInfo.Width,
-            ["height"] = genInfo.Height,
-            ["upscale_method"] = "lanczos",
-            ["crop"] = "disabled",
-        });
-        JArray scaledEnd = [scaled, 0];
-        JToken clipVisionEnd = null;
-        string compatibilityId =
-            genInfo.VideoModel.ModelClass?.CompatClass?.ID;
-        bool exactWan22ImageProfile =
-            stage.ResolvedModel.ModelProfileId == WanArchitectureModule.ImageToVideoProfileId;
-        if (!exactWan22ImageProfile
-            && (compatibilityId == T2IModelClassSorter.CompatWan21_14b.ID
-                || compatibilityId
-                    == T2IModelClassSorter.CompatWan21_1_3b.ID))
-        {
-            string targetName = generator.RequireVisionModel(
-                "clip_vision_h.safetensors",
-                "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/"
-                    + "split_files/clip_vision/clip_vision_h.safetensors",
-                "64a7ef761bfccbadbaa3da77366aac4185a6c58fa5de5f589b42a65bcc21f161",
-                T2IParamTypes.ClipVisionModel);
-            string clipLoader = generator.CreateNode(
-                "CLIPVisionLoader",
-                new JObject
-                {
-                    ["clip_name"] = targetName,
-                });
-            string encodedEnd = generator.CreateNode(
-                "CLIPVisionEncode",
-                new JObject
-                {
-                    ["clip_vision"] = new JArray(clipLoader, 0),
-                    ["image"] = scaledEnd,
-                    ["crop"] = "center",
-                });
-            clipVisionEnd = new JArray(encodedEnd, 0);
+            CLIPVisionLoaderNode clipLoader = bridge.AddNode(
+                new CLIPVisionLoaderNode().With(
+                    ClipName: generator.RequireVisionModel(
+                        "clip_vision_h.safetensors",
+                        "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/"
+                            + "split_files/clip_vision/clip_vision_h.safetensors",
+                        "64a7ef761bfccbadbaa3da77366aac4185a6c58fa5de5f589b42a65bcc21f161",
+                        T2IParamTypes.ClipVisionModel)));
+            CLIPVisionEncodeNode encoded = bridge.AddNode(
+                new CLIPVisionEncodeNode().With(
+                    ClipVision: clipLoader.CLIPVISION,
+                    Image: scaled.IMAGE,
+                    Crop: CLIPVisionEncodeNode.CropValues.Center));
+            conditioning.ClipVisionEndImage.ConnectTo(encoded.CLIPVISIONOUTPUT);
         }
-        string conditioning = generator.CreateNode(
-            "WanFirstLastFrameToVideo",
-            new JObject
-            {
-                ["width"] = genInfo.Width,
-                ["height"] = genInfo.Height,
-                ["length"] = frames,
-                ["positive"] = genInfo.PosCond,
-                ["negative"] = genInfo.NegCond,
-                ["vae"] = genInfo.Vae.Path,
-                ["start_image"] = null,
-                ["end_image"] = scaledEnd,
-                ["clip_vision_start_image"] = null,
-                ["clip_vision_end_image"] = clipVisionEnd,
-                ["batch_size"] = 1,
-            });
-        genInfo.PosCond = [conditioning, 0];
-        genInfo.NegCond = [conditioning, 1];
+        genInfo.PosCond = conditioning.Positive.ToPath();
+        genInfo.NegCond = conditioning.Negative.ToPath();
         generator.CurrentMedia = new(
-            [conditioning, 2],
+            conditioning.Latent.ToPath(),
             generator,
             WGNodeData.DT_LATENT_VIDEO,
             genInfo.Model.Compat)
         {
-            Width = (int)genInfo.Width,
-            Height = (int)genInfo.Height,
+            Width = width,
+            Height = height,
             Frames = frames,
             FPS = plan.FramesPerSecond,
         };
+    }
+
+    /// <summary>Wan 2.1 conditions the end frame through CLIP vision; Wan 2.2's image profile does not.</summary>
+    private static bool NeedsClipVisionEndFrame(
+        StagePlan stage,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    {
+        if (stage.ResolvedModel.ModelProfileId == WanArchitectureModule.ImageToVideoProfileId)
+        {
+            return false;
+        }
+        string compatibilityId = genInfo.VideoModel.ModelClass?.CompatClass?.ID;
+        return compatibilityId == T2IModelClassSorter.CompatWan21_14b.ID
+            || compatibilityId == T2IModelClassSorter.CompatWan21_1_3b.ID;
     }
 
     internal ISet<string> CapturePreHostNodeIds(
