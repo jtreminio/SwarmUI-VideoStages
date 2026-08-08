@@ -81,6 +81,19 @@ public class Ltx2InitVideoContractTests
             bridge.Graph.NodesOfType<ImageScaleNode>(),
             scale => ReferenceEquals(scale.Image.Connection?.Node, window));
 
+    /// <summary>
+    /// The conform chain's own audio trim, told apart from any trim applied downstream of it by
+    /// the upload's audio split it reads.
+    /// </summary>
+    private static TrimAudioDurationNode ConformAudioTrimOf(WorkflowBridge bridge)
+    {
+        GetVideoComponentsNode components = Assert.Single(
+            bridge.Graph.NodesOfType<GetVideoComponentsNode>());
+        return Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
+            node => ReferenceEquals(node.Audio.Connection, components.Audio));
+    }
+
     private static SwarmFrameWindowNode AssertConformChain(
         WorkflowBridge bridge,
         int expectedFrames,
@@ -89,12 +102,8 @@ public class Ltx2InitVideoContractTests
     {
         SwarmFrameWindowNode window = AssertSourceConformChain(
             bridge, StartFrame, expectedFrames, expectedWidth, expectedHeight);
-        GetVideoComponentsNode components = Assert.Single(
-            bridge.Graph.NodesOfType<GetVideoComponentsNode>());
 
-        TrimAudioDurationNode trim = Assert.Single(
-            bridge.Graph.NodesOfType<TrimAudioDurationNode>(),
-            node => ReferenceEquals(node.Audio.Connection, components.Audio));
+        TrimAudioDurationNode trim = ConformAudioTrimOf(bridge);
         Assert.Equal(StartSeconds, trim.StartIndex.LiteralAsDouble());
         Assert.Equal(
             expectedFrames / Fps,
@@ -815,6 +824,7 @@ public class Ltx2InitVideoContractTests
 
         TrimAudioDurationNode audioTrim = Assert.IsType<TrimAudioDurationNode>(
             bridge.ResolvePath(generator.CurrentMedia.AttachedAudio.Path).Node);
+        Assert.Same(ConformAudioTrimOf(bridge).AUDIO, audioTrim.Audio.Connection);
         Assert.Equal(trimStart / Fps, audioTrim.StartIndex.LiteralAsDouble()!.Value, precision: 6);
         Assert.Equal(trimmedFrames / Fps, audioTrim.Duration.LiteralAsDouble()!.Value, precision: 6);
 
