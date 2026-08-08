@@ -97,6 +97,48 @@ public class LtxStageExecutorComponentTests
         Assert.Null(latentPath);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Reusable_latent_resolver_crosses_vae_routes_on_a_dynamic_frame_count_only_when_the_compat_matches(
+        bool matchingCompat)
+    {
+        JObject workflow = BuildDecodeWorkflow(includeSecondVae: true);
+        WorkflowGenerator generator = new()
+        {
+            UserInput = new T2IParamInput(null),
+            Features = [],
+            ModelFolderFormat = "/",
+            Workflow = workflow
+        };
+        WGNodeData source = new(
+            new JArray("3", 0),
+            generator,
+            WGNodeData.DT_VIDEO,
+            T2IModelClassSorter.CompatLtxv2);
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = new()
+        {
+            Generator = generator,
+            Frames = null,
+            Vae = new WGNodeData(
+                new JArray("4", 2),
+                generator,
+                WGNodeData.DT_VAE,
+                matchingCompat
+                    ? T2IModelClassSorter.CompatLtxv2
+                    : T2IModelClassSorter.CompatLtxv)
+        };
+
+        bool reused = new LtxReusableLatentResolver(generator).TryResolve(
+            source,
+            genInfo,
+            allowDynamicFrameCount: true,
+            out JArray latentPath);
+
+        Assert.Equal(matchingCompat, reused);
+        Assert.True(JToken.DeepEquals(matchingCompat ? new JArray("2", 0) : null, latentPath));
+    }
+
     private static JObject BuildDecodeWorkflow(bool includeSecondVae)
     {
         JObject workflow = [];
