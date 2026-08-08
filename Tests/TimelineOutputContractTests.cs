@@ -429,8 +429,12 @@ public class TimelineOutputContractTests
     /// <summary>
     /// The text-to-video shape, where the timeline displaces core's video root entirely and the
     /// root's own save is the only one in the graph: it is retargeted onto whatever the timeline
-    /// ends up publishing. There is no core base-image save here to carry the request, so a
-    /// suppressed save would leave ComfyUI a prompt with no output node to run at all.
+    /// ends up publishing.
+    /// <para>
+    /// Both <c>donotsave</c> arms assert the same shape. Core honours that request above the graph
+    /// and only drops the save node itself at zero steps, so the flag changes nothing here; the
+    /// second row is kept to record that.
+    /// </para>
     /// </summary>
     [Theory]
     [InlineData(false)]
