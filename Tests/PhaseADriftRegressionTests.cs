@@ -113,6 +113,17 @@ public class PhaseADriftRegressionTests
             FrontendConstant("constants.ts", "AUDIO_SPAN_VOLUME_MAX"));
     }
 
+    /// <summary>The snap grid needs no assertion here: every case in dimension-snap-cases.json is
+    /// grid-sensitive, so both languages red on it. No case reaches the clamp — max rawWidth is
+    /// 1344 — and the two that do assert it spell 4096 by hand on each side.</summary>
+    [Fact]
+    public void Frontend_root_dimension_maximum_matches_the_backend()
+    {
+        Assert.Equal<double>(
+            DimensionSnap.MaximumDimension,
+            FrontendConstant("constants.ts", "ROOT_DIMENSION_MAX"));
+    }
+
     /// <summary>Reads a number out of a hand-written frontend module. Parsing beats matching the
     /// rendered text, which reads two spellings of one number as drift: C# writes 0.00001 as
     /// 1E-05, and TypeScript may write 4096 as 4_096. Insisting on exactly one declaration is
