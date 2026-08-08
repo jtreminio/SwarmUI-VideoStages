@@ -1,5 +1,7 @@
 using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Architectures.HostVideo;
+using VideoStages.Architectures.Wan;
 using VideoStages.Authoring;
 using VideoStages.Planning;
 
@@ -28,36 +30,45 @@ internal static class TestPlanCompiler
             rootEnvironment,
             ResolveLtx(spec));
 
-    internal static ArchitecturePlanningResult ResolveLtx(TimelineSpec spec)
+    internal static ArchitecturePlanningResult ResolveLtx(TimelineSpec spec) =>
+        Resolve(spec, _ => Ltx2ArchitectureModule.Instance);
+
+    internal static ArchitecturePlanningResult Resolve(
+        TimelineSpec spec,
+        Func<ClipSpec, IVideoArchitectureModule> moduleFor,
+        Func<ClipSpec, VideoArchitectureDescriptor> descriptorFor = null)
     {
-        VideoArchitectureDescriptor descriptor =
-            Ltx2ArchitectureModule.Instance.Descriptor;
         Dictionary<int, ClipArchitectureAssignment> clips = [];
         foreach (ClipSpec clip in spec.Clips ?? [])
         {
             if (clip.Stages is not { Count: > 0 })
             {
-                clips.TryAdd(clip.Id, new(
+                clips[clip.Id] = new(
                     clip.Id,
                     null,
                     NoneArchitecture.Descriptor,
-                    new Dictionary<int, ResolvedVideoModel>()));
+                    new Dictionary<int, ResolvedVideoModel>());
                 continue;
             }
-            Dictionary<int, ResolvedVideoModel> stages = [];
-            foreach (StageSpec stage in clip.Stages)
-            {
-                stages[stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
-                    stage.Model,
-                    new("ltx-2.3"),
-                    descriptor);
-            }
-            clips.TryAdd(clip.Id, new(
+            IVideoArchitectureModule module = moduleFor(clip);
+            VideoArchitectureDescriptor descriptor =
+                descriptorFor?.Invoke(clip) ?? module.Descriptor;
+            ModelProfileId profileId = ProfileFor(descriptor);
+            clips[clip.Id] = new(
                 clip.Id,
-                Ltx2ArchitectureModule.Instance,
+                module,
                 descriptor,
-                stages));
+                clip.Stages.ToDictionary(
+                    stage => stage.ClipStageRawIndex,
+                    stage => TestResolvedVideoModel.Create(stage.Model, profileId, descriptor)));
         }
         return new ArchitecturePlanningResult(clips, []);
     }
+
+    private static ModelProfileId ProfileFor(VideoArchitectureDescriptor descriptor) =>
+        descriptor.Id == Ltx2ArchitectureModule.ArchitectureId
+            ? Ltx2ArchitectureModule.ProfileId
+            : descriptor.Id == WanArchitectureModule.ArchitectureId
+                ? WanArchitectureModule.ImageToVideoProfileId
+                : HostVideoArchitectureModule.ProfileId;
 }

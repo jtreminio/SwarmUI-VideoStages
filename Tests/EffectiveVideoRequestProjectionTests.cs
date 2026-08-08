@@ -35,7 +35,7 @@ public sealed class EffectiveVideoRequestProjectionTests
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
-            Resolve(authored, _ => module, _ => descriptor));
+            TestPlanCompiler.Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(27, authored.Clips[0].Frames);
         Assert.Equal(expectedFrames, request.Spec.Clips[0].Frames);
@@ -56,7 +56,7 @@ public sealed class EffectiveVideoRequestProjectionTests
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
-            Resolve(authored, _ => module, _ => descriptor));
+            TestPlanCompiler.Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(25, authored.Clips[0].Stages[0].RetakeWindow.LengthFrames);
         Assert.Equal(31, request.Spec.Clips[0].Stages[0].RetakeWindow.LengthFrames);
@@ -77,7 +77,7 @@ public sealed class EffectiveVideoRequestProjectionTests
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
-            Resolve(authored, _ => module, _ => descriptor));
+            TestPlanCompiler.Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(33, request.Spec.Clips[0].Frames);
     }
@@ -110,7 +110,7 @@ public sealed class EffectiveVideoRequestProjectionTests
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
-            Resolve(authored, _ => module, _ => descriptor));
+            TestPlanCompiler.Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(
             new int?[] { 27, 33 },
@@ -140,7 +140,7 @@ public sealed class EffectiveVideoRequestProjectionTests
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
-            Resolve(authored, _ => module, _ => descriptor));
+            TestPlanCompiler.Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(27, request.Spec.Clips[0].Frames);
     }
@@ -162,7 +162,7 @@ public sealed class EffectiveVideoRequestProjectionTests
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
-            Resolve(authored, _ => module, _ => descriptor));
+            TestPlanCompiler.Resolve(authored, _ => module, _ => descriptor));
 
         ClipSpec effective = Assert.Single(request.Spec.Clips);
         Assert.Equal(33, effective.Frames);
@@ -185,7 +185,10 @@ public sealed class EffectiveVideoRequestProjectionTests
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
-            Resolve(authored, _ => MiniMaxArchitectureModule.Instance, _ => descriptor));
+            TestPlanCompiler.Resolve(
+                authored,
+                _ => MiniMaxArchitectureModule.Instance,
+                _ => descriptor));
 
         Assert.Equal(39, Assert.Single(request.Spec.Clips).Frames);
     }
@@ -235,7 +238,7 @@ public sealed class EffectiveVideoRequestProjectionTests
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
-            Resolve(authored, _ => module, _ => descriptor));
+            TestPlanCompiler.Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(27, request.Spec.Clips[0].Frames);
     }
@@ -282,7 +285,7 @@ public sealed class EffectiveVideoRequestProjectionTests
             Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
         IVideoArchitectureModule module = Ltx2ArchitectureModule.Instance;
         ArchitecturePlanningResult resolved =
-            Resolve(authored, _ => module, _ => descriptor);
+            TestPlanCompiler.Resolve(authored, _ => module, _ => descriptor);
         ArchitecturePlanningResult blocked = resolved with
         {
             Diagnostics =
@@ -314,7 +317,7 @@ public sealed class EffectiveVideoRequestProjectionTests
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
-            Resolve(authored, _ => module, _ => descriptor));
+            TestPlanCompiler.Resolve(authored, _ => module, _ => descriptor));
 
         Assert.Equal(int.MaxValue, request.Spec.Clips[0].Frames);
         Assert.Contains(
@@ -473,7 +476,7 @@ public sealed class EffectiveVideoRequestProjectionTests
             ],
         };
         TimelineSpec authored = Spec(clip);
-        ArchitecturePlanningResult architectures = Resolve(
+        ArchitecturePlanningResult architectures = TestPlanCompiler.Resolve(
             authored,
             _ => HostVideoArchitectureModule.Instance,
             _ => HostVideoArchitectureModule.Instance.Descriptor);
@@ -555,7 +558,7 @@ public sealed class EffectiveVideoRequestProjectionTests
             ],
         };
         TimelineSpec authored = Spec(clip);
-        ArchitecturePlanningResult architectures = Resolve(
+        ArchitecturePlanningResult architectures = TestPlanCompiler.Resolve(
             authored,
             _ => HostVideoArchitectureModule.Instance,
             _ => HostVideoArchitectureModule.Instance.Descriptor);
@@ -664,7 +667,7 @@ public sealed class EffectiveVideoRequestProjectionTests
         {
             LegacyVideoSwap = new("legacy-swap-model"),
         };
-        ArchitecturePlanningResult architectures = Resolve(
+        ArchitecturePlanningResult architectures = TestPlanCompiler.Resolve(
             authored,
             clip => clip.Id == 0
                 ? HostVideoArchitectureModule.Instance
@@ -749,7 +752,7 @@ public sealed class EffectiveVideoRequestProjectionTests
             ControlNetStrength = Constants.DefaultStageControlNetStrength,
         };
         TimelineSpec spec = Spec(Clip(stage));
-        ArchitecturePlanningResult architectures = Resolve(
+        ArchitecturePlanningResult architectures = TestPlanCompiler.Resolve(
             spec,
             _ => HostVideoArchitectureModule.Instance,
             _ => HostVideoArchitectureModule.Instance.Descriptor);
@@ -893,54 +896,16 @@ public sealed class EffectiveVideoRequestProjectionTests
 
     private static ArchitecturePlanningResult ResolveWan(
         TimelineSpec spec,
-        IVideoArchitectureModule module = null)
-    {
-        VideoArchitectureDescriptor descriptor =
-            WanArchitectureModule.Instance.Descriptor;
-        return Resolve(
+        IVideoArchitectureModule module = null) =>
+        TestPlanCompiler.Resolve(
             spec,
             _ => module ?? WanArchitectureModule.Instance,
-            _ => descriptor);
-    }
+            _ => WanArchitectureModule.Instance.Descriptor);
 
     private static ArchitecturePlanningResult ResolveMixed(TimelineSpec spec) =>
-        Resolve(
+        TestPlanCompiler.Resolve(
             spec,
             clip => clip.Id == 0
                 ? Ltx2ArchitectureModule.Instance
-                : WanArchitectureModule.Instance,
-            clip => clip.Id == 0
-                ? Ltx2ArchitectureModule.Instance.Descriptor
-                : WanArchitectureModule.Instance.Descriptor);
-
-    private static ArchitecturePlanningResult Resolve(
-        TimelineSpec spec,
-        Func<ClipSpec, IVideoArchitectureModule> moduleFor,
-        Func<ClipSpec, VideoArchitectureDescriptor> descriptorFor)
-    {
-        Dictionary<int, ClipArchitectureAssignment> assignments = [];
-        foreach (ClipSpec clip in spec.Clips)
-        {
-            IVideoArchitectureModule module = moduleFor(clip);
-            VideoArchitectureDescriptor descriptor = descriptorFor(clip);
-            ModelProfileId profileId = descriptor.Id == Ltx2ArchitectureModule.ArchitectureId
-                ? Ltx2ArchitectureModule.ProfileId
-                : descriptor.Id == WanArchitectureModule.ArchitectureId
-                    ? WanArchitectureModule.ImageToVideoProfileId
-                    : HostVideoArchitectureModule.ProfileId;
-            Dictionary<int, ResolvedVideoModel> stages = clip.Stages.ToDictionary(
-                stage => stage.ClipStageRawIndex,
-                stage => TestResolvedVideoModel.Create(
-                    stage.Model,
-                    profileId,
-                    descriptor));
-            assignments[clip.Id] = new(
-                clip.Id,
-                module,
-                descriptor,
-                stages);
-        }
-        return new(assignments, []);
-    }
-
+                : WanArchitectureModule.Instance);
 }

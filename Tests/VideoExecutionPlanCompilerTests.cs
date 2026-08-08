@@ -729,29 +729,11 @@ public class VideoExecutionPlanCompilerTests
                     LengthSeconds: 4),
             ],
         };
-        ClipArchitectureAssignment Assignment(
-            ClipSpec clip,
-            IVideoArchitectureModule module)
-        {
-            VideoArchitectureDescriptor descriptor = module.Descriptor;
-            return new(
-                clip.Id,
-                module,
-                descriptor,
-                clip.Stages.ToDictionary(
-                    stage => stage.ClipStageRawIndex,
-                    stage => TestResolvedVideoModel.Create(
-                        stage.Model,
-                        new($"{descriptor.Id.Value}-test-profile"),
-                        descriptor)));
-        }
-        ArchitecturePlanningResult architectures = new(
-            new Dictionary<int, ClipArchitectureAssignment>
-            {
-                [ltx.Id] = Assignment(ltx, Ltx2ArchitectureModule.Instance),
-                [host.Id] = Assignment(host, HostVideoArchitectureModule.Instance),
-            },
-            []);
+        ArchitecturePlanningResult architectures = TestPlanCompiler.Resolve(
+            spec,
+            clip => clip.Id == ltx.Id
+                ? Ltx2ArchitectureModule.Instance
+                : HostVideoArchitectureModule.Instance);
 
         VideoExecutionPlan plan = VideoExecutionPlanCompiler.Compile(
             spec,
