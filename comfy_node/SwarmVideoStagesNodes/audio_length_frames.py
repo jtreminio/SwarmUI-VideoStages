@@ -10,14 +10,14 @@ DEFAULT_FRAME_GRID_ORIGIN: Final[int] = 1
 DEFAULT_FRAME_COUNT_OFFSET: Final[int] = 1
 
 
-def _num_samples(waveform: torch.Tensor | object) -> int:
+def num_samples(waveform: torch.Tensor | object) -> int:
     if not isinstance(waveform, torch.Tensor) or waveform.numel() == 0:
         return 0
 
     return int(waveform.shape[-1])
 
 
-def _aligned_frames(
+def aligned_frames(
     duration_sec: float,
     frame_rate: int,
     frame_grid: int = DEFAULT_FRAME_GRID,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Final, NotRequired, TypedDict
+from typing import Final
 
 import torch
 from comfy_api.latest import io
@@ -9,16 +9,9 @@ from .audio_length_frames import (
     DEFAULT_FRAME_COUNT_OFFSET,
     DEFAULT_FRAME_GRID,
     DEFAULT_FRAME_GRID_ORIGIN,
-    _aligned_frames,
-    _num_samples,
+    aligned_frames,
+    num_samples,
 )
-
-
-class AudioPayload(TypedDict):
-    waveform: torch.Tensor
-    sample_rate: float | int
-    path: NotRequired[str]
-
 
 MIN_FRAME_RATE: Final[int] = 1
 MAX_FRAME_RATE: Final[int] = 120
@@ -76,13 +69,13 @@ class SwarmAudioLengthToFrames(io.ComfyNode):
     @torch.inference_mode()
     def execute(
         cls,
-        audio: AudioPayload | dict[str, object] | None,
+        audio: dict[str, object] | None,
         frame_rate: int,
         frame_grid: int = DEFAULT_FRAME_GRID,
         frame_grid_origin: int = DEFAULT_FRAME_GRID_ORIGIN,
         frame_count_offset: int = DEFAULT_FRAME_COUNT_OFFSET,
     ) -> io.NodeOutput:
-        minimum_frames = _aligned_frames(
+        minimum_frames = aligned_frames(
             0,
             int(frame_rate),
             int(frame_grid),
@@ -97,12 +90,12 @@ class SwarmAudioLengthToFrames(io.ComfyNode):
         if not isinstance(sample_rate, (int, float)) or sample_rate <= 0:
             return io.NodeOutput(audio, minimum_frames)
 
-        sample_count = _num_samples(waveform)
+        sample_count = num_samples(waveform)
         if sample_count <= 0:
             return io.NodeOutput(audio, minimum_frames)
 
         duration_sec = sample_count / float(sample_rate)
-        frame_count = _aligned_frames(
+        frame_count = aligned_frames(
             duration_sec,
             int(frame_rate),
             int(frame_grid),
