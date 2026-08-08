@@ -30,9 +30,13 @@ internal sealed class MiniMaxGenerationSession(
     HostRootAdoption rootAdoption) : IVideoGenerationSession
 {
     private readonly PlannedStagePromptResolver _prompts = new(g);
-    private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
     private readonly MiniMaxBoundaryReferenceBuilder _boundaryReferenceBuilder =
         new(g, plan, boundaries);
+
+    private readonly ClipEntryMedia _entryMedia = new(
+        g,
+        rootSources,
+        MiniMaxArchitectureModule.Instance.Descriptor.DisplayName);
 
     private readonly (int Width, int Height) _dimensions =
         DimensionSnap.Snap(plan.Width, plan.Height);
@@ -65,46 +69,20 @@ internal sealed class MiniMaxGenerationSession(
         _endFrame = ResolveEndFrame(payload.LastFrameReference);
         if (clip.EntryMode == ArchitectureEntryMode.InitVideo)
         {
-            InitVideoPlan source = clip.InitVideo
-                ?? throw Invariant.Failure(
-                    $"MiniMax H3 clip {clip.ClipId} has no init-video plan.");
-            ClipPlan sourceInstallPlan = clip with
-            {
-                InitVideo = source with
-                {
-                    TargetWidth = _dimensions.Width,
-                    TargetHeight = _dimensions.Height,
-                },
-            };
             // Any other source replaces the track, and the trim branch would then be built but
             // never consumed — nothing downstream prunes TrimAudioDuration.
-            g.CurrentMedia = _initVideoClipInstaller.TryInstall(
-                sourceInstallPlan,
-                includeSourceAudio: clip.Audio.Base.Kind == AudioSourceKind.Native)
-                ?? throw Invariant.Failure(
-                    $"clip {clip.ClipId} source video could not be installed.");
+            g.CurrentMedia = _entryMedia.InstallInitVideo(
+                clip,
+                _dimensions,
+                includeSourceAudio: clip.Audio.Base.Kind == AudioSourceKind.Native);
             PrepareInitVideoAudio(clip);
-            g.CurrentVae = null;
-        }
-        else if (_entryFirstFrame is not null)
-        {
-            g.CurrentMedia = _entryFirstFrame;
-            // The selected model supplies its own VAE during host preparation. Do not attach an
-            // unrelated text-root donor VAE to the uploaded image.
-            g.CurrentVae = null;
-        }
-        else if (clip.EntryMode == ArchitectureEntryMode.TextToVideo)
-        {
-            g.CurrentMedia = null;
             g.CurrentVae = null;
         }
         else
         {
-            g.CurrentMedia = rootSources.Media?.Duplicate()
-                ?? throw Invariant.Failure(
-                    $"clip {clip.ClipId} has no host image to generate from.");
-            g.CurrentVae = rootSources.Vae?.Duplicate();
-            _entryFirstFrame = g.CurrentMedia;
+            _entryMedia.SelectGenerated(clip, _entryFirstFrame);
+            // A host image the clip fell back to is also its first frame.
+            _entryFirstFrame ??= g.CurrentMedia;
         }
         if (clip.EntryMode != ArchitectureEntryMode.InitVideo
             && g.CurrentMedia is not null)

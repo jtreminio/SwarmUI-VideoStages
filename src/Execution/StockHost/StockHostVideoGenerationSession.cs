@@ -26,11 +26,15 @@ internal sealed class StockHostVideoGenerationSession(
     private readonly string _architectureLabel = architecture.DisplayName;
 
     private readonly PlannedStagePromptResolver _prompts = new(g);
-    private readonly InitVideoClipInstaller _initVideoClipInstaller = new(g);
     private readonly WanStockHostVideoBehavior _wanBehavior = wanBehavior;
 
     private readonly (int Width, int Height) _dimensions =
         DimensionSnap.Snap(plan.Width, plan.Height);
+
+    private readonly ClipEntryMedia _entryMedia = new(
+        g,
+        rootSources,
+        architecture.DisplayName);
 
     public ArchitectureId ArchitectureId => architecture.Id;
 
@@ -67,50 +71,15 @@ internal sealed class StockHostVideoGenerationSession(
 
         if (clip.EntryMode == ArchitectureEntryMode.InitVideo)
         {
-            InitVideoPlan source = clip.InitVideo
-                ?? throw Invariant.Failure(
-                    $"InitVideo {_architectureLabel} clip {clip.ClipId} has no init-video plan.");
-            ClipPlan sourceInstallPlan = clip with
-            {
-                InitVideo = source with
-                {
-                    TargetWidth = _dimensions.Width,
-                    TargetHeight = _dimensions.Height,
-                },
-            };
-            g.CurrentMedia = _initVideoClipInstaller.TryInstall(
-                sourceInstallPlan,
-                includeSourceAudio: false)
-                ?? throw Invariant.Failure(
-                    $"clip {clip.ClipId} source video could not be installed.");
+            g.CurrentMedia = _entryMedia.InstallInitVideo(
+                clip,
+                _dimensions,
+                includeSourceAudio: false);
             g.CurrentVae = null;
         }
         else
         {
-            WGNodeData authoredFirst =
-                _wanBehavior?.ResolveFirstFrame(clip);
-            if (authoredFirst is not null)
-            {
-                g.CurrentMedia = authoredFirst;
-                // The selected WAN model supplies its own VAE during host preparation. Do not
-                // attach an unrelated text-root donor VAE to the uploaded image.
-                g.CurrentVae = null;
-            }
-            else if (clip.EntryMode == ArchitectureEntryMode.TextToVideo)
-            {
-                // Upload materialization is deliberately runtime-owned. A missing or malformed
-                // first image leaves the text-root plan unchanged and falls back to native text
-                // generation without borrowing a host image.
-                g.CurrentMedia = null;
-                g.CurrentVae = null;
-            }
-            else
-            {
-                g.CurrentMedia = rootSources.Media?.Duplicate()
-                    ?? throw Invariant.Failure(
-                        $"clip {clip.ClipId} has no host image to generate from.");
-                g.CurrentVae = rootSources.Vae?.Duplicate();
-            }
+            _entryMedia.SelectGenerated(clip, _wanBehavior?.ResolveFirstFrame(clip));
         }
         // Stock-host stages are video-only, but a shared root may carry another architecture's audio.
         if (g.CurrentMedia is not null)
