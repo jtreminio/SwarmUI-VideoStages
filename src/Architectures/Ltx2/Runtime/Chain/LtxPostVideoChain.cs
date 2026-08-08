@@ -7,6 +7,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Planning;
 using VideoStages.Architectures.Ltx2.Runtime.Audio;
+using VideoStages.Execution.Graph;
 
 namespace VideoStages.Architectures.Ltx2.Runtime.Chain;
 
@@ -262,8 +263,10 @@ internal sealed class LtxPostVideoChain
         LTXVSeparateAVLatentNode newSeparate)
     {
         INodeOutput oldImageOutput = oldDecode.Outputs[0];
-        // Keep the decode id so existing consumers and cached references stay valid.
-        bridge.RemoveNode(oldDecode.Id);
+        // The id survives so paths already handed out still resolve, but the samples behind it
+        // change, so core's dedup entry for the old inputs has to go: it would otherwise hand the
+        // next caller asking for that decode a node that now decodes this stage's output.
+        VideoGraphHelpers.RemoveNode(generator, bridge, oldDecode.Id);
 
         ComfyNode newDecode = LtxPostChainRebuilder.AddDecode(
             bridge,

@@ -1,3 +1,4 @@
+using ComfyTyped.Families;
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
@@ -170,6 +171,62 @@ public class DecisionOwnerRegressionTests
 
         using WorkflowBridge decoded = WorkflowBridge.Create(generator.Workflow);
         return Assert.Single(decoded.Graph.NodesOfType<VAEDecodeTiledNode>());
+    }
+
+    /// <summary>The splice keeps the decode's id but rewires its samples, and core caches every
+    /// node it creates under a key made of that node's inputs. Leaving the cache entry behind hands
+    /// the next caller asking for the original decode a node that now decodes the stage output.
+    /// </summary>
+    [Fact]
+    public void Splicing_a_decode_stops_core_reusing_it_for_the_latent_it_no_longer_decodes()
+    {
+        using SwarmUiTestContext _ = new();
+        JObject workflow = [];
+        WorkflowGenerator generator = Generator(workflow);
+        using (WorkflowBridge bridge = WorkflowBridge.Create(workflow))
+        {
+            bridge.AddStub("UnitTest_Vae", "900").WithOutputs(WGNodeData.DT_VAE);
+            bridge.AddStub("UnitTest_AudioVae", "899").WithOutputs(WGNodeData.DT_AUDIOVAE);
+            bridge.AddStub("UnitTest_Joint", "901")
+                .WithOutputs(WGNodeData.DT_LATENT_AUDIOVIDEO);
+            bridge.AddStub("UnitTest_StageOutput", "890")
+                .WithOutputs(WGNodeData.DT_LATENT_AUDIOVIDEO);
+        }
+        WGNodeData vae = new(
+            new JArray("900", 0), generator, WGNodeData.DT_VAE, T2IModelClassSorter.CompatLtxv2);
+        WGNodeData joint = new(
+            new JArray("901", 0),
+            generator,
+            WGNodeData.DT_LATENT_AUDIOVIDEO,
+            T2IModelClassSorter.CompatLtxv2);
+        generator.CurrentVae = vae;
+        generator.CurrentAudioVae = new(
+            new JArray("899", 0),
+            generator,
+            WGNodeData.DT_AUDIOVAE,
+            T2IModelClassSorter.CompatLtxv2);
+
+        generator.CurrentMedia = VaeDecodePreference.AsRawImage(generator, joint, vae);
+        string splicedDecodeId = $"{generator.CurrentMedia.Path[0]}";
+        LtxPostVideoChain chain = LtxPostVideoChain.TryCapture(generator);
+        Assert.NotNull(chain);
+        generator.CurrentMedia = new WGNodeData(
+            new JArray("890", 0),
+            generator,
+            WGNodeData.DT_LATENT_AUDIOVIDEO,
+            T2IModelClassSorter.CompatLtxv2);
+        chain.SpliceCurrentOutput(vae);
+
+        WGNodeData redecoded = VaeDecodePreference.AsRawImage(generator, joint, vae);
+
+        using WorkflowBridge decoded = WorkflowBridge.Create(workflow);
+        IVaeDecode spliced = decoded.Graph.GetNode<IVaeDecode>(splicedDecodeId);
+        IVaeDecode reused = decoded.NodeAt<IVaeDecode>(redecoded.Path);
+        Assert.Equal("890", spliced.Samples.Connection?.Node.FindInput("av_latent")
+            ?.Connection?.Node.Id);
+        Assert.NotEqual(splicedDecodeId, reused.Id);
+        Assert.Equal("901", reused.Samples.Connection?.Node.FindInput("av_latent")
+            ?.Connection?.Node.Id);
     }
 
     [Fact]
