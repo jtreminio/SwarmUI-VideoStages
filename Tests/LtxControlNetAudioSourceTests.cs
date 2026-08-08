@@ -149,14 +149,16 @@ public class LtxControlNetAudioSourceTests
             input,
             BuildNoGetVideoComponentsControlNetSteps(controlNetModel));
 
+        ControlNetCoreMediaCapture capture = new(generator);
         Assert.False(
-            generator.NodeHelpers.ContainsKey("videostages.controlnet.audio.0"),
+            capture.TryGetCapturedAudio(0, out WGNodeData _),
             "Expected no ControlNet audio capture when no GetVideoComponents node is upstream.");
         Assert.True(
-            generator.NodeHelpers.ContainsKey("videostages.controlnet.apply.0"),
+            capture.TryGetCapturedControlImage(0, out WGNodeData _),
             "The capture loop never reached this ControlNet, so declining its audio proves nothing.");
+        using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         Assert.True(
-            generator.NodeHelpers.ContainsKey("videostages.controlnet.fullimage.0"),
+            capture.TryGetCapturedApplyImageInput(bridge, 0, out JArray _),
             "The capture loop never reached this ControlNet, so declining its audio proves nothing.");
     }
 
