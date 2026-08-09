@@ -17,6 +17,7 @@ export const testArchitectureCapabilities = (
     features: [
         "promptRelay",
         "frameReferences",
+        "stageReferenceStrengths",
         "referenceFraming",
         "retake",
         "audioBoundaryCarry",

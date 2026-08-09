@@ -1345,6 +1345,7 @@ public class ArchitectureFoundationTests
             [
                 "promptRelay",
                 "frameReferences",
+                "stageReferenceStrengths",
                 "referenceFraming",
                 "retake",
                 "audioBoundaryCarry",

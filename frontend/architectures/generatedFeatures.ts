@@ -3,6 +3,7 @@
 export const ARCHITECTURE_FEATURE_LABELS = {
     promptRelay: "Prompt relay",
     frameReferences: "Keyframes",
+    stageReferenceStrengths: "Stage keyframe strengths",
     clipReferences: "Clip references",
     referenceFraming: "Reference framing",
     retake: "Retake",

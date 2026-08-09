@@ -49,6 +49,7 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
         ],
         ArchitectureFeature.PromptRelay
             | ArchitectureFeature.FrameReferences
+            | ArchitectureFeature.StageReferenceStrengths
             | ArchitectureFeature.Retake
             | ArchitectureFeature.AudioReuse
             | ArchitectureFeature.AudioBoundaryCarry

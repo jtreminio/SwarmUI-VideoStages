@@ -450,6 +450,7 @@
   var ARCHITECTURE_FEATURE_LABELS = {
     promptRelay: "Prompt relay",
     frameReferences: "Keyframes",
+    stageReferenceStrengths: "Stage keyframe strengths",
     clipReferences: "Clip references",
     referenceFraming: "Reference framing",
     retake: "Retake",
@@ -11318,7 +11319,7 @@
       built.heading,
       built.section,
       "LoRAs",
-      "Choose the normal LoRA models once for this clip. Each stage sets its own weight below its keyframe strengths."
+      "Choose the normal LoRA models once for this clip. Each stage sets its own weight."
     );
     return built.section;
   };
@@ -12488,8 +12489,8 @@ ${slot}`;
     fields,
     debouncedCommit
   }) => {
-    if (clip.frameRefs.length > 0) {
-      const refDecision = context.authoring().capabilities.forClip(clip).decision("frameReferences");
+    const capabilityView = context.authoring().capabilities.forClip(clip);
+    if (clip.frameRefs.length > 0 && capabilityView.decision("stageReferenceStrengths").supported) {
       appendSectionHeader(fields, "Keyframe Strengths");
       const setRefHover = (refIdx, on) => {
         context.getBoundBody()?.querySelector(
@@ -12526,13 +12527,7 @@ ${slot}`;
           () => setRefHover(refIdx, false)
         );
         fields.appendChild(refSlider);
-        if (!refDecision.supported) {
-          disableCapabilityControls(refSlider, refDecision);
-        }
       });
-      if (!refDecision.supported) {
-        fields.appendChild(buildCapabilityNotice(refDecision));
-      }
     }
     if (clip.loras.length > 0) {
       appendSectionHeader(fields, "LoRA Weights");
@@ -12561,7 +12556,6 @@ ${slot}`;
     const applicableIcLoras = clip.icLoras.map((entry, entryIdx) => ({ entry, entryIdx })).filter(({ entry }) => entry.stage < 0 || entry.stage === stageIdx);
     if (applicableIcLoras.length === 0) return;
     appendSectionHeader(fields, "IC-LoRA Guide Strengths");
-    const capabilityView = context.authoring().capabilities.forClip(clip);
     const icDecision = capabilityView.decision("icLora");
     const icGroup = document.createDocumentFragment();
     applicableIcLoras.forEach(({ entry, entryIdx }) => {

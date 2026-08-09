@@ -53,7 +53,9 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
     wan.label = "WAN";
     wan.capabilities.features = wan.capabilities.features.filter(
         (feature) =>
-            feature !== "latentUpscale" && feature !== "latentModelUpscale",
+            feature !== "latentUpscale" &&
+            feature !== "latentModelUpscale" &&
+            feature !== "stageReferenceStrengths",
     );
     models.architectures.push(wan);
     models.entries.push(
@@ -139,7 +141,6 @@ const modelOptions = (column: HTMLElement): HTMLOptionElement[] => {
     return Array.from(modelField?.querySelectorAll("option") ?? []);
 };
 
-/** Puts the clip in the store so a model change has something to commit against. */
 const mountClip = <T extends object>(clip: T): T => {
     mountVideoStagesData({ clips: [clip], audioTracks: [] });
     mountPromptBox("");
@@ -147,7 +148,6 @@ const mountClip = <T extends object>(clip: T): T => {
     return getState().clips[0] as T;
 };
 
-/** Which command a model change dispatches is the whole-clip vs stage decision. */
 const dispatchSpy = () =>
     jest
         .spyOn(persistence, "dispatchDocumentCommand")
@@ -159,6 +159,34 @@ afterEach(() => {
     setVideoStagesHostBridgeForTests(null);
     __resetPersistenceForTests();
     document.body.innerHTML = "";
+});
+
+describe("stage reference strengths", () => {
+    it("hides strengths when the architecture supports keyframes without per-stage strength", () => {
+        const models = catalogWithWan();
+        const stage = minimalStage({
+            model: "wan-current.safetensors",
+            modelProfileId: "wan-i2v",
+        });
+        const clip = minimalClip({
+            architectureHint: "wan22",
+            modelProfileId: "wan-i2v",
+            frameRefs: [minimalRef()],
+            stages: [stage],
+        });
+
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            stage,
+            testRootDefaults(models),
+        );
+
+        expect(column.textContent).not.toContain("Keyframe Strengths");
+        expect(column.querySelector(".vst-stage-ref-slider")).toBeNull();
+    });
 });
 
 describe("stage architecture model filtering", () => {

@@ -18,10 +18,7 @@ import {
 } from "../../icLoraAuthoring";
 import { LORA_WEIGHT_STEP } from "../../loraAuthoring";
 import { refSourceLabel } from "../../timelineDetail";
-import {
-    buildCapabilityNotice,
-    disableCapabilityControls,
-} from "../capabilityUi";
+import { disableCapabilityControls } from "../capabilityUi";
 import type { StagePanelBindings } from "./types";
 
 const appendSectionHeader = (fields: HTMLElement, label: string): void => {
@@ -48,11 +45,11 @@ export const appendStageReferenceGuideSection = ({
     fields,
     debouncedCommit,
 }: StagePanelBindings): void => {
-    if (clip.frameRefs.length > 0) {
-        const refDecision = context
-            .authoring()
-            .capabilities.forClip(clip)
-            .decision("frameReferences");
+    const capabilityView = context.authoring().capabilities.forClip(clip);
+    if (
+        clip.frameRefs.length > 0 &&
+        capabilityView.decision("stageReferenceStrengths").supported
+    ) {
         appendSectionHeader(fields, "Keyframe Strengths");
         const setRefHover = (refIdx: number, on: boolean): void => {
             context
@@ -93,13 +90,7 @@ export const appendStageReferenceGuideSection = ({
                 setRefHover(refIdx, false),
             );
             fields.appendChild(refSlider);
-            if (!refDecision.supported) {
-                disableCapabilityControls(refSlider, refDecision);
-            }
         });
-        if (!refDecision.supported) {
-            fields.appendChild(buildCapabilityNotice(refDecision));
-        }
     }
 
     if (clip.loras.length > 0) {
@@ -133,7 +124,6 @@ export const appendStageReferenceGuideSection = ({
     if (applicableIcLoras.length === 0) return;
 
     appendSectionHeader(fields, "IC-LoRA Guide Strengths");
-    const capabilityView = context.authoring().capabilities.forClip(clip);
     const icDecision = capabilityView.decision("icLora");
     const icGroup = document.createDocumentFragment();
     applicableIcLoras.forEach(({ entry, entryIdx }) => {
