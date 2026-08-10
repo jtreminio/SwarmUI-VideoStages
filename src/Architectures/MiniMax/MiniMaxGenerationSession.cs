@@ -41,7 +41,7 @@ internal sealed class MiniMaxGenerationSession(
     private readonly (int Width, int Height) _dimensions =
         DimensionSnap.Snap(plan.Width, plan.Height);
 
-    private WGNodeData _entryFirstFrame;
+    private WGNodeData _firstFrame;
     private WGNodeData _endFrame;
     private WGNodeData _reusedAudio;
     private WGNodeData _boundaryCarryAudio;
@@ -63,7 +63,7 @@ internal sealed class MiniMaxGenerationSession(
             ResolveFrames(context.Clip));
         PrepareBoundaryAudioCarry(context);
         _referenceFraming = payload.ReferenceFraming;
-        _entryFirstFrame = ResolveFrameReference(
+        _firstFrame = ResolveFrameReference(
             payload.FirstFrameReference,
             "MiniMax H3 first keyframe");
         _endFrame = ResolveEndFrame(payload.LastFrameReference);
@@ -80,9 +80,9 @@ internal sealed class MiniMaxGenerationSession(
         }
         else
         {
-            _entryMedia.SelectGenerated(clip, _entryFirstFrame);
+            _entryMedia.SelectGenerated(clip, _firstFrame);
             // A host image the clip fell back to is also its first frame.
-            _entryFirstFrame ??= g.CurrentMedia;
+            _firstFrame ??= g.CurrentMedia;
         }
         if (clip.EntryMode != ArchitectureEntryMode.InitVideo
             && g.CurrentMedia is not null)
@@ -155,7 +155,6 @@ internal sealed class MiniMaxGenerationSession(
                 positive,
                 negative);
             WGNodeData incoming = null;
-            WGNodeData firstFrame = _entryFirstFrame;
             int startStep = 0;
             if (stage.Input is StageInputKind.PreviousStage or StageInputKind.InitVideo)
             {
@@ -168,7 +167,6 @@ internal sealed class MiniMaxGenerationSession(
                     throw Invariant.Failure(
                         "A MiniMax H3 refine stage's incoming media carries no audio input.");
                 }
-                firstFrame = null;
                 startStep = StageStartStepPolicy.StartStep(
                     core.Steps,
                     core.Control);
@@ -178,7 +176,6 @@ internal sealed class MiniMaxGenerationSession(
                 stage,
                 genInfo,
                 incoming,
-                firstFrame,
                 startStep,
                 core.Upscale);
             RestoreReusableAudio(clipPayload, stage);
@@ -272,7 +269,6 @@ internal sealed class MiniMaxGenerationSession(
         StagePlan stage,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
         WGNodeData incoming,
-        WGNodeData firstFrame,
         int startStep,
         StageUpscalePlan stageUpscale)
     {
@@ -289,7 +285,7 @@ internal sealed class MiniMaxGenerationSession(
                 ? EntryJointLatent(clip, genInfo, frames, claim.Latent)
                 : JointLatent(incoming, genInfo);
             ApplyLatentInterpolation(stageUpscale);
-            AttachKeyframes(genInfo, firstFrame);
+            AttachKeyframes(genInfo);
             string sampled = g.CreateKSampler(
                 genInfo.Model.Path,
                 genInfo.PosCond,
@@ -368,18 +364,16 @@ internal sealed class MiniMaxGenerationSession(
         };
     }
 
-    private void AttachKeyframes(
-        WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        WGNodeData firstFrame)
+    private void AttachKeyframes(WorkflowGenerator.ImageToVideoGenInfo genInfo)
     {
-        if (firstFrame is null && _endFrame is null)
+        if (_firstFrame is null && _endFrame is null)
         {
             return;
         }
         int targetWidth = g.CurrentMedia?.Width ?? (int)genInfo.Width;
         int targetHeight = g.CurrentMedia?.Height ?? (int)genInfo.Height;
         using WorkflowBridge bridge = BridgeSync.For(g);
-        JArray firstFramePath = firstFrame?.Path is JArray firstPath
+        JArray firstFramePath = _firstFrame?.Path is JArray firstPath
             ? ReferenceFramingGraph.Frame(
                 bridge,
                 firstPath,

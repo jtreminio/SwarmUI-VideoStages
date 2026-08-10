@@ -268,6 +268,60 @@ public class MiniMaxGeneratedWorkflowContractTests
     }
 
     /// <summary>
+    /// A refine stage re-encodes decoded frames that have already drifted from the authored opening
+    /// image, so dropping the first keyframe after stage 0 leaves nothing holding frame 0 — and an
+    /// upscaling stage samples at a resolution the stage-0 framing does not fit.
+    /// </summary>
+    [Fact]
+    public async Task An_opening_frame_reference_is_reframed_for_each_stage_resolution()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(
+            fixture.Stage(),
+            fixture.Stage("PreviousStage", control: 0.5, upscale: 1.5));
+        clip["duration"] = 1.0;
+        clip["frameRefs"] = new JArray(UploadedReference("RklSU1Q="));
+        clip["refFraming"] = Constants.ReferenceFramingFitGreen;
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmLoadImageB64Node upload = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        Assert.Equal("RklSU1Q=", upload.ImageBase64.LiteralAsString());
+
+        SwarmFrameImageNode framed512 = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameImageNode>(),
+            node => node.Width.LiteralAsInt() == 512);
+        SwarmFrameImageNode framed768 = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameImageNode>(),
+            node => node.Width.LiteralAsInt() == 768);
+        Assert.All(
+            new[] { framed512, framed768 },
+            node => Assert.Same(upload, node.ImagesInput.Connection?.Node));
+
+        Assert.All(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>(),
+            keyframes => Assert.Null(keyframes.LastFrame.Connection));
+        Assert.Equal(
+            [512, 768],
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>()
+                .Select(keyframes => Assert.IsType<SwarmFrameImageNode>(
+                    keyframes.FirstFrame.Connection?.Node).Width.LiteralAsInt())
+                .Order());
+
+        SwarmKSamplerNode first = StageSampler(bridge, 0);
+        SwarmKSamplerNode second = StageSampler(bridge, 1);
+        Assert.True(ReachesUpstream(bridge, first.Positive.Connection?.Node, framed512.Id));
+        Assert.True(ReachesUpstream(bridge, second.Positive.Connection?.Node, framed768.Id));
+        AssertKeyframesReadTheSampledJointLatent(first, second);
+
+        live.AssertAllLive(upload, framed512, framed768, first, second);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
     /// A reference the compiler drops must leave no loader behind; the diagnostic alone does not
     /// prove the upload never reached the graph.
     /// </summary>
@@ -513,4 +567,18 @@ public class MiniMaxGeneratedWorkflowContractTests
 
         AssertShippable(bridge, workflow, live);
     }
+
+    /// <summary>
+    /// SwarmMiniMaxH3AddKeyframes unbinds its latent into H3's (video, audio) pair and reads
+    /// <c>shape[4]</c> for the canvas width. The video half alone unbinds to four dimensions, so a
+    /// stage handing over anything but the joint latent it actually samples dies mid-run on
+    /// "tuple index out of range" — the graph builds and ships clean either way.
+    /// </summary>
+    private static void AssertKeyframesReadTheSampledJointLatent(params SwarmKSamplerNode[] samplers) =>
+        Assert.All(
+            samplers,
+            sampler => Assert.Same(
+                sampler.LatentImage.Connection,
+                Assert.IsType<SwarmMiniMaxH3AddKeyframesNode>(sampler.Positive.Connection?.Node)
+                    .Latent.Connection));
 }
