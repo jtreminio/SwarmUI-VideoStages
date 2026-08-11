@@ -8518,17 +8518,43 @@
     });
     target.appendChild(action);
   };
-  var appendSectionHeaderActions = (target, spec) => {
+  var appendSectionHeaderActions = (actions, spec) => {
     const headerActions = spec.headerActions ?? (spec.headerAction === void 0 ? [] : [spec.headerAction]);
     if (headerActions.length === 0) {
       return;
     }
-    const actions = document.createElement("span");
-    actions.className = "vst-detail-repeating-group-actions";
     for (const action of headerActions) {
       appendSectionHeaderAction(actions, action);
     }
-    target.appendChild(actions);
+  };
+  var buildSectionHeader = (spec) => {
+    const header = document.createElement("span");
+    header.className = spec.className;
+    const labelWrap = document.createElement("span");
+    labelWrap.className = "header-label-wrap";
+    if (spec.open !== void 0) {
+      const symbol = document.createElement("span");
+      symbol.className = "auto-symbol";
+      symbol.textContent = spec.open ? "⮟" : "⮞";
+      labelWrap.appendChild(symbol);
+    }
+    const heading = document.createElement("span");
+    heading.className = "header-label";
+    heading.textContent = spec.label;
+    const spacer = document.createElement("span");
+    spacer.className = "header-label-spacer";
+    labelWrap.append(heading, spacer);
+    if (spec.counter !== void 0) {
+      const counter = document.createElement("span");
+      counter.className = "header-label-counter";
+      counter.textContent = `${spec.counter}`;
+      labelWrap.appendChild(counter);
+    }
+    const actions = document.createElement("span");
+    actions.className = "vst-detail-repeating-group-actions";
+    labelWrap.appendChild(actions);
+    header.appendChild(labelWrap);
+    return { header, heading, actions };
   };
   var rememberedAccordionSections = /* @__PURE__ */ new Set();
   var seenAccordionSections = /* @__PURE__ */ new Set();
@@ -8544,18 +8570,11 @@
     const section = document.createElement("div");
     section.className = `input-group input-group-open vst-detail-section vst-detail-static-section ${spec.className ?? ""}`.trim();
     section.dataset.vstStaticKey = spec.key;
-    const header = document.createElement("span");
-    header.className = "input-group-header input-group-noshrink vst-detail-section-header";
-    const labelWrap = document.createElement("span");
-    labelWrap.className = "header-label-wrap";
-    const heading = document.createElement("span");
-    heading.className = "header-label";
-    heading.textContent = spec.label;
-    const spacer = document.createElement("span");
-    spacer.className = "header-label-spacer";
-    labelWrap.append(heading, spacer);
-    appendSectionHeaderActions(labelWrap, spec);
-    header.appendChild(labelWrap);
+    const { header, heading, actions } = buildSectionHeader({
+      label: spec.label,
+      className: "input-group-header input-group-noshrink vst-detail-section-header"
+    });
+    appendSectionHeaderActions(actions, spec);
     const content = document.createElement("div");
     content.className = "input-group-content vst-detail-section-content";
     appendSectionContent(content, spec.content, spec.flattenContent === true);
@@ -8572,30 +8591,16 @@
     const section = document.createElement("div");
     section.className = `input-group vst-detail-section ${open ? "input-group-open" : "input-group-closed"} ${spec.className ?? ""}`.trim();
     section.dataset.vstAccordionKey = spec.key;
-    const header = document.createElement("span");
-    header.className = "input-group-header input-group-shrinkable vst-detail-section-header";
+    const { header, heading, actions } = buildSectionHeader({
+      label: spec.label,
+      className: "input-group-header input-group-shrinkable vst-detail-section-header",
+      open,
+      counter: spec.counter
+    });
     header.tabIndex = 0;
     header.setAttribute("role", "button");
     header.setAttribute("aria-expanded", `${open}`);
-    const labelWrap = document.createElement("span");
-    labelWrap.className = "header-label-wrap";
-    const symbol = document.createElement("span");
-    symbol.className = "auto-symbol";
-    symbol.textContent = open ? "⮟" : "⮞";
-    const heading = document.createElement("span");
-    heading.className = "header-label";
-    heading.textContent = spec.label;
-    const spacer = document.createElement("span");
-    spacer.className = "header-label-spacer";
-    labelWrap.append(symbol, heading, spacer);
-    if (spec.counter !== void 0) {
-      const counter = document.createElement("span");
-      counter.className = "header-label-counter";
-      counter.textContent = `${spec.counter}`;
-      labelWrap.appendChild(counter);
-    }
-    appendSectionHeaderActions(labelWrap, spec);
-    header.appendChild(labelWrap);
+    appendSectionHeaderActions(actions, spec);
     const content = document.createElement("div");
     content.className = "input-group-content vst-detail-section-content";
     content.hidden = !open;
@@ -8802,8 +8807,11 @@
       const open = openItems.has(index);
       const group = document.createElement("div");
       group.className = `input-group vst-detail-repeating-group ${open ? "input-group-open" : "input-group-closed"} ${item.groupClassName ?? ""}`.trim();
-      const header = document.createElement("span");
-      header.className = `input-group-header input-group-shrinkable vst-detail-repeating-group-header ${item.className ?? ""}`.trim();
+      const { header, actions } = buildSectionHeader({
+        label: item.label,
+        className: `input-group-header input-group-shrinkable vst-detail-repeating-group-header ${item.className ?? ""}`.trim(),
+        open
+      });
       header.tabIndex = 0;
       header.setAttribute("role", "button");
       header.setAttribute("aria-expanded", `${open}`);
@@ -8814,18 +8822,6 @@
       if (item.title) {
         header.title = item.title;
       }
-      const labelWrap = document.createElement("span");
-      labelWrap.className = "header-label-wrap";
-      const symbol = document.createElement("span");
-      symbol.className = "auto-symbol";
-      symbol.textContent = open ? "⮟" : "⮞";
-      const label = document.createElement("span");
-      label.className = "header-label";
-      label.textContent = item.label;
-      const spacer = document.createElement("span");
-      spacer.className = "header-label-spacer";
-      const actions = document.createElement("span");
-      actions.className = "vst-detail-repeating-group-actions";
       if (item.headerAction) {
         appendSectionHeaderAction(actions, item.headerAction);
       }
@@ -8845,8 +8841,6 @@
         });
         actions.appendChild(remove);
       }
-      labelWrap.append(symbol, label, spacer, actions);
-      header.appendChild(labelWrap);
       const content = document.createElement("div");
       content.className = "input-group-content vst-detail-repeating-group-content";
       let editor = open ? item.editor ?? spec.editorForItem?.(index) ?? (active ? spec.editor : void 0) : void 0;
@@ -8976,7 +8970,7 @@
       label: spec.label,
       content: children,
       counter: spec.items.length,
-      // Empty repeaters stay open so their Add action remains reachable.
+      // Keep empty repeaters open so Add remains reachable.
       open: forceOpen || spec.items.length === 0 || spec.open,
       defaultOpen: spec.items.length > 0,
       className: `vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim()
@@ -9623,6 +9617,79 @@ ${slot}`;
     }
   };
 
+  // frontend/detailStrip/modalManager.ts
+  var currentModal = null;
+  var closeManagedModal = () => currentModal?.close();
+  var createManagedModal = (spec) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = `modal-backdrop fade show ${spec.backdropClass}`;
+    const modal = document.createElement("div");
+    modal.className = `modal fade show ${spec.modalClass}`;
+    modal.style.display = "block";
+    modal.tabIndex = -1;
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", spec.labelledBy);
+    const dialog = document.createElement("div");
+    dialog.className = "modal-dialog modal-dialog-centered";
+    dialog.setAttribute("role", "document");
+    const content = document.createElement("div");
+    content.className = "modal-content";
+    const header = document.createElement("div");
+    header.className = "modal-header";
+    const body = document.createElement("div");
+    body.className = "modal-body";
+    content.append(header, body);
+    dialog.appendChild(content);
+    modal.appendChild(dialog);
+    let open = false;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        managed.close();
+        return;
+      }
+      spec.onKeyDown?.(event);
+    };
+    const managed = {
+      modal,
+      content,
+      header,
+      body,
+      open: (initialFocus) => {
+        closeManagedModal();
+        open = true;
+        currentModal = managed;
+        document.addEventListener("keydown", onKeyDown);
+        document.body.append(backdrop, modal);
+        initialFocus?.focus();
+      },
+      close: () => {
+        if (!open) {
+          return;
+        }
+        open = false;
+        document.removeEventListener("keydown", onKeyDown);
+        if (currentModal === managed) {
+          currentModal = null;
+        }
+        try {
+          spec.onClose?.();
+        } finally {
+          modal.remove();
+          backdrop.remove();
+        }
+      }
+    };
+    backdrop.addEventListener("click", managed.close);
+    modal.addEventListener("mousedown", (event) => {
+      if (event.target === modal) {
+        managed.close();
+      }
+    });
+    return managed;
+  };
+
   // frontend/detailStrip/trimBar.ts
   var NUDGE_SECONDS = 0.1;
   var COARSE_NUDGE_SECONDS = 1;
@@ -9864,7 +9931,7 @@ ${slot}`;
   var MODAL_CLASS = "vst-trim-modal";
   var BACKDROP_CLASS = "vst-trim-modal-backdrop";
   var TITLE_ID = "vst_trim_modal_title";
-  var currentCleanup = null;
+  var currentModal2 = null;
   var seconds = (value) => value.toFixed(1);
   var button = (label, title, dataAttribute) => {
     const element = document.createElement("button");
@@ -9903,10 +9970,7 @@ ${slot}`;
     return row;
   };
   var closeTrimModal = () => {
-    currentCleanup?.();
-    currentCleanup = null;
-    document.querySelector(`.${MODAL_CLASS}`)?.remove();
-    document.querySelector(`.${BACKDROP_CLASS}`)?.remove();
+    currentModal2?.close();
   };
   var openTrimModal = (spec) => {
     closeTrimModal();
@@ -9914,22 +9978,6 @@ ${slot}`;
     let draft = { ...spec.range };
     let bar = null;
     let stopAt = null;
-    const backdrop = document.createElement("div");
-    backdrop.className = `modal-backdrop fade show ${BACKDROP_CLASS}`;
-    const modal = document.createElement("div");
-    modal.className = `modal fade show ${MODAL_CLASS}`;
-    modal.style.display = "block";
-    modal.tabIndex = -1;
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-    modal.setAttribute("aria-labelledby", TITLE_ID);
-    const dialog = document.createElement("div");
-    dialog.className = "modal-dialog modal-dialog-centered";
-    dialog.setAttribute("role", "document");
-    const content = document.createElement("div");
-    content.className = "modal-content";
-    const header = document.createElement("div");
-    header.className = "modal-header";
     const heading = document.createElement("div");
     const title = document.createElement("h5");
     title.className = "modal-title";
@@ -9941,9 +9989,6 @@ ${slot}`;
     heading.append(title, fileName);
     const close = button("×", "Close without applying");
     close.setAttribute("aria-label", close.title);
-    header.append(heading, close);
-    const body = document.createElement("div");
-    body.className = "modal-body";
     const playerWrap = document.createElement("div");
     playerWrap.className = "vst-trim-modal-player-wrap";
     if (isAudio) {
@@ -10117,71 +10162,62 @@ ${slot}`;
       "click",
       () => setDraft(setOutPoint(draft, player.currentTime, spec.limits))
     );
-    body.append(playerWrap, transport, bar.element, fields, impact);
     const footer = document.createElement("div");
     footer.className = "modal-footer vst-trim-modal-footer";
     const cancel = button("Cancel", "Close without applying");
     const apply = button("Apply", "Apply this range", "data-vst-trim-apply");
     apply.classList.add("vst-trim-modal-apply");
     footer.append(reset, cancel, apply);
-    content.append(header, body, footer);
-    dialog.appendChild(content);
-    modal.appendChild(dialog);
-    const dismiss = () => currentCleanup?.();
+    let managed;
+    managed = createManagedModal({
+      modalClass: MODAL_CLASS,
+      backdropClass: BACKDROP_CLASS,
+      labelledBy: TITLE_ID,
+      onKeyDown: (event) => {
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) {
+          return;
+        }
+        const key = event.key.toLowerCase();
+        if (key === "i") {
+          event.preventDefault();
+          setDraft(markInPoint(draft, player.currentTime, spec.limits));
+        } else if (key === "o") {
+          event.preventDefault();
+          setDraft(setOutPoint(draft, player.currentTime, spec.limits));
+        } else if (event.key === " ") {
+          event.preventDefault();
+          if (player.paused) {
+            playRange();
+          } else {
+            player.pause();
+            stopAt = null;
+          }
+        }
+      },
+      onClose: () => {
+        player.removeEventListener("timeupdate", paintPlayhead);
+        player.removeEventListener("seeked", paintPlayhead);
+        player.pause();
+        player.removeAttribute("src");
+        player.load();
+        if (currentModal2 === managed) {
+          currentModal2 = null;
+        }
+      }
+    });
+    currentModal2 = managed;
+    managed.header.append(heading, close);
+    managed.body.append(playerWrap, transport, bar.element, fields, impact);
+    managed.content.appendChild(footer);
+    const dismiss = () => managed.close();
     const applyAndClose = () => {
       const applied = { ...draft };
       dismiss();
       spec.onApply(applied);
     };
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        dismiss();
-        return;
-      }
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) {
-        return;
-      }
-      const key = event.key.toLowerCase();
-      if (key === "i") {
-        event.preventDefault();
-        setDraft(markInPoint(draft, player.currentTime, spec.limits));
-      } else if (key === "o") {
-        event.preventDefault();
-        setDraft(setOutPoint(draft, player.currentTime, spec.limits));
-      } else if (event.key === " ") {
-        event.preventDefault();
-        if (player.paused) {
-          playRange();
-        } else {
-          player.pause();
-          stopAt = null;
-        }
-      }
-    };
-    const cleanup = () => {
-      document.removeEventListener("keydown", onKeyDown);
-      player.removeEventListener("timeupdate", paintPlayhead);
-      player.removeEventListener("seeked", paintPlayhead);
-      player.pause();
-      player.removeAttribute("src");
-      player.load();
-      modal.remove();
-      backdrop.remove();
-      if (currentCleanup === cleanup) {
-        currentCleanup = null;
-      }
-    };
-    currentCleanup = cleanup;
     close.addEventListener("click", dismiss);
     cancel.addEventListener("click", dismiss);
     apply.addEventListener("click", applyAndClose);
-    backdrop.addEventListener("click", dismiss);
-    modal.addEventListener("mousedown", (event) => {
-      if (event.target === modal) {
-        dismiss();
-      }
-    });
     player.addEventListener("loadedmetadata", () => seek(draft.startSeconds));
     player.addEventListener("timeupdate", paintPlayhead);
     player.addEventListener("seeked", paintPlayhead);
@@ -10189,11 +10225,9 @@ ${slot}`;
       player.hidden = true;
       mediaError.hidden = false;
     });
-    document.addEventListener("keydown", onKeyDown);
-    document.body.append(backdrop, modal);
     renderDraft();
     paintPlayhead();
-    player.focus();
+    managed.open(player);
   };
 
   // frontend/detailStrip/audioTracksPanel.ts
@@ -12898,8 +12932,6 @@ ${slot}`;
               ctx.render();
             },
             {
-              // Keep a checked box enabled so a failed re-probe
-              // cannot trap its clip-length claim.
               disabled: !(seconds2 > 0) && reference.drivesClipLength !== true,
               help: seconds2 > 0 ? "Set this clip's length to the reference's own length. Only one source can own the clip length, so this clears any other reference and the clip-level length options." : "This reference has no detected length to lend the clip. Pick a file the browser can read."
             }
@@ -14433,35 +14465,30 @@ ${slot}`;
   // frontend/detailStrip/settingsModal.ts
   var MODAL_CLASS2 = "vst-timeline-settings-modal";
   var BACKDROP_CLASS2 = "vst-timeline-settings-backdrop";
-  var currentCleanup2 = null;
+  var TITLE_ID2 = "vst_timeline_settings_title";
+  var currentModal3 = null;
   var closeTimelineAuthoringSettingsModal = () => {
-    currentCleanup2?.();
-    currentCleanup2 = null;
-    document.querySelector(`.${MODAL_CLASS2}`)?.remove();
-    document.querySelector(`.${BACKDROP_CLASS2}`)?.remove();
+    currentModal3?.close();
   };
   var openTimelineAuthoringSettingsModal = () => {
     closeTimelineAuthoringSettingsModal();
     const settings = getTimelineAuthoringSettings();
-    const backdrop = document.createElement("div");
-    backdrop.className = `modal-backdrop fade show ${BACKDROP_CLASS2}`;
-    const modal = document.createElement("div");
-    modal.className = `modal fade show ${MODAL_CLASS2}`;
-    modal.style.display = "block";
-    modal.tabIndex = -1;
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-    modal.setAttribute("aria-labelledby", "vst_timeline_settings_title");
-    const dialog = document.createElement("div");
-    dialog.className = "modal-dialog modal-dialog-centered";
-    dialog.setAttribute("role", "document");
-    const content = document.createElement("div");
-    content.className = "modal-content";
-    const header = document.createElement("div");
-    header.className = "modal-header";
+    let managed;
+    managed = createManagedModal({
+      modalClass: MODAL_CLASS2,
+      backdropClass: BACKDROP_CLASS2,
+      labelledBy: TITLE_ID2,
+      onClose: () => {
+        if (currentModal3 === managed) {
+          currentModal3 = null;
+        }
+      }
+    });
+    currentModal3 = managed;
+    const { header, body } = managed;
     const title = document.createElement("h5");
     title.className = "modal-title";
-    title.id = "vst_timeline_settings_title";
+    title.id = TITLE_ID2;
     title.textContent = "Timeline Settings";
     const close = document.createElement("button");
     close.type = "button";
@@ -14470,8 +14497,6 @@ ${slot}`;
     close.title = "Close timeline settings";
     close.setAttribute("aria-label", close.title);
     header.append(title, close);
-    const body = document.createElement("div");
-    body.className = "modal-body";
     body.append(
       buildCheckbox(
         "Snap",
@@ -14485,36 +14510,8 @@ ${slot}`;
         }
       })
     );
-    content.append(header, body);
-    dialog.appendChild(content);
-    modal.appendChild(dialog);
-    const dismiss = () => {
-      currentCleanup2?.();
-    };
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") {
-        dismiss();
-      }
-    };
-    const cleanup = () => {
-      document.removeEventListener("keydown", onKeyDown);
-      modal.remove();
-      backdrop.remove();
-      if (currentCleanup2 === cleanup) {
-        currentCleanup2 = null;
-      }
-    };
-    currentCleanup2 = cleanup;
-    close.addEventListener("click", dismiss);
-    backdrop.addEventListener("click", dismiss);
-    modal.addEventListener("mousedown", (event) => {
-      if (event.target === modal) {
-        dismiss();
-      }
-    });
-    document.addEventListener("keydown", onKeyDown);
-    document.body.append(backdrop, modal);
-    close.focus();
+    close.addEventListener("click", managed.close);
+    managed.open(close);
   };
 
   // frontend/detailStrip/settingsPanel.ts

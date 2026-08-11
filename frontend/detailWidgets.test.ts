@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { stubRect } from "./__test_helpers__/dom";
 import {
+    buildAccordionSection,
     buildCheckbox,
     buildField,
     buildMediaPickRow,
@@ -220,6 +221,61 @@ describe("native detail groups", () => {
         expect(
             built.section.querySelector(".vst-detail-repeating-group-action"),
         ).not.toBeNull();
+    });
+
+    it("uses the same label chrome order for every section header", () => {
+        const parts = (root: HTMLElement): string[] =>
+            Array.from(
+                root.querySelector<HTMLElement>(
+                    ":scope > .input-group-header > .header-label-wrap",
+                )?.children ?? [],
+            ).map((element) => element.className);
+        const staticSection = buildStaticSection({
+            key: "static-chrome",
+            label: "Clip",
+            content: document.createDocumentFragment(),
+        }).section;
+        const accordion = buildAccordionSection({
+            key: "accordion-chrome",
+            label: "References",
+            counter: 2,
+            content: document.createDocumentFragment(),
+        }).section;
+        const repeating = buildRepeatingEditor({
+            key: "repeating-chrome",
+            label: "Stages",
+            items: [{ label: "Stage 0" }],
+            add: {
+                title: "Add stage",
+                className: "test-add",
+                onClick: () => {},
+            },
+            remove: {
+                title: "Delete stage",
+                className: "test-delete",
+            },
+        }).section.querySelector<HTMLElement>(
+            ":scope > .input-group-content > .vst-detail-repeating-group",
+        );
+
+        expect(parts(staticSection)).toEqual([
+            "header-label",
+            "header-label-spacer",
+            "vst-detail-repeating-group-actions",
+        ]);
+        expect(parts(accordion)).toEqual([
+            "auto-symbol",
+            "header-label",
+            "header-label-spacer",
+            "header-label-counter",
+            "vst-detail-repeating-group-actions",
+        ]);
+        expect(repeating && parts(repeating)).toEqual([
+            "auto-symbol",
+            "header-label",
+            "header-label-spacer",
+            "vst-detail-repeating-group-actions",
+        ]);
     });
 
     it("opens the newly appended child through the shared repeater pattern", () => {

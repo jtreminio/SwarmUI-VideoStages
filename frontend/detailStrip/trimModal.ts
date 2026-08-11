@@ -8,6 +8,7 @@ import {
     type TrimLimits,
     toInOut,
 } from "../trimGeometry";
+import { createManagedModal, type ManagedModal } from "./modalManager";
 import { buildTrimBar, type TrimBarHandle } from "./trimBar";
 
 export interface TrimModalSpec {
@@ -24,7 +25,7 @@ export interface TrimModalSpec {
 const MODAL_CLASS = "vst-trim-modal";
 const BACKDROP_CLASS = "vst-trim-modal-backdrop";
 const TITLE_ID = "vst_trim_modal_title";
-let currentCleanup: (() => void) | null = null;
+let currentModal: ManagedModal | null = null;
 
 const seconds = (value: number): string => value.toFixed(1);
 
@@ -79,10 +80,7 @@ export const buildTrimLauncher = (
 };
 
 export const closeTrimModal = (): void => {
-    currentCleanup?.();
-    currentCleanup = null;
-    document.querySelector(`.${MODAL_CLASS}`)?.remove();
-    document.querySelector(`.${BACKDROP_CLASS}`)?.remove();
+    currentModal?.close();
 };
 
 export const openTrimModal = (spec: TrimModalSpec): void => {
@@ -93,25 +91,6 @@ export const openTrimModal = (spec: TrimModalSpec): void => {
     let bar: TrimBarHandle | null = null;
     let stopAt: number | null = null;
 
-    const backdrop = document.createElement("div");
-    backdrop.className = `modal-backdrop fade show ${BACKDROP_CLASS}`;
-
-    const modal = document.createElement("div");
-    modal.className = `modal fade show ${MODAL_CLASS}`;
-    modal.style.display = "block";
-    modal.tabIndex = -1;
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-    modal.setAttribute("aria-labelledby", TITLE_ID);
-
-    const dialog = document.createElement("div");
-    dialog.className = "modal-dialog modal-dialog-centered";
-    dialog.setAttribute("role", "document");
-    const content = document.createElement("div");
-    content.className = "modal-content";
-
-    const header = document.createElement("div");
-    header.className = "modal-header";
     const heading = document.createElement("div");
     const title = document.createElement("h5");
     title.className = "modal-title";
@@ -123,10 +102,6 @@ export const openTrimModal = (spec: TrimModalSpec): void => {
     heading.append(title, fileName);
     const close = button("×", "Close without applying");
     close.setAttribute("aria-label", close.title);
-    header.append(heading, close);
-
-    const body = document.createElement("div");
-    body.className = "modal-body";
 
     const playerWrap = document.createElement("div");
     playerWrap.className = "vst-trim-modal-player-wrap";
@@ -318,77 +293,68 @@ export const openTrimModal = (spec: TrimModalSpec): void => {
         setDraft(setOutPoint(draft, player.currentTime, spec.limits)),
     );
 
-    body.append(playerWrap, transport, bar.element, fields, impact);
-
     const footer = document.createElement("div");
     footer.className = "modal-footer vst-trim-modal-footer";
     const cancel = button("Cancel", "Close without applying");
     const apply = button("Apply", "Apply this range", "data-vst-trim-apply");
     apply.classList.add("vst-trim-modal-apply");
     footer.append(reset, cancel, apply);
-    content.append(header, body, footer);
-    dialog.appendChild(content);
-    modal.appendChild(dialog);
 
-    const dismiss = (): void => currentCleanup?.();
+    let managed: ManagedModal;
+    managed = createManagedModal({
+        modalClass: MODAL_CLASS,
+        backdropClass: BACKDROP_CLASS,
+        labelledBy: TITLE_ID,
+        onKeyDown: (event) => {
+            if (
+                event.target instanceof HTMLInputElement ||
+                event.target instanceof HTMLTextAreaElement ||
+                event.target instanceof HTMLSelectElement
+            ) {
+                return;
+            }
+            const key = event.key.toLowerCase();
+            if (key === "i") {
+                event.preventDefault();
+                setDraft(markInPoint(draft, player.currentTime, spec.limits));
+            } else if (key === "o") {
+                event.preventDefault();
+                setDraft(setOutPoint(draft, player.currentTime, spec.limits));
+            } else if (event.key === " ") {
+                event.preventDefault();
+                if (player.paused) {
+                    playRange();
+                } else {
+                    player.pause();
+                    stopAt = null;
+                }
+            }
+        },
+        onClose: () => {
+            player.removeEventListener("timeupdate", paintPlayhead);
+            player.removeEventListener("seeked", paintPlayhead);
+            player.pause();
+            player.removeAttribute("src");
+            player.load();
+            if (currentModal === managed) {
+                currentModal = null;
+            }
+        },
+    });
+    currentModal = managed;
+    managed.header.append(heading, close);
+    managed.body.append(playerWrap, transport, bar.element, fields, impact);
+    managed.content.appendChild(footer);
+
+    const dismiss = (): void => managed.close();
     const applyAndClose = (): void => {
         const applied = { ...draft };
         dismiss();
         spec.onApply(applied);
     };
-    const onKeyDown = (event: KeyboardEvent): void => {
-        if (event.key === "Escape") {
-            event.preventDefault();
-            dismiss();
-            return;
-        }
-        if (
-            event.target instanceof HTMLInputElement ||
-            event.target instanceof HTMLTextAreaElement ||
-            event.target instanceof HTMLSelectElement
-        ) {
-            return;
-        }
-        const key = event.key.toLowerCase();
-        if (key === "i") {
-            event.preventDefault();
-            setDraft(markInPoint(draft, player.currentTime, spec.limits));
-        } else if (key === "o") {
-            event.preventDefault();
-            setDraft(setOutPoint(draft, player.currentTime, spec.limits));
-        } else if (event.key === " ") {
-            event.preventDefault();
-            if (player.paused) {
-                playRange();
-            } else {
-                player.pause();
-                stopAt = null;
-            }
-        }
-    };
-    const cleanup = (): void => {
-        document.removeEventListener("keydown", onKeyDown);
-        player.removeEventListener("timeupdate", paintPlayhead);
-        player.removeEventListener("seeked", paintPlayhead);
-        player.pause();
-        player.removeAttribute("src");
-        player.load();
-        modal.remove();
-        backdrop.remove();
-        if (currentCleanup === cleanup) {
-            currentCleanup = null;
-        }
-    };
-    currentCleanup = cleanup;
     close.addEventListener("click", dismiss);
     cancel.addEventListener("click", dismiss);
     apply.addEventListener("click", applyAndClose);
-    backdrop.addEventListener("click", dismiss);
-    modal.addEventListener("mousedown", (event) => {
-        if (event.target === modal) {
-            dismiss();
-        }
-    });
     player.addEventListener("loadedmetadata", () => seek(draft.startSeconds));
     player.addEventListener("timeupdate", paintPlayhead);
     player.addEventListener("seeked", paintPlayhead);
@@ -396,9 +362,7 @@ export const openTrimModal = (spec: TrimModalSpec): void => {
         player.hidden = true;
         mediaError.hidden = false;
     });
-    document.addEventListener("keydown", onKeyDown);
-    document.body.append(backdrop, modal);
     renderDraft();
     paintPlayhead();
-    player.focus();
+    managed.open(player);
 };

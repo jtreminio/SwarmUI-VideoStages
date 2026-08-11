@@ -334,10 +334,7 @@ const readFileAsDataUri = (
 
 let mediaPickCounter = 0;
 
-/**
- * Host server picks arrive in `dataset.filedata` and require the hidden
- * preview and filename nodes. Both server and browser picks become data URIs.
- */
+/** Host server picks arrive through `dataset.filedata`; all picks become data URIs. */
 export const buildMediaPickRow = (
     label: string,
     accept: string,
@@ -543,7 +540,7 @@ const appendSectionHeaderAction = (
 };
 
 const appendSectionHeaderActions = (
-    target: HTMLElement,
+    actions: HTMLElement,
     spec: {
         headerAction?: SectionHeaderAction;
         headerActions?: SectionHeaderAction[];
@@ -555,12 +552,52 @@ const appendSectionHeaderActions = (
     if (headerActions.length === 0) {
         return;
     }
-    const actions = document.createElement("span");
-    actions.className = "vst-detail-repeating-group-actions";
     for (const action of headerActions) {
         appendSectionHeaderAction(actions, action);
     }
-    target.appendChild(actions);
+};
+
+interface SectionHeaderSpec {
+    label: string;
+    className: string;
+    open?: boolean;
+    counter?: string | number;
+}
+
+const buildSectionHeader = (
+    spec: SectionHeaderSpec,
+): {
+    header: HTMLSpanElement;
+    heading: HTMLSpanElement;
+    actions: HTMLSpanElement;
+} => {
+    const header = document.createElement("span");
+    header.className = spec.className;
+    const labelWrap = document.createElement("span");
+    labelWrap.className = "header-label-wrap";
+    if (spec.open !== undefined) {
+        const symbol = document.createElement("span");
+        symbol.className = "auto-symbol";
+        symbol.textContent = spec.open ? "⮟" : "⮞";
+        labelWrap.appendChild(symbol);
+    }
+    const heading = document.createElement("span");
+    heading.className = "header-label";
+    heading.textContent = spec.label;
+    const spacer = document.createElement("span");
+    spacer.className = "header-label-spacer";
+    labelWrap.append(heading, spacer);
+    if (spec.counter !== undefined) {
+        const counter = document.createElement("span");
+        counter.className = "header-label-counter";
+        counter.textContent = `${spec.counter}`;
+        labelWrap.appendChild(counter);
+    }
+    const actions = document.createElement("span");
+    actions.className = "vst-detail-repeating-group-actions";
+    labelWrap.appendChild(actions);
+    header.appendChild(labelWrap);
+    return { header, heading, actions };
 };
 
 export interface StaticSectionSpec {
@@ -585,7 +622,6 @@ export const resetRememberedAccordionSections = (): void => {
     persistedRepeaterState = null;
 };
 
-/** Native SwarmUI group without disclosure behavior. */
 export const buildStaticSection = (
     spec: StaticSectionSpec,
 ): {
@@ -598,19 +634,12 @@ export const buildStaticSection = (
         `input-group input-group-open vst-detail-section vst-detail-static-section ${spec.className ?? ""}`.trim();
     section.dataset.vstStaticKey = spec.key;
 
-    const header = document.createElement("span");
-    header.className =
-        "input-group-header input-group-noshrink vst-detail-section-header";
-    const labelWrap = document.createElement("span");
-    labelWrap.className = "header-label-wrap";
-    const heading = document.createElement("span");
-    heading.className = "header-label";
-    heading.textContent = spec.label;
-    const spacer = document.createElement("span");
-    spacer.className = "header-label-spacer";
-    labelWrap.append(heading, spacer);
-    appendSectionHeaderActions(labelWrap, spec);
-    header.appendChild(labelWrap);
+    const { header, heading, actions } = buildSectionHeader({
+        label: spec.label,
+        className:
+            "input-group-header input-group-noshrink vst-detail-section-header",
+    });
+    appendSectionHeaderActions(actions, spec);
 
     const content = document.createElement("div");
     content.className = "input-group-content vst-detail-section-content";
@@ -619,7 +648,7 @@ export const buildStaticSection = (
     return { section, heading, content };
 };
 
-/** Native SwarmUI disclosure group with rebuild-stable open state. */
+/** Remembers open state across detail-strip rebuilds. */
 export const buildAccordionSection = (
     spec: AccordionSectionSpec,
 ): {
@@ -641,32 +670,17 @@ export const buildAccordionSection = (
         `input-group vst-detail-section ${open ? "input-group-open" : "input-group-closed"} ${spec.className ?? ""}`.trim();
     section.dataset.vstAccordionKey = spec.key;
 
-    const header = document.createElement("span");
-    header.className =
-        "input-group-header input-group-shrinkable vst-detail-section-header";
+    const { header, heading, actions } = buildSectionHeader({
+        label: spec.label,
+        className:
+            "input-group-header input-group-shrinkable vst-detail-section-header",
+        open,
+        counter: spec.counter,
+    });
     header.tabIndex = 0;
     header.setAttribute("role", "button");
     header.setAttribute("aria-expanded", `${open}`);
-
-    const labelWrap = document.createElement("span");
-    labelWrap.className = "header-label-wrap";
-    const symbol = document.createElement("span");
-    symbol.className = "auto-symbol";
-    symbol.textContent = open ? "⮟" : "⮞";
-    const heading = document.createElement("span");
-    heading.className = "header-label";
-    heading.textContent = spec.label;
-    const spacer = document.createElement("span");
-    spacer.className = "header-label-spacer";
-    labelWrap.append(symbol, heading, spacer);
-    if (spec.counter !== undefined) {
-        const counter = document.createElement("span");
-        counter.className = "header-label-counter";
-        counter.textContent = `${spec.counter}`;
-        labelWrap.appendChild(counter);
-    }
-    appendSectionHeaderActions(labelWrap, spec);
-    header.appendChild(labelWrap);
+    appendSectionHeaderActions(actions, spec);
 
     const content = document.createElement("div");
     content.className = "input-group-content vst-detail-section-content";
@@ -896,7 +910,6 @@ const runRepeaterStructuralAction = (
     }
 };
 
-/** Shared outer group, item disclosures, Add action, and Delete actions. */
 export const buildRepeatingEditor = (
     spec: RepeatingEditorSpec,
 ): {
@@ -988,9 +1001,12 @@ export const buildRepeatingEditor = (
         group.className = `input-group vst-detail-repeating-group ${
             open ? "input-group-open" : "input-group-closed"
         } ${item.groupClassName ?? ""}`.trim();
-        const header = document.createElement("span");
-        header.className =
-            `input-group-header input-group-shrinkable vst-detail-repeating-group-header ${item.className ?? ""}`.trim();
+        const { header, actions } = buildSectionHeader({
+            label: item.label,
+            className:
+                `input-group-header input-group-shrinkable vst-detail-repeating-group-header ${item.className ?? ""}`.trim(),
+            open,
+        });
         header.tabIndex = 0;
         header.setAttribute("role", "button");
         header.setAttribute("aria-expanded", `${open}`);
@@ -1001,18 +1017,6 @@ export const buildRepeatingEditor = (
         if (item.title) {
             header.title = item.title;
         }
-        const labelWrap = document.createElement("span");
-        labelWrap.className = "header-label-wrap";
-        const symbol = document.createElement("span");
-        symbol.className = "auto-symbol";
-        symbol.textContent = open ? "⮟" : "⮞";
-        const label = document.createElement("span");
-        label.className = "header-label";
-        label.textContent = item.label;
-        const spacer = document.createElement("span");
-        spacer.className = "header-label-spacer";
-        const actions = document.createElement("span");
-        actions.className = "vst-detail-repeating-group-actions";
         if (item.headerAction) {
             appendSectionHeaderAction(actions, item.headerAction);
         }
@@ -1035,8 +1039,6 @@ export const buildRepeatingEditor = (
             });
             actions.appendChild(remove);
         }
-        labelWrap.append(symbol, label, spacer, actions);
-        header.appendChild(labelWrap);
         const content = document.createElement("div");
         content.className =
             "input-group-content vst-detail-repeating-group-content";
@@ -1193,7 +1195,7 @@ export const buildRepeatingEditor = (
         label: spec.label,
         content: children,
         counter: spec.items.length,
-        // Empty repeaters stay open so their Add action remains reachable.
+        // Keep empty repeaters open so Add remains reachable.
         open: forceOpen || spec.items.length === 0 || spec.open,
         defaultOpen: spec.items.length > 0,
         className:
@@ -1227,7 +1229,6 @@ export const wrapForm = (
     return body;
 };
 
-/** Tag a control for focus restoration after a rebuild. */
 export const tagFocus = (field: HTMLElement, key: string): HTMLElement => {
     const control =
         field.querySelector<HTMLElement>("input.auto-slider-number") ??
