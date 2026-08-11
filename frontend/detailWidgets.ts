@@ -20,13 +20,7 @@ const slugify = (value: string): string =>
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/(^-|-$)/g, "") || "field";
 
-/**
- * Append SwarmUI's native "?" info-popover to a field: a qbutton span inside
- * the label plus a `.sui-popover` div the host's `doPopover` toggles (the host
- * styles/positions it). `doPopover` lives in ui_improvements.js, which is not
- * loaded in jest, so the click is guarded. Text-only content — no HTML
- * injection into the popover body.
- */
+/** Host-compatible info popover with a text-only body. */
 export const appendHelp = (
     labelEl: HTMLElement,
     row: HTMLElement | DocumentFragment,
@@ -341,14 +335,8 @@ const readFileAsDataUri = (
 let mediaPickCounter = 0;
 
 /**
- * Media file picker offering both a browser upload and (when the host page
- * provides the input browser) SwarmUI's "Select" server-file browser — the
- * same pairing core file params get. `accept` filters the browser upload and
- * `browserTypes` (e.g. ["image"], ["audio"], ["image", "video"]) filters the
- * host input browser. Both paths resolve to a data URI before `onFile`; a
- * server pick lands as a View/ URL in `dataset.filedata` (written by site.js
- * `setMediaFileDirect`, which also needs the hidden preview and filename nodes
- * below) and is converted with the host's `toDataURL`.
+ * Host server picks arrive in `dataset.filedata` and require the hidden
+ * preview and filename nodes. Both server and browser picks become data URIs.
  */
 export const buildMediaPickRow = (
     label: string,
@@ -461,26 +449,6 @@ const setAccordionOpen = (section: HTMLElement, open: boolean): void => {
     }
 };
 
-const closeSiblingAccordionSections = (section: HTMLElement): void => {
-    const parent = section.parentElement;
-    if (!parent) {
-        return;
-    }
-    for (const sibling of parent.children) {
-        if (
-            sibling instanceof HTMLElement &&
-            sibling !== section &&
-            sibling.classList.contains("vst-detail-section")
-        ) {
-            setAccordionOpen(sibling, false);
-            const key = sibling.dataset.vstAccordionKey;
-            if (key) {
-                rememberedAccordionSections.delete(key);
-            }
-        }
-    }
-};
-
 const appendSectionContent = (
     target: HTMLElement,
     source: HTMLElement | DocumentFragment,
@@ -508,6 +476,8 @@ export interface AccordionSectionSpec {
     counter?: string | number;
     className?: string;
     flattenContent?: boolean;
+    headerAction?: SectionHeaderAction;
+    headerActions?: SectionHeaderAction[];
 }
 
 export interface SectionHeaderAction {
@@ -519,27 +489,78 @@ export interface SectionHeaderAction {
     onClick: () => void;
 }
 
+export interface DetailActionButtonSpec {
+    label: string;
+    title: string;
+    className: string;
+    variant?: "basic" | "interrupt";
+    active?: boolean;
+    disabled?: boolean;
+    stopPropagation?: boolean;
+    onClick: (button: HTMLButtonElement) => void;
+}
+
+export const buildDetailActionButton = (
+    spec: DetailActionButtonSpec,
+): HTMLButtonElement => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className =
+        `${spec.variant === "interrupt" ? "interrupt-button" : "basic-button"} ${spec.className}`.trim();
+    button.textContent = spec.label;
+    button.title = spec.title;
+    button.setAttribute("aria-label", spec.title);
+    button.disabled = spec.disabled === true;
+    if (spec.active !== undefined) {
+        button.setAttribute("aria-pressed", `${spec.active}`);
+        button.classList.toggle("vst-btn-skip-active", spec.active);
+    }
+    button.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (spec.stopPropagation) {
+            event.stopPropagation();
+        }
+        spec.onClick(button);
+    });
+    return button;
+};
+
 const appendSectionHeaderAction = (
     target: HTMLElement,
     actionSpec: SectionHeaderAction,
 ): void => {
-    const action = document.createElement("button");
-    action.type = "button";
-    action.className =
-        `${actionSpec.variant === "interrupt" ? "interrupt-button" : "basic-button"} vst-btn-tiny vst-detail-repeating-group-action ${actionSpec.className ?? ""}`.trim();
-    action.textContent = actionSpec.label;
-    action.title = actionSpec.title;
-    action.setAttribute("aria-label", actionSpec.title);
-    if (actionSpec.active !== undefined) {
-        action.setAttribute("aria-pressed", `${actionSpec.active}`);
-        action.classList.toggle("vst-btn-skip-active", actionSpec.active);
-    }
-    action.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        actionSpec.onClick();
+    const action = buildDetailActionButton({
+        label: actionSpec.label,
+        title: actionSpec.title,
+        className:
+            `vst-btn-tiny vst-detail-repeating-group-action ${actionSpec.className ?? ""}`.trim(),
+        variant: actionSpec.variant,
+        active: actionSpec.active,
+        stopPropagation: true,
+        onClick: actionSpec.onClick,
     });
     target.appendChild(action);
+};
+
+const appendSectionHeaderActions = (
+    target: HTMLElement,
+    spec: {
+        headerAction?: SectionHeaderAction;
+        headerActions?: SectionHeaderAction[];
+    },
+): void => {
+    const headerActions =
+        spec.headerActions ??
+        (spec.headerAction === undefined ? [] : [spec.headerAction]);
+    if (headerActions.length === 0) {
+        return;
+    }
+    const actions = document.createElement("span");
+    actions.className = "vst-detail-repeating-group-actions";
+    for (const action of headerActions) {
+        appendSectionHeaderAction(actions, action);
+    }
+    target.appendChild(actions);
 };
 
 export interface StaticSectionSpec {
@@ -564,11 +585,7 @@ export const resetRememberedAccordionSections = (): void => {
     persistedRepeaterState = null;
 };
 
-/**
- * Native SwarmUI input group that is always open. It keeps the same header and
- * content structure as an accordion group, but deliberately omits the
- * shrinkable class, disclosure symbol, button role, and toggle listeners.
- */
+/** Native SwarmUI group without disclosure behavior. */
 export const buildStaticSection = (
     spec: StaticSectionSpec,
 ): {
@@ -592,17 +609,7 @@ export const buildStaticSection = (
     const spacer = document.createElement("span");
     spacer.className = "header-label-spacer";
     labelWrap.append(heading, spacer);
-    const headerActions =
-        spec.headerActions ??
-        (spec.headerAction === undefined ? [] : [spec.headerAction]);
-    if (headerActions.length > 0) {
-        const actions = document.createElement("span");
-        actions.className = "vst-detail-repeating-group-actions";
-        for (const action of headerActions) {
-            appendSectionHeaderAction(actions, action);
-        }
-        labelWrap.appendChild(actions);
-    }
+    appendSectionHeaderActions(labelWrap, spec);
     header.appendChild(labelWrap);
 
     const content = document.createElement("div");
@@ -612,12 +619,7 @@ export const buildStaticSection = (
     return { section, heading, content };
 };
 
-/**
- * Native SwarmUI sidebar group with a wired shrinkable header. Sibling
- * VideoStages sections form a progressive accordion while Auto-collapse is
- * enabled; otherwise their open state survives panel rebuilds. Geometry and
- * field chrome are left to the host `.input-group` styles.
- */
+/** Native SwarmUI disclosure group with rebuild-stable open state. */
 export const buildAccordionSection = (
     spec: AccordionSectionSpec,
 ): {
@@ -663,6 +665,7 @@ export const buildAccordionSection = (
         counter.textContent = `${spec.counter}`;
         labelWrap.appendChild(counter);
     }
+    appendSectionHeaderActions(labelWrap, spec);
     header.appendChild(labelWrap);
 
     const content = document.createElement("div");
@@ -674,25 +677,6 @@ export const buildAccordionSection = (
         event.preventDefault();
         event.stopPropagation();
         const opening = content.hidden === true;
-        const collapseSiblings = getTimelineAuthoringSettings().autoCollapse;
-        if (opening && collapseSiblings) {
-            closeSiblingAccordionSections(section);
-        } else if (opening) {
-            for (const sibling of Array.from(
-                section.parentElement?.children ?? [],
-            )) {
-                if (
-                    sibling instanceof HTMLElement &&
-                    sibling !== section &&
-                    sibling.classList.contains("input-group-open")
-                ) {
-                    const key = sibling.dataset.vstAccordionKey;
-                    if (key) {
-                        rememberedAccordionSections.add(key);
-                    }
-                }
-            }
-        }
         setAccordionOpen(section, opening);
         if (opening) {
             rememberedAccordionSections.add(spec.key);
@@ -912,10 +896,7 @@ const runRepeaterStructuralAction = (
     }
 };
 
-/**
- * Canonical repeating-child section: one native outer SwarmUI accordion group,
- * containing one native group per item and the extension's Add action.
- */
+/** Shared outer group, item disclosures, Add action, and Delete actions. */
 export const buildRepeatingEditor = (
     spec: RepeatingEditorSpec,
 ): {
@@ -1037,21 +1018,20 @@ export const buildRepeatingEditor = (
         }
         const onDelete = item.onDelete;
         if (onDelete) {
-            const remove = document.createElement("button");
-            remove.type = "button";
-            remove.className =
-                `interrupt-button vst-btn-tiny vst-detail-delete vst-detail-repeating-group-delete ${spec.remove.className}`.trim();
-            remove.textContent = "×";
-            remove.title =
-                item.deleteTitle ??
-                (active ? spec.remove.title : `Delete ${item.label}`);
-            remove.setAttribute("aria-label", remove.title);
-            remove.disabled = item.deleteDisabled === true;
-            remove.addEventListener("click", (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                forgetRepeaterItem(item);
-                runRepeaterStructuralAction(remove, onDelete);
+            const remove = buildDetailActionButton({
+                label: "×",
+                title:
+                    item.deleteTitle ??
+                    (active ? spec.remove.title : `Delete ${item.label}`),
+                className:
+                    `vst-btn-tiny vst-detail-delete vst-detail-repeating-group-delete ${spec.remove.className}`.trim(),
+                variant: "interrupt",
+                disabled: item.deleteDisabled,
+                stopPropagation: true,
+                onClick: (button) => {
+                    forgetRepeaterItem(item);
+                    runRepeaterStructuralAction(button, onDelete);
+                },
             });
             actions.appendChild(remove);
         }
@@ -1167,44 +1147,45 @@ export const buildRepeatingEditor = (
         children.appendChild(group);
         group.dataset.vstRepeaterItem = `${index}`;
     });
-    const add = document.createElement("button");
-    add.type = "button";
-    add.className =
-        `basic-button small-button vst-detail-repeating-add ${spec.add.className}`.trim();
-    add.textContent = spec.add.label ?? "+ Add";
-    add.title = spec.add.title;
-    add.setAttribute("aria-label", spec.add.title);
-    add.disabled = spec.add.disabled === true;
-    add.addEventListener("click", (event) => {
-        event.preventDefault();
-        const nextIndex = spec.items.length;
-        if (getTimelineAuthoringSettings().autoCollapse) {
-            rememberedRepeaterOpenItems.set(spec.key, new Set([nextIndex]));
-        } else {
-            const remembered =
-                rememberedRepeaterOpenItems.get(spec.key) ?? new Set<number>();
-            for (const sibling of Array.from(
-                add.parentElement?.children ?? [],
-            )) {
-                if (
-                    sibling instanceof HTMLElement &&
-                    sibling.classList.contains("vst-detail-repeating-group") &&
-                    sibling.classList.contains("input-group-open")
-                ) {
-                    const siblingIndex = Number(
-                        sibling.dataset.vstRepeaterItem,
-                    );
-                    if (Number.isInteger(siblingIndex)) {
-                        remembered.add(siblingIndex);
+    const add = buildDetailActionButton({
+        label: spec.add.label ?? "+ Add",
+        title: spec.add.title,
+        className:
+            `small-button vst-detail-repeating-add ${spec.add.className}`.trim(),
+        disabled: spec.add.disabled,
+        onClick: (button) => {
+            const nextIndex = spec.items.length;
+            if (getTimelineAuthoringSettings().autoCollapse) {
+                rememberedRepeaterOpenItems.set(spec.key, new Set([nextIndex]));
+            } else {
+                const remembered =
+                    rememberedRepeaterOpenItems.get(spec.key) ??
+                    new Set<number>();
+                for (const sibling of Array.from(
+                    button.parentElement?.children ?? [],
+                )) {
+                    if (
+                        sibling instanceof HTMLElement &&
+                        sibling.classList.contains(
+                            "vst-detail-repeating-group",
+                        ) &&
+                        sibling.classList.contains("input-group-open")
+                    ) {
+                        const siblingIndex = Number(
+                            sibling.dataset.vstRepeaterItem,
+                        );
+                        if (Number.isInteger(siblingIndex)) {
+                            remembered.add(siblingIndex);
+                        }
                     }
                 }
+                remembered.add(nextIndex);
+                rememberedRepeaterOpenItems.set(spec.key, remembered);
             }
-            remembered.add(nextIndex);
-            rememberedRepeaterOpenItems.set(spec.key, remembered);
-        }
-        rememberedRepeaterItems.set(spec.key, spec.items.length);
-        forceOpenRepeaterKeys.add(spec.key);
-        runRepeaterStructuralAction(add, spec.add.onClick);
+            rememberedRepeaterItems.set(spec.key, spec.items.length);
+            forceOpenRepeaterKeys.add(spec.key);
+            runRepeaterStructuralAction(button, spec.add.onClick);
+        },
     });
     children.appendChild(add);
     const built = buildAccordionSection({
@@ -1246,10 +1227,7 @@ export const wrapForm = (
     return body;
 };
 
-/**
- * Tag a field's inner control with a focus key so the strip can preserve and
- * restore its caret across a self-triggered rebuild.
- */
+/** Tag a control for focus restoration after a rebuild. */
 export const tagFocus = (field: HTMLElement, key: string): HTMLElement => {
     const control =
         field.querySelector<HTMLElement>("input.auto-slider-number") ??

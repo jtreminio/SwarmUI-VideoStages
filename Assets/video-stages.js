@@ -8472,21 +8472,6 @@
       symbol.textContent = open ? "⮟" : "⮞";
     }
   };
-  var closeSiblingAccordionSections = (section) => {
-    const parent = section.parentElement;
-    if (!parent) {
-      return;
-    }
-    for (const sibling of parent.children) {
-      if (sibling instanceof HTMLElement && sibling !== section && sibling.classList.contains("vst-detail-section")) {
-        setAccordionOpen(sibling, false);
-        const key = sibling.dataset.vstAccordionKey;
-        if (key) {
-          rememberedAccordionSections.delete(key);
-        }
-      }
-    }
-  };
   var appendSectionContent = (target, source, flatten) => {
     if (!flatten || source instanceof DocumentFragment) {
       target.appendChild(source);
@@ -8500,23 +8485,50 @@
     target.classList.add(...Array.from(source.classList));
     target.append(...Array.from(source.childNodes));
   };
-  var appendSectionHeaderAction = (target, actionSpec) => {
-    const action = document.createElement("button");
-    action.type = "button";
-    action.className = `${actionSpec.variant === "interrupt" ? "interrupt-button" : "basic-button"} vst-btn-tiny vst-detail-repeating-group-action ${actionSpec.className ?? ""}`.trim();
-    action.textContent = actionSpec.label;
-    action.title = actionSpec.title;
-    action.setAttribute("aria-label", actionSpec.title);
-    if (actionSpec.active !== void 0) {
-      action.setAttribute("aria-pressed", `${actionSpec.active}`);
-      action.classList.toggle("vst-btn-skip-active", actionSpec.active);
+  var buildDetailActionButton = (spec) => {
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.className = `${spec.variant === "interrupt" ? "interrupt-button" : "basic-button"} ${spec.className}`.trim();
+    button2.textContent = spec.label;
+    button2.title = spec.title;
+    button2.setAttribute("aria-label", spec.title);
+    button2.disabled = spec.disabled === true;
+    if (spec.active !== void 0) {
+      button2.setAttribute("aria-pressed", `${spec.active}`);
+      button2.classList.toggle("vst-btn-skip-active", spec.active);
     }
-    action.addEventListener("click", (event) => {
+    button2.addEventListener("click", (event) => {
       event.preventDefault();
-      event.stopPropagation();
-      actionSpec.onClick();
+      if (spec.stopPropagation) {
+        event.stopPropagation();
+      }
+      spec.onClick(button2);
+    });
+    return button2;
+  };
+  var appendSectionHeaderAction = (target, actionSpec) => {
+    const action = buildDetailActionButton({
+      label: actionSpec.label,
+      title: actionSpec.title,
+      className: `vst-btn-tiny vst-detail-repeating-group-action ${actionSpec.className ?? ""}`.trim(),
+      variant: actionSpec.variant,
+      active: actionSpec.active,
+      stopPropagation: true,
+      onClick: actionSpec.onClick
     });
     target.appendChild(action);
+  };
+  var appendSectionHeaderActions = (target, spec) => {
+    const headerActions = spec.headerActions ?? (spec.headerAction === void 0 ? [] : [spec.headerAction]);
+    if (headerActions.length === 0) {
+      return;
+    }
+    const actions = document.createElement("span");
+    actions.className = "vst-detail-repeating-group-actions";
+    for (const action of headerActions) {
+      appendSectionHeaderAction(actions, action);
+    }
+    target.appendChild(actions);
   };
   var rememberedAccordionSections = /* @__PURE__ */ new Set();
   var seenAccordionSections = /* @__PURE__ */ new Set();
@@ -8542,15 +8554,7 @@
     const spacer = document.createElement("span");
     spacer.className = "header-label-spacer";
     labelWrap.append(heading, spacer);
-    const headerActions = spec.headerActions ?? (spec.headerAction === void 0 ? [] : [spec.headerAction]);
-    if (headerActions.length > 0) {
-      const actions = document.createElement("span");
-      actions.className = "vst-detail-repeating-group-actions";
-      for (const action of headerActions) {
-        appendSectionHeaderAction(actions, action);
-      }
-      labelWrap.appendChild(actions);
-    }
+    appendSectionHeaderActions(labelWrap, spec);
     header.appendChild(labelWrap);
     const content = document.createElement("div");
     content.className = "input-group-content vst-detail-section-content";
@@ -8590,6 +8594,7 @@
       counter.textContent = `${spec.counter}`;
       labelWrap.appendChild(counter);
     }
+    appendSectionHeaderActions(labelWrap, spec);
     header.appendChild(labelWrap);
     const content = document.createElement("div");
     content.className = "input-group-content vst-detail-section-content";
@@ -8599,21 +8604,6 @@
       event.preventDefault();
       event.stopPropagation();
       const opening = content.hidden === true;
-      const collapseSiblings = getTimelineAuthoringSettings().autoCollapse;
-      if (opening && collapseSiblings) {
-        closeSiblingAccordionSections(section);
-      } else if (opening) {
-        for (const sibling of Array.from(
-          section.parentElement?.children ?? []
-        )) {
-          if (sibling instanceof HTMLElement && sibling !== section && sibling.classList.contains("input-group-open")) {
-            const key = sibling.dataset.vstAccordionKey;
-            if (key) {
-              rememberedAccordionSections.add(key);
-            }
-          }
-        }
-      }
       setAccordionOpen(section, opening);
       if (opening) {
         rememberedAccordionSections.add(spec.key);
@@ -8841,18 +8831,17 @@
       }
       const onDelete = item.onDelete;
       if (onDelete) {
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = `interrupt-button vst-btn-tiny vst-detail-delete vst-detail-repeating-group-delete ${spec.remove.className}`.trim();
-        remove.textContent = "×";
-        remove.title = item.deleteTitle ?? (active ? spec.remove.title : `Delete ${item.label}`);
-        remove.setAttribute("aria-label", remove.title);
-        remove.disabled = item.deleteDisabled === true;
-        remove.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          forgetRepeaterItem(item);
-          runRepeaterStructuralAction(remove, onDelete);
+        const remove = buildDetailActionButton({
+          label: "×",
+          title: item.deleteTitle ?? (active ? spec.remove.title : `Delete ${item.label}`),
+          className: `vst-btn-tiny vst-detail-delete vst-detail-repeating-group-delete ${spec.remove.className}`.trim(),
+          variant: "interrupt",
+          disabled: item.deleteDisabled,
+          stopPropagation: true,
+          onClick: (button2) => {
+            forgetRepeaterItem(item);
+            runRepeaterStructuralAction(button2, onDelete);
+          }
         });
         actions.appendChild(remove);
       }
@@ -8948,38 +8937,38 @@
       children.appendChild(group);
       group.dataset.vstRepeaterItem = `${index}`;
     });
-    const add = document.createElement("button");
-    add.type = "button";
-    add.className = `basic-button small-button vst-detail-repeating-add ${spec.add.className}`.trim();
-    add.textContent = spec.add.label ?? "+ Add";
-    add.title = spec.add.title;
-    add.setAttribute("aria-label", spec.add.title);
-    add.disabled = spec.add.disabled === true;
-    add.addEventListener("click", (event) => {
-      event.preventDefault();
-      const nextIndex = spec.items.length;
-      if (getTimelineAuthoringSettings().autoCollapse) {
-        rememberedRepeaterOpenItems.set(spec.key, /* @__PURE__ */ new Set([nextIndex]));
-      } else {
-        const remembered = rememberedRepeaterOpenItems.get(spec.key) ?? /* @__PURE__ */ new Set();
-        for (const sibling of Array.from(
-          add.parentElement?.children ?? []
-        )) {
-          if (sibling instanceof HTMLElement && sibling.classList.contains("vst-detail-repeating-group") && sibling.classList.contains("input-group-open")) {
-            const siblingIndex = Number(
-              sibling.dataset.vstRepeaterItem
-            );
-            if (Number.isInteger(siblingIndex)) {
-              remembered.add(siblingIndex);
+    const add = buildDetailActionButton({
+      label: spec.add.label ?? "+ Add",
+      title: spec.add.title,
+      className: `small-button vst-detail-repeating-add ${spec.add.className}`.trim(),
+      disabled: spec.add.disabled,
+      onClick: (button2) => {
+        const nextIndex = spec.items.length;
+        if (getTimelineAuthoringSettings().autoCollapse) {
+          rememberedRepeaterOpenItems.set(spec.key, /* @__PURE__ */ new Set([nextIndex]));
+        } else {
+          const remembered = rememberedRepeaterOpenItems.get(spec.key) ?? /* @__PURE__ */ new Set();
+          for (const sibling of Array.from(
+            button2.parentElement?.children ?? []
+          )) {
+            if (sibling instanceof HTMLElement && sibling.classList.contains(
+              "vst-detail-repeating-group"
+            ) && sibling.classList.contains("input-group-open")) {
+              const siblingIndex = Number(
+                sibling.dataset.vstRepeaterItem
+              );
+              if (Number.isInteger(siblingIndex)) {
+                remembered.add(siblingIndex);
+              }
             }
           }
+          remembered.add(nextIndex);
+          rememberedRepeaterOpenItems.set(spec.key, remembered);
         }
-        remembered.add(nextIndex);
-        rememberedRepeaterOpenItems.set(spec.key, remembered);
+        rememberedRepeaterItems.set(spec.key, spec.items.length);
+        forceOpenRepeaterKeys.add(spec.key);
+        runRepeaterStructuralAction(button2, spec.add.onClick);
       }
-      rememberedRepeaterItems.set(spec.key, spec.items.length);
-      forceOpenRepeaterKeys.add(spec.key);
-      runRepeaterStructuralAction(add, spec.add.onClick);
     });
     children.appendChild(add);
     const built = buildAccordionSection({
@@ -12756,9 +12745,6 @@ ${slot}`;
         return editorForItem?.(itemIndex - itemOffset);
       }
     }).section;
-    if (activeIdx === null) {
-      return buildSection();
-    }
     const buildEditor = (editorIdx) => {
       const reference = references[editorIdx];
       if (!reference) {
@@ -12912,8 +12898,8 @@ ${slot}`;
               ctx.render();
             },
             {
-              // Never disable a ticked box: a re-pick that probes to
-              // nothing would otherwise trap an unhonourable claim.
+              // Keep a checked box enabled so a failed re-probe
+              // cannot trap its clip-length claim.
               disabled: !(seconds2 > 0) && reference.drivesClipLength !== true,
               help: seconds2 > 0 ? "Set this clip's length to the reference's own length. Only one source can own the clip length, so this clears any other reference and the clip-level length options." : "This reference has no detected length to lend the clip. Pick a file the browser can read."
             }
@@ -13401,25 +13387,15 @@ ${slot}`;
         className: "vst-detail-retake-section",
         open,
         content: col,
-        flattenContent: true
+        flattenContent: true,
+        headerAction: retake ? {
+          label: "×",
+          title: "Delete the retake window",
+          className: "vst-detail-delete vst-detail-delete-retake",
+          variant: "interrupt",
+          onClick: () => context.removeRetake(clipIdx)
+        } : void 0
       });
-      if (retake) {
-        const actions = document.createElement("span");
-        actions.className = "vst-detail-repeating-group-actions";
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "interrupt-button vst-btn-tiny vst-detail-delete vst-detail-delete-retake";
-        remove.textContent = "×";
-        remove.title = "Delete the retake window";
-        remove.setAttribute("aria-label", remove.title);
-        remove.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          context.removeRetake(clipIdx);
-        });
-        actions.appendChild(remove);
-        built.heading.parentElement?.appendChild(actions);
-      }
       appendHelp(
         built.heading,
         built.section,
@@ -13433,16 +13409,12 @@ ${slot}`;
       hint.className = "vst-detail-field-hint";
       hint.textContent = "Regenerates a sub-range when refining a base video.";
       col.appendChild(hint);
-      const add = document.createElement("button");
-      add.type = "button";
-      add.className = "basic-button small-button vst-detail-repeating-add vst-detail-add-retake";
-      add.textContent = "+ Add Retake";
-      add.title = decision.supported ? "Add a retake window" : decision.reason;
-      add.setAttribute("aria-label", add.title);
-      add.disabled = !decision.supported;
-      add.addEventListener("click", (event) => {
-        event.preventDefault();
-        context.createRetake(clipIdx);
+      const add = buildDetailActionButton({
+        label: "+ Add Retake",
+        title: decision.supported ? "Add a retake window" : decision.reason,
+        className: "small-button vst-detail-repeating-add vst-detail-add-retake",
+        disabled: !decision.supported,
+        onClick: () => context.createRetake(clipIdx)
       });
       col.appendChild(add);
       return buildSection();

@@ -1,4 +1,10 @@
 import { describe, expect, it, jest } from "@jest/globals";
+import { resetArchitectureCatalogForTests } from "./__test_helpers__/architectureCatalog";
+import {
+    testArchitectureCapabilities,
+    testArchitectureCatalog,
+    testArchitectureCatalogDto,
+} from "./__test_helpers__/architectureFixtures";
 import { initVideoFixture } from "./__test_helpers__/clipFixtures";
 import {
     committedClips,
@@ -15,6 +21,9 @@ import {
     sliderNumberByLabel,
 } from "./__test_helpers__/detailStrip";
 import { lastSavedClips } from "./__test_helpers__/dom";
+import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
+import { setVideoStagesHostBridgeForTests } from "./host";
+import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import * as persistence from "./persistence/repository";
 import { activateSelection, getSelection, setSelection } from "./selection";
 import { renderTimeline } from "./timelineView";
@@ -1334,6 +1343,84 @@ describe("createTimelineDetailStrip", () => {
             ).toBe(true);
         });
 
+        it("keeps an added reference open when another repeater adds an item", async () => {
+            const catalog = testArchitectureCatalog();
+            catalog.architectures[0].capabilities =
+                testArchitectureCapabilities({
+                    features: [
+                        ...catalog.architectures[0].capabilities.features,
+                        "clipReferences",
+                    ],
+                });
+            resetArchitectureCatalogForTests();
+            setVideoStagesHostBridgeForTests({
+                ...createDefaultVideoStagesHostBridge(),
+                requestJson: async () => testArchitectureCatalogDto(catalog),
+            });
+            await loadAuthoritativeArchitectureCatalog();
+            h.setup([
+                {
+                    duration: 10,
+                    stages: [{}],
+                    references: [],
+                    frameRefs: [],
+                },
+            ]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+            detailBody()
+                ?.querySelector<HTMLButtonElement>(".vst-detail-add-clip-ref")
+                ?.click();
+
+            const referenceGroup = (): HTMLElement | null =>
+                detailBody()?.querySelector<HTMLElement>(
+                    '[data-vst-repeater-key="clip-references"] .vst-detail-repeating-group',
+                ) ?? null;
+            const referencesSection = (): HTMLElement | null =>
+                detailBody()?.querySelector<HTMLElement>(
+                    '[data-vst-repeater-key="clip-references"]',
+                ) ?? null;
+            const referenceEditor = (): HTMLElement | null =>
+                referenceGroup()?.querySelector<HTMLElement>(
+                    ".vst-detail-clip-ref-editor",
+                ) ?? null;
+            expect(referencesSection()?.classList).toContain(
+                "input-group-open",
+            );
+            expect(referenceGroup()?.classList).toContain("input-group-open");
+            expect(referenceEditor()).not.toBeNull();
+
+            const keyframes = detailBody()?.querySelector<HTMLElement>(
+                '[data-vst-repeater-key="references"]',
+            );
+            const keyframesHeader = keyframes?.querySelector<HTMLElement>(
+                ":scope > .input-group-header",
+            );
+            keyframesHeader?.click();
+            keyframesHeader?.click();
+            detailBody()
+                ?.querySelector<HTMLButtonElement>(".vst-detail-add-ref")
+                ?.click();
+
+            expect(referencesSection()?.classList).toContain(
+                "input-group-open",
+            );
+            expect(referenceGroup()?.classList).toContain("input-group-open");
+            expect(referenceEditor()).not.toBeNull();
+
+            referenceGroup()
+                ?.querySelector<HTMLElement>(
+                    ":scope > .vst-detail-repeating-group-header",
+                )
+                ?.click();
+            referenceGroup()
+                ?.querySelector<HTMLElement>(
+                    ":scope > .vst-detail-repeating-group-header",
+                )
+                ?.click();
+            expect(referenceEditor()).not.toBeNull();
+        });
+
         it("adds references at unique rounded ten-percent frame intervals before wrapping", () => {
             h.setup([{ duration: 5, stages: [{}], frameRefs: [] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
@@ -1371,7 +1458,7 @@ describe("createTimelineDetailStrip", () => {
             expect(globals.getCookie).not.toHaveBeenCalled();
         });
 
-        it("keeps only one top-level section open at a time", () => {
+        it("toggles top-level sections independently", () => {
             h.setup([{ duration: 4, stages: [{}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             const hostDelegatedToggle = jest.fn();
@@ -1387,7 +1474,7 @@ describe("createTimelineDetailStrip", () => {
                 ?.querySelector<HTMLElement>(":scope > .input-group-header")
                 ?.click();
             expect(source?.classList.contains("input-group-open")).toBe(true);
-            expect(stages?.classList.contains("input-group-closed")).toBe(true);
+            expect(stages?.classList.contains("input-group-open")).toBe(true);
             expect(
                 source?.querySelector<HTMLElement>(
                     ":scope > .input-group-content",
@@ -1402,30 +1489,9 @@ describe("createTimelineDetailStrip", () => {
             document.removeEventListener("click", hostDelegatedToggle);
         });
 
-        it("keeps other sections open when Auto-collapse is disabled", () => {
+        it("keeps independently opened sections open through a rebuild", () => {
             h.setup([{ duration: 4, stages: [{}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            detail()
-                ?.querySelector<HTMLButtonElement>(
-                    ".vst-detail-settings-button",
-                )
-                ?.click();
-            const autoCollapse = Array.from(
-                document.querySelectorAll<HTMLInputElement>(
-                    ".vst-timeline-settings-modal input[type='checkbox']",
-                ),
-            ).find((input) => input.dataset.name === "Auto-collapse");
-            if (!autoCollapse) {
-                throw new Error("Auto-collapse setting missing");
-            }
-            autoCollapse.checked = false;
-            autoCollapse.dispatchEvent(new Event("change", { bubbles: true }));
-            document
-                .querySelector<HTMLButtonElement>(
-                    ".vst-timeline-settings-modal .modal-header button",
-                )
-                ?.click();
-
             const stages = detailBody()?.querySelector<HTMLElement>(
                 '[data-vst-repeater-key="stages"]',
             );

@@ -379,9 +379,6 @@ export const buildClipReferenceSection = (
                       },
         }).section;
 
-    if (activeIdx === null) {
-        return buildSection();
-    }
     const buildEditor = (editorIdx: number): HTMLElement | undefined => {
         const reference = references[editorIdx];
         if (!reference) {
@@ -553,8 +550,6 @@ export const buildClipReferenceSection = (
                         ctx.render();
                     },
                     {
-                        // Never disable a ticked box: a re-pick that probes to
-                        // nothing would otherwise trap an unhonourable claim.
                         disabled:
                             !(seconds > 0) &&
                             reference.drivesClipLength !== true,

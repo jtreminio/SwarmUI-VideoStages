@@ -9,6 +9,7 @@ import {
 import {
     appendHelp,
     buildAccordionSection,
+    buildDetailActionButton,
     buildField,
     buildSlider,
 } from "../detailWidgets";
@@ -37,25 +38,16 @@ export const buildRetakeSection = (
             open,
             content: col,
             flattenContent: true,
+            headerAction: retake
+                ? {
+                      label: "×",
+                      title: "Delete the retake window",
+                      className: "vst-detail-delete vst-detail-delete-retake",
+                      variant: "interrupt",
+                      onClick: () => context.removeRetake(clipIdx),
+                  }
+                : undefined,
         });
-        if (retake) {
-            const actions = document.createElement("span");
-            actions.className = "vst-detail-repeating-group-actions";
-            const remove = document.createElement("button");
-            remove.type = "button";
-            remove.className =
-                "interrupt-button vst-btn-tiny vst-detail-delete vst-detail-delete-retake";
-            remove.textContent = "×";
-            remove.title = "Delete the retake window";
-            remove.setAttribute("aria-label", remove.title);
-            remove.addEventListener("click", (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                context.removeRetake(clipIdx);
-            });
-            actions.appendChild(remove);
-            built.heading.parentElement?.appendChild(actions);
-        }
         appendHelp(
             built.heading,
             built.section,
@@ -72,19 +64,13 @@ export const buildRetakeSection = (
         hint.textContent =
             "Regenerates a sub-range when refining a base video.";
         col.appendChild(hint);
-        const add = document.createElement("button");
-        add.type = "button";
-        add.className =
-            "basic-button small-button vst-detail-repeating-add vst-detail-add-retake";
-        add.textContent = "+ Add Retake";
-        add.title = decision.supported
-            ? "Add a retake window"
-            : decision.reason;
-        add.setAttribute("aria-label", add.title);
-        add.disabled = !decision.supported;
-        add.addEventListener("click", (event) => {
-            event.preventDefault();
-            context.createRetake(clipIdx);
+        const add = buildDetailActionButton({
+            label: "+ Add Retake",
+            title: decision.supported ? "Add a retake window" : decision.reason,
+            className:
+                "small-button vst-detail-repeating-add vst-detail-add-retake",
+            disabled: !decision.supported,
+            onClick: () => context.createRetake(clipIdx),
         });
         col.appendChild(add);
         return buildSection();

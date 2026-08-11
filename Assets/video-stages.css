@@ -1805,10 +1805,31 @@
     margin: 0;
     white-space: nowrap;
 }
-.vst-detail-repeating-add {
+.vst-detail .vst-detail-repeating-add {
     align-self: stretch;
-    width: calc(100% - 10px);
-    margin: 6px 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: calc(100% - 20px);
+    height: 36px;
+    margin: 10px;
+    padding: 0 10px;
+    border: 1px dashed var(--light-border);
+    background: transparent;
+    color: var(--text-soft);
+    border-radius: 6px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.vst-detail .vst-detail-repeating-add:hover {
+    border-color: var(--emphasis);
+    color: var(--emphasis);
+    background: color-mix(in srgb, var(--emphasis) 8%, transparent);
 }
 
 /* Every repeating section uses the same native-outline rail. Stages,
