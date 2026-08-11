@@ -139,6 +139,7 @@ internal static class UnitTestStubs
         // T2IParamType.ID is CleanTypeName(Name), and that ID is the key a POST body uses.
         Ensure(ref ComfyUIBackendExtension.CustomWorkflowParam, "ComfyUI Custom Workflow", "");
         Ensure(ref ComfyUIBackendExtension.SetClipDevice, "Set CLIP Device", "cpu");
+        Ensure(ref ComfyUIBackendExtension.ModelAttentionBackend, "Model Attention Backend", "pytorch attention");
         Ensure(ref ComfyUIBackendExtension.SelfAttentionGuidanceScale, "Self-Attention Guidance Scale", "0.5");
         Ensure(ref ComfyUIBackendExtension.SelfAttentionGuidanceSigmaBlur, "Self-Attention Guidance Sigma Blur", "2");
         Ensure(ref ComfyUIBackendExtension.PerturbedAttentionGuidanceScale, "Perturbed-Attention Guidance Scale", "3");

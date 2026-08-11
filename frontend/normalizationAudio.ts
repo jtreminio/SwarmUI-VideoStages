@@ -57,13 +57,7 @@ const normalizeAudioTrackSpan = (value: unknown): AudioTrackSpan | null => {
     };
 };
 
-/**
- * Splits a multi-span track into one single-span lane per span, which is the
- * shape both the authoring UI and the backend already work in: the backend
- * flattens every span into its own per-clip span with exactly this
- * `trackId:spanIndex` identity, so the split is projection-preserving. Without
- * it, spans past the first would execute with nothing on screen to edit them.
- */
+/** Splits legacy multi-span tracks into independently editable lanes. */
 const splitSpansIntoLanes = (track: AudioTrack): AudioTrack[] => {
     if (track.spans.length <= 1) {
         return [track];
@@ -104,6 +98,9 @@ export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
                     kind: normalizeAudioTrackSourceKind(source.kind),
                     reference: trimmedText(source.reference),
                     uploadedAudio: normalizeUploadedMedia(source.uploadedAudio),
+                    mediaDurationSeconds:
+                        optionalPositiveNumber(source.mediaDurationSeconds) ??
+                        0,
                 },
                 spans: Array.isArray(rawSpans)
                     ? rawSpans

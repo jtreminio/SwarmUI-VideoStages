@@ -46,6 +46,9 @@ export interface ClipFixture {
     frameRefs?: { source: string; frame: number }[];
     audioSource?: string;
     uploadedAudio?: { data: string; fileName: string };
+    uploadedAudioDurationSeconds?: number;
+    uploadedAudioStartSeconds?: number;
+    uploadedAudioLengthSeconds?: number;
     controlNetLora?: string;
     icLoras?: Record<string, unknown>[];
     reuseAudio?: boolean;
@@ -72,6 +75,13 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
     boundaryOutCarryAudio: clip.boundaryOutCarryAudio ?? false,
     audioSource: clip.audioSource ?? "Native",
     ...(clip.uploadedAudio ? { uploadedAudio: clip.uploadedAudio } : {}),
+    ...(clip.uploadedAudioDurationSeconds === undefined
+        ? {}
+        : {
+              uploadedAudioDurationSeconds: clip.uploadedAudioDurationSeconds,
+              uploadedAudioStartSeconds: clip.uploadedAudioStartSeconds ?? 0,
+              uploadedAudioLengthSeconds: clip.uploadedAudioLengthSeconds ?? 0,
+          }),
     controlNetLora: clip.controlNetLora ?? "",
     ...(clip.icLoras ? { icLoras: clip.icLoras } : {}),
     reuseAudio: clip.reuseAudio ?? false,
@@ -288,6 +298,13 @@ export const detailStripHarness = (): DetailStripHarness => {
         setVideoStagesHostBridgeForTests({
             ...createDefaultVideoStagesHostBridge(),
             requestJson: async () => testArchitectureCatalogDto(catalog),
+            createInitVideoElement: () => {
+                const video = document.createElement("video");
+                video.pause = jest.fn();
+                video.load = jest.fn();
+                video.play = jest.fn(() => Promise.resolve());
+                return video;
+            },
         });
         await loadAuthoritativeArchitectureCatalog();
         resetSelectionForTests();

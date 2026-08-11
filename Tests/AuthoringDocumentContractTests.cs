@@ -7,20 +7,14 @@ using Xunit;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// Backend half of the frontend/backend authoring-document contract. The shared fixture
-/// <c>Tests/fixtures/authoring-document.json</c> is the exact carrier payload the frontend codec
-/// emits (asserted by <c>frontend/authoringDocumentContract.test.ts</c>); these tests parse that same
-/// payload and prove the backend reads it key-for-key, so renaming a field on either side breaks the
-/// pair instead of silently dropping data.
-/// </summary>
+/// <summary>Backend contract for the shared authoring-document fixture.</summary>
 [Collection("VideoStagesTests")]
 public class AuthoringDocumentContractTests
 {
     /// <summary>Keys the frontend emits that the backend deliberately never reads.</summary>
     private static readonly HashSet<string> UnreadByBackend =
     [
-        // Browser-side entity identity; the backend uses only clip and audio-track ids.
+        // UI-only entity identity.
         "clips[].stages[].id",
         "clips[].frameRefs[].id",
         "clips[].references[].id",
@@ -28,35 +22,32 @@ public class AuthoringDocumentContractTests
         "clips[].retake.id",
         "clips[].initVideo.id",
         "audioTracks[].spans[].id",
-        // Display-only probed metadata: the backend conforms the picked range itself.
+        // Browser metadata; execution reads the authored clip and span ranges.
         "clips[].initVideo.fps",
         "clips[].initVideo.durationSeconds",
         "clips[].initVideo.lengthSeconds",
-        // Browser-probed reference length and the flag that applies it: the clip's own
-        // authored duration already follows them, so the backend reads that instead.
+        "clips[].uploadedAudioDurationSeconds",
+        "audioTracks[].source.mediaDurationSeconds",
+        // Reference length ownership has already updated the authored clip duration.
         "clips[].references[].mediaDurationSeconds",
         "clips[].references[].drivesClipLength",
     ];
 
-    /// <summary>Keys the backend reads that the frontend deliberately never emits, with the reason
-    /// each one is still read. Anything else missing from the fixture is a contract break.</summary>
+    /// <summary>Backend keys intentionally omitted by the frontend.</summary>
     private static readonly HashSet<string> OptionalForFrontend =
     [
-        // The timeline always follows the core Video FPS param, so fps is never serialized; the
-        // backend keeps the reader for hand-authored/API documents that do set it.
+        // API documents may set fps; the UI follows core's Video FPS param.
         "fps",
-        // Legacy/API stage-local LoRA objects remain readable; the UI now emits
-        // clip model definitions plus aligned per-stage loraWeights.
+        // Legacy/API stage-local LoRAs remain readable.
         "clips[].stages[].loras",
         // Clip definitions are names only; stages own their aligned weights.
         "clips[].loras[].weight",
         "clips[].loras[].textEncoderWeight",
-        // Split model/text-encoder stage LoRA weights are API-only.
+        // API-only split model/text-encoder weight.
         "clips[].stages[].loras[].textEncoderWeight",
-        // Pre-container reference payload kept for API documents; the UI writes uploadedImage.
+        // Legacy/API frame reference payload.
         "clips[].frameRefs[].data",
-        // The guide source is authored through the frame-references track, so the codec never writes it; the
-        // reader exists for the <videoclip[c,s],imagereference=...> prompt-tag override.
+        // Prompt-tag-only image reference override.
         "clips[].stages[].imageReference",
     ];
 
@@ -107,8 +98,7 @@ public class AuthoringDocumentContractTests
             DocumentJson.KeyProbe = null;
             log = keyLog;
         }
-        // A carrier the backend cannot see (renamed Enabled/Data param key) parses to an empty spec
-        // with an empty probe log, which satisfies the key-contract emptiness assertions vacuously.
+        // Prevent an unread carrier from satisfying empty contract assertions.
         Assert.Equal(2, spec.Clips.Count);
         Assert.NotEmpty(keyLog.Read);
         return spec;
@@ -156,6 +146,8 @@ public class AuthoringDocumentContractTests
         Assert.True(clip.SaveAudioTrack);
         Assert.True(clip.ReuseAudio);
         Assert.False(clip.ClipLengthFromAudio);
+        Assert.Equal(1, clip.UploadedAudioStartSeconds);
+        Assert.Equal(3, clip.UploadedAudioLengthSeconds);
         Assert.Equal(Constants.BoundaryOutContinue, clip.BoundaryOut);
         Assert.Equal(8, clip.BoundaryOutOverlap);
         Assert.True(clip.BoundaryOutCarryAudio);

@@ -628,6 +628,19 @@ describe("createTimelineDetailStrip", () => {
         expect(field.classList.contains("vst-field-disabled")).toBe(true);
     });
 
+    it("reserves the derived-duration hint row while duration is editable", () => {
+        h.setup([{ duration: 4, stages: [{}] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+        const hint = fieldByLabel("Duration (s)").querySelector<HTMLElement>(
+            ".vst-detail-field-hint",
+        );
+        expect(hint?.textContent).toBe(
+            "(derived from a reference's media length)",
+        );
+        expect(hint?.classList).toContain("vst-detail-field-hint-hidden");
+    });
+
     it("deletes the current stage from the rail's Delete stage button", () => {
         h.setup([{ duration: 4, stages: [{}, {}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
@@ -947,6 +960,50 @@ describe("createTimelineDetailStrip", () => {
             fieldByLabel("Clip Length from Audio").querySelector("input")
                 ?.disabled,
         ).toBe(false);
+    });
+
+    it("trims uploaded base audio with the shared modal", () => {
+        h.setup([
+            {
+                duration: 5,
+                stages: [{}],
+                audioSource: "Upload",
+                uploadedAudio: {
+                    data: "data:audio/wav;base64,AAAA",
+                    fileName: "voice.wav",
+                },
+                uploadedAudioDurationSeconds: 8,
+                uploadedAudioStartSeconds: 1,
+                uploadedAudioLengthSeconds: 4,
+            },
+        ]);
+        setSelection({ kind: "audio", clipIdx: 0 });
+
+        document
+            .querySelector<HTMLButtonElement>(
+                ".vst-detail-audio [data-vst-open-trim]",
+            )
+            ?.click();
+
+        expect(document.querySelector(".vst-trim-modal-player")?.tagName).toBe(
+            "AUDIO",
+        );
+        const inInput = document.querySelector<HTMLInputElement>(
+            '[data-vst-trim-field="in"]',
+        );
+        if (!inInput) {
+            throw new Error("base audio trim input missing");
+        }
+        inInput.value = "2";
+        inInput.dispatchEvent(new Event("input", { bubbles: true }));
+        document
+            .querySelector<HTMLButtonElement>("[data-vst-trim-apply]")
+            ?.click();
+
+        expect(persistence.getState().clips[0]).toMatchObject({
+            uploadedAudioStartSeconds: 2,
+            uploadedAudioLengthSeconds: 3,
+        });
     });
 
     it("offers captured-stage audio reuse below three active stages", () => {

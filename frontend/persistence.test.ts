@@ -294,6 +294,8 @@ describe("persistence", () => {
                             mediaDurationSeconds: 4.5,
                             drivesClipLength: true,
                             mediaScale: 0.5,
+                            startSeconds: 0,
+                            lengthSeconds: 0,
                         }),
                     ],
                     frameRefs: [minimalRef({ frame: 2, fromEnd: true })],
@@ -342,6 +344,9 @@ describe("persistence", () => {
                     clipLengthFromControlNet: true,
                     reuseAudio: false,
                     uploadedAudio: null,
+                    uploadedAudioDurationSeconds: 0,
+                    uploadedAudioStartSeconds: 0,
+                    uploadedAudioLengthSeconds: 0,
                     initVideo: null,
                     retake: null,
                     references: [
@@ -357,6 +362,8 @@ describe("persistence", () => {
                             mediaDurationSeconds: 4.5,
                             drivesClipLength: true,
                             mediaScale: 0.5,
+                            startSeconds: 0,
+                            lengthSeconds: 0,
                         },
                     ],
                     frameRefs: [

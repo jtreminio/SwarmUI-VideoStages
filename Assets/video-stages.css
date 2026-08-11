@@ -1359,6 +1359,9 @@
 .vst-field-disabled input {
     cursor: not-allowed;
 }
+.vst-detail-field-hint-hidden {
+    visibility: hidden;
+}
 
 .vst-audio-clip:hover {
     filter: brightness(1.06);
@@ -2127,4 +2130,234 @@
     color: var(--text-soft);
     font-size: var(--vst-font-xs);
     line-height: 1.35;
+}
+
+.vst-trim {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    box-sizing: border-box;
+    width: 100%;
+    gap: 3px;
+    margin: 4px 0 2px;
+}
+.vst-trim-track {
+    position: relative;
+    height: 26px;
+    border-radius: var(--vst-radius-sm);
+    border: 1px solid var(--vst-hairline);
+    background-color: var(--vst-bed);
+    background-image: repeating-linear-gradient(
+        45deg,
+        color-mix(in srgb, var(--text) 10%, transparent) 0,
+        color-mix(in srgb, var(--text) 10%, transparent) 2px,
+        transparent 2px,
+        transparent 7px
+    );
+    cursor: crosshair;
+}
+.vst-trim-window {
+    position: absolute;
+    top: 1px;
+    bottom: 1px;
+    min-width: 2px;
+    border-radius: var(--vst-radius-sm);
+    background-color: color-mix(in srgb, var(--emphasis) 30%, transparent);
+    border: 1px solid color-mix(in srgb, var(--emphasis) 70%, transparent);
+    cursor: grab;
+}
+.vst-trim-window:focus-visible,
+.vst-trim-grip:focus-visible {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 1px;
+}
+.vst-trim-grip {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 9px;
+    margin-left: -4.5px;
+    z-index: 2;
+    border-radius: var(--vst-radius-sm);
+    background-color: var(--emphasis);
+    cursor: ew-resize;
+}
+.vst-trim-grip::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -6px;
+    right: -6px;
+}
+.vst-trim-scale {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--vst-font-3xs);
+    color: var(--text-soft);
+}
+.vst-trim-launcher {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    width: 100%;
+    gap: 8px;
+    padding: 5px 0;
+}
+.vst-trim-launcher-summary {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-soft);
+    font-size: var(--vst-font-xs);
+}
+.vst-trim-launcher button {
+    flex: none;
+}
+.vst-sidebar-video-preview-section {
+    display: grid;
+    box-sizing: border-box;
+    width: 100%;
+    gap: 4px;
+}
+.vst-sidebar-video-preview-label {
+    color: var(--text-soft);
+    font-size: var(--vst-font-xs);
+}
+.vst-sidebar-video-preview {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    max-height: 260px;
+    aspect-ratio: 16 / 9;
+    object-fit: contain;
+    border: 1px solid var(--vst-hairline);
+    border-radius: var(--vst-radius-sm);
+    background: #000;
+}
+
+.vst-trim-modal .modal-dialog {
+    width: min(900px, calc(100vw - 24px));
+    max-width: 900px;
+}
+.vst-trim-modal .modal-content {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+}
+.vst-trim-modal .modal-header > div:first-child {
+    min-width: 0;
+}
+.vst-trim-modal-file {
+    display: block;
+    max-width: min(70vw, 700px);
+    overflow: hidden;
+    color: var(--text-soft);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.vst-trim-modal .modal-body {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+    overflow-y: auto;
+}
+.vst-trim-modal-player-wrap {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: 180px;
+    overflow: hidden;
+    border: 1px solid var(--vst-hairline);
+    border-radius: var(--vst-radius-sm);
+    background: var(--vst-bed);
+}
+.vst-trim-modal-player {
+    display: block;
+    width: 100%;
+    max-height: 52vh;
+    aspect-ratio: 16 / 9;
+    object-fit: contain;
+    background: #000;
+}
+.vst-trim-modal-player-wrap-audio {
+    min-height: 70px;
+    padding: 14px;
+}
+audio.vst-trim-modal-player {
+    max-height: none;
+    aspect-ratio: auto;
+    background: transparent;
+}
+.vst-trim-modal-media-error {
+    padding: 24px;
+    color: var(--text-soft);
+}
+.vst-trim-modal-transport {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+}
+.vst-trim-modal-timecode {
+    flex: 1 1 150px;
+    font-family: var(--vst-mono);
+    font-variant-numeric: tabular-nums;
+}
+.vst-trim-modal .vst-trim {
+    padding: 0;
+    margin: 2px 0 0;
+}
+.vst-trim-playhead {
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    z-index: 3;
+    width: 2px;
+    margin-left: -1px;
+    background: var(--text);
+    pointer-events: none;
+}
+.vst-trim-modal-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+.vst-trim-modal-field {
+    display: grid;
+    gap: 3px;
+    color: var(--text-soft);
+    font-size: var(--vst-font-xs);
+}
+.vst-trim-modal-field input {
+    width: 100%;
+    min-width: 0;
+}
+.vst-trim-modal-field input[readonly] {
+    color: var(--text-soft);
+}
+.vst-trim-modal-impact {
+    color: var(--text-soft);
+}
+.vst-trim-modal-footer {
+    display: flex;
+    gap: 6px;
+}
+.vst-trim-modal-footer [data-vst-trim-reset] {
+    margin-right: auto;
+}
+.vst-trim-modal-apply {
+    color: var(--emphasis);
+}
+@media (max-width: 600px) {
+    .vst-trim-modal .modal-dialog {
+        width: calc(100vw - 12px);
+    }
+    .vst-trim-modal .modal-content {
+        max-height: calc(100vh - 12px);
+    }
+    .vst-trim-modal-player-wrap {
+        min-height: 120px;
+    }
+    .vst-trim-modal-fields {
+        grid-template-columns: 1fr;
+    }
 }

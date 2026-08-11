@@ -70,16 +70,25 @@ export const clampClipRefsToDuration = (
     }
 };
 
+/**
+ * Snaps here rather than only in normalization: an unsnapped duration survives
+ * until the document round-trips through the carrier, so until then the number
+ * in the detail strip and the clip drawn on the timeline disagree.
+ */
 export const applyClipDurationResize = (
     clip: Clip,
     newDuration: number,
     defaults: RootDefaults,
     effectiveFps?: number,
 ): boolean => {
-    if (clip.duration === newDuration) {
+    const snapped =
+        effectiveFps === undefined
+            ? newDuration
+            : snapDurationToFps(newDuration, effectiveFps);
+    if (clip.duration === snapped) {
         return false;
     }
-    clip.duration = newDuration;
+    clip.duration = snapped;
     clampClipRefsToDuration(clip, defaults, effectiveFps);
     return true;
 };

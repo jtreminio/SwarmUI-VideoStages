@@ -40,12 +40,21 @@ internal static class ClipReferences
                 ReferenceScale.Full,
                 $"Clip {clipIndex} reference {index}",
                 warn);
+            string where = $"Clip {clipIndex} reference {index}";
             references.Add(new ClipReferenceSpec(
                 kind,
                 source.Trim(),
                 media,
                 DocumentJson.GetOptionalBool(raw[index], "includeSoundtrack", false),
-                ReferenceScale.Normalize(scale)));
+                ReferenceScale.Normalize(scale),
+                Math.Max(
+                    0,
+                    DocumentJson.GetOptionalDouble(
+                        raw[index], "startSeconds", 0, where, warn)),
+                Math.Max(
+                    0,
+                    DocumentJson.GetOptionalDouble(
+                        raw[index], "lengthSeconds", 0, where, warn))));
         }
         return references;
     }

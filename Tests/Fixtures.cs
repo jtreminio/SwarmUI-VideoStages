@@ -169,7 +169,9 @@ internal static class Fixtures
         string fileName = null,
         string source = MediaSource.Upload,
         bool includeSoundtrack = false,
-        double mediaScale = 1)
+        double mediaScale = 1,
+        double startSeconds = 0,
+        double lengthSeconds = 0)
     {
         JObject reference = new()
         {
@@ -177,6 +179,8 @@ internal static class Fixtures
             ["source"] = source,
             ["includeSoundtrack"] = includeSoundtrack,
             ["mediaScale"] = mediaScale,
+            ["startSeconds"] = startSeconds,
+            ["lengthSeconds"] = lengthSeconds,
         };
         if (data is not null)
         {

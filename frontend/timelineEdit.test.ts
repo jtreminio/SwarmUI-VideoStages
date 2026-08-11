@@ -187,4 +187,30 @@ describe("applyClipDurationResize", () => {
         // Refs are left untouched on a no-op — the caller skips the write entirely.
         expect(c.frameRefs[0].frame).toBe(1000);
     });
+
+    /**
+     * Normalization snaps on carrier re-read, so an unsnapped write survives
+     * until the document round-trips: until then the detail strip's number and
+     * the clip drawn on the timeline are different lengths.
+     */
+    it("snaps the duration onto the fps grid when an fps is known", () => {
+        const c = clip(5, []);
+        expect(applyClipDurationResize(c, 4.03, rootDefaults(24), 30)).toBe(
+            true,
+        );
+        expect(c.duration).toBe(4);
+    });
+
+    it("reports no change when the snap lands on the duration already set", () => {
+        const c = clip(4, []);
+        expect(applyClipDurationResize(c, 4.03, rootDefaults(24), 30)).toBe(
+            false,
+        );
+    });
+
+    it("leaves the duration alone when no fps is known", () => {
+        const c = clip(5, []);
+        applyClipDurationResize(c, 4.03, rootDefaults(24));
+        expect(c.duration).toBe(4.03);
+    });
 });

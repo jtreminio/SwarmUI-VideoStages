@@ -33,7 +33,8 @@ internal static class NativeFrameReferences
         VideoArchitectureDescriptor architecture,
         ICollection<PlanDiagnostic> diagnostics,
         string codeToken,
-        bool allowHostStageSources = false)
+        bool allowHostStageSources = false,
+        bool allowFirstFrameWithInitVideo = false)
     {
         string label = architecture.DisplayName;
         NativeFrameReferencePlan first = null;
@@ -68,7 +69,12 @@ internal static class NativeFrameReferences
                         + "for this generation.");
                 continue;
             }
-            if (isFirst && clip.InitVideo is not null)
+            // An architecture whose first frame IS its entry image has nowhere to put one beside
+            // source footage — the footage already took that slot. One that conditions on
+            // keyframes separately can hold both, which is what a refine pass wants: the footage
+            // was generated from this keyframe, so re-asserting it at the refine resolution keeps
+            // frame 0 on the image the clip was authored around.
+            if (isFirst && clip.InitVideo is not null && !allowFirstFrameWithInitVideo)
             {
                 Ignore(
                     "init-video-first-frame-reference-ignored",

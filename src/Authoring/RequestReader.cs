@@ -213,7 +213,23 @@ internal static class RequestReader
                 true),
             ReferenceFraming: ReferenceFraming.Parse(
                 DocumentJson.GetString(clipObject, "refFraming")),
-            References: ClipReferences.Read(clipObject, clipIndex, context.Warn))
+            References: ClipReferences.Read(clipObject, clipIndex, context.Warn),
+            UploadedAudioStartSeconds: Math.Max(
+                0,
+                DocumentJson.GetOptionalDouble(
+                    clipObject,
+                    "uploadedAudioStartSeconds",
+                    0,
+                    location,
+                    context.Warn)),
+            UploadedAudioLengthSeconds: Math.Max(
+                0,
+                DocumentJson.GetOptionalDouble(
+                    clipObject,
+                    "uploadedAudioLengthSeconds",
+                    0,
+                    location,
+                    context.Warn)))
         {
             AuthoredArchitectureHint = DocumentJson.GetString(
                 clipObject,

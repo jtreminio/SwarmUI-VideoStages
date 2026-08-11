@@ -26,6 +26,7 @@ import type { Clip, ClipReference } from "../types";
 import { buildClipReferenceSection } from "./clipReferencePanel";
 import type { DetailStripContext } from "./context";
 import { clampDetailSelection, detailBreadcrumb } from "./panelRouter";
+import { closeTrimModal } from "./trimModal";
 
 const catalogSupportingClipReferences = (): ArchitectureModelCatalog => {
     const catalog = testArchitectureCatalog();
@@ -84,6 +85,7 @@ describe("buildClipReferenceSection", () => {
     });
 
     afterEach(() => {
+        closeTrimModal();
         resetArchitectureCatalogForTests();
         setVideoStagesHostBridgeForTests(null);
         document.body.innerHTML = "";
@@ -341,6 +343,307 @@ describe("buildClipReferenceSection", () => {
 
         expect(hasToggle(buildBody([{ kind: "video" }], 0))).toBe(true);
         expect(hasToggle(buildBody([{ kind: "image" }], 0))).toBe(false);
+    });
+
+    describe("trim", () => {
+        const videoReference = (
+            overrides: Partial<ClipReference> = {},
+        ): Partial<ClipReference> => ({
+            kind: "video",
+            mediaDurationSeconds: 8,
+            uploadedMedia: {
+                data: "data:video/mp4;base64,AAAA",
+                fileName: "reference.mp4",
+            },
+            ...overrides,
+        });
+        const openTrim = (body: HTMLElement): void => {
+            const launch = body.querySelector<HTMLButtonElement>(
+                "[data-vst-open-trim]",
+            );
+            if (!launch) {
+                throw new Error("trim launcher missing");
+            }
+            launch.click();
+            const player = document.querySelector<HTMLMediaElement>(
+                ".vst-trim-modal-player",
+            );
+            if (player) {
+                player.pause = jest.fn();
+                player.load = jest.fn();
+            }
+        };
+        const modalWindow = (): HTMLElement => {
+            const window = document.querySelector<HTMLElement>(
+                ".vst-trim-modal .vst-trim-window",
+            );
+            if (!window) {
+                throw new Error("modal trim window missing");
+            }
+            return window;
+        };
+
+        const sidebarField = (
+            body: HTMLElement,
+            label: string,
+        ): HTMLInputElement => {
+            const row = Array.from(
+                body.querySelectorAll<HTMLElement>(".vst-detail-field"),
+            ).find(
+                (candidate) =>
+                    candidate.querySelector(".vst-detail-field-label")
+                        ?.textContent === label,
+            );
+            const input = row?.querySelector<HTMLInputElement>("input");
+            if (!input) {
+                throw new Error(`${label} sidebar field missing`);
+            }
+            return input;
+        };
+
+        it("offers the modal editor on a video reference with a probed length", () => {
+            const body = buildBody([videoReference()], 0);
+
+            expect(body.querySelector("[data-vst-open-trim]")).not.toBeNull();
+            expect(body.querySelector(".vst-trim")).toBeNull();
+        });
+
+        it("keeps editable In and Out fields in the reference sidebar", () => {
+            let saved: Clip[] = [];
+            const body = buildBody(
+                [videoReference({ startSeconds: 2, lengthSeconds: 4 })],
+                0,
+                catalogSupportingClipReferences(),
+                {
+                    commit: (mutate) => {
+                        saved = getClips();
+                        mutate(saved);
+                    },
+                },
+            );
+
+            expect(sidebarField(body, "In (s)").value).toBe("2");
+            expect(sidebarField(body, "Out (s)").value).toBe("6");
+
+            const input = sidebarField(body, "Out (s)");
+            input.value = "7";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            expect(saved[0].references[0]).toMatchObject({
+                startSeconds: 2,
+                lengthSeconds: 5,
+            });
+
+            const preview = body.querySelector<HTMLVideoElement>(
+                ".vst-sidebar-video-preview",
+            );
+            if (!preview) {
+                throw new Error("reference preview missing");
+            }
+            preview.currentTime = 6.5;
+            preview.dispatchEvent(new Event("seeking"));
+            expect(preview.currentTime).toBe(6.5);
+        });
+
+        it("disables the sidebar fields while the video owns clip length", () => {
+            const body = buildBody(
+                [videoReference({ drivesClipLength: true })],
+                0,
+            );
+
+            const inInput = sidebarField(body, "In (s)");
+            const outInput = sidebarField(body, "Out (s)");
+            expect(inInput.disabled).toBe(true);
+            expect(outInput.disabled).toBe(true);
+            expect(inInput.closest(".vst-detail-field")?.classList).toContain(
+                "vst-field-disabled",
+            );
+            expect(outInput.closest(".vst-detail-field")?.classList).toContain(
+                "vst-field-disabled",
+            );
+        });
+
+        it("shows the selected reference video in the sidebar", () => {
+            const body = buildBody([videoReference()], 0);
+
+            const preview = body.querySelector<HTMLVideoElement>(
+                ".vst-sidebar-video-preview",
+            );
+            expect(preview).not.toBeNull();
+            expect(preview?.src).toContain("data:video/mp4");
+        });
+
+        /**
+         * Without a probed length the bar has no truthful scale, and the
+         * backend keeps the whole file regardless.
+         */
+        it("omits the editor when the reference length is unknown", () => {
+            expect(
+                buildBody(
+                    [videoReference({ mediaDurationSeconds: 0 })],
+                    0,
+                ).querySelector("[data-vst-open-trim]"),
+            ).toBeNull();
+        });
+
+        it("offers audio references the shared trim modal", () => {
+            const body = buildBody(
+                [
+                    {
+                        kind: "audio",
+                        mediaDurationSeconds: 8,
+                        uploadedMedia: {
+                            data: "data:audio/wav;base64,AAAA",
+                            fileName: "reference.wav",
+                        },
+                    },
+                ],
+                0,
+            );
+
+            openTrim(body);
+
+            expect(
+                document.querySelector(".vst-trim-modal-player")?.tagName,
+            ).toBe("AUDIO");
+        });
+
+        it("offers no trim on images", () => {
+            expect(
+                buildBody(
+                    [{ kind: "image", mediaDurationSeconds: 8 }],
+                    0,
+                ).querySelector("[data-vst-open-trim]"),
+            ).toBeNull();
+        });
+
+        /** An untrimmed reference stores 0/0, so the editor has to widen it. */
+        it("shows an untrimmed reference as the whole file", () => {
+            const body = buildBody(
+                [
+                    videoReference({
+                        startSeconds: 0,
+                        lengthSeconds: 0,
+                    }),
+                ],
+                0,
+            );
+            openTrim(body);
+
+            const window_ = modalWindow();
+            expect(parseFloat(window_.style.left)).toBeCloseTo(0, 5);
+            expect(parseFloat(window_.style.width)).toBeCloseTo(100, 5);
+        });
+
+        it("draws a stored trim over the part of the file it uses", () => {
+            const body = buildBody(
+                [
+                    videoReference({
+                        startSeconds: 2,
+                        lengthSeconds: 4,
+                    }),
+                ],
+                0,
+            );
+            openTrim(body);
+
+            const window_ = modalWindow();
+            expect(parseFloat(window_.style.left)).toBeCloseTo(25, 5);
+            expect(parseFloat(window_.style.width)).toBeCloseTo(50, 5);
+        });
+
+        it("reports how much of the reference is used", () => {
+            const body = buildBody(
+                [
+                    videoReference({
+                        startSeconds: 2,
+                        lengthSeconds: 4,
+                    }),
+                ],
+                0,
+            );
+
+            expect(body.textContent).toContain("References 4.0 s of 8.0 s");
+        });
+
+        it("stores the modal range and rebuilds the reference editor on Apply", () => {
+            let saved: Clip[] = [];
+            const render = jest.fn();
+            const body = buildBody(
+                [
+                    videoReference({
+                        startSeconds: 2,
+                        lengthSeconds: 4,
+                    }),
+                ],
+                0,
+                catalogSupportingClipReferences(),
+                {
+                    commit: (mutate) => {
+                        saved = getClips();
+                        mutate(saved);
+                    },
+                    render,
+                },
+            );
+            openTrim(body);
+            const input = document.querySelector<HTMLInputElement>(
+                '[data-vst-trim-field="in"]',
+            );
+            if (!input) {
+                throw new Error("modal In field missing");
+            }
+            input.value = "3";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            document
+                .querySelector<HTMLButtonElement>("[data-vst-trim-apply]")
+                ?.click();
+
+            expect(saved[0].references[0]).toMatchObject({
+                startSeconds: 3,
+                lengthSeconds: 3,
+            });
+            expect(render).toHaveBeenCalledTimes(1);
+        });
+
+        it("resizes a clip when its length-driving reference is trimmed", () => {
+            let saved: Clip[] = [];
+            const body = buildBody(
+                [
+                    videoReference({
+                        startSeconds: 2,
+                        lengthSeconds: 4,
+                        drivesClipLength: true,
+                    }),
+                ],
+                0,
+                catalogSupportingClipReferences(),
+                {
+                    commit: (mutate) => {
+                        saved = getClips();
+                        mutate(saved);
+                    },
+                    render: jest.fn(),
+                },
+            );
+            openTrim(body);
+            const input = document.querySelector<HTMLInputElement>(
+                '[data-vst-trim-field="in"]',
+            );
+            if (!input) {
+                throw new Error("modal In field missing");
+            }
+            input.value = "3";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            document
+                .querySelector<HTMLButtonElement>("[data-vst-trim-apply]")
+                ?.click();
+
+            expect(saved[0].references[0]).toMatchObject({
+                startSeconds: 3,
+                lengthSeconds: 3,
+            });
+            expect(saved[0].duration).toBe(3);
+        });
     });
 
     it("disables Add for an architecture that does not support clip references", () => {

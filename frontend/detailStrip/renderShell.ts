@@ -3,6 +3,7 @@ import type { AuthoringDocument, TimelineSelection } from "../types";
 import type { DetailStripContext } from "./context";
 import type { DetailFocusSession } from "./focusSession";
 import { buildDetailHeader, buildDetailPanelBody } from "./panelRouter";
+import { releaseSidebarVideoPreviews } from "./sidebarVideoPreview";
 
 const DETAIL_CLASS = "vst-detail";
 
@@ -43,6 +44,7 @@ export const renderDetailShell = (options: {
     const savedScroll = previousBody?.scrollTop ?? 0;
     options.focus.capture();
     options.detail.className = DETAIL_CLASS;
+    releaseSidebarVideoPreviews(options.detail);
     options.detail.innerHTML = "";
     options.detail.appendChild(
         buildDetailHeader(

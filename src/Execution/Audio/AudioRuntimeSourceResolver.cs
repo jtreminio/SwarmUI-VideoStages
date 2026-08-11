@@ -1,3 +1,6 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Media;
@@ -126,11 +129,26 @@ internal sealed class AudioRuntimeSourceResolver(
                 continue;
             }
             string loadNodeId = g.CreateAudioLoadNode(uploaded, "${vsaudioupload}");
-            sources[clip.ClipId] = new WGNodeData(
+            WGNodeData source = new(
                 new JArray(loadNodeId, 0),
                 g,
                 WGNodeData.DT_AUDIO,
                 g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
+            if (clip.Audio.Base.LengthSeconds > 0)
+            {
+                using WorkflowBridge bridge = BridgeSync.For(g);
+                TrimAudioDurationNode trim = bridge.AddNode(
+                    new TrimAudioDurationNode().With(
+                        StartIndex: clip.Audio.Base.TrimStartSeconds,
+                        Duration: clip.Audio.Base.LengthSeconds));
+                trim.Audio.ConnectFromPath(bridge, source.Path);
+                source = new(
+                    WorkflowBridge.ToPath(trim.AUDIO),
+                    g,
+                    WGNodeData.DT_AUDIO,
+                    source.Compat);
+            }
+            sources[clip.ClipId] = source;
         }
         return sources;
     }

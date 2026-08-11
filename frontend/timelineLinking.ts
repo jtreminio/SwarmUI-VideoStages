@@ -1,4 +1,5 @@
 import { reconcileArchitectureIncomingIcLoraDrives } from "./architectures/behaviorRegistry";
+import { CLIP_DURATION_MIN } from "./constants";
 import { documentFps } from "./documentQueries";
 import type { GestureRouter, GestureSession } from "./gestureRouter";
 import {
@@ -26,6 +27,7 @@ import {
     livePxPerSecond,
     parseIntAttr,
 } from "./trackDomUtils";
+import { setOutPoint, sourceLimitSeconds } from "./trimGeometry";
 
 const REGION_SELECTOR = ".vst-region[data-clip-idx]";
 const REGION_ACTION_SELECTOR = "[data-vst-region-action]";
@@ -250,8 +252,7 @@ export const createTimelineLinking = (): TimelineLinking => {
                             state.idx < 0 ||
                             state.idx >= clips.length ||
                             clip.clipLengthFromAudio ||
-                            clip.clipLengthFromControlNet ||
-                            clip.initVideo
+                            clip.clipLengthFromControlNet
                         ) {
                             return null;
                         }
@@ -267,6 +268,39 @@ export const createTimelineLinking = (): TimelineLinking => {
                             pxPerSecond,
                             fps,
                         );
+                        // On a source clip this edge IS the out point: the wire
+                        // carries only the start, so the clip's duration and the
+                        // trimmed length are the same number.
+                        const source = clip.initVideo;
+                        if (source) {
+                            const trimmed = setOutPoint(
+                                source,
+                                source.startSeconds + newDuration,
+                                {
+                                    limitSeconds: sourceLimitSeconds(source),
+                                    minLengthSeconds: CLIP_DURATION_MIN,
+                                    fps,
+                                },
+                            );
+                            // getClips hands back live state, so nothing is
+                            // written until the gesture is known to change it.
+                            if (
+                                trimmed.startSeconds === source.startSeconds &&
+                                trimmed.lengthSeconds === source.lengthSeconds
+                            ) {
+                                return null;
+                            }
+                            source.startSeconds = trimmed.startSeconds;
+                            source.lengthSeconds = trimmed.lengthSeconds;
+                            applyClipDurationResize(
+                                clip,
+                                trimmed.lengthSeconds,
+                                getRootDefaults(),
+                                fps,
+                            );
+                            selectClip(state.idx, stageForClip(state.idx));
+                            return clips;
+                        }
                         if (
                             !applyClipDurationResize(
                                 clip,

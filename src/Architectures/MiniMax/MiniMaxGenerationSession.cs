@@ -662,14 +662,18 @@ internal sealed class MiniMaxGenerationSession(
                     {
                         break;
                     }
-                    videos.Add(ConformReferenceVideo(video, reference.MediaScale));
+                    videos.Add(ConformReferenceVideo(video, reference, descriptor));
                     videoAudios.Add(
-                        reference.IncludeSoundtrack ? video.AttachedAudio?.Path : null);
+                        reference.IncludeSoundtrack
+                            ? TrimReferenceAudio(
+                                video.AttachedAudio?.Path as JArray,
+                                reference)
+                            : null);
                     break;
                 default:
                     if (ResolveReferenceAudio(reference, descriptor) is JArray audio)
                     {
-                        audios.Add(audio);
+                        audios.Add(TrimReferenceAudio(audio, reference));
                     }
                     break;
             }
@@ -721,12 +725,23 @@ internal sealed class MiniMaxGenerationSession(
     /// after, on the frames that survived, and only buys back reference tokens — H3 fits every
     /// reference onto its own 32-aligned canvas regardless.
     /// </para>
+    /// <para>
+    /// An authored trim window lands between the two: the resample fixes the timebase, so the
+    /// authored seconds convert to frames at a rate this graph chose rather than one the file
+    /// happened to have. A reference whose rate is unknown cannot make that conversion and keeps
+    /// its whole length.
+    /// </para>
     /// </summary>
-    private JArray ConformReferenceVideo(WGNodeData video, double scale)
+    private JArray ConformReferenceVideo(
+        WGNodeData video,
+        MiniMaxReferencePlan reference,
+        string descriptor)
     {
         JArray frames = video.Path;
         JArray fps = video.FPS as JArray;
-        if (fps is null && scale >= 1)
+        double scale = reference.MediaScale;
+        bool trims = reference.LengthSeconds > 0;
+        if (fps is null && !trims && scale >= 1)
         {
             return frames;
         }
@@ -741,6 +756,22 @@ internal sealed class MiniMaxGenerationSession(
             resampled.FpsIn.ConnectFromPath(bridge, fps);
             frames = WorkflowBridge.ToPath(resampled.Images);
         }
+        else if (trims)
+        {
+            RequestWarnings.Track(
+                g.UserInput,
+                $"VideoStages: {descriptor} carries no frame rate, so its trim cannot be "
+                    + "converted to frames; the whole reference is used for this generation.");
+        }
+        if (trims && fps is not null)
+        {
+            double rate = MiniMaxArchitectureModule.ReferenceFramesPerSecond;
+            SwarmFrameWindowNode window = bridge.AddNode(new SwarmFrameWindowNode().With(
+                StartFrame: (int)Math.Round(reference.StartSeconds * rate),
+                FrameCount: Math.Max(1, (int)Math.Round(reference.LengthSeconds * rate))));
+            window.ImagesInput.ConnectFromPath(bridge, frames);
+            frames = WorkflowBridge.ToPath(window.Images);
+        }
         if (scale >= 1)
         {
             return frames;
@@ -750,6 +781,21 @@ internal sealed class MiniMaxGenerationSession(
             ScaleBy: scale));
         scaled.Image.ConnectFromPath(bridge, frames);
         return WorkflowBridge.ToPath(scaled.IMAGE);
+    }
+
+    /// <summary>Applies the authored range to video soundtracks and audio references.</summary>
+    private JArray TrimReferenceAudio(JArray path, MiniMaxReferencePlan reference)
+    {
+        if (path is null || reference.LengthSeconds <= 0)
+        {
+            return path;
+        }
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        TrimAudioDurationNode trim = bridge.AddNode(new TrimAudioDurationNode().With(
+            StartIndex: reference.StartSeconds,
+            Duration: reference.LengthSeconds));
+        trim.Audio.ConnectFromPath(bridge, path);
+        return WorkflowBridge.ToPath(trim.AUDIO);
     }
 
     private JArray ReferenceImage(

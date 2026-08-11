@@ -23,8 +23,10 @@ import {
     text,
     trimmedText,
 } from "./normalizationShared";
+import type { SourceRange } from "./trimGeometry";
 import type {
     ClipReference,
+    ClipReferenceKind,
     InitVideo,
     PromptWindow,
     Retake,
@@ -182,17 +184,72 @@ export const normalizeClipReferences = (
                 kind === "video"
                     ? normalizeClipReferenceScale(raw.mediaScale)
                     : REFERENCE_SCALE_FULL,
+            ...normalizeClipReferenceTrim(raw, kind, mediaDurationSeconds),
         };
         lengthClaimed = lengthClaimed || reference.drivesClipLength;
         return reference;
     });
 };
 
+const normalizeClipReferenceTrim = (
+    raw: Record<string, unknown>,
+    kind: ClipReferenceKind,
+    mediaDurationSeconds: number,
+): { startSeconds: number; lengthSeconds: number } => {
+    if (kind === "image") {
+        return { startSeconds: 0, lengthSeconds: 0 };
+    }
+    return normalizeTimedMediaRange(
+        raw.startSeconds,
+        raw.lengthSeconds,
+        mediaDurationSeconds,
+    );
+};
+
+export const normalizeTimedMediaRange = (
+    startValue: unknown,
+    lengthValue: unknown,
+    mediaDurationSeconds: number,
+): SourceRange => {
+    if (mediaDurationSeconds <= 0) {
+        return { startSeconds: 0, lengthSeconds: 0 };
+    }
+    const startSeconds = Math.min(
+        roundToTenth(nonNegativeNumber(startValue)),
+        mediaDurationSeconds,
+    );
+    const lengthSeconds = Math.min(
+        roundToTenth(nonNegativeNumber(lengthValue)),
+        mediaDurationSeconds - startSeconds,
+    );
+    return lengthSeconds > 0
+        ? { startSeconds, lengthSeconds }
+        : { startSeconds: 0, lengthSeconds: 0 };
+};
+
+/** The reference's trim, or the whole file when its stored 0/0 means untrimmed. */
+export const clipReferenceUsedRange = (
+    reference: ClipReference,
+): SourceRange =>
+    reference.lengthSeconds > 0
+        ? {
+              startSeconds: reference.startSeconds,
+              lengthSeconds: reference.lengthSeconds,
+          }
+        : {
+              startSeconds: 0,
+              lengthSeconds: reference.mediaDurationSeconds,
+          };
+
+export const clipReferenceUsedSeconds = (reference: ClipReference): number =>
+    clipReferenceUsedRange(reference).lengthSeconds;
+
+/** A driving reference lends the clip the seconds it actually uses, not the file's whole length. */
 export const clipReferenceDurationSeconds = (
     references: readonly ClipReference[],
 ): number | null => {
     const index = clipLengthReferenceIndex(references);
-    return index < 0 ? null : references[index].mediaDurationSeconds;
+    return index < 0 ? null : clipReferenceUsedSeconds(references[index]);
 };
 
 export const normalizeUploadedMedia = (

@@ -50,8 +50,7 @@ export const resolveRootDims = (
     return {
         width: dimsExplicit ? width : inherited.width,
         height: dimsExplicit ? height : inherited.height,
-        // fps is never stored: the timeline always follows the core Video FPS
-        // param (the backend falls back to it too when the JSON has no fps).
+        // The timeline follows core's Video FPS param.
         fps: inherited.fps,
         dimsExplicit,
     };
@@ -110,6 +109,9 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
             clipLengthFromControlNet: clip.clipLengthFromControlNet,
             reuseAudio: clip.reuseAudio,
             uploadedAudio: clip.uploadedAudio,
+            uploadedAudioDurationSeconds: clip.uploadedAudioDurationSeconds,
+            uploadedAudioStartSeconds: clip.uploadedAudioStartSeconds,
+            uploadedAudioLengthSeconds: clip.uploadedAudioLengthSeconds,
             initVideo: clip.initVideo
                 ? {
                       data: clip.initVideo.data,
@@ -137,6 +139,8 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 mediaDurationSeconds: reference.mediaDurationSeconds,
                 drivesClipLength: reference.drivesClipLength,
                 mediaScale: reference.mediaScale,
+                startSeconds: reference.startSeconds,
+                lengthSeconds: reference.lengthSeconds,
             })),
             frameRefs: clip.frameRefs.map((ref) => ({
                 id: ref.id,
@@ -211,11 +215,7 @@ const timelinePointProjection = (
     return null;
 };
 
-/**
- * Absolute authoring seconds position the block in the browser. These derived
- * clip anchors let the backend preserve the exact visible seam when compiled
- * LTX frame alignment makes a clip's runtime duration differ by one frame.
- */
+/** Stores seam anchors across backend frame alignment. */
 const timelineSpanProjection = (
     clips: readonly ProjectionClip[],
     span: Pick<
@@ -267,6 +267,7 @@ export const serializeStateForStorage = (state: AuthoringDocument): string => {
             kind: track.source.kind,
             reference: track.source.reference,
             uploadedAudio: track.source.uploadedAudio,
+            mediaDurationSeconds: track.source.mediaDurationSeconds,
         },
         spans: track.spans.map((span) => ({
             id: span.id,
@@ -286,11 +287,7 @@ const isTransientBrowserMedia = (
     return data.startsWith("data:") || data.startsWith("blob:");
 };
 
-/**
- * Durable browser storage deliberately excludes embedded upload payloads.
- * The normal Data carrier still receives the complete runtime document so a
- * generation can use newly selected media until the page is reloaded.
- */
+/** Durable storage excludes transient browser media payloads. */
 export const serializeStateForDurableStorage = (
     state: AuthoringDocument,
 ): string => {
@@ -299,6 +296,9 @@ export const serializeStateForDurableStorage = (
     for (const clip of durable.clips) {
         if (isTransientBrowserMedia(clip.uploadedAudio)) {
             clip.uploadedAudio = null;
+            clip.uploadedAudioDurationSeconds = 0;
+            clip.uploadedAudioStartSeconds = 0;
+            clip.uploadedAudioLengthSeconds = 0;
         }
         if (
             clip.initVideo &&
@@ -341,11 +341,7 @@ const hasArrayOfRecords = (
     return Array.isArray(value) && value.every(isRecord);
 };
 
-/**
- * Scalar normalization is deliberately forgiving, but collection topology is
- * strict: a malformed present collection must never disappear as an empty
- * list, and a malformed item must never turn into a default entity.
- */
+/** Rejects malformed collections instead of normalizing them away. */
 const hasValidStoredCollections = (
     parsed: Record<string, unknown>,
 ): parsed is Record<string, unknown> & {
@@ -465,12 +461,7 @@ const storedSpanProjection = (
         : null;
 };
 
-/**
- * A stored clip anchor is DERIVED from the span's timeline seconds, so the
- * authoring model has no field to keep a hand-authored anchor that says
- * something else. Rather than silently rewriting one, decode reports it: the
- * backend would otherwise execute a window the browser never showed.
- */
+/** Reports stored seam anchors that disagree with their authored seconds. */
 const hasDivergentSpanProjection = (
     parsed: Record<string, unknown> & { clips: Record<string, unknown>[] },
 ): boolean => {
@@ -537,11 +528,7 @@ const renameKey = (
     delete target[oldKey];
 };
 
-/**
- * The sole v6→v7 migration: the keyframe fields gained their "frame"
- * prefix so they no longer read as the position-free references other
- * architectures accept.
- */
+/** Renames the v6 keyframe fields. */
 const migrateStoredDocument = (
     parsed: Record<string, unknown>,
 ): Record<string, unknown> | null => {
@@ -573,7 +560,6 @@ const migrateStoredDocument = (
     return migrated;
 };
 
-/** Strict current decode with the one bounded v6 field-rename migration. */
 export const decodeStoredDocument = (
     serialized: string,
     inherited: InheritedDims,

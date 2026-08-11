@@ -666,11 +666,11 @@
     const beyondOrigin = Math.max(0, intervals + 1 - gridOrigin);
     return gridOrigin + Math.ceil(beyondOrigin / frameGrid) * frameGrid;
   };
-  var snapDurationToFps = (seconds, fps) => {
-    if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(fps) || fps <= 0) {
-      return seconds;
+  var snapDurationToFps = (seconds2, fps) => {
+    if (!Number.isFinite(seconds2) || seconds2 <= 0 || !Number.isFinite(fps) || fps <= 0) {
+      return seconds2;
     }
-    const frames = Math.max(1, Math.ceil(seconds * fps));
+    const frames = Math.max(1, Math.ceil(seconds2 * fps));
     const aligned = frames / fps;
     return Math.max(0.1, Math.floor(aligned * 10) / 10);
   };
@@ -1968,9 +1968,9 @@
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
-  var roundToTenth = (seconds) => Math.round(seconds * 10) / 10;
-  var gridCeil = (seconds) => Math.ceil(seconds * 10) / 10;
-  var gridFloor = (seconds) => Math.floor(seconds * 10) / 10;
+  var roundToTenth = (seconds2) => Math.round(seconds2 * 10) / 10;
+  var gridCeil = (seconds2) => Math.ceil(seconds2 * 10) / 10;
+  var gridFloor = (seconds2) => Math.floor(seconds2 * 10) / 10;
   var safeJsonParse = (raw, fallback) => {
     if (raw == null) {
       return fallback;
@@ -2158,7 +2158,7 @@
     };
   };
 
-  // frontend/initVideoProbe.ts
+  // frontend/mediaProbe.ts
   var initVideoFromProbe = (probe, data, fileName, clipDuration) => {
     const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
     return {
@@ -2503,6 +2503,8 @@
     includeSoundtrack: false,
     mediaDurationSeconds: 0,
     drivesClipLength: false,
+    startSeconds: 0,
+    lengthSeconds: 0,
     mediaScale: REFERENCE_SCALE_FULL
   });
   var clipReferenceCanDriveLength = (reference) => reference.kind === "video" || reference.kind === "audio";
@@ -2634,15 +2636,48 @@
         // A claim with no length behind it cannot move the clip, so it is
         // dropped rather than left holding the one slot forever.
         drivesClipLength: !lengthClaimed && raw.drivesClipLength === true && clipReferenceCanDriveLength({ kind }) && mediaDurationSeconds > 0,
-        mediaScale: kind === "video" ? normalizeClipReferenceScale(raw.mediaScale) : REFERENCE_SCALE_FULL
+        mediaScale: kind === "video" ? normalizeClipReferenceScale(raw.mediaScale) : REFERENCE_SCALE_FULL,
+        ...normalizeClipReferenceTrim(raw, kind, mediaDurationSeconds)
       };
       lengthClaimed = lengthClaimed || reference.drivesClipLength;
       return reference;
     });
   };
+  var normalizeClipReferenceTrim = (raw, kind, mediaDurationSeconds) => {
+    if (kind === "image") {
+      return { startSeconds: 0, lengthSeconds: 0 };
+    }
+    return normalizeTimedMediaRange(
+      raw.startSeconds,
+      raw.lengthSeconds,
+      mediaDurationSeconds
+    );
+  };
+  var normalizeTimedMediaRange = (startValue, lengthValue, mediaDurationSeconds) => {
+    if (mediaDurationSeconds <= 0) {
+      return { startSeconds: 0, lengthSeconds: 0 };
+    }
+    const startSeconds = Math.min(
+      roundToTenth(nonNegativeNumber(startValue)),
+      mediaDurationSeconds
+    );
+    const lengthSeconds = Math.min(
+      roundToTenth(nonNegativeNumber(lengthValue)),
+      mediaDurationSeconds - startSeconds
+    );
+    return lengthSeconds > 0 ? { startSeconds, lengthSeconds } : { startSeconds: 0, lengthSeconds: 0 };
+  };
+  var clipReferenceUsedRange = (reference) => reference.lengthSeconds > 0 ? {
+    startSeconds: reference.startSeconds,
+    lengthSeconds: reference.lengthSeconds
+  } : {
+    startSeconds: 0,
+    lengthSeconds: reference.mediaDurationSeconds
+  };
+  var clipReferenceUsedSeconds = (reference) => clipReferenceUsedRange(reference).lengthSeconds;
   var clipReferenceDurationSeconds = (references) => {
     const index = clipLengthReferenceIndex(references);
-    return index < 0 ? null : references[index].mediaDurationSeconds;
+    return index < 0 ? null : clipReferenceUsedSeconds(references[index]);
   };
   var normalizeUploadedMedia = (value) => {
     if (!isRecord2(value)) {
@@ -2727,7 +2762,8 @@
           source: {
             kind: normalizeAudioTrackSourceKind(source.kind),
             reference: trimmedText(source.reference),
-            uploadedAudio: normalizeUploadedMedia(source.uploadedAudio)
+            uploadedAudio: normalizeUploadedMedia(source.uploadedAudio),
+            mediaDurationSeconds: optionalPositiveNumber(source.mediaDurationSeconds) ?? 0
           },
           spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter(
             (span) => span !== null
@@ -3772,6 +3808,9 @@
       clipLengthFromControlNet: false,
       reuseAudio: false,
       uploadedAudio: null,
+      uploadedAudioDurationSeconds: 0,
+      uploadedAudioStartSeconds: 0,
+      uploadedAudioLengthSeconds: 0,
       prompt: "",
       promptWindows: [],
       retake: null,
@@ -3906,6 +3945,13 @@
       defaults.modelCatalog,
       resolvedArchitecture
     )?.boundaryRules[boundaryOut];
+    const uploadedAudio = normalizeUploadedMedia(rawClip.uploadedAudio);
+    const uploadedAudioDurationSeconds = uploadedAudio ? roundToTenth(nonNegativeNumber(rawClip.uploadedAudioDurationSeconds)) : 0;
+    const uploadedAudioRange = uploadedAudio ? normalizeTimedMediaRange(
+      rawClip.uploadedAudioStartSeconds,
+      rawClip.uploadedAudioLengthSeconds,
+      uploadedAudioDurationSeconds
+    ) : { startSeconds: 0, lengthSeconds: 0 };
     return {
       id: normalizeOptionalEntityId(rawClip.id),
       architectureHint: architecture,
@@ -3931,7 +3977,10 @@
       clipLengthFromAudio,
       clipLengthFromControlNet,
       reuseAudio: !!rawClip.reuseAudio,
-      uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
+      uploadedAudio,
+      uploadedAudioDurationSeconds,
+      uploadedAudioStartSeconds: uploadedAudioRange.startSeconds,
+      uploadedAudioLengthSeconds: uploadedAudioRange.lengthSeconds,
       prompt: text(rawClip.prompt),
       promptWindows: normalizePromptWindows(rawClip),
       retake,
@@ -3954,8 +4003,7 @@
     return {
       width: dimsExplicit ? width : inherited.width,
       height: dimsExplicit ? height : inherited.height,
-      // fps is never stored: the timeline always follows the core Video FPS
-      // param (the backend falls back to it too when the JSON has no fps).
+      // The timeline follows core's Video FPS param.
       fps: inherited.fps,
       dimsExplicit
     };
@@ -4007,6 +4055,9 @@
         clipLengthFromControlNet: clip.clipLengthFromControlNet,
         reuseAudio: clip.reuseAudio,
         uploadedAudio: clip.uploadedAudio,
+        uploadedAudioDurationSeconds: clip.uploadedAudioDurationSeconds,
+        uploadedAudioStartSeconds: clip.uploadedAudioStartSeconds,
+        uploadedAudioLengthSeconds: clip.uploadedAudioLengthSeconds,
         initVideo: clip.initVideo ? {
           data: clip.initVideo.data,
           fileName: clip.initVideo.fileName,
@@ -4029,7 +4080,9 @@
           includeSoundtrack: reference.includeSoundtrack,
           mediaDurationSeconds: reference.mediaDurationSeconds,
           drivesClipLength: reference.drivesClipLength,
-          mediaScale: reference.mediaScale
+          mediaScale: reference.mediaScale,
+          startSeconds: reference.startSeconds,
+          lengthSeconds: reference.lengthSeconds
         })),
         frameRefs: clip.frameRefs.map((ref) => ({
           id: ref.id,
@@ -4059,8 +4112,8 @@
       })
     );
   };
-  var timelinePointProjection = (clips, seconds, edge) => {
-    if (!Number.isFinite(seconds) || seconds < 0 || clips.length === 0) {
+  var timelinePointProjection = (clips, seconds2, edge) => {
+    if (!Number.isFinite(seconds2) || seconds2 < 0 || clips.length === 0) {
       return null;
     }
     let cursor = 0;
@@ -4069,13 +4122,13 @@
       const duration = Math.max(0, clip.duration || 0);
       const clipEnd = cursor + duration;
       const isLast = index === clips.length - 1;
-      const ownsPoint = edge === "start" ? seconds < clipEnd || isLast : seconds <= clipEnd || isLast;
+      const ownsPoint = edge === "start" ? seconds2 < clipEnd || isLast : seconds2 <= clipEnd || isLast;
       if (ownsPoint) {
         return {
           clipId: clip.id,
           offsetSeconds: Math.max(
             0,
-            Math.min(duration, seconds - cursor)
+            Math.min(duration, seconds2 - cursor)
           )
         };
       }
@@ -4121,7 +4174,8 @@
       source: {
         kind: track.source.kind,
         reference: track.source.reference,
-        uploadedAudio: track.source.uploadedAudio
+        uploadedAudio: track.source.uploadedAudio,
+        mediaDurationSeconds: track.source.mediaDurationSeconds
       },
       spans: track.spans.map((span) => ({
         id: span.id,
@@ -4143,6 +4197,9 @@
     for (const clip of durable.clips) {
       if (isTransientBrowserMedia(clip.uploadedAudio)) {
         clip.uploadedAudio = null;
+        clip.uploadedAudioDurationSeconds = 0;
+        clip.uploadedAudioStartSeconds = 0;
+        clip.uploadedAudioLengthSeconds = 0;
       }
       if (clip.initVideo && isTransientBrowserMedia({ data: clip.initVideo.data })) {
         clip.initVideo = null;
@@ -4466,6 +4523,9 @@
       "clipLengthFromControlNet",
       "reuseAudio",
       "uploadedAudio",
+      "uploadedAudioDurationSeconds",
+      "uploadedAudioStartSeconds",
+      "uploadedAudioLengthSeconds",
       "prompt",
       "initVideo"
     ],
@@ -4534,7 +4594,9 @@
       "includeSoundtrack",
       "mediaDurationSeconds",
       "drivesClipLength",
-      "mediaScale"
+      "mediaScale",
+      "startSeconds",
+      "lengthSeconds"
     ],
     reservedKeys: ["id"],
     collection: (clip) => clip.references
@@ -6162,12 +6224,12 @@
     }
   };
   var retryButton = (onRetry) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "basic-button vst-catalog-retry";
-    button.textContent = "Retry";
-    button.addEventListener("click", onRetry);
-    return button;
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.className = "basic-button vst-catalog-retry";
+    button2.textContent = "Retry";
+    button2.addEventListener("click", onRetry);
+    return button2;
   };
   var renderBlockingArchitectureCatalogStatus = (body, snapshot, onRetry) => {
     if (snapshot.catalog) {
@@ -7125,14 +7187,14 @@
     const raw = fromEnd ? duration - offset : offset;
     return Math.min(Math.max(raw, 0), duration);
   };
-  var formatTimeLabel = (seconds, unit, fps) => {
+  var formatTimeLabel = (seconds2, unit, fps) => {
     if (unit === "frames") {
-      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+      return `${Math.round((seconds2 || 0) * safeFps(fps))}f`;
     }
-    const rounded = Math.round((seconds || 0) * 10) / 10;
+    const rounded = Math.round((seconds2 || 0) * 10) / 10;
     return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
   };
-  var formatSecondsTenth = (seconds) => `${(Math.round((Number.isFinite(seconds) ? seconds : 0) * 10) / 10).toFixed(1)}s`;
+  var formatSecondsTenth = (seconds2) => `${(Math.round((Number.isFinite(seconds2) ? seconds2 : 0) * 10) / 10).toFixed(1)}s`;
   var formatOverlapSeconds = (frames, fps) => formatSecondsTenth(frames / Math.max(1, fps));
   var RULER_MIN_TICK_SPACING_PX = 60;
   var RULER_STEP_LADDER_SECONDS = [
@@ -7177,11 +7239,11 @@
     }
     return ticks;
   };
-  var formatRulerLabel = (seconds, unit, fps) => {
+  var formatRulerLabel = (seconds2, unit, fps) => {
     if (unit === "frames") {
-      return `${Math.round((seconds || 0) * safeFps(fps))}f`;
+      return `${Math.round((seconds2 || 0) * safeFps(fps))}f`;
     }
-    const s = Math.max(0, seconds || 0);
+    const s = Math.max(0, seconds2 || 0);
     if (s >= 60) {
       const totalWhole = Math.round(s);
       const mm = Math.floor(totalWhole / 60);
@@ -7730,17 +7792,17 @@
       };
     };
     const createFromButton = (target) => {
-      const button = config.createButtonSelector ? target.closest(config.createButtonSelector) : null;
-      if (!(button instanceof HTMLElement)) {
+      const button2 = config.createButtonSelector ? target.closest(config.createButtonSelector) : null;
+      if (!(button2 instanceof HTMLElement)) {
         return false;
       }
-      const lane = config.scope.resolveLane(button);
+      const lane = config.scope.resolveLane(button2);
       if (lane && !(config.canCreate && !config.canCreate(lane))) {
         commitCreate(
           {
             ownerIdx: lane.ownerIdx,
             duration: lane.duration,
-            laneEl: button,
+            laneEl: button2,
             laneLeft: 0,
             startSec: 0,
             ghost: null,
@@ -8778,11 +8840,6 @@
       editor: spec.editor ?? null
     };
   };
-  var clampStartLength = (start, length, clipDur, minLength) => {
-    const s = clamp(start, 0, Math.max(0, clipDur - minLength));
-    const l = clamp(length, minLength, Math.max(minLength, clipDur - s));
-    return { start: s, length: l };
-  };
   var wrapForm = (key, label, content) => {
     const body = document.createElement("div");
     body.className = "vst-detail-body";
@@ -9198,6 +9255,59 @@
     };
   };
 
+  // frontend/clipMediaProbeGuard.ts
+  var INIT_VIDEO_PROBE_SLOT = "init-video";
+  var nextOperationId = 0;
+  var currentOperations = /* @__PURE__ */ new Map();
+  var findClipByStableId = (clips, clipId) => clips.find((clip) => clip.id === clipId);
+  var beginClipMediaProbe = (clipId, slot, revisionAtStart) => {
+    const operationId = ++nextOperationId;
+    const key = `${clipId}
+${slot}`;
+    currentOperations.set(key, operationId);
+    const release = () => {
+      if (currentOperations.get(key) === operationId) {
+        currentOperations.delete(key);
+      }
+    };
+    return {
+      clipId,
+      claim: (currentRevision2) => {
+        const current = currentRevision2 === revisionAtStart && currentOperations.get(key) === operationId;
+        release();
+        return current;
+      },
+      cancel: release
+    };
+  };
+  var runClipMediaProbe = ({
+    clipId,
+    slot,
+    probe,
+    apply,
+    onApplied
+  }) => {
+    const store2 = getTimelineStore();
+    const operation = beginClipMediaProbe(
+      clipId,
+      slot,
+      store2.getSnapshot().revision
+    );
+    void probe().then((result) => {
+      if (!operation.claim(store2.revision())) {
+        return;
+      }
+      const state = store2.getState();
+      const clip = findClipByStableId(state.clips, operation.clipId);
+      if (!clip) {
+        return;
+      }
+      apply(clip, result, state);
+      saveClips(state.clips, { origin: "detail-strip" });
+      onApplied?.();
+    }, operation.cancel);
+  };
+
   // frontend/documentQueries.ts
   var documentFps = (document2) => safeFps(document2.fps);
   var clipTimelineWindow = (clips, clipIdx) => {
@@ -9227,6 +9337,647 @@
       });
       return intersects ? [trackIdx] : [];
     });
+  };
+
+  // frontend/trimGeometry.ts
+  var clampStartLength = (start, length, duration, minLength) => {
+    const clampedStart = clamp(start, 0, Math.max(0, duration - minLength));
+    const clampedLength = clamp(
+      length,
+      minLength,
+      Math.max(minLength, duration - clampedStart)
+    );
+    return { start: clampedStart, length: clampedLength };
+  };
+  var sourceLimitSeconds = (source) => source.durationSeconds > 0 ? source.durationSeconds : source.startSeconds + source.lengthSeconds;
+  var toInOut = ({
+    startSeconds,
+    lengthSeconds
+  }) => ({
+    inSeconds: startSeconds,
+    outSeconds: roundToTenth(startSeconds + lengthSeconds)
+  });
+  var fromInOut = ({ inSeconds, outSeconds }, { limitSeconds, minLengthSeconds, fps }) => {
+    const start = roundToTenth(inSeconds);
+    const length = snapDurationToFps(roundToTenth(outSeconds) - start, fps);
+    const clamped = clampStartLength(
+      start,
+      length,
+      limitSeconds,
+      minLengthSeconds
+    );
+    return { startSeconds: clamped.start, lengthSeconds: clamped.length };
+  };
+  var setInPoint = (current, inSeconds, limits) => {
+    const { outSeconds } = toInOut(current);
+    return fromInOut(
+      {
+        inSeconds: Math.max(
+          0,
+          Math.min(inSeconds, outSeconds - limits.minLengthSeconds)
+        ),
+        outSeconds
+      },
+      limits
+    );
+  };
+  var setOutPoint = (current, outSeconds, limits) => {
+    const { inSeconds } = toInOut(current);
+    return fromInOut(
+      {
+        inSeconds,
+        outSeconds: Math.min(
+          limits.limitSeconds,
+          Math.max(outSeconds, inSeconds + limits.minLengthSeconds)
+        )
+      },
+      limits
+    );
+  };
+  var slideRange = (current, inSeconds, limits) => {
+    const length = current.lengthSeconds;
+    const start = Math.max(
+      0,
+      Math.min(
+        roundToTenth(inSeconds),
+        Math.max(0, limits.limitSeconds - length)
+      )
+    );
+    return fromInOut({ inSeconds: start, outSeconds: start + length }, limits);
+  };
+  var markInPoint = (current, inSeconds, limits) => inSeconds > toInOut(current).outSeconds ? slideRange(current, inSeconds, limits) : setInPoint(current, inSeconds, limits);
+
+  // frontend/detailStrip/trimBar.ts
+  var NUDGE_SECONDS = 0.1;
+  var COARSE_NUDGE_SECONDS = 1;
+  var pointerSecondsAt = (clientX, trackLeft, trackWidth, limitSeconds) => {
+    if (!(trackWidth > 0) || !(limitSeconds > 0)) {
+      return 0;
+    }
+    const ratio = (clientX - trackLeft) / trackWidth;
+    return Math.min(limitSeconds, Math.max(0, ratio * limitSeconds));
+  };
+  var trimBarGeometry = (range, limitSeconds) => {
+    if (!(limitSeconds > 0)) {
+      return { leftPct: 0, widthPct: 100 };
+    }
+    const { inSeconds, outSeconds } = toInOut(range);
+    const leftPct = Math.min(
+      100,
+      Math.max(0, inSeconds / limitSeconds * 100)
+    );
+    const rightPct = Math.min(
+      100,
+      Math.max(0, outSeconds / limitSeconds * 100)
+    );
+    return { leftPct, widthPct: Math.max(0, rightPct - leftPct) };
+  };
+  var applyGrip = (grip, range, seconds2, limits) => {
+    if (grip === "in") {
+      return setInPoint(range, seconds2, limits);
+    }
+    if (grip === "out") {
+      return setOutPoint(range, seconds2, limits);
+    }
+    return slideRange(range, seconds2, limits);
+  };
+  var buildTrimBar = (spec) => {
+    let range = spec.range;
+    const { limits } = spec;
+    const wrap = document.createElement("div");
+    wrap.className = "vst-trim";
+    const track = document.createElement("div");
+    track.className = "vst-trim-track";
+    wrap.appendChild(track);
+    const window_ = document.createElement("div");
+    window_.className = "vst-trim-window";
+    window_.setAttribute("role", "slider");
+    window_.setAttribute("aria-label", "Trimmed range position");
+    window_.tabIndex = 0;
+    track.appendChild(window_);
+    const grips = {
+      in: document.createElement("span"),
+      out: document.createElement("span")
+    };
+    for (const edge of ["in", "out"]) {
+      const grip = grips[edge];
+      grip.className = `vst-trim-grip vst-trim-grip-${edge}`;
+      grip.dataset.vstTrimGrip = edge;
+      grip.setAttribute("role", "slider");
+      grip.setAttribute(
+        "aria-label",
+        edge === "in" ? "In point" : "Out point"
+      );
+      grip.tabIndex = 0;
+      track.appendChild(grip);
+    }
+    const scale = document.createElement("div");
+    scale.className = "vst-trim-scale";
+    const scaleStart = document.createElement("span");
+    scaleStart.textContent = "0.0";
+    const scaleEnd = document.createElement("span");
+    scaleEnd.textContent = `${limits.limitSeconds.toFixed(1)}`;
+    scale.append(scaleStart, scaleEnd);
+    wrap.appendChild(scale);
+    const paint = () => {
+      const { leftPct, widthPct } = trimBarGeometry(
+        range,
+        limits.limitSeconds
+      );
+      window_.style.left = `${leftPct}%`;
+      window_.style.width = `${widthPct}%`;
+      grips.in.style.left = `${leftPct}%`;
+      grips.out.style.left = `${leftPct + widthPct}%`;
+      const { inSeconds, outSeconds } = toInOut(range);
+      const describe = (element, now, max, text2) => {
+        element.setAttribute("aria-valuemin", "0");
+        element.setAttribute("aria-valuemax", `${max}`);
+        element.setAttribute("aria-valuenow", `${now}`);
+        element.setAttribute("aria-valuetext", text2);
+      };
+      describe(
+        grips.in,
+        inSeconds,
+        limits.limitSeconds,
+        `In point, ${inSeconds.toFixed(1)} seconds`
+      );
+      describe(
+        grips.out,
+        outSeconds,
+        limits.limitSeconds,
+        `Out point, ${outSeconds.toFixed(1)} seconds`
+      );
+      describe(
+        window_,
+        inSeconds,
+        limits.limitSeconds,
+        `Trimmed range, ${inSeconds.toFixed(1)} to ${outSeconds.toFixed(1)} seconds`
+      );
+      grips.in.title = `In point — ${inSeconds.toFixed(1)} s`;
+      grips.out.title = `Out point — ${outSeconds.toFixed(1)} s`;
+      window_.title = "Drag to slide the range without changing its length";
+    };
+    const push = (next) => {
+      if (next.startSeconds === range.startSeconds && next.lengthSeconds === range.lengthSeconds) {
+        return;
+      }
+      range = next;
+      paint();
+      spec.onChange(next);
+    };
+    const startDrag = (grip, event) => {
+      if (!(limits.limitSeconds > 0) || event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const target = event.currentTarget;
+      target.setPointerCapture?.(event.pointerId);
+      const rect = track.getBoundingClientRect();
+      const pressed = toInOut(range);
+      const pressSeconds = pointerSecondsAt(
+        event.clientX,
+        rect.left,
+        rect.width,
+        limits.limitSeconds
+      );
+      const grabOffset = pressSeconds - pressed.inSeconds;
+      const before = range;
+      const secondsFor = (moveEvent) => {
+        const at = pointerSecondsAt(
+          moveEvent.clientX,
+          rect.left,
+          rect.width,
+          limits.limitSeconds
+        );
+        return grip === "window" ? at - grabOffset : at;
+      };
+      const onMove = (moveEvent) => {
+        push(applyGrip(grip, range, secondsFor(moveEvent), limits));
+      };
+      const finish2 = (commit, moveEvent) => {
+        target.removeEventListener("pointermove", onMove);
+        target.removeEventListener("pointerup", onUp);
+        target.removeEventListener("pointercancel", onCancel);
+        document.removeEventListener("keydown", onKey, true);
+        target.releasePointerCapture?.(event.pointerId);
+        push(
+          commit && moveEvent ? applyGrip(grip, range, secondsFor(moveEvent), limits) : before
+        );
+      };
+      const onUp = (upEvent) => finish2(true, upEvent);
+      const onCancel = () => finish2(false);
+      const onKey = (keyEvent) => {
+        if (keyEvent.key === "Escape") {
+          keyEvent.preventDefault();
+          finish2(false);
+        }
+      };
+      target.addEventListener("pointermove", onMove);
+      target.addEventListener("pointerup", onUp);
+      target.addEventListener("pointercancel", onCancel);
+      document.addEventListener("keydown", onKey, true);
+    };
+    const onKeyGrip = (grip, event) => {
+      const step = event.shiftKey ? COARSE_NUDGE_SECONDS : NUDGE_SECONDS;
+      const { inSeconds, outSeconds } = toInOut(range);
+      const at = grip === "out" ? outSeconds : inSeconds;
+      let next = null;
+      if (event.key === "ArrowLeft") {
+        next = at - step;
+      } else if (event.key === "ArrowRight") {
+        next = at + step;
+      } else if (event.key === "Home") {
+        next = 0;
+      } else if (event.key === "End") {
+        next = limits.limitSeconds;
+      }
+      if (next === null) {
+        return;
+      }
+      event.preventDefault();
+      push(applyGrip(grip, range, next, limits));
+    };
+    for (const edge of ["in", "out"]) {
+      grips[edge].addEventListener(
+        "pointerdown",
+        (event) => startDrag(edge, event)
+      );
+      grips[edge].addEventListener(
+        "keydown",
+        (event) => onKeyGrip(edge, event)
+      );
+    }
+    window_.addEventListener(
+      "pointerdown",
+      (event) => startDrag("window", event)
+    );
+    window_.addEventListener("keydown", (event) => onKeyGrip("window", event));
+    track.addEventListener("pointerdown", (event) => {
+      if (event.target !== track || !(limits.limitSeconds > 0)) {
+        return;
+      }
+      const rect = track.getBoundingClientRect();
+      const at = pointerSecondsAt(
+        event.clientX,
+        rect.left,
+        rect.width,
+        limits.limitSeconds
+      );
+      const { inSeconds, outSeconds } = toInOut(range);
+      push(
+        applyGrip(
+          Math.abs(at - inSeconds) <= Math.abs(at - outSeconds) ? "in" : "out",
+          range,
+          at,
+          limits
+        )
+      );
+    });
+    paint();
+    return {
+      element: wrap,
+      sync: (next) => {
+        range = next;
+        paint();
+      }
+    };
+  };
+
+  // frontend/detailStrip/trimModal.ts
+  var MODAL_CLASS = "vst-trim-modal";
+  var BACKDROP_CLASS = "vst-trim-modal-backdrop";
+  var TITLE_ID = "vst_trim_modal_title";
+  var currentCleanup = null;
+  var seconds = (value) => value.toFixed(1);
+  var button = (label, title, dataAttribute) => {
+    const element = document.createElement("button");
+    element.type = "button";
+    element.className = "basic-button small-button";
+    element.textContent = label;
+    element.title = title;
+    if (dataAttribute) {
+      element.setAttribute(dataAttribute, "");
+    }
+    return element;
+  };
+  var numberField = (labelText, name, readOnly = false) => {
+    const wrap = document.createElement("label");
+    wrap.className = "vst-trim-modal-field";
+    const label = document.createElement("span");
+    label.textContent = labelText;
+    const input2 = document.createElement("input");
+    input2.type = "number";
+    input2.step = "0.1";
+    input2.dataset.vstTrimField = name;
+    input2.readOnly = readOnly;
+    wrap.append(label, input2);
+    return { wrap, input: input2 };
+  };
+  var buildTrimLauncher = (summary, onOpen) => {
+    const row = document.createElement("div");
+    row.className = "vst-trim-launcher";
+    const text2 = document.createElement("span");
+    text2.className = "vst-trim-launcher-summary vst-detail-field-hint";
+    text2.textContent = summary;
+    const open = button("Edit…", "Open the range editor");
+    open.setAttribute("data-vst-open-trim", "");
+    open.addEventListener("click", onOpen);
+    row.append(text2, open);
+    return row;
+  };
+  var closeTrimModal = () => {
+    currentCleanup?.();
+    currentCleanup = null;
+    document.querySelector(`.${MODAL_CLASS}`)?.remove();
+    document.querySelector(`.${BACKDROP_CLASS}`)?.remove();
+  };
+  var openTrimModal = (spec) => {
+    closeTrimModal();
+    const isAudio = spec.mediaKind === "audio";
+    let draft = { ...spec.range };
+    let bar = null;
+    let stopAt = null;
+    const backdrop = document.createElement("div");
+    backdrop.className = `modal-backdrop fade show ${BACKDROP_CLASS}`;
+    const modal = document.createElement("div");
+    modal.className = `modal fade show ${MODAL_CLASS}`;
+    modal.style.display = "block";
+    modal.tabIndex = -1;
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", TITLE_ID);
+    const dialog = document.createElement("div");
+    dialog.className = "modal-dialog modal-dialog-centered";
+    dialog.setAttribute("role", "document");
+    const content = document.createElement("div");
+    content.className = "modal-content";
+    const header = document.createElement("div");
+    header.className = "modal-header";
+    const heading = document.createElement("div");
+    const title = document.createElement("h5");
+    title.className = "modal-title";
+    title.id = TITLE_ID;
+    title.textContent = spec.title;
+    const fileName = document.createElement("small");
+    fileName.className = "vst-trim-modal-file";
+    fileName.textContent = spec.fileName;
+    heading.append(title, fileName);
+    const close = button("×", "Close without applying");
+    close.setAttribute("aria-label", close.title);
+    header.append(heading, close);
+    const body = document.createElement("div");
+    body.className = "modal-body";
+    const playerWrap = document.createElement("div");
+    playerWrap.className = "vst-trim-modal-player-wrap";
+    if (isAudio) {
+      playerWrap.classList.add("vst-trim-modal-player-wrap-audio");
+    }
+    const player = isAudio ? document.createElement("audio") : getVideoStagesHostBridge().createInitVideoElement();
+    player.className = "vst-trim-modal-player";
+    player.controls = true;
+    player.preload = "auto";
+    if (!isAudio) {
+      player.setAttribute("playsinline", "");
+    }
+    if (spec.dataUri) {
+      player.src = mediaPreviewSrc(spec.dataUri);
+    }
+    player.currentTime = draft.startSeconds;
+    const mediaError = document.createElement("div");
+    mediaError.className = "vst-trim-modal-media-error";
+    mediaError.textContent = `This browser cannot preview the selected ${spec.mediaKind}.`;
+    mediaError.hidden = spec.dataUri !== null;
+    player.hidden = spec.dataUri === null;
+    playerWrap.append(player, mediaError);
+    const transport = document.createElement("div");
+    transport.className = "vst-trim-modal-transport";
+    const timecode = document.createElement("output");
+    timecode.className = "vst-trim-modal-timecode";
+    const stepLabel = isAudio ? "0.1 s" : "Frame";
+    const previousFrame = button(
+      `◀ ${stepLabel}`,
+      isAudio ? "Step backward 0.1 seconds" : "Step backward one frame"
+    );
+    const preview = button("▶ Preview range", "Play the selected range");
+    const nextFrame = button(
+      `${stepLabel} ▶`,
+      isAudio ? "Step forward 0.1 seconds" : "Step forward one frame"
+    );
+    const markIn = button("Mark In", "Set In at the playhead (I)");
+    const markOut = button("Mark Out", "Set Out at the playhead (O)");
+    transport.append(
+      timecode,
+      previousFrame,
+      preview,
+      nextFrame,
+      markIn,
+      markOut
+    );
+    const fields = document.createElement("div");
+    fields.className = "vst-trim-modal-fields";
+    const inField = numberField("In (s)", "in");
+    const outField = numberField("Out (s)", "out");
+    const durationField = numberField("Duration (s)", "duration", true);
+    inField.input.min = "0";
+    inField.input.max = `${spec.limits.limitSeconds}`;
+    outField.input.min = `${spec.limits.minLengthSeconds}`;
+    outField.input.max = `${spec.limits.limitSeconds}`;
+    fields.append(inField.wrap, outField.wrap, durationField.wrap);
+    const impact = document.createElement("small");
+    impact.className = "vst-trim-modal-impact";
+    const renderDraft = (syncBar = true) => {
+      const range = toInOut(draft);
+      inField.input.value = seconds(range.inSeconds);
+      outField.input.value = seconds(range.outSeconds);
+      durationField.input.value = seconds(draft.lengthSeconds);
+      impact.textContent = spec.impactText(draft);
+      if (syncBar) {
+        bar?.sync(draft);
+      }
+    };
+    const setDraft = (next, syncBar = true) => {
+      draft = next;
+      renderDraft(syncBar);
+    };
+    bar = buildTrimBar({
+      range: draft,
+      limits: spec.limits,
+      onChange: (next) => {
+        const before = toInOut(draft);
+        const after = toInOut(next);
+        setDraft(next, false);
+        if (after.inSeconds !== before.inSeconds && after.outSeconds === before.outSeconds) {
+          seek(after.inSeconds);
+        } else if (after.outSeconds !== before.outSeconds && after.inSeconds === before.inSeconds) {
+          seek(after.outSeconds);
+        }
+      }
+    });
+    const playhead = document.createElement("span");
+    playhead.className = "vst-trim-playhead";
+    playhead.setAttribute("aria-hidden", "true");
+    bar.element.querySelector(".vst-trim-track")?.appendChild(playhead);
+    const paintPlayhead = () => {
+      const at = Math.min(
+        spec.limits.limitSeconds,
+        Math.max(0, player.currentTime || 0)
+      );
+      timecode.textContent = `${seconds(at)} / ${seconds(spec.limits.limitSeconds)} s`;
+      const percent = spec.limits.limitSeconds > 0 ? at / spec.limits.limitSeconds * 100 : 0;
+      playhead.style.left = `${percent}%`;
+      if (stopAt !== null && at >= stopAt) {
+        player.pause();
+        stopAt = null;
+        player.currentTime = draft.startSeconds;
+        paintPlayhead();
+      }
+    };
+    const seek = (value) => {
+      player.currentTime = Math.min(
+        spec.limits.limitSeconds,
+        Math.max(0, value)
+      );
+      paintPlayhead();
+    };
+    const playRange = () => {
+      const range = toInOut(draft);
+      stopAt = range.outSeconds;
+      seek(range.inSeconds);
+      player.play()?.catch(() => {
+        stopAt = null;
+      });
+    };
+    const readNumber = (input2, apply2) => {
+      const value = Number(input2.value);
+      if (Number.isFinite(value)) {
+        setDraft(apply2(value));
+      }
+    };
+    inField.input.addEventListener(
+      "input",
+      () => readNumber(
+        inField.input,
+        (value) => setInPoint(draft, value, spec.limits)
+      )
+    );
+    outField.input.addEventListener(
+      "input",
+      () => readNumber(
+        outField.input,
+        (value) => setOutPoint(draft, value, spec.limits)
+      )
+    );
+    const reset = button(
+      `Use full ${spec.mediaKind}`,
+      "Reset In and Out to the whole source",
+      "data-vst-trim-reset"
+    );
+    reset.addEventListener(
+      "click",
+      () => setDraft({
+        startSeconds: 0,
+        lengthSeconds: spec.limits.limitSeconds
+      })
+    );
+    previousFrame.addEventListener(
+      "click",
+      () => seek(
+        player.currentTime - (spec.limits.fps > 0 ? 1 / spec.limits.fps : 0.1)
+      )
+    );
+    nextFrame.addEventListener(
+      "click",
+      () => seek(
+        player.currentTime + (spec.limits.fps > 0 ? 1 / spec.limits.fps : 0.1)
+      )
+    );
+    preview.addEventListener("click", playRange);
+    markIn.addEventListener(
+      "click",
+      () => setDraft(markInPoint(draft, player.currentTime, spec.limits))
+    );
+    markOut.addEventListener(
+      "click",
+      () => setDraft(setOutPoint(draft, player.currentTime, spec.limits))
+    );
+    body.append(playerWrap, transport, bar.element, fields, impact);
+    const footer = document.createElement("div");
+    footer.className = "modal-footer vst-trim-modal-footer";
+    const cancel = button("Cancel", "Close without applying");
+    const apply = button("Apply", "Apply this range", "data-vst-trim-apply");
+    apply.classList.add("vst-trim-modal-apply");
+    footer.append(reset, cancel, apply);
+    content.append(header, body, footer);
+    dialog.appendChild(content);
+    modal.appendChild(dialog);
+    const dismiss = () => currentCleanup?.();
+    const applyAndClose = () => {
+      const applied = { ...draft };
+      dismiss();
+      spec.onApply(applied);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        dismiss();
+        return;
+      }
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "i") {
+        event.preventDefault();
+        setDraft(markInPoint(draft, player.currentTime, spec.limits));
+      } else if (key === "o") {
+        event.preventDefault();
+        setDraft(setOutPoint(draft, player.currentTime, spec.limits));
+      } else if (event.key === " ") {
+        event.preventDefault();
+        if (player.paused) {
+          playRange();
+        } else {
+          player.pause();
+          stopAt = null;
+        }
+      }
+    };
+    const cleanup = () => {
+      document.removeEventListener("keydown", onKeyDown);
+      player.removeEventListener("timeupdate", paintPlayhead);
+      player.removeEventListener("seeked", paintPlayhead);
+      player.pause();
+      player.removeAttribute("src");
+      player.load();
+      modal.remove();
+      backdrop.remove();
+      if (currentCleanup === cleanup) {
+        currentCleanup = null;
+      }
+    };
+    currentCleanup = cleanup;
+    close.addEventListener("click", dismiss);
+    cancel.addEventListener("click", dismiss);
+    apply.addEventListener("click", applyAndClose);
+    backdrop.addEventListener("click", dismiss);
+    modal.addEventListener("mousedown", (event) => {
+      if (event.target === modal) {
+        dismiss();
+      }
+    });
+    player.addEventListener("loadedmetadata", () => seek(draft.startSeconds));
+    player.addEventListener("timeupdate", paintPlayhead);
+    player.addEventListener("seeked", paintPlayhead);
+    player.addEventListener("error", () => {
+      player.hidden = true;
+      mediaError.hidden = false;
+    });
+    document.addEventListener("keydown", onKeyDown);
+    document.body.append(backdrop, modal);
+    renderDraft();
+    paintPlayhead();
+    player.focus();
   };
 
   // frontend/detailStrip/audioTracksPanel.ts
@@ -9276,6 +10027,7 @@
             next.source.kind = "AceStepFun";
             next.source.reference = value;
             next.source.uploadedAudio = null;
+            next.source.mediaDurationSeconds = 0;
           } else {
             next.source.kind = "Upload";
             next.source.reference = next.source.uploadedAudio?.fileName ?? "";
@@ -9304,13 +10056,27 @@
               next.source.kind = "Upload";
               next.source.reference = fileName ?? "";
               next.source.uploadedAudio = { data, fileName };
+              next.source.mediaDurationSeconds = 0;
             });
             ctx.render();
+            void probeMediaDurationSeconds(data).then((duration) => {
+              commitTrack(ctx, trackId, (next) => {
+                if (next.source.uploadedAudio?.data !== data) {
+                  return;
+                }
+                const seconds2 = roundToTenth(duration);
+                if (seconds2 > 0) {
+                  next.source.mediaDurationSeconds = seconds2;
+                }
+              });
+              ctx.render();
+            });
           },
           () => {
             commitTrack(ctx, trackId, (next) => {
               next.source.reference = "";
               next.source.uploadedAudio = null;
+              next.source.mediaDurationSeconds = 0;
             });
             ctx.render();
           }
@@ -9441,6 +10207,49 @@
         "How long this track plays across the complete timeline."
       )
     );
+    const uploadedAudio = track.source.uploadedAudio;
+    const durationSeconds = track.source.mediaDurationSeconds ?? 0;
+    if (uploadedAudio) {
+      const shown = {
+        startSeconds: span.sourceStartSeconds,
+        lengthSeconds: geometry.length
+      };
+      const limitSeconds = Math.max(
+        durationSeconds,
+        shown.startSeconds + shown.lengthSeconds
+      );
+      const limits = {
+        limitSeconds,
+        minLengthSeconds: AUDIO_SPAN_MIN_LENGTH,
+        fps: 0
+      };
+      const range = toInOut(shown);
+      const maxTimelineLength = total - geometry.start;
+      fields.appendChild(
+        buildTrimLauncher(
+          `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · Plays ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+          () => openTrimModal({
+            mediaKind: "audio",
+            title: "Trim Audio Track",
+            fileName: uploadedAudio.fileName ?? "Audio track",
+            dataUri: uploadedAudio.data,
+            range: shown,
+            limits,
+            impactText: (next) => `Track length becomes ${Math.min(next.lengthSeconds, maxTimelineLength).toFixed(1)} s`,
+            onApply: (next) => {
+              commitTrack(ctx, trackId, (_next, nextSpan) => {
+                nextSpan.sourceStartSeconds = next.startSeconds;
+                nextSpan.timelineLengthSeconds = Math.min(
+                  next.lengthSeconds,
+                  maxTimelineLength
+                );
+              });
+              ctx.render();
+            }
+          })
+        )
+      );
+    }
     fields.dataset.vstTrackIndex = `${trackIndex}`;
     return fields;
   };
@@ -9465,7 +10274,8 @@
         source: {
           kind: "Upload",
           reference: "",
-          uploadedAudio: null
+          uploadedAudio: null,
+          mediaDurationSeconds: 0
         },
         volume: AUDIO_SPAN_VOLUME_DEFAULT,
         spans: [
@@ -9564,14 +10374,14 @@
     ".vst-detail-delete"
   ];
   var buildCapabilityRepairButton = (action) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `interrupt-button vst-btn-tiny vst-capability-repair ${action.className ?? ""}`.trim();
-    button.textContent = action.label;
-    button.title = action.title ?? action.label;
-    button.setAttribute("aria-label", button.title);
-    button.addEventListener("click", action.onRepair);
-    return button;
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.className = `interrupt-button vst-btn-tiny vst-capability-repair ${action.className ?? ""}`.trim();
+    button2.textContent = action.label;
+    button2.title = action.title ?? action.label;
+    button2.setAttribute("aria-label", button2.title);
+    button2.addEventListener("click", action.onRepair);
+    return button2;
   };
   var disableCapabilityControls = (root, decision, removableSelectors = []) => {
     const removable = new Set(
@@ -9668,6 +10478,11 @@
         }
         target.saveAudioTrack = isAceStepFunAudioSource(nextSource) && target.saveAudioTrack;
         target.uploadedAudio = nextSource === AUDIO_SOURCE_UPLOAD ? target.uploadedAudio : null;
+        if (nextSource !== AUDIO_SOURCE_UPLOAD) {
+          target.uploadedAudioDurationSeconds = 0;
+          target.uploadedAudioStartSeconds = 0;
+          target.uploadedAudioLengthSeconds = 0;
+        }
       });
     };
     const body = document.createElement("div");
@@ -9808,17 +10623,71 @@
           (data, fileName) => {
             commitAudio((c) => {
               c.uploadedAudio = { data, fileName };
+              c.uploadedAudioDurationSeconds = 0;
+              c.uploadedAudioStartSeconds = 0;
+              c.uploadedAudioLengthSeconds = 0;
             });
             ctx.render();
+            if (clip.id) {
+              runClipMediaProbe({
+                clipId: clip.id,
+                slot: "base-audio",
+                probe: () => probeMediaDurationSeconds(data),
+                apply: (target, duration) => {
+                  if (target.uploadedAudio?.data !== data) {
+                    return;
+                  }
+                  target.uploadedAudioDurationSeconds = roundToTenth(duration);
+                },
+                onApplied: () => ctx.render()
+              });
+            }
           },
           () => {
             commitAudio((c) => {
               c.uploadedAudio = null;
+              c.uploadedAudioDurationSeconds = 0;
+              c.uploadedAudioStartSeconds = 0;
+              c.uploadedAudioLengthSeconds = 0;
             });
             ctx.render();
           }
         )
       );
+      if (clip.uploadedAudio && clip.uploadedAudioDurationSeconds > 0) {
+        const limitSeconds = clip.uploadedAudioDurationSeconds;
+        const shown = clip.uploadedAudioLengthSeconds > 0 ? {
+          startSeconds: clip.uploadedAudioStartSeconds,
+          lengthSeconds: clip.uploadedAudioLengthSeconds
+        } : { startSeconds: 0, lengthSeconds: limitSeconds };
+        const range = toInOut(shown);
+        base.appendChild(
+          buildTrimLauncher(
+            `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · Uses ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+            () => openTrimModal({
+              mediaKind: "audio",
+              title: "Trim Base Audio",
+              fileName: clip.uploadedAudio?.fileName ?? "Base audio",
+              dataUri: clip.uploadedAudio?.data ?? null,
+              range: shown,
+              limits: {
+                limitSeconds,
+                minLengthSeconds: AUDIO_SPAN_MIN_LENGTH,
+                fps: 0
+              },
+              impactText: (next) => `Uses ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+              onApply: (next) => {
+                const whole = next.startSeconds <= 0 && next.lengthSeconds >= limitSeconds;
+                commitAudio((target) => {
+                  target.uploadedAudioStartSeconds = whole ? 0 : next.startSeconds;
+                  target.uploadedAudioLengthSeconds = whole ? 0 : next.lengthSeconds;
+                });
+                ctx.render();
+              }
+            })
+          )
+        );
+      }
     }
     if (!audioDecision.supported) {
       applyPersistedCapabilityRepair(base, audioDecision, {
@@ -10090,7 +10959,7 @@
     const skipMark = skipGlyph(layout.skipped);
     const firstClip = layout.index === 0;
     const controls = firstClip ? "" : `<div class="vst-region-controls"><button type="button" class="basic-button small-button vst-region-btn${layout.skipped ? " vst-btn-skip-active" : ""}" data-vst-region-action="skip" aria-pressed="${layout.skipped}" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button></div>`;
-    const resizeGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
+    const resizeGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="${clip.initVideo ? "Drag to trim the end of the source video" : "Drag to change clip duration"}"></div>`;
     const width = clipInnerWidth(layout.widthPx);
     const retakeDecision = capabilities?.forClip(clip).decision("retake");
     const retakeSupported = retakeDecision?.supported ?? true;
@@ -11092,8 +11961,8 @@
     if (!Number.isFinite(px) || !Number.isFinite(pxPerSecond) || pxPerSecond <= 0) {
       return CLIP_DURATION_MIN;
     }
-    const seconds = Math.max(CLIP_DURATION_MIN, px / pxPerSecond);
-    return Math.max(CLIP_DURATION_MIN, snapDurationToFps(seconds, fps));
+    const seconds2 = Math.max(CLIP_DURATION_MIN, px / pxPerSecond);
+    return Math.max(CLIP_DURATION_MIN, snapDurationToFps(seconds2, fps));
   };
   var pxToFrame = (pointerXWithinRegion, regionWidthPx, durationSeconds, fps, fromEnd, frameGrid) => {
     const safeFps2 = Number.isFinite(fps) && fps > 0 ? fps : 1;
@@ -11118,16 +11987,18 @@
     }
   };
   var applyClipDurationResize = (clip, newDuration, defaults, effectiveFps) => {
-    if (clip.duration === newDuration) {
+    const snapped = effectiveFps === void 0 ? newDuration : snapDurationToFps(newDuration, effectiveFps);
+    if (clip.duration === snapped) {
       return false;
     }
-    clip.duration = newDuration;
+    clip.duration = snapped;
     clampClipRefsToDuration(clip, defaults, effectiveFps);
     return true;
   };
 
   // frontend/detailStrip/clipBasics.ts
   var DURATION_STEP = 0.1;
+  var REFERENCE_LENGTH_HINT = "(derived from a reference's media length)";
   var buildClipColumn = (context, clip, clipIdx, referenceFramingState) => {
     const column = document.createElement("div");
     column.className = "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
@@ -11150,11 +12021,13 @@
       }
     );
     durationInput.setAttribute("data-vst-focus-key", "duration");
+    const durationHint = !lengthDerived2 ? null : initVideoClip ? "(derived from the source video range)" : lengthReferenceIdx >= 0 ? REFERENCE_LENGTH_HINT : "(derived from audio/ControlNet source)";
     const durationField = buildField(
       "Duration (s)",
       durationInput,
-      !lengthDerived2 ? void 0 : initVideoClip ? "(derived from the source video range)" : lengthReferenceIdx >= 0 ? "(derived from a reference's media length)" : "(derived from audio/ControlNet source)"
+      durationHint ?? REFERENCE_LENGTH_HINT
     );
+    durationField.querySelector(".vst-detail-field-hint")?.classList.toggle("vst-detail-field-hint-hidden", !durationHint);
     if (lengthDerived2) {
       durationInput.disabled = true;
       durationField.classList.add("vst-field-disabled");
@@ -11324,59 +12197,6 @@
     return built.section;
   };
 
-  // frontend/clipMediaProbeGuard.ts
-  var INIT_VIDEO_PROBE_SLOT = "init-video";
-  var nextOperationId = 0;
-  var currentOperations = /* @__PURE__ */ new Map();
-  var findClipByStableId = (clips, clipId) => clips.find((clip) => clip.id === clipId);
-  var beginClipMediaProbe = (clipId, slot, revisionAtStart) => {
-    const operationId = ++nextOperationId;
-    const key = `${clipId}
-${slot}`;
-    currentOperations.set(key, operationId);
-    const release = () => {
-      if (currentOperations.get(key) === operationId) {
-        currentOperations.delete(key);
-      }
-    };
-    return {
-      clipId,
-      claim: (currentRevision2) => {
-        const current = currentRevision2 === revisionAtStart && currentOperations.get(key) === operationId;
-        release();
-        return current;
-      },
-      cancel: release
-    };
-  };
-  var runClipMediaProbe = ({
-    clipId,
-    slot,
-    probe,
-    apply,
-    onApplied
-  }) => {
-    const store2 = getTimelineStore();
-    const operation = beginClipMediaProbe(
-      clipId,
-      slot,
-      store2.getSnapshot().revision
-    );
-    void probe().then((result) => {
-      if (!operation.claim(store2.revision())) {
-        return;
-      }
-      const state = store2.getState();
-      const clip = findClipByStableId(state.clips, operation.clipId);
-      if (!clip) {
-        return;
-      }
-      apply(clip, result, state);
-      saveClips(state.clips, { origin: "detail-strip" });
-      onApplied?.();
-    }, operation.cancel);
-  };
-
   // frontend/imageSource.ts
   var buildImageSourceOptions = (currentValue = "", includeControlNet = false) => {
     const options = [
@@ -11445,7 +12265,143 @@ ${slot}`;
     return kind === "image" && (value === MEDIA_SOURCE_BASE || value === MEDIA_SOURCE_REFINER || parseBase2EditStageIndex(value) !== null);
   };
 
+  // frontend/detailStrip/sidebarVideoPreview.ts
+  var buildSidebarVideoPreview = (dataUri, range) => {
+    const section = document.createElement("div");
+    section.className = "vst-sidebar-video-preview-section";
+    const label = document.createElement("span");
+    label.className = "vst-sidebar-video-preview-label";
+    label.textContent = "Preview";
+    const player = getVideoStagesHostBridge().createInitVideoElement();
+    player.className = "vst-sidebar-video-preview";
+    player.controls = true;
+    player.preload = "metadata";
+    player.setAttribute("playsinline", "");
+    player.src = mediaPreviewSrc(dataUri);
+    const bounds = () => range.lengthSeconds > 0 ? toInOut(range) : null;
+    const resetToIn = () => {
+      const selected = bounds();
+      if (selected && player.currentTime !== selected.inSeconds) {
+        player.currentTime = selected.inSeconds;
+      }
+    };
+    const keepSeekInRange = () => {
+      const selected = bounds();
+      if (selected && (player.currentTime < selected.inSeconds || player.currentTime >= selected.outSeconds)) {
+        resetToIn();
+      }
+    };
+    const stopAtOut = () => {
+      const selected = bounds();
+      if (!selected) {
+        return;
+      }
+      if (player.currentTime >= selected.outSeconds) {
+        player.pause();
+        resetToIn();
+      } else if (player.currentTime < selected.inSeconds) {
+        resetToIn();
+      }
+    };
+    player.addEventListener("loadedmetadata", resetToIn);
+    player.addEventListener("play", keepSeekInRange);
+    player.addEventListener("seeking", keepSeekInRange);
+    player.addEventListener("timeupdate", stopAtOut);
+    player.addEventListener("ended", stopAtOut);
+    section.append(label, player);
+    return section;
+  };
+  var releaseSidebarVideoPreviews = (root) => {
+    for (const player of root.querySelectorAll(
+      ".vst-sidebar-video-preview"
+    )) {
+      player.pause();
+      player.removeAttribute("src");
+      player.load();
+    }
+  };
+
   // frontend/detailStrip/clipReferencePanel.ts
+  var REFERENCE_TRIM_MIN = 0.1;
+  var appendReferenceTrim = (ctx, fields, reference, shown, commitReference) => {
+    const mediaKind = reference.kind === "audio" ? "audio" : "video";
+    const mediaLabel = CLIP_REFERENCE_KIND_INFO[reference.kind].label;
+    const limitSeconds = reference.mediaDurationSeconds;
+    const limits = {
+      limitSeconds,
+      minLengthSeconds: reference.drivesClipLength ? CLIP_DURATION_MIN : REFERENCE_TRIM_MIN,
+      // Only a driving reference hands its length to a clip, so only then does
+      // the timeline's frame grid have any claim on it.
+      fps: reference.drivesClipLength ? getTimelineStore().getState().fps : 0
+    };
+    const write = (next) => {
+      const whole = next.startSeconds <= 0 && next.lengthSeconds >= limitSeconds;
+      Object.assign(shown, next);
+      commitReference((target, clip) => {
+        target.startSeconds = whole ? 0 : next.startSeconds;
+        target.lengthSeconds = whole ? 0 : next.lengthSeconds;
+        if (target.drivesClipLength) {
+          applyClipDurationResize(
+            clip,
+            Math.max(CLIP_DURATION_MIN, next.lengthSeconds),
+            ctx.authoring().defaults,
+            limits.fps
+          );
+        }
+      });
+    };
+    const range = toInOut(shown);
+    let inInput;
+    let outInput;
+    inInput = buildNumber(
+      range.inSeconds,
+      0,
+      limitSeconds,
+      REFERENCE_TRIM_MIN,
+      (value) => {
+        const next = setInPoint(shown, value, limits);
+        outInput.value = `${toInOut(next).outSeconds}`;
+        write(next);
+      }
+    );
+    outInput = buildNumber(
+      range.outSeconds,
+      REFERENCE_TRIM_MIN,
+      limitSeconds,
+      REFERENCE_TRIM_MIN,
+      (value) => {
+        const next = setOutPoint(shown, value, limits);
+        inInput.value = `${next.startSeconds}`;
+        write(next);
+      }
+    );
+    const disabled = reference.drivesClipLength === true;
+    inInput.disabled = disabled;
+    outInput.disabled = disabled;
+    const inField = buildField("In (s)", inInput);
+    const outField = buildField("Out (s)", outInput);
+    inField.classList.toggle("vst-field-disabled", disabled);
+    outField.classList.toggle("vst-field-disabled", disabled);
+    fields.append(inField, outField);
+    fields.appendChild(
+      buildTrimLauncher(
+        `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · References ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+        () => openTrimModal({
+          mediaKind,
+          title: `Trim ${mediaLabel} Reference`,
+          fileName: reference.uploadedMedia?.fileName ?? `${mediaLabel} reference`,
+          dataUri: reference.uploadedMedia?.data ?? null,
+          range: shown,
+          limits,
+          impactText: (next) => `References ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+          onApply: (next) => {
+            write(next);
+            ctx.render();
+          }
+        })
+      )
+    );
+  };
   var claimClipLength = (clip, referenceIdx, defaults, fps) => {
     clip.references.forEach((reference, index) => {
       reference.drivesClipLength = index === referenceIdx;
@@ -11455,11 +12411,12 @@ ${slot}`;
     }
     clip.clipLengthFromAudio = false;
     clip.clipLengthFromControlNet = false;
-    const seconds = clip.references[referenceIdx]?.mediaDurationSeconds ?? 0;
-    if (seconds > 0) {
+    const claimed = clip.references[referenceIdx];
+    const seconds2 = claimed ? clipReferenceUsedSeconds(claimed) : 0;
+    if (seconds2 > 0) {
       applyClipDurationResize(
         clip,
-        Math.max(CLIP_DURATION_MIN, seconds),
+        Math.max(CLIP_DURATION_MIN, seconds2),
         defaults,
         fps
       );
@@ -11469,7 +12426,7 @@ ${slot}`;
     clipId,
     slot: referenceId,
     probe: () => probeMediaDurationSeconds(data),
-    apply: (clip, seconds, state) => {
+    apply: (clip, seconds2, state) => {
       const index = clip.references.findIndex(
         (reference2) => reference2.id === referenceId
       );
@@ -11478,7 +12435,7 @@ ${slot}`;
         return;
       }
       reference.uploadedMedia = { data, fileName };
-      reference.mediaDurationSeconds = roundToTenth(seconds);
+      reference.mediaDurationSeconds = roundToTenth(seconds2);
       if (reference.drivesClipLength) {
         claimClipLength(
           clip,
@@ -11616,11 +12573,13 @@ ${slot}`;
       if (!reference) {
         return void 0;
       }
-      const patch = (mutate) => {
+      const shownRange = clipReferenceUsedRange(reference);
+      const commitReference = (mutate) => {
         ctx.commit((cs) => {
-          const target = cs[clipIdx]?.references[editorIdx];
-          if (target) {
-            mutate(target);
+          const targetClip = cs[clipIdx];
+          const target = targetClip?.references[editorIdx];
+          if (target && targetClip) {
+            mutate(target, targetClip);
           }
         });
       };
@@ -11637,7 +12596,7 @@ ${slot}`;
             })),
             reference.kind,
             (value) => {
-              patch((target) => {
+              commitReference((target) => {
                 target.kind = value;
                 target.uploadedMedia = null;
                 target.includeSoundtrack = false;
@@ -11669,7 +12628,7 @@ ${slot}`;
         buildField(
           "Source",
           buildOptionSelect(options, source, (value) => {
-            patch((target) => {
+            commitReference((target) => {
               const resolved = resolveClipReferenceSourceValue(
                 value,
                 buildClipReferenceSourceOptions(target.kind, value)
@@ -11713,7 +12672,7 @@ ${slot}`;
                 );
                 return;
               }
-              patch((target) => {
+              commitReference((target) => {
                 target.uploadedMedia = {
                   data: pickedData,
                   fileName
@@ -11722,7 +12681,7 @@ ${slot}`;
               ctx.render();
             },
             () => {
-              patch((target) => {
+              commitReference((target) => {
                 target.uploadedMedia = null;
                 target.mediaDurationSeconds = 0;
                 target.drivesClipLength = false;
@@ -11731,12 +12690,15 @@ ${slot}`;
             }
           )
         );
+        if (reference.kind === "video" && data) {
+          fields.appendChild(buildSidebarVideoPreview(data, shownRange));
+        }
       }
       if (clipReferenceCanDriveLength(reference)) {
-        const seconds = reference.mediaDurationSeconds;
+        const seconds2 = reference.mediaDurationSeconds;
         const hint = document.createElement("small");
         hint.className = "vst-detail-field-hint";
-        hint.textContent = `Detected: ${seconds > 0 ? `${seconds.toFixed(1)} s` : "unknown length"}`;
+        hint.textContent = `Detected: ${seconds2 > 0 ? `${seconds2.toFixed(1)} s` : "unknown length"}`;
         fields.appendChild(hint);
         fields.appendChild(
           buildCheckbox(
@@ -11759,10 +12721,19 @@ ${slot}`;
             {
               // Never disable a ticked box: a re-pick that probes to
               // nothing would otherwise trap an unhonourable claim.
-              disabled: !(seconds > 0) && reference.drivesClipLength !== true,
-              help: seconds > 0 ? "Set this clip's length to the reference's own length. Only one source can own the clip length, so this clears any other reference and the clip-level length options." : "This reference has no detected length to lend the clip. Pick a file the browser can read."
+              disabled: !(seconds2 > 0) && reference.drivesClipLength !== true,
+              help: seconds2 > 0 ? "Set this clip's length to the reference's own length. Only one source can own the clip length, so this clears any other reference and the clip-level length options." : "This reference has no detected length to lend the clip. Pick a file the browser can read."
             }
           )
+        );
+      }
+      if (reference.kind !== "image" && reference.mediaDurationSeconds > 0) {
+        appendReferenceTrim(
+          ctx,
+          fields,
+          reference,
+          shownRange,
+          commitReference
         );
       }
       if (reference.kind === "video") {
@@ -11776,7 +12747,7 @@ ${slot}`;
               })),
               `${reference.mediaScale}`,
               (value) => {
-                patch((target) => {
+                commitReference((target) => {
                   target.mediaScale = Number(value);
                 });
               }
@@ -11790,7 +12761,7 @@ ${slot}`;
             "Include soundtrack",
             reference.includeSoundtrack === true,
             (value) => {
-              patch((target) => {
+              commitReference((target) => {
                 target.includeSoundtrack = value;
               });
               ctx.render();
@@ -11890,89 +12861,100 @@ ${slot}`;
     if (!source) {
       return wrap;
     }
+    const shown = {
+      startSeconds: source.startSeconds,
+      lengthSeconds: source.lengthSeconds
+    };
+    col.appendChild(buildSidebarVideoPreview(source.data, shown));
     const info = document.createElement("small");
     info.className = "vst-detail-field-hint";
     info.textContent = `Detected: ${source.fps > 0 ? `${source.fps} fps` : "unknown fps"} · ${source.durationSeconds > 0 ? `${source.durationSeconds.toFixed(1)} s` : "unknown length"}`;
     col.appendChild(info);
-    const fileLimit = source.durationSeconds > 0 ? source.durationSeconds : source.startSeconds + source.lengthSeconds;
-    const syncClipDuration = (target) => {
-      const defaults = context.authoring().defaults;
+    const fileLimit = sourceLimitSeconds(source);
+    const fps = getTimelineStore().getState().fps;
+    const limits = {
+      limitSeconds: fileLimit,
+      minLengthSeconds: CLIP_DURATION_MIN,
+      fps
+    };
+    const writeRange = (target, next) => {
+      const targetSource = target.initVideo;
+      if (!targetSource) {
+        return;
+      }
+      targetSource.startSeconds = next.startSeconds;
+      targetSource.lengthSeconds = next.lengthSeconds;
+      Object.assign(shown, next);
       applyClipDurationResize(
         target,
-        Math.max(
-          CLIP_DURATION_MIN,
-          target.initVideo?.lengthSeconds ?? target.duration
-        ),
-        defaults,
-        getTimelineStore().getState().fps
+        Math.max(CLIP_DURATION_MIN, next.lengthSeconds),
+        context.authoring().defaults,
+        fps
       );
     };
-    const clampSource = (start, length) => clampStartLength(start, length, fileLimit, CLIP_DURATION_MIN);
-    const startInput = context.buildClampedNumber({
-      key: "source-start",
-      value: source.startSeconds,
-      min: 0,
-      max: Math.max(0, fileLimit - CLIP_DURATION_MIN),
-      step: DURATION_STEP2,
-      readBack: (clips) => clips[clipIdx]?.initVideo?.startSeconds ?? null,
-      mutate: (clips, value) => {
-        const target = clips[clipIdx];
-        const targetSource = target?.initVideo;
-        if (target && targetSource) {
-          const next = clampSource(value, targetSource.lengthSeconds);
-          targetSource.startSeconds = next.start;
-          targetSource.lengthSeconds = next.length;
-          syncClipDuration(target);
-        }
-      }
-    });
-    col.appendChild(
-      buildField(
-        "Start (s)",
-        startInput,
-        void 0,
-        "Where inside the source file this clip's footage begins. Trims the front of the file."
-      )
-    );
-    const lengthInput = context.buildClampedNumber({
-      key: "source-length",
-      value: source.lengthSeconds,
-      min: CLIP_DURATION_MIN,
+    const edgeInput = (edge, apply) => context.buildClampedNumber({
+      key: `source-${edge}`,
+      value: toInOut(shown)[edge === "in" ? "inSeconds" : "outSeconds"],
+      min: edge === "in" ? 0 : CLIP_DURATION_MIN,
       max: fileLimit,
       step: DURATION_STEP2,
-      readBack: (clips) => clips[clipIdx]?.initVideo?.lengthSeconds ?? null,
+      readBack: (clips) => {
+        const readSource = clips[clipIdx]?.initVideo;
+        return readSource ? toInOut(readSource)[edge === "in" ? "inSeconds" : "outSeconds"] : null;
+      },
       mutate: (clips, value) => {
         const target = clips[clipIdx];
-        const targetSource = target?.initVideo;
-        if (target && targetSource) {
-          const next = clampSource(targetSource.startSeconds, value);
-          targetSource.startSeconds = next.start;
-          targetSource.lengthSeconds = next.length;
-          syncClipDuration(target);
+        if (target?.initVideo) {
+          writeRange(target, apply(target.initVideo, value, limits));
         }
       }
     });
     col.appendChild(
       buildField(
-        "Length (s)",
-        lengthInput,
+        "In (s)",
+        edgeInput("in", setInPoint),
         void 0,
-        "How many seconds of the source file this clip uses, starting at Start. This also becomes the clip's duration."
+        "Where inside the source file this clip's footage begins. Moving it leaves Out where it is, so the clip gets shorter."
       )
     );
+    col.appendChild(
+      buildField(
+        "Out (s)",
+        edgeInput("out", setOutPoint),
+        void 0,
+        "Where inside the source file this clip's footage ends. This also becomes the clip's duration."
+      )
+    );
+    if (source.durationSeconds > 0) {
+      const range = toInOut(shown);
+      col.appendChild(
+        buildTrimLauncher(
+          `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · Uses ${shown.lengthSeconds.toFixed(1)} s of ${fileLimit.toFixed(1)} s`,
+          () => openTrimModal({
+            mediaKind: "video",
+            title: "Trim Source Video",
+            fileName: source.fileName ?? "Source video",
+            dataUri: source.data,
+            range: shown,
+            limits,
+            impactText: (next) => `Clip duration becomes ${next.lengthSeconds.toFixed(1)} s`,
+            onApply: (next) => {
+              context.commit((clips) => {
+                const target = clips[clipIdx];
+                if (target) {
+                  writeRange(target, next);
+                }
+              });
+              context.render();
+            }
+          })
+        )
+      );
+    }
     const note = document.createElement("p");
     note.className = "vst-detail-note";
     note.textContent = "This range (conformed to the timeline fps and size) is the clip's starting point: the first stage refines it using its Control value, later stages refine or upscale it, and a retake regenerates part of it.";
     col.appendChild(note);
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className = "interrupt-button vst-btn-tiny vst-detail-delete vst-detail-rail-btn";
-    removeButton.textContent = "Remove source video";
-    removeButton.addEventListener("click", (event) => {
-      event.preventDefault();
-      removeSource();
-    });
-    col.appendChild(removeButton);
     return wrap;
   };
 
@@ -13275,22 +14257,22 @@ ${slot}`;
   var buildPromptMinorBody = (ctx, selection, clips) => buildPromptBody(ctx, selection, clips);
 
   // frontend/detailStrip/settingsModal.ts
-  var MODAL_CLASS = "vst-timeline-settings-modal";
-  var BACKDROP_CLASS = "vst-timeline-settings-backdrop";
-  var currentCleanup = null;
+  var MODAL_CLASS2 = "vst-timeline-settings-modal";
+  var BACKDROP_CLASS2 = "vst-timeline-settings-backdrop";
+  var currentCleanup2 = null;
   var closeTimelineAuthoringSettingsModal = () => {
-    currentCleanup?.();
-    currentCleanup = null;
-    document.querySelector(`.${MODAL_CLASS}`)?.remove();
-    document.querySelector(`.${BACKDROP_CLASS}`)?.remove();
+    currentCleanup2?.();
+    currentCleanup2 = null;
+    document.querySelector(`.${MODAL_CLASS2}`)?.remove();
+    document.querySelector(`.${BACKDROP_CLASS2}`)?.remove();
   };
   var openTimelineAuthoringSettingsModal = () => {
     closeTimelineAuthoringSettingsModal();
     const settings = getTimelineAuthoringSettings();
     const backdrop = document.createElement("div");
-    backdrop.className = `modal-backdrop fade show ${BACKDROP_CLASS}`;
+    backdrop.className = `modal-backdrop fade show ${BACKDROP_CLASS2}`;
     const modal = document.createElement("div");
-    modal.className = `modal fade show ${MODAL_CLASS}`;
+    modal.className = `modal fade show ${MODAL_CLASS2}`;
     modal.style.display = "block";
     modal.tabIndex = -1;
     modal.setAttribute("role", "dialog");
@@ -13333,7 +14315,7 @@ ${slot}`;
     dialog.appendChild(content);
     modal.appendChild(dialog);
     const dismiss = () => {
-      currentCleanup?.();
+      currentCleanup2?.();
     };
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
@@ -13344,11 +14326,11 @@ ${slot}`;
       document.removeEventListener("keydown", onKeyDown);
       modal.remove();
       backdrop.remove();
-      if (currentCleanup === cleanup) {
-        currentCleanup = null;
+      if (currentCleanup2 === cleanup) {
+        currentCleanup2 = null;
       }
     };
-    currentCleanup = cleanup;
+    currentCleanup2 = cleanup;
     close.addEventListener("click", dismiss);
     backdrop.addEventListener("click", dismiss);
     modal.addEventListener("mousedown", (event) => {
@@ -13785,6 +14767,7 @@ ${slot}`;
     const savedScroll = previousBody?.scrollTop ?? 0;
     options.focus.capture();
     options.detail.className = DETAIL_CLASS;
+    releaseSidebarVideoPreviews(options.detail);
     options.detail.innerHTML = "";
     options.detail.appendChild(
       buildDetailHeader(
@@ -14559,6 +15542,7 @@ ${slot}`;
     const dispose = () => {
       draftQueue.dispose();
       closeTimelineAuthoringSettingsModal();
+      closeTrimModal();
       focus.reset();
       document.removeEventListener(
         "pointerdown",
@@ -14596,6 +15580,7 @@ ${slot}`;
         boundBody = null;
       }
       if (dockEl) {
+        releaseSidebarVideoPreviews(dockEl);
         dockEl.removeEventListener(
           "keydown",
           selectionOperations.onStripKeyDown
@@ -15034,7 +16019,7 @@ ${slot}`;
             "linking",
             (clips) => {
               const clip = clips[state.idx];
-              if (state.idx < 0 || state.idx >= clips.length || clip.clipLengthFromAudio || clip.clipLengthFromControlNet || clip.initVideo) {
+              if (state.idx < 0 || state.idx >= clips.length || clip.clipLengthFromAudio || clip.clipLengthFromControlNet) {
                 return null;
               }
               const fps = documentFps(getState());
@@ -15048,6 +16033,31 @@ ${slot}`;
                 pxPerSecond,
                 fps
               );
+              const source = clip.initVideo;
+              if (source) {
+                const trimmed = setOutPoint(
+                  source,
+                  source.startSeconds + newDuration,
+                  {
+                    limitSeconds: sourceLimitSeconds(source),
+                    minLengthSeconds: CLIP_DURATION_MIN,
+                    fps
+                  }
+                );
+                if (trimmed.startSeconds === source.startSeconds && trimmed.lengthSeconds === source.lengthSeconds) {
+                  return null;
+                }
+                source.startSeconds = trimmed.startSeconds;
+                source.lengthSeconds = trimmed.lengthSeconds;
+                applyClipDurationResize(
+                  clip,
+                  trimmed.lengthSeconds,
+                  getRootDefaults(),
+                  fps
+                );
+                selectClip(state.idx, stageForClip(state.idx));
+                return clips;
+              }
               if (!applyClipDurationResize(
                 clip,
                 newDuration,
@@ -15922,8 +16932,8 @@ ${slot}`;
       }
     }
     if (options?.onAddClip) {
-      for (const button of body.querySelectorAll("[data-vst-add-clip]")) {
-        button.addEventListener("click", () => options.onAddClip?.());
+      for (const button2 of body.querySelectorAll("[data-vst-add-clip]")) {
+        button2.addEventListener("click", () => options.onAddClip?.());
       }
     }
   };
@@ -16195,15 +17205,15 @@ ${slot}`;
     const minorTicks = [];
     const maxMinorTicks = 5e3;
     for (let i = 1; i <= maxMinorTicks; i++) {
-      const seconds = i * minorStep;
-      if (seconds > totalSeconds + 1e-6) {
+      const seconds2 = i * minorStep;
+      if (seconds2 > totalSeconds + 1e-6) {
         break;
       }
       if (i % 5 === 0) {
         continue;
       }
       minorTicks.push(
-        `<span class="vst-tick vst-tick-minor" style="left:${seconds * pxPerSecond}px" aria-hidden="true"></span>`
+        `<span class="vst-tick vst-tick-minor" style="left:${seconds2 * pxPerSecond}px" aria-hidden="true"></span>`
       );
     }
     const seamTicks = timing.boundaries.map((boundary) => {

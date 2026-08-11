@@ -29,6 +29,8 @@ export const STORED_CLIP_REFERENCE_KEYS = [
     "mediaDurationSeconds",
     "drivesClipLength",
     "mediaScale",
+    "startSeconds",
+    "lengthSeconds",
 ] as const satisfies readonly (keyof ClipReference)[];
 
 export const STORED_STAGE_KEYS = [
@@ -69,6 +71,9 @@ export const STORED_CLIP_KEYS = [
     "clipLengthFromControlNet",
     "reuseAudio",
     "uploadedAudio",
+    "uploadedAudioDurationSeconds",
+    "uploadedAudioStartSeconds",
+    "uploadedAudioLengthSeconds",
     "retake",
     "initVideo",
     "references",

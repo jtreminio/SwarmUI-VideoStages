@@ -77,6 +77,8 @@ export const buildDefaultClipReference = (
     includeSoundtrack: false,
     mediaDurationSeconds: 0,
     drivesClipLength: false,
+    startSeconds: 0,
+    lengthSeconds: 0,
     mediaScale: REFERENCE_SCALE_FULL,
 });
 

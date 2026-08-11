@@ -98,6 +98,9 @@ const maximalClip = (): Clip =>
             data: "data:audio/wav;base64,AAAA",
             fileName: "v.wav",
         },
+        uploadedAudioDurationSeconds: 8,
+        uploadedAudioStartSeconds: 1,
+        uploadedAudioLengthSeconds: 4,
         initVideo: {
             data: "data:video/mp4;base64,CCCC",
             fileName: "src.mp4",
@@ -121,6 +124,8 @@ const maximalClip = (): Clip =>
                 // and normalization allows only one claimant.
                 drivesClipLength: false,
                 mediaScale: 0.5,
+                startSeconds: 0,
+                lengthSeconds: 0,
             },
         ],
         frameRefs: [

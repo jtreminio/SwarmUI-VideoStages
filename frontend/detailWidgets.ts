@@ -1015,17 +1015,6 @@ export const buildRepeatingEditor = (
     };
 };
 
-export const clampStartLength = (
-    start: number,
-    length: number,
-    clipDur: number,
-    minLength: number,
-): { start: number; length: number } => {
-    const s = clamp(start, 0, Math.max(0, clipDur - minLength));
-    const l = clamp(length, minLength, Math.max(minLength, clipDur - s));
-    return { start: s, length: l };
-};
-
 export const wrapForm = (
     key: string,
     label: string,

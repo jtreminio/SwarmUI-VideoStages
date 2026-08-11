@@ -8,6 +8,8 @@ import {
     isAceStepFunAudioSource,
     isAllowedAudioSource,
 } from "../audioSource";
+import { runClipMediaProbe } from "../clipMediaProbeGuard";
+import { AUDIO_SPAN_MIN_LENGTH } from "../constants";
 import {
     buildAccordionSection,
     buildCheckbox,
@@ -19,7 +21,10 @@ import {
     audioTrackIndicesForClipWindow,
     clipTimelineWindow,
 } from "../documentQueries";
+import { probeMediaDurationSeconds } from "../mediaProbe";
+import { toInOut } from "../trimGeometry";
 import type { AuthoringDocument, Clip, TimelineSelection } from "../types";
+import { roundToTenth } from "../utils";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import {
     applyPersistedCapabilityRepair,
@@ -28,6 +33,7 @@ import {
     CAPABILITY_REPAIR_SELECTORS,
 } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
+import { buildTrimLauncher, openTrimModal } from "./trimModal";
 
 export const buildAudioBody = (
     ctx: DetailStripContext,
@@ -124,6 +130,11 @@ export const buildAudioBody = (
                 nextSource === AUDIO_SOURCE_UPLOAD
                     ? target.uploadedAudio
                     : null;
+            if (nextSource !== AUDIO_SOURCE_UPLOAD) {
+                target.uploadedAudioDurationSeconds = 0;
+                target.uploadedAudioStartSeconds = 0;
+                target.uploadedAudioLengthSeconds = 0;
+            }
         });
     };
 
@@ -287,17 +298,85 @@ export const buildAudioBody = (
                 (data, fileName) => {
                     commitAudio((c) => {
                         c.uploadedAudio = { data, fileName };
+                        c.uploadedAudioDurationSeconds = 0;
+                        c.uploadedAudioStartSeconds = 0;
+                        c.uploadedAudioLengthSeconds = 0;
                     });
                     ctx.render();
+                    if (clip.id) {
+                        runClipMediaProbe({
+                            clipId: clip.id,
+                            slot: "base-audio",
+                            probe: () => probeMediaDurationSeconds(data),
+                            apply: (target, duration) => {
+                                if (target.uploadedAudio?.data !== data) {
+                                    return;
+                                }
+                                target.uploadedAudioDurationSeconds =
+                                    roundToTenth(duration);
+                            },
+                            onApplied: () => ctx.render(),
+                        });
+                    }
                 },
                 () => {
                     commitAudio((c) => {
                         c.uploadedAudio = null;
+                        c.uploadedAudioDurationSeconds = 0;
+                        c.uploadedAudioStartSeconds = 0;
+                        c.uploadedAudioLengthSeconds = 0;
                     });
                     ctx.render();
                 },
             ),
         );
+        if (clip.uploadedAudio && clip.uploadedAudioDurationSeconds > 0) {
+            const limitSeconds = clip.uploadedAudioDurationSeconds;
+            const shown =
+                clip.uploadedAudioLengthSeconds > 0
+                    ? {
+                          startSeconds: clip.uploadedAudioStartSeconds,
+                          lengthSeconds: clip.uploadedAudioLengthSeconds,
+                      }
+                    : { startSeconds: 0, lengthSeconds: limitSeconds };
+            const range = toInOut(shown);
+            base.appendChild(
+                buildTrimLauncher(
+                    `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s` +
+                        ` · Uses ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+                    () =>
+                        openTrimModal({
+                            mediaKind: "audio",
+                            title: "Trim Base Audio",
+                            fileName:
+                                clip.uploadedAudio?.fileName ?? "Base audio",
+                            dataUri: clip.uploadedAudio?.data ?? null,
+                            range: shown,
+                            limits: {
+                                limitSeconds,
+                                minLengthSeconds: AUDIO_SPAN_MIN_LENGTH,
+                                fps: 0,
+                            },
+                            impactText: (next) =>
+                                `Uses ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+                            onApply: (next) => {
+                                const whole =
+                                    next.startSeconds <= 0 &&
+                                    next.lengthSeconds >= limitSeconds;
+                                commitAudio((target) => {
+                                    target.uploadedAudioStartSeconds = whole
+                                        ? 0
+                                        : next.startSeconds;
+                                    target.uploadedAudioLengthSeconds = whole
+                                        ? 0
+                                        : next.lengthSeconds;
+                                });
+                                ctx.render();
+                            },
+                        }),
+                ),
+            );
+        }
     }
     if (!audioDecision.supported) {
         applyPersistedCapabilityRepair(base, audioDecision, {

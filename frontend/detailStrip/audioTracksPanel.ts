@@ -21,18 +21,21 @@ import {
     buildOptionSelect,
     buildRepeatingEditor,
     buildSlider,
-    clampStartLength,
 } from "../detailWidgets";
 import type { ClipTimelineWindow } from "../documentQueries";
 import { createEntityId } from "../identity";
+import { probeMediaDurationSeconds } from "../mediaProbe";
 import { selectionAfterRemoval, setSelection } from "../selection";
+import { clampStartLength, toInOut } from "../trimGeometry";
 import type {
     AudioTrack,
     AudioTrackSpan,
     AuthoringDocument,
     TimelineSelection,
 } from "../types";
+import { roundToTenth } from "../utils";
 import type { DetailStripContext } from "./context";
+import { buildTrimLauncher, openTrimModal } from "./trimModal";
 
 const timelineDuration = (state: AuthoringDocument): number =>
     state.clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
@@ -99,6 +102,7 @@ const buildTrackEditor = (
                     next.source.kind = "AceStepFun";
                     next.source.reference = value;
                     next.source.uploadedAudio = null;
+                    next.source.mediaDurationSeconds = 0;
                 } else {
                     next.source.kind = "Upload";
                     next.source.reference =
@@ -130,13 +134,27 @@ const buildTrackEditor = (
                         next.source.kind = "Upload";
                         next.source.reference = fileName ?? "";
                         next.source.uploadedAudio = { data, fileName };
+                        next.source.mediaDurationSeconds = 0;
                     });
                     ctx.render();
+                    void probeMediaDurationSeconds(data).then((duration) => {
+                        commitTrack(ctx, trackId, (next) => {
+                            if (next.source.uploadedAudio?.data !== data) {
+                                return;
+                            }
+                            const seconds = roundToTenth(duration);
+                            if (seconds > 0) {
+                                next.source.mediaDurationSeconds = seconds;
+                            }
+                        });
+                        ctx.render();
+                    });
                 },
                 () => {
                     commitTrack(ctx, trackId, (next) => {
                         next.source.reference = "";
                         next.source.uploadedAudio = null;
+                        next.source.mediaDurationSeconds = 0;
                     });
                     ctx.render();
                 },
@@ -275,6 +293,53 @@ const buildTrackEditor = (
         ),
     );
 
+    const uploadedAudio = track.source.uploadedAudio;
+    const durationSeconds = track.source.mediaDurationSeconds ?? 0;
+    if (uploadedAudio) {
+        const shown = {
+            startSeconds: span.sourceStartSeconds,
+            lengthSeconds: geometry.length,
+        };
+        const limitSeconds = Math.max(
+            durationSeconds,
+            shown.startSeconds + shown.lengthSeconds,
+        );
+        const limits = {
+            limitSeconds,
+            minLengthSeconds: AUDIO_SPAN_MIN_LENGTH,
+            fps: 0,
+        };
+        const range = toInOut(shown);
+        const maxTimelineLength = total - geometry.start;
+        fields.appendChild(
+            buildTrimLauncher(
+                `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s` +
+                    ` · Plays ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+                () =>
+                    openTrimModal({
+                        mediaKind: "audio",
+                        title: "Trim Audio Track",
+                        fileName: uploadedAudio.fileName ?? "Audio track",
+                        dataUri: uploadedAudio.data,
+                        range: shown,
+                        limits,
+                        impactText: (next) =>
+                            `Track length becomes ${Math.min(next.lengthSeconds, maxTimelineLength).toFixed(1)} s`,
+                        onApply: (next) => {
+                            commitTrack(ctx, trackId, (_next, nextSpan) => {
+                                nextSpan.sourceStartSeconds = next.startSeconds;
+                                nextSpan.timelineLengthSeconds = Math.min(
+                                    next.lengthSeconds,
+                                    maxTimelineLength,
+                                );
+                            });
+                            ctx.render();
+                        },
+                    }),
+            ),
+        );
+    }
+
     fields.dataset.vstTrackIndex = `${trackIndex}`;
     return fields;
 };
@@ -307,6 +372,7 @@ const addAudioTrack = (
                 kind: "Upload",
                 reference: "",
                 uploadedAudio: null,
+                mediaDurationSeconds: 0,
             },
             volume: AUDIO_SPAN_VOLUME_DEFAULT,
             spans: [

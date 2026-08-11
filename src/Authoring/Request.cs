@@ -82,14 +82,17 @@ public enum ClipReferenceKind
 /// a host capture name ("Base", "Refiner") for images, or an AceStepFun track for audio.
 /// <c>IncludeSoundtrack</c> asks a video reference to also pass its own audio track as the paired
 /// reference audio. <c>MediaScale</c> downsamples a video reference before it is presented,
-/// trading detail for reference tokens.
+/// trading detail for reference tokens. <c>StartSeconds</c> and <c>LengthSeconds</c> select a
+/// video or audio range; <c>LengthSeconds</c> of 0 means the whole file.
 /// </summary>
 public sealed record ClipReferenceSpec(
     ClipReferenceKind Kind,
     string Source,
     UploadedMediaSpec Media,
     bool IncludeSoundtrack = false,
-    double MediaScale = ReferenceScale.Full
+    double MediaScale = ReferenceScale.Full,
+    double StartSeconds = 0,
+    double LengthSeconds = 0
 );
 
 /// <summary>
@@ -207,7 +210,9 @@ public sealed record ClipSpec(
     ReferenceFramingMode ReferenceFraming = ReferenceFramingMode.Crop,
     // Whole-clip references with no frame position; only architectures declaring
     // ArchitectureFeature.ClipReferences consume them.
-    IReadOnlyList<ClipReferenceSpec> References = null
+    IReadOnlyList<ClipReferenceSpec> References = null,
+    double UploadedAudioStartSeconds = 0,
+    double UploadedAudioLengthSeconds = 0
 )
 {
     /// <summary>Persisted repair/diagnostic hint. Resolved stage models own behavior.</summary>

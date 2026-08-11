@@ -6,6 +6,11 @@ import {
     it,
     jest,
 } from "@jest/globals";
+import { resetArchitectureCatalogForTests } from "./__test_helpers__/architectureCatalog";
+import {
+    testArchitectureCatalog,
+    testArchitectureCatalogDto,
+} from "./__test_helpers__/architectureFixtures";
 import {
     firstSavedClips,
     mountPromptBox,
@@ -15,7 +20,10 @@ import {
     mouse,
     stubRect,
 } from "./__test_helpers__/dom";
+import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
 import { createGestureRouter, type GestureRouter } from "./gestureRouter";
+import { setVideoStagesHostBridgeForTests } from "./host";
+import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import * as persistence from "./persistence/repository";
 import { resetSelectionForTests } from "./selection";
 import {
@@ -126,6 +134,35 @@ const stubRegionRects = (body: HTMLElement): void => {
     }
 };
 
+/**
+ * Changing `initVideo` at all routes through documentDiff's architecture
+ * conversion path, which needs a resolved catalog. Production always has one
+ * loaded; these two tests are the only ones here that mutate a source clip.
+ */
+const withArchitectureCatalog = async (): Promise<void> => {
+    resetArchitectureCatalogForTests();
+    setVideoStagesHostBridgeForTests({
+        ...createDefaultVideoStagesHostBridge(),
+        requestJson: async () =>
+            testArchitectureCatalogDto(testArchitectureCatalog()),
+    });
+    await loadAuthoritativeArchitectureCatalog();
+};
+
+const sourceClip = (durationSeconds: number): Record<string, unknown> => ({
+    duration: 2,
+    stages: [{}],
+    frameRefs: [],
+    initVideo: {
+        data: "data:video/mp4;base64,AA==",
+        fileName: "beach.mp4",
+        fps: 24,
+        durationSeconds,
+        startSeconds: 1,
+        lengthSeconds: 2,
+    },
+});
+
 describe("createTimelineLinking selection + write gestures (DOM)", () => {
     let linking: TimelineLinking | null = null;
     let router: GestureRouter | null = null;
@@ -141,6 +178,8 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         router = null;
         linking = null;
         jest.restoreAllMocks();
+        resetArchitectureCatalogForTests();
+        setVideoStagesHostBridgeForTests(null);
         document.body.innerHTML = "";
     });
 
@@ -344,6 +383,64 @@ describe("createTimelineLinking selection + write gestures (DOM)", () => {
         const clips = firstSavedClips<Clip[]>(saveSpy);
         expect(clips[0].duration).toBe(4);
         expect(clips[1].duration).toBe(2);
+    });
+
+    /**
+     * The grip renders on a source clip and previewed the drag, but the commit
+     * used to bail on `clip.initVideo` — so the drag snapped back with no sign
+     * it had been refused. On a source clip this edge is the out point.
+     */
+    it("edge-dragging a source clip's right border trims the source out point", async () => {
+        await withArchitectureCatalog();
+        clipsSection([sourceClip(12)]);
+        const body = mountTimelineBody();
+        renderRegions(body, 1);
+        stubRegionRects(body);
+        const saveSpy = jest.spyOn(persistence, "saveClips");
+
+        linking = createTimelineLinking();
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
+
+        region(body, 0)
+            .querySelector<HTMLElement>(".vst-region-resize")
+            ?.dispatchEvent(mouse("mousedown", 100));
+        document.dispatchEvent(mouse("mousemove", 176));
+        document.dispatchEvent(mouse("mouseup", 176));
+
+        expect(saveSpy).toHaveBeenCalledTimes(1);
+        const clips = firstSavedClips<Clip[]>(saveSpy);
+        // The in point is untouched; the out point moved out to 1 + 4.
+        expect(clips[0].initVideo).toMatchObject({
+            startSeconds: 1,
+            lengthSeconds: 4,
+        });
+        expect(clips[0].duration).toBe(4);
+    });
+
+    it("stops a source clip's right border at the end of the source file", async () => {
+        await withArchitectureCatalog();
+        clipsSection([sourceClip(3)]);
+        const body = mountTimelineBody();
+        renderRegions(body, 1);
+        stubRegionRects(body);
+        const saveSpy = jest.spyOn(persistence, "saveClips");
+
+        linking = createTimelineLinking();
+        router = createGestureRouter();
+        router.attach(body);
+        linking.attach(body, router);
+
+        region(body, 0)
+            .querySelector<HTMLElement>(".vst-region-resize")
+            ?.dispatchEvent(mouse("mousedown", 100));
+        document.dispatchEvent(mouse("mousemove", 400));
+        document.dispatchEvent(mouse("mouseup", 400));
+
+        // 3 s of source starting at 1 s leaves 2 s — already the whole range,
+        // so the drag past the end changes nothing and saves nothing.
+        expect(saveSpy).not.toHaveBeenCalled();
     });
 
     it("restores the clip's allocated half-join when resizing its unique region", () => {

@@ -15,6 +15,8 @@ import {
 import { renderDetailShell } from "./detailStrip/renderShell";
 import { createDetailSelectionOperations } from "./detailStrip/selectionOperations";
 import { closeTimelineAuthoringSettingsModal } from "./detailStrip/settingsModal";
+import { releaseSidebarVideoPreviews } from "./detailStrip/sidebarVideoPreview";
+import { closeTrimModal } from "./detailStrip/trimModal";
 import { getState } from "./persistence/repository";
 import {
     getSelection,
@@ -218,6 +220,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
     const dispose = (): void => {
         draftQueue.dispose();
         closeTimelineAuthoringSettingsModal();
+        closeTrimModal();
         focus.reset();
         document.removeEventListener(
             "pointerdown",
@@ -255,6 +258,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
             boundBody = null;
         }
         if (dockEl) {
+            releaseSidebarVideoPreviews(dockEl);
             dockEl.removeEventListener(
                 "keydown",
                 selectionOperations.onStripKeyDown,

@@ -17,7 +17,9 @@ internal sealed record AudioBaseSourcePlan(
     AudioSourceKind Kind,
     int? AceStepFunTrack,
     bool HasConfiguredTrack,
-    UploadedMediaSpec UploadedMedia);
+    UploadedMediaSpec UploadedMedia,
+    double TrimStartSeconds = 0,
+    double LengthSeconds = 0);
 
 internal sealed record AudioSpanPlan(
     AudioSourceKind SourceKind,

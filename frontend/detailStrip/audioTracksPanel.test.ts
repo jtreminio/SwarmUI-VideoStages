@@ -1,9 +1,18 @@
-import { beforeEach, describe, expect, it } from "@jest/globals";
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    jest,
+} from "@jest/globals";
 import { minimalClip } from "../__test_helpers__/clipFixtures";
 import {
     audioTrackIndicesForClipWindow,
     clipTimelineWindow,
 } from "../documentQueries";
+import { setVideoStagesHostBridgeForTests } from "../host";
+import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
 import { normalizeAudioTracks } from "../normalizationAudio";
 import { serializeStateForStorage } from "../persistence/documentCodec";
 import {
@@ -15,6 +24,7 @@ import type { AuthoringDocument, TimelineSelection } from "../types";
 import { buildAudioTracksPanel } from "./audioTracksPanel";
 import type { DetailStripContext } from "./context";
 import { revealRepeaterKey } from "./renderShell";
+import { closeTrimModal } from "./trimModal";
 
 const config = (): AuthoringDocument => ({
     schemaVersion: 4,
@@ -73,6 +83,11 @@ describe("timeline-wide audio spans panel", () => {
             render,
         } as DetailStripContext;
         render();
+    });
+
+    afterEach(() => {
+        closeTrimModal();
+        setVideoStagesHostBridgeForTests(null);
     });
 
     it("reveals a track selection through the key its own panel emits", () => {
@@ -172,6 +187,122 @@ describe("timeline-wide audio spans panel", () => {
         expect(state.audioTracks).toEqual([]);
     });
 
+    it("probes and stores an uploaded audio file's duration", async () => {
+        host.querySelector<HTMLButtonElement>(".vst-audio-track-add")?.click();
+        const probePlayer = document.createElement("video");
+        probePlayer.pause = jest.fn();
+        probePlayer.load = jest.fn();
+        Object.defineProperty(probePlayer, "duration", { value: 12.4 });
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            createInitVideoElement: () => probePlayer,
+        });
+        const input = host.querySelector<HTMLInputElement>("input.auto-file");
+        if (!input) {
+            throw new Error("audio picker missing");
+        }
+        input.dataset.filedata = "data:audio/wav;base64,AA==";
+        input.dataset.filename = "score.wav";
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        probePlayer.dispatchEvent(new Event("loadedmetadata"));
+        await Promise.resolve();
+
+        expect(state.audioTracks?.[0].source).toMatchObject({
+            uploadedAudio: {
+                data: "data:audio/wav;base64,AA==",
+                fileName: "score.wav",
+            },
+            mediaDurationSeconds: 12.4,
+        });
+    });
+
+    it("opens the shared trim modal and applies its source range", () => {
+        state.audioTracks = [
+            {
+                id: "track-upload",
+                source: {
+                    kind: "Upload",
+                    reference: "score.wav",
+                    uploadedAudio: {
+                        data: "data:audio/wav;base64,AA==",
+                        fileName: "score.wav",
+                    },
+                    mediaDurationSeconds: 12,
+                },
+                spans: [
+                    {
+                        id: "span-upload",
+                        timelineStartSeconds: 0,
+                        timelineLengthSeconds: 5,
+                        sourceStartSeconds: 1,
+                    },
+                ],
+            },
+        ];
+        render();
+
+        host.querySelector<HTMLButtonElement>("[data-vst-open-trim]")?.click();
+        const audio = document.querySelector<HTMLAudioElement>(
+            ".vst-trim-modal-player",
+        );
+        expect(audio?.tagName).toBe("AUDIO");
+        expect(
+            document.querySelector<HTMLInputElement>(
+                '[data-vst-trim-field="in"]',
+            )?.value,
+        ).toBe("1.0");
+        const inInput = document.querySelector<HTMLInputElement>(
+            '[data-vst-trim-field="in"]',
+        );
+        const outInput = document.querySelector<HTMLInputElement>(
+            '[data-vst-trim-field="out"]',
+        );
+        if (!audio || !inInput || !outInput) {
+            throw new Error("audio trim controls missing");
+        }
+        audio.pause = jest.fn();
+        audio.load = jest.fn();
+        inInput.value = "2";
+        inInput.dispatchEvent(new Event("input", { bubbles: true }));
+        outInput.value = "5";
+        outInput.dispatchEvent(new Event("input", { bubbles: true }));
+        document
+            .querySelector<HTMLButtonElement>("[data-vst-trim-apply]")
+            ?.click();
+
+        expect(state.audioTracks?.[0].spans[0]).toMatchObject({
+            sourceStartSeconds: 2,
+            timelineLengthSeconds: 3,
+        });
+    });
+
+    it("offers trim for an older uploaded track without probed duration", () => {
+        state.audioTracks = [
+            {
+                id: "track-upload",
+                source: {
+                    kind: "Upload",
+                    reference: "score.wav",
+                    uploadedAudio: {
+                        data: "data:audio/wav;base64,AA==",
+                        fileName: "score.wav",
+                    },
+                },
+                spans: [
+                    {
+                        id: "span-upload",
+                        timelineStartSeconds: 0,
+                        timelineLengthSeconds: 5,
+                        sourceStartSeconds: 1,
+                    },
+                ],
+            },
+        ];
+        render();
+
+        expect(host.querySelector("[data-vst-open-trim]")).not.toBeNull();
+    });
+
     it("round-trips volume and the timeline window through the root codec", () => {
         state.audioTracks = [
             {
@@ -181,6 +312,7 @@ describe("timeline-wide audio spans panel", () => {
                     kind: "AceStepFun",
                     reference: "audio1",
                     uploadedAudio: null,
+                    mediaDurationSeconds: 12.4,
                 },
                 spans: [
                     {
@@ -192,9 +324,9 @@ describe("timeline-wide audio spans panel", () => {
                 ],
             },
         ];
-
         const raw = JSON.parse(serializeStateForStorage(state)) as {
             audioTracks: Array<{
+                source: { mediaDurationSeconds?: number };
                 spans: Array<{ projection: Record<string, unknown> }>;
             }>;
         };
@@ -207,13 +339,10 @@ describe("timeline-wide audio spans panel", () => {
             clipStartOffsetSeconds: 2,
             clipEndOffsetSeconds: 3.5,
         });
+        expect(raw.audioTracks[0].source.mediaDurationSeconds).toBe(12.4);
     });
 
-    /**
-     * A stored track may carry more than one span (hand-authored, or written by
-     * an earlier planned-track schema). Every one of those spans executes, so
-     * every one becomes its own authorable lane on load.
-     */
+    /** Legacy multi-span tracks become independently editable lanes. */
     const twoSpanTrack = (): unknown => ({
         id: "track-multi",
         volume: 0.5,
@@ -259,7 +388,6 @@ describe("timeline-wide audio spans panel", () => {
         expect(tabs[0].textContent).toContain("A1");
         expect(tabs[1].textContent).toContain("A2");
 
-        // Every lane still projects exactly the window its span described.
         const raw = JSON.parse(serializeStateForStorage(state)) as {
             audioTracks: Array<{
                 id: string;

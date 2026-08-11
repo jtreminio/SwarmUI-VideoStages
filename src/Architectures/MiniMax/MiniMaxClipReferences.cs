@@ -8,7 +8,9 @@ internal sealed record MiniMaxReferencePlan(
     string Source,
     UploadedMediaSpec Media,
     bool IncludeSoundtrack,
-    double MediaScale);
+    double MediaScale,
+    double StartSeconds,
+    double LengthSeconds);
 
 internal static class MiniMaxClipReferences
 {
@@ -68,12 +70,15 @@ internal static class MiniMaxClipReferences
             }
             counts[reference.Kind] = used + 1;
             bool isVideo = reference.Kind == ClipReferenceKind.Video;
+            bool isTimed = reference.Kind is ClipReferenceKind.Video or ClipReferenceKind.Audio;
             compiled.Add(new(
                 reference.Kind,
                 reference.Source?.Trim() ?? "",
                 reference.Media,
                 isVideo && reference.IncludeSoundtrack,
-                isVideo ? reference.MediaScale : ReferenceScale.Full));
+                isVideo ? reference.MediaScale : ReferenceScale.Full,
+                isTimed ? reference.StartSeconds : 0,
+                isTimed ? reference.LengthSeconds : 0));
         }
         return compiled;
     }

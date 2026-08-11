@@ -49,6 +49,9 @@
                 "data": "data:audio/wav;base64,QUJD",
                 "fileName": "clip.wav"
             },
+            "uploadedAudioDurationSeconds": 6,
+            "uploadedAudioStartSeconds": 1,
+            "uploadedAudioLengthSeconds": 3,
             "initVideo": {
                 "data": "data:video/mp4;base64,REVG",
                 "fileName": "source.mp4",
@@ -75,7 +78,9 @@
                     "includeSoundtrack": false,
                     "mediaDurationSeconds": 0,
                     "drivesClipLength": false,
-                    "mediaScale": 1
+                    "mediaScale": 1,
+                    "startSeconds": 0,
+                    "lengthSeconds": 0
                 },
                 {
                     "id": "clip-reference-1",
@@ -88,7 +93,9 @@
                     "includeSoundtrack": true,
                     "mediaDurationSeconds": 4.5,
                     "drivesClipLength": true,
-                    "mediaScale": 0.5
+                    "mediaScale": 0.5,
+                    "startSeconds": 1.5,
+                    "lengthSeconds": 2.5
                 }
             ],
             "frameRefs": [
@@ -173,6 +180,9 @@
             "clipLengthFromControlNet": false,
             "reuseAudio": false,
             "uploadedAudio": null,
+            "uploadedAudioDurationSeconds": 0,
+            "uploadedAudioStartSeconds": 0,
+            "uploadedAudioLengthSeconds": 0,
             "initVideo": null,
             "retake": null,
             "references": [],
@@ -208,7 +218,8 @@
                 "uploadedAudio": {
                     "data": "data:audio/wav;base64,REVG",
                     "fileName": "track.wav"
-                }
+                },
+                "mediaDurationSeconds": 6.5
             },
             "spans": [
                 {

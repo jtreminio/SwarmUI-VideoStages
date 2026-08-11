@@ -1397,6 +1397,8 @@ describe("normalizeClipReferences", () => {
                 mediaDurationSeconds: 0,
                 drivesClipLength: false,
                 mediaScale: 1,
+                startSeconds: 0,
+                lengthSeconds: 0,
             },
             {
                 id: undefined,
@@ -1410,8 +1412,78 @@ describe("normalizeClipReferences", () => {
                 mediaDurationSeconds: 0,
                 drivesClipLength: false,
                 mediaScale: 1,
+                startSeconds: 0,
+                lengthSeconds: 0,
             },
         ]);
+    });
+
+    it("keeps a video reference's trim inside its probed length", () => {
+        const [reference] = normalizeClipReferences([
+            {
+                kind: "video",
+                source: "Upload",
+                mediaDurationSeconds: 8,
+                startSeconds: 2,
+                lengthSeconds: 99,
+            },
+        ]);
+        expect(reference).toMatchObject({ startSeconds: 2, lengthSeconds: 6 });
+    });
+
+    it("keeps an audio reference's trim inside its probed length", () => {
+        const [reference] = normalizeClipReferences([
+            {
+                kind: "audio",
+                source: "Upload",
+                mediaDurationSeconds: 8,
+                startSeconds: 2,
+                lengthSeconds: 99,
+            },
+        ]);
+        expect(reference).toMatchObject({ startSeconds: 2, lengthSeconds: 6 });
+    });
+
+    /**
+     * The backend pads a short window by freezing the last frame, so it cannot
+     * express "from here to the end". A start with no length is untrimmed.
+     */
+    it("drops a start that carries no length behind it", () => {
+        const [reference] = normalizeClipReferences([
+            {
+                kind: "video",
+                source: "Upload",
+                mediaDurationSeconds: 8,
+                startSeconds: 3,
+            },
+        ]);
+        expect(reference).toMatchObject({ startSeconds: 0, lengthSeconds: 0 });
+    });
+
+    it("ignores a trim on a kind that has no timebase", () => {
+        const [reference] = normalizeClipReferences([
+            {
+                kind: "image",
+                source: "Upload",
+                mediaDurationSeconds: 8,
+                startSeconds: 1,
+                lengthSeconds: 2,
+            },
+        ]);
+        expect(reference).toMatchObject({ startSeconds: 0, lengthSeconds: 0 });
+    });
+
+    it("ignores a trim with no probed length to clamp against", () => {
+        const [reference] = normalizeClipReferences([
+            {
+                kind: "video",
+                source: "Upload",
+                mediaDurationSeconds: 0,
+                startSeconds: 1,
+                lengthSeconds: 2,
+            },
+        ]);
+        expect(reference).toMatchObject({ startSeconds: 0, lengthSeconds: 0 });
     });
 
     it("preserves ControlNet sources on every kind and AceStepFun on audio", () => {
@@ -1558,6 +1630,18 @@ describe("clip length from a reference", () => {
         expect(
             clipWith([videoReference({ mediaDurationSeconds: 0 })]).duration,
         ).toBe(2);
+    });
+
+    /**
+     * The whole point of trimming a driving reference is to use part of it. If
+     * the clip still took the file's full length, a 3 s trim of a 30 s motion
+     * reference would leave a 30 s clip conditioned on 3 s of footage.
+     */
+    it("takes the trimmed length, not the file's, from a driving reference", () => {
+        expect(
+            clipWith([videoReference({ startSeconds: 1, lengthSeconds: 2.5 })])
+                .duration,
+        ).toBe(2.5);
     });
 
     it("yields to the clip-level length flags", () => {

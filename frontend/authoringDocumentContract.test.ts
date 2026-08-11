@@ -16,10 +16,7 @@ import {
     CURRENT_AUTHORING_SCHEMA_VERSION,
 } from "./types";
 
-// Frontend half of the frontend/backend authoring-document contract. The fixture is the exact
-// carrier payload this codec emits; the C# AuthoringDocumentContractTests parses the same file and
-// asserts every key the backend reads is present in it, so renaming a key on either side breaks the
-// pair instead of silently dropping data.
+// Shared with the backend authoring-document contract tests.
 const fixturePath = path.resolve(
     __dirname,
     "..",
@@ -30,10 +27,7 @@ const fixturePath = path.resolve(
 const fixture = (): Record<string, unknown> =>
     JSON.parse(fs.readFileSync(fixturePath, "utf8"));
 
-/**
- * One complete authoring document: every field the codec persists is set to a
- * non-default value so the fixture exercises the whole contract surface.
- */
+/** Fully populated document for the shared contract fixture. */
 const contractState = (): AuthoringDocument => ({
     schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
     width: 768,
@@ -82,6 +76,9 @@ const contractState = (): AuthoringDocument => ({
                 data: "data:audio/wav;base64,QUJD",
                 fileName: "clip.wav",
             },
+            uploadedAudioDurationSeconds: 6,
+            uploadedAudioStartSeconds: 1,
+            uploadedAudioLengthSeconds: 3,
             prompt: "",
             promptWindows: [],
             retake: {
@@ -111,6 +108,8 @@ const contractState = (): AuthoringDocument => ({
                     mediaDurationSeconds: 0,
                     drivesClipLength: false,
                     mediaScale: 1,
+                    startSeconds: 0,
+                    lengthSeconds: 0,
                 },
                 {
                     id: "clip-reference-1",
@@ -124,6 +123,8 @@ const contractState = (): AuthoringDocument => ({
                     mediaDurationSeconds: 4.5,
                     drivesClipLength: true,
                     mediaScale: 0.5,
+                    startSeconds: 1.5,
+                    lengthSeconds: 2.5,
                 },
             ],
             frameRefs: [
@@ -197,6 +198,9 @@ const contractState = (): AuthoringDocument => ({
             clipLengthFromControlNet: false,
             reuseAudio: false,
             uploadedAudio: null,
+            uploadedAudioDurationSeconds: 0,
+            uploadedAudioStartSeconds: 0,
+            uploadedAudioLengthSeconds: 0,
             prompt: "",
             promptWindows: [],
             retake: null,
@@ -235,6 +239,7 @@ const contractState = (): AuthoringDocument => ({
                     data: "data:audio/wav;base64,REVG",
                     fileName: "track.wav",
                 },
+                mediaDurationSeconds: 6.5,
             },
             spans: [
                 {

@@ -41,7 +41,9 @@ internal static class AudioPlanCompiler
             hasConfiguredTrack,
             sourceKind == AudioSourceKind.Upload
                 ? clip.UploadedAudio
-                : null);
+                : null,
+            clip.UploadedAudioStartSeconds,
+            clip.UploadedAudioLengthSeconds);
 
         AudioLengthOwner lengthOwner;
         if (clip.ClipLengthFromControlNet)

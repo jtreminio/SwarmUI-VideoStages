@@ -337,9 +337,16 @@ const renderRegions = (
                 : `<div class="vst-region-controls">` +
                   `<button type="button" class="basic-button small-button vst-region-btn${layout.skipped ? " vst-btn-skip-active" : ""}" data-vst-region-action="skip" aria-pressed="${layout.skipped}" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button>` +
                   `</div>`;
+            // On a source clip this edge is the out point — the wire carries
+            // only the start, so trimming the footage and resizing the clip are
+            // the same edit under two names.
             const resizeGrip = lengthDerived(clip)
                 ? ""
-                : `<div class="vst-region-resize" title="Drag to change clip duration"></div>`;
+                : `<div class="vst-region-resize" title="${
+                      clip.initVideo
+                          ? "Drag to trim the end of the source video"
+                          : "Drag to change clip duration"
+                  }"></div>`;
             const width = clipInnerWidth(layout.widthPx);
             const retakeDecision = capabilities
                 ?.forClip(clip)

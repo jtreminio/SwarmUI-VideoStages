@@ -2,8 +2,8 @@ import { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity"
 import { captureAuthoringTransactionSnapshot } from "./authoringSnapshot";
 import { activeStageCount } from "./clipSemantics";
 import { getVideoStagesHostBridge } from "./host";
-import type { InitVideoProbe } from "./initVideoProbe";
-import { initVideoFromProbe, probeInitVideo } from "./initVideoProbe";
+import type { InitVideoProbe } from "./mediaProbe";
+import { initVideoFromProbe, probeInitVideo } from "./mediaProbe";
 import { readProp } from "./normalizationShared";
 import { serializeStateForStorage } from "./persistence/documentCodec";
 import { getState } from "./persistence/repository";

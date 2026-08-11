@@ -149,7 +149,10 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 Descriptor,
                 diagnostics,
                 "minimax",
-                allowHostStageSources: true);
+                allowHostStageSources: true,
+                // H3 conditions on keyframes through a node that takes the latent as an input, so
+                // a first keyframe composes with source footage instead of competing for its slot.
+                allowFirstFrameWithInitVideo: true);
         foreach (StageSpec stage in activeStages)
         {
             // Assignments are resolver-vetted; a missing key is a caller contract violation.

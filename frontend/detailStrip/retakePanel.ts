@@ -11,8 +11,8 @@ import {
     buildAccordionSection,
     buildField,
     buildSlider,
-    clampStartLength,
 } from "../detailWidgets";
+import { clampStartLength } from "../trimGeometry";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
 

@@ -59,6 +59,27 @@ public class MiniMaxAudioContractTests
         AssertShippable(bridge, workflow, live);
     }
 
+    [Fact]
+    public async Task Uploaded_audio_uses_its_authored_trim()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["audioSource"] = "Upload";
+        clip["uploadedAudio"] = UploadedAudio();
+        clip["uploadedAudioStartSeconds"] = 1.5;
+        clip["uploadedAudioLengthSeconds"] = 2.5;
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        TrimAudioDurationNode trim = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal(1.5, trim.StartIndex.LiteralAsDouble());
+        Assert.Equal(2.5, trim.Duration.LiteralAsDouble());
+        Assert.IsType<SwarmLoadAudioB64Node>(trim.Audio.Connection?.Node);
+    }
+
     /// <summary>
     /// Audio-derived length wires the latent's <c>length</c> to <c>SwarmAudioLengthToFrames</c>
     /// instead of a literal, moving the 17k+5 snap into the graph.

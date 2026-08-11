@@ -14,6 +14,7 @@ import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 const DURATION_STEP = 0.1;
+const REFERENCE_LENGTH_HINT = "(derived from a reference's media length)";
 
 export const buildClipColumn = (
     context: DetailStripContext,
@@ -48,17 +49,21 @@ export const buildClipColumn = (
         },
     );
     durationInput.setAttribute("data-vst-focus-key", "duration");
+    const durationHint = !lengthDerived
+        ? null
+        : initVideoClip
+          ? "(derived from the source video range)"
+          : lengthReferenceIdx >= 0
+            ? REFERENCE_LENGTH_HINT
+            : "(derived from audio/ControlNet source)";
     const durationField = buildField(
         "Duration (s)",
         durationInput,
-        !lengthDerived
-            ? undefined
-            : initVideoClip
-              ? "(derived from the source video range)"
-              : lengthReferenceIdx >= 0
-                ? "(derived from a reference's media length)"
-                : "(derived from audio/ControlNet source)",
+        durationHint ?? REFERENCE_LENGTH_HINT,
     );
+    durationField
+        .querySelector(".vst-detail-field-hint")
+        ?.classList.toggle("vst-detail-field-hint-hidden", !durationHint);
     if (lengthDerived) {
         durationInput.disabled = true;
         durationField.classList.add("vst-field-disabled");

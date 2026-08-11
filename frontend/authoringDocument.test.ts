@@ -460,6 +460,7 @@ describe("versioned authoring document identity", () => {
                             data: "data:audio/wav;base64,AAAA",
                             fileName: "voice.wav",
                         },
+                        mediaDurationSeconds: 0,
                     },
                     spans: [
                         {
@@ -493,6 +494,7 @@ describe("versioned authoring document identity", () => {
                             kind: "AceStepFun",
                             reference: "audio1",
                             uploadedAudio: null,
+                            mediaDurationSeconds: 0,
                         },
                         spans: [
                             {

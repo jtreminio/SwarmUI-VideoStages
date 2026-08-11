@@ -10,13 +10,22 @@ import {
     buildField,
     buildMediaPickRow,
     buildStackSection,
-    clampStartLength,
 } from "../detailWidgets";
-import { initVideoFromProbe, probeInitVideo } from "../initVideoProbe";
+import { initVideoFromProbe, probeInitVideo } from "../mediaProbe";
 import { getTimelineStore } from "../persistence/repository";
 import { applyClipDurationResize } from "../timelineEdit";
+import {
+    type SourceRange,
+    setInPoint,
+    setOutPoint,
+    sourceLimitSeconds,
+    type TrimLimits,
+    toInOut,
+} from "../trimGeometry";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
+import { buildSidebarVideoPreview } from "./sidebarVideoPreview";
+import { buildTrimLauncher, openTrimModal } from "./trimModal";
 
 const DURATION_STEP = 0.1;
 
@@ -120,6 +129,12 @@ export const buildInitVideoSection = (
         return wrap;
     }
 
+    const shown: SourceRange = {
+        startSeconds: source.startSeconds,
+        lengthSeconds: source.lengthSeconds,
+    };
+    col.appendChild(buildSidebarVideoPreview(source.data, shown));
+
     const info = document.createElement("small");
     info.className = "vst-detail-field-hint";
     info.textContent = `Detected: ${
@@ -131,83 +146,107 @@ export const buildInitVideoSection = (
     }`;
     col.appendChild(info);
 
-    const fileLimit =
-        source.durationSeconds > 0
-            ? source.durationSeconds
-            : source.startSeconds + source.lengthSeconds;
-    const syncClipDuration = (target: Clip): void => {
-        const defaults = context.authoring().defaults;
+    const fileLimit = sourceLimitSeconds(source);
+    const fps = getTimelineStore().getState().fps;
+    const limits: TrimLimits = {
+        limitSeconds: fileLimit,
+        minLengthSeconds: CLIP_DURATION_MIN,
+        fps,
+    };
+    const writeRange = (target: Clip, next: SourceRange): void => {
+        const targetSource = target.initVideo;
+        if (!targetSource) {
+            return;
+        }
+        targetSource.startSeconds = next.startSeconds;
+        targetSource.lengthSeconds = next.lengthSeconds;
+        Object.assign(shown, next);
         applyClipDurationResize(
             target,
-            Math.max(
-                CLIP_DURATION_MIN,
-                target.initVideo?.lengthSeconds ?? target.duration,
-            ),
-            defaults,
-            getTimelineStore().getState().fps,
+            Math.max(CLIP_DURATION_MIN, next.lengthSeconds),
+            context.authoring().defaults,
+            fps,
         );
     };
-    const clampSource = (
-        start: number,
-        length: number,
-    ): { start: number; length: number } =>
-        clampStartLength(start, length, fileLimit, CLIP_DURATION_MIN);
 
-    const startInput = context.buildClampedNumber({
-        key: "source-start",
-        value: source.startSeconds,
-        min: 0,
-        max: Math.max(0, fileLimit - CLIP_DURATION_MIN),
-        step: DURATION_STEP,
-        readBack: (clips) => clips[clipIdx]?.initVideo?.startSeconds ?? null,
-        mutate: (clips, value) => {
-            const target = clips[clipIdx];
-            const targetSource = target?.initVideo;
-            if (target && targetSource) {
-                const next = clampSource(value, targetSource.lengthSeconds);
-                targetSource.startSeconds = next.start;
-                targetSource.lengthSeconds = next.length;
-                syncClipDuration(target);
-            }
-        },
-    });
+    const edgeInput = (
+        edge: "in" | "out",
+        apply: (
+            current: SourceRange,
+            value: number,
+            trimLimits: TrimLimits,
+        ) => SourceRange,
+    ): HTMLInputElement =>
+        context.buildClampedNumber({
+            key: `source-${edge}`,
+            value: toInOut(shown)[edge === "in" ? "inSeconds" : "outSeconds"],
+            min: edge === "in" ? 0 : CLIP_DURATION_MIN,
+            max: fileLimit,
+            step: DURATION_STEP,
+            readBack: (clips) => {
+                const readSource = clips[clipIdx]?.initVideo;
+                return readSource
+                    ? toInOut(readSource)[
+                          edge === "in" ? "inSeconds" : "outSeconds"
+                      ]
+                    : null;
+            },
+            mutate: (clips, value) => {
+                const target = clips[clipIdx];
+                if (target?.initVideo) {
+                    writeRange(target, apply(target.initVideo, value, limits));
+                }
+            },
+        });
+
     col.appendChild(
         buildField(
-            "Start (s)",
-            startInput,
+            "In (s)",
+            edgeInput("in", setInPoint),
             undefined,
-            "Where inside the source file this clip's footage begins. Trims " +
-                "the front of the file.",
+            "Where inside the source file this clip's footage begins. Moving " +
+                "it leaves Out where it is, so the clip gets shorter.",
+        ),
+    );
+    col.appendChild(
+        buildField(
+            "Out (s)",
+            edgeInput("out", setOutPoint),
+            undefined,
+            "Where inside the source file this clip's footage ends. This also " +
+                "becomes the clip's duration.",
         ),
     );
 
-    const lengthInput = context.buildClampedNumber({
-        key: "source-length",
-        value: source.lengthSeconds,
-        min: CLIP_DURATION_MIN,
-        max: fileLimit,
-        step: DURATION_STEP,
-        readBack: (clips) => clips[clipIdx]?.initVideo?.lengthSeconds ?? null,
-        mutate: (clips, value) => {
-            const target = clips[clipIdx];
-            const targetSource = target?.initVideo;
-            if (target && targetSource) {
-                const next = clampSource(targetSource.startSeconds, value);
-                targetSource.startSeconds = next.start;
-                targetSource.lengthSeconds = next.length;
-                syncClipDuration(target);
-            }
-        },
-    });
-    col.appendChild(
-        buildField(
-            "Length (s)",
-            lengthInput,
-            undefined,
-            "How many seconds of the source file this clip uses, starting at " +
-                "Start. This also becomes the clip's duration.",
-        ),
-    );
+    if (source.durationSeconds > 0) {
+        const range = toInOut(shown);
+        col.appendChild(
+            buildTrimLauncher(
+                `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s` +
+                    ` · Uses ${shown.lengthSeconds.toFixed(1)} s of ${fileLimit.toFixed(1)} s`,
+                () =>
+                    openTrimModal({
+                        mediaKind: "video",
+                        title: "Trim Source Video",
+                        fileName: source.fileName ?? "Source video",
+                        dataUri: source.data,
+                        range: shown,
+                        limits,
+                        impactText: (next) =>
+                            `Clip duration becomes ${next.lengthSeconds.toFixed(1)} s`,
+                        onApply: (next) => {
+                            context.commit((clips) => {
+                                const target = clips[clipIdx];
+                                if (target) {
+                                    writeRange(target, next);
+                                }
+                            });
+                            context.render();
+                        },
+                    }),
+            ),
+        );
+    }
 
     const note = document.createElement("p");
     note.className = "vst-detail-note";
@@ -217,15 +256,5 @@ export const buildInitVideoSection = (
         "later stages refine or upscale it, and a retake regenerates part of it.";
     col.appendChild(note);
 
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className =
-        "interrupt-button vst-btn-tiny vst-detail-delete vst-detail-rail-btn";
-    removeButton.textContent = "Remove source video";
-    removeButton.addEventListener("click", (event) => {
-        event.preventDefault();
-        removeSource();
-    });
-    col.appendChild(removeButton);
     return wrap;
 };

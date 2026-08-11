@@ -48,10 +48,7 @@ export interface RootDefaults {
 }
 
 export interface AuthoringDocument {
-    /**
-     * Version of the frontend authoring document. Only the current schema is
-     * accepted; older and unversioned carriers are intentionally rejected.
-     */
+    /** Only the current schema is accepted. */
     schemaVersion?: number;
     width: number;
     height: number;
@@ -76,10 +73,7 @@ export interface Stage {
     id?: string;
     skipped: boolean;
     control: number;
-    /**
-     * Legacy stage-wide IC-LoRA strength retained as the fallback for documents
-     * authored before per-guide strengths were introduced.
-     */
+    /** Legacy fallback for documents without per-guide strengths. */
     controlNetStrength: number;
     /** Per-stage strength for each clip IC-LoRA, aligned by IC-LoRA index. */
     icLoraStrengths: number[];
@@ -97,22 +91,13 @@ export interface Stage {
 }
 
 export interface PromptWindow {
-    /**
-     * Prompt windows ride the prompt carrier, whose syntax has no ID slot.
-     * Persistence keeps this ID in the versioned UI-state sidecar when
-     * possible; it is regenerated if that browser-local sidecar is absent.
-     */
+    /** Regenerated when the browser-local identity sidecar is absent. */
     id?: string;
     prompt: string;
     start: number;
     duration: number;
 }
 
-/**
- * Optional per-clip retake window (seconds). Regenerates only frames inside
- * [startSeconds, startSeconds + lengthSeconds) of a refined base video while the
- * rest stay locked; `strength` is the per-frame noise-mask value inside it.
- */
 export interface Retake {
     id?: string;
     startSeconds: number;
@@ -120,24 +105,7 @@ export interface Retake {
     strength: number;
 }
 
-/**
- * Pre-existing footage used as the clip's starting point instead of a
- * from-scratch generation. `data`/`fileName` are the picked video (data URI +
- * name — both browser uploads and server-picked files resolve to a data URI);
- * `fps` and `durationSeconds` are the file's probed metadata (display only,
- * 0 = unknown); `startSeconds`/`lengthSeconds` select the used range inside
- * the file, and the clip's own duration follows `lengthSeconds`. The backend
- * conforms the range to the timeline (fps resample, exact frame window,
- * resize) and feeds it to the clip's stage chain as per-clip refine input:
- * stage 0 refines it according to its Control value, later stages
- * refine/upscale it, and a retake window regenerates part of it.
- */
-/**
- * The video a clip starts from instead of generating. Called "Source Video" everywhere the user
- * sees it — the wire key, the entry mode and every type say `initVideo`, and that split is
- * deliberate: bare "source" already means a provenance selector here (`audioSource`,
- * `driveSource`, `ClipReference.source`), so the code cannot spell it that way.
- */
+/** Source Video is stored under the `initVideo` wire key. */
 export interface InitVideo {
     data: string;
     fileName: string | null;
@@ -149,19 +117,7 @@ export interface InitVideo {
 
 export type ClipReferenceKind = "image" | "video" | "audio";
 
-/**
- * One whole-clip reference: media the model conditions on with no frame
- * position. The architecture presents references to its text encoder as
- * numbered items the prompt names by tag, so the authored order is meaningful.
- * `source` is "Upload" for `uploadedMedia`, a ControlNet input for any media
- * kind, a host capture ("Base", "Refiner") for images, or an AceStepFun track
- * for audio. `includeSoundtrack` asks a video reference to also pass its own
- * audio track as the paired reference audio.
- * `mediaDurationSeconds` is the browser-probed length of the picked media
- * (0 = unknown); when `drivesClipLength` is set the clip's own duration follows
- * it, so at most one reference per clip may claim it. `mediaScale` downsamples
- * a video reference before it is presented, trading detail for speed.
- */
+/** Whole-clip reference. Authored order determines prompt tag numbering. */
 export interface ClipReference {
     id?: string;
     kind: ClipReferenceKind;
@@ -171,6 +127,9 @@ export interface ClipReference {
     mediaDurationSeconds: number;
     drivesClipLength: boolean;
     mediaScale: number;
+    startSeconds: number;
+    /** 0 uses the whole source. */
+    lengthSeconds: number;
 }
 
 export interface FrameRefImage {
@@ -189,24 +148,7 @@ export type IcLoraDriveData = "none" | "visual" | "audio";
 export type IcLoraDriveMediaKind = "image" | "video" | "audio";
 export type ReferenceFraming = (typeof REFERENCE_FRAMINGS)[number];
 
-/**
- * One in-context LoRA on a clip. `lora` is the LoRA model name; `preset` is a
- * curated LTX catalog id ("custom" = normal visual-drive behavior) and may
- * select an architecture-owned Drive Media stream contract. `strength` is the
- * LoRA model strength; an
- * `attentionStrength` below 1 switches the backend to the Advanced guide node
- * (per-guide self-attention influence); `controlType` renders the drive video
- * into a control signal before guiding; `driveMedia` is the uploaded drive
- * media (data URI + name). `driveData` explicitly selects which stream is
- * extracted: visual frames, audio, or none for a model-only patch.
- * `driveMediaKinds` declares the media containers that may supply that stream.
- * Curated presets seed both values; Custom exposes the stream choice directly.
- * `driveSource` is
- * "Upload" for per-entry media or "Incoming" for media already entering the
- * target generation point (init/source media, prior-stage output, or available
- * previous-clip context). `stage` restricts the entry to one stage index
- * (-1 = every stage).
- */
+/** One in-context LoRA guide. */
 export interface IcLora {
     id?: string;
     lora: string;
@@ -223,28 +165,19 @@ export interface IcLora {
 
 export interface Clip {
     id?: string;
-    /** Cached authoring label/repair hint. Resolved stage-0 model identity owns behavior. */
+    /** Cache only; stage-0 model identity owns behavior. */
     architectureHint: VideoArchitectureId;
     modelProfileId: ModelProfileId;
     skipped: boolean;
     hue: number;
     boundaryOut: BoundaryOut;
-    /**
-     * For a continue/crossfade overlap, preserve this clip's outgoing audio
-     * tail as opening generation context for the next clip.
-     */
     boundaryOutCarryAudio: boolean;
-    /** Scale applied to an automatic reference-mode Continue video. */
     boundaryOutReferenceScale: number;
-    /** Whether that automatic reference video also supplies its soundtrack. */
     boundaryOutReferenceIncludeSoundtrack: boolean;
-    /** Architecture-normalized frame window used by the selected outgoing join. */
     boundaryOutOverlap: number;
     duration: number;
-    /** How reference media is fitted to this clip's generation dimensions. */
     refFraming: ReferenceFraming;
     audioSource: string;
-    /** Normal LoRA model definitions shared by every stage in this clip. */
     loras: ClipLora[];
     icLoras: IcLora[];
     saveAudioTrack: boolean;
@@ -252,6 +185,9 @@ export interface Clip {
     clipLengthFromControlNet: boolean;
     reuseAudio: boolean;
     uploadedAudio: UploadedMedia | null;
+    uploadedAudioDurationSeconds: number;
+    uploadedAudioStartSeconds: number;
+    uploadedAudioLengthSeconds: number;
     prompt: string;
     promptWindows: PromptWindow[];
     retake: Retake | null;
@@ -261,17 +197,14 @@ export interface Clip {
     stages: Stage[];
 }
 
-/** Source identity for a timeline-wide audio span. */
 export interface AudioTrackSource {
     kind: AudioTrackSourceKind;
     reference: string;
     uploadedAudio: UploadedMedia | null;
+    mediaDurationSeconds?: number;
 }
 
-/**
- * One addressable interval of a root audio track, expressed as a timeline
- * seconds window plus the matching offset into the source audio.
- */
+/** Root timeline window plus its source offset. */
 export interface AudioTrackSpan {
     id?: string;
     timelineStartSeconds: number | null;
@@ -279,16 +212,11 @@ export interface AudioTrackSpan {
     sourceStartSeconds: number;
 }
 
-/**
- * A logical timeline-wide audio span. New authoring creates exactly one
- * span per track; the array remains for compatibility with the earlier
- * planned-track schema and is normalized into independent lanes on load.
- */
+/** Legacy multi-span tracks are normalized into independent lanes. */
 export interface AudioTrack {
     id?: string;
     source: AudioTrackSource;
     spans: AudioTrackSpan[];
-    /** Relative loudness before additive mixing. */
     volume?: number;
 }
 

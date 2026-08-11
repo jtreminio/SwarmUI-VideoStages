@@ -16,14 +16,27 @@ import {
     buildCheckbox,
     buildField,
     buildMediaPickRow,
+    buildNumber,
     buildOptionSelect,
     buildRepeatingEditor,
 } from "../detailWidgets";
 import { MEDIA_SOURCE_UPLOAD } from "../generatedMediaSource";
-import { probeMediaDurationSeconds } from "../initVideoProbe";
+import { probeMediaDurationSeconds } from "../mediaProbe";
+import {
+    clipReferenceUsedRange,
+    clipReferenceUsedSeconds,
+} from "../normalizationMedia";
+import { getTimelineStore } from "../persistence/repository";
 import { setSelection } from "../selection";
 import { applyClipDurationResize } from "../timelineEdit";
 import { incomingReferenceContinueForClip } from "../timelineTiming";
+import {
+    type SourceRange,
+    setInPoint,
+    setOutPoint,
+    type TrimLimits,
+    toInOut,
+} from "../trimGeometry";
 import type {
     Clip,
     ClipReference,
@@ -32,6 +45,113 @@ import type {
 } from "../types";
 import { roundToTenth } from "../utils";
 import type { DetailStripContext } from "./context";
+import { buildSidebarVideoPreview } from "./sidebarVideoPreview";
+import { buildTrimLauncher, openTrimModal } from "./trimModal";
+
+/**
+ * A reference has no minimum of its own — it is conditioning, not a clip — but
+ * one that lends the clip its length inherits the clip's floor.
+ */
+const REFERENCE_TRIM_MIN = 0.1;
+
+const appendReferenceTrim = (
+    ctx: DetailStripContext,
+    fields: HTMLElement,
+    reference: ClipReference,
+    shown: SourceRange,
+    commitReference: (
+        mutate: (target: ClipReference, clip: Clip) => void,
+    ) => void,
+): void => {
+    const mediaKind = reference.kind === "audio" ? "audio" : "video";
+    const mediaLabel = CLIP_REFERENCE_KIND_INFO[reference.kind].label;
+    const limitSeconds = reference.mediaDurationSeconds;
+    const limits: TrimLimits = {
+        limitSeconds,
+        minLengthSeconds: reference.drivesClipLength
+            ? CLIP_DURATION_MIN
+            : REFERENCE_TRIM_MIN,
+        // Only a driving reference hands its length to a clip, so only then does
+        // the timeline's frame grid have any claim on it.
+        fps: reference.drivesClipLength ? getTimelineStore().getState().fps : 0,
+    };
+    const write = (next: SourceRange): void => {
+        // A range covering the whole file stores as untrimmed, so an undone trim
+        // leaves no frame-window node behind in the graph.
+        const whole =
+            next.startSeconds <= 0 && next.lengthSeconds >= limitSeconds;
+        Object.assign(shown, next);
+        commitReference((target, clip) => {
+            target.startSeconds = whole ? 0 : next.startSeconds;
+            target.lengthSeconds = whole ? 0 : next.lengthSeconds;
+            if (target.drivesClipLength) {
+                applyClipDurationResize(
+                    clip,
+                    Math.max(CLIP_DURATION_MIN, next.lengthSeconds),
+                    ctx.authoring().defaults,
+                    limits.fps,
+                );
+            }
+        });
+    };
+
+    const range = toInOut(shown);
+    let inInput: HTMLInputElement;
+    let outInput: HTMLInputElement;
+    inInput = buildNumber(
+        range.inSeconds,
+        0,
+        limitSeconds,
+        REFERENCE_TRIM_MIN,
+        (value) => {
+            const next = setInPoint(shown, value, limits);
+            outInput.value = `${toInOut(next).outSeconds}`;
+            write(next);
+        },
+    );
+    outInput = buildNumber(
+        range.outSeconds,
+        REFERENCE_TRIM_MIN,
+        limitSeconds,
+        REFERENCE_TRIM_MIN,
+        (value) => {
+            const next = setOutPoint(shown, value, limits);
+            inInput.value = `${next.startSeconds}`;
+            write(next);
+        },
+    );
+    const disabled = reference.drivesClipLength === true;
+    inInput.disabled = disabled;
+    outInput.disabled = disabled;
+    const inField = buildField("In (s)", inInput);
+    const outField = buildField("Out (s)", outInput);
+    inField.classList.toggle("vst-field-disabled", disabled);
+    outField.classList.toggle("vst-field-disabled", disabled);
+    fields.append(inField, outField);
+    fields.appendChild(
+        buildTrimLauncher(
+            `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s` +
+                ` · References ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+            () =>
+                openTrimModal({
+                    mediaKind,
+                    title: `Trim ${mediaLabel} Reference`,
+                    fileName:
+                        reference.uploadedMedia?.fileName ??
+                        `${mediaLabel} reference`,
+                    dataUri: reference.uploadedMedia?.data ?? null,
+                    range: shown,
+                    limits,
+                    impactText: (next) =>
+                        `References ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+                    onApply: (next) => {
+                        write(next);
+                        ctx.render();
+                    },
+                }),
+        ),
+    );
+};
 
 /** Takes clip-length ownership away from every other claimant and applies it. */
 const claimClipLength = (
@@ -50,7 +170,10 @@ const claimClipLength = (
     // would silently move a clip whose authored length now says otherwise.
     clip.clipLengthFromAudio = false;
     clip.clipLengthFromControlNet = false;
-    const seconds = clip.references[referenceIdx]?.mediaDurationSeconds ?? 0;
+    // The trimmed length, not the file's — the same number normalization lends
+    // the clip, so ticking the box cannot disagree with the next document read.
+    const claimed = clip.references[referenceIdx];
+    const seconds = claimed ? clipReferenceUsedSeconds(claimed) : 0;
     if (seconds > 0) {
         applyClipDurationResize(
             clip,
@@ -258,11 +381,15 @@ export const buildClipReferenceSection = (
         if (!reference) {
             return undefined;
         }
-        const patch = (mutate: (target: ClipReference) => void): void => {
+        const shownRange = clipReferenceUsedRange(reference);
+        const commitReference = (
+            mutate: (target: ClipReference, clip: Clip) => void,
+        ): void => {
             ctx.commit((cs) => {
-                const target = cs[clipIdx]?.references[editorIdx];
-                if (target) {
-                    mutate(target);
+                const targetClip = cs[clipIdx];
+                const target = targetClip?.references[editorIdx];
+                if (target && targetClip) {
+                    mutate(target, targetClip);
                 }
             });
         };
@@ -281,7 +408,7 @@ export const buildClipReferenceSection = (
                     })),
                     reference.kind,
                     (value) => {
-                        patch((target) => {
+                        commitReference((target) => {
                             target.kind = value as ClipReferenceKind;
                             target.uploadedMedia = null;
                             target.includeSoundtrack = false;
@@ -317,7 +444,7 @@ export const buildClipReferenceSection = (
             buildField(
                 "Source",
                 buildOptionSelect(options, source, (value) => {
-                    patch((target) => {
+                    commitReference((target) => {
                         const resolved = resolveClipReferenceSourceValue(
                             value,
                             buildClipReferenceSourceOptions(target.kind, value),
@@ -368,7 +495,7 @@ export const buildClipReferenceSection = (
                             );
                             return;
                         }
-                        patch((target) => {
+                        commitReference((target) => {
                             target.uploadedMedia = {
                                 data: pickedData,
                                 fileName,
@@ -377,7 +504,7 @@ export const buildClipReferenceSection = (
                         ctx.render();
                     },
                     () => {
-                        patch((target) => {
+                        commitReference((target) => {
                             target.uploadedMedia = null;
                             target.mediaDurationSeconds = 0;
                             target.drivesClipLength = false;
@@ -386,6 +513,9 @@ export const buildClipReferenceSection = (
                     },
                 ),
             );
+            if (reference.kind === "video" && data) {
+                fields.appendChild(buildSidebarVideoPreview(data, shownRange));
+            }
         }
 
         if (clipReferenceCanDriveLength(reference)) {
@@ -433,6 +563,16 @@ export const buildClipReferenceSection = (
             );
         }
 
+        if (reference.kind !== "image" && reference.mediaDurationSeconds > 0) {
+            appendReferenceTrim(
+                ctx,
+                fields,
+                reference,
+                shownRange,
+                commitReference,
+            );
+        }
+
         if (reference.kind === "video") {
             fields.appendChild(
                 buildField(
@@ -444,7 +584,7 @@ export const buildClipReferenceSection = (
                         })),
                         `${reference.mediaScale}`,
                         (value) => {
-                            patch((target) => {
+                            commitReference((target) => {
                                 target.mediaScale = Number(value);
                             });
                         },
@@ -461,7 +601,7 @@ export const buildClipReferenceSection = (
                     "Include soundtrack",
                     reference.includeSoundtrack === true,
                     (value) => {
-                        patch((target) => {
+                        commitReference((target) => {
                             target.includeSoundtrack = value;
                         });
                         ctx.render();

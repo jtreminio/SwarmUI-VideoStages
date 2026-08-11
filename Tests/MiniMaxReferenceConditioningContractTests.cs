@@ -109,6 +109,142 @@ public class MiniMaxReferenceConditioningContractTests
         AssertShippable(bridge, workflow, live);
     }
 
+    /// <summary>
+    /// A trimmed video reference is windowed AFTER the 24 fps resample, so the authored seconds
+    /// convert at a rate this graph fixed rather than one the upload happened to carry. Windowing
+    /// the raw upload instead would cut a different span of the file for every source frame rate.
+    /// </summary>
+    [Fact]
+    public async Task A_trimmed_video_reference_is_windowed_on_the_resampled_timebase()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["references"] = new JArray(
+            MakeClipReference(
+                "video",
+                "data:video/mp4;base64,TU9USU9O",
+                "motion.mp4",
+                startSeconds: 1.5,
+                lengthSeconds: 2.5));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        // 1.5 s and 2.5 s at the reference's own 24 fps.
+        Assert.Equal(36, window.StartFrame.LiteralAsInt());
+        Assert.Equal(60, window.FrameCount.LiteralAsInt());
+        Assert.IsType<SwarmVideoResampleFPSNode>(window.ImagesInput.Connection?.Node);
+
+        ComfyNode referenceNode = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
+        Assert.Equal(window.Id, inputs["ref_videos.ref_video_0"][0].ToString());
+
+        live.AssertLive(window);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// Handing H3 the whole soundtrack beside trimmed frames would describe two different moments
+    /// to the same reference slot.
+    /// </summary>
+    [Fact]
+    public async Task A_trimmed_video_reference_trims_its_soundtrack_to_match()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["references"] = new JArray(
+            MakeClipReference(
+                "video",
+                "data:video/mp4;base64,TU9USU9O",
+                "motion.mp4",
+                includeSoundtrack: true,
+                startSeconds: 1.5,
+                lengthSeconds: 2.5));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        TrimAudioDurationNode trim = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal(1.5, trim.StartIndex.LiteralAsDouble());
+        Assert.Equal(2.5, trim.Duration.LiteralAsDouble());
+
+        ComfyNode referenceNode = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
+        Assert.Equal(
+            trim.Id,
+            inputs["ref_video_audios.ref_video_audio_0"][0].ToString());
+
+        live.AssertLive(trim);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    [Fact]
+    public async Task A_trimmed_audio_reference_uses_the_selected_range()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["references"] = new JArray(
+            MakeClipReference(
+                "audio",
+                "data:audio/wav;base64,Vk9JQ0U=",
+                "voice.wav",
+                startSeconds: 1.5,
+                lengthSeconds: 2.5));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        TrimAudioDurationNode trim = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal(1.5, trim.StartIndex.LiteralAsDouble());
+        Assert.Equal(2.5, trim.Duration.LiteralAsDouble());
+
+        ComfyNode referenceNode = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
+        Assert.Equal(trim.Id, inputs["ref_audios.ref_audio_0"][0].ToString());
+    }
+
+    /// <summary>
+    /// An untrimmed reference must not pay for a window node it does not need — and the padding
+    /// branch of SwarmFrameWindow would repeat the last frame to fill a count it cannot know.
+    /// </summary>
+    [Fact]
+    public async Task An_untrimmed_video_reference_builds_no_frame_window()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["references"] = new JArray(
+            MakeClipReference(
+                "video",
+                "data:video/mp4;base64,TU9USU9O",
+                "motion.mp4",
+                includeSoundtrack: true));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+
+        AssertShippable(bridge, workflow, live);
+    }
+
     [Theory]
     [InlineData("image", MediaSource.ControlNetOne, 0)]
     [InlineData("video", MediaSource.ControlNetTwo, 1)]

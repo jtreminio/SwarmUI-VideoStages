@@ -29,9 +29,11 @@ import {
     normalizeInitVideo,
     normalizePromptWindows,
     normalizeRetake,
+    normalizeTimedMediaRange,
     normalizeUploadedMedia,
 } from "./normalizationMedia";
 import {
+    nonNegativeNumber,
     normalizeOptionalEntityId,
     numberOr,
     text,
@@ -55,7 +57,7 @@ import type {
     RootDefaults,
     Stage,
 } from "./types";
-import { isRecord } from "./utils";
+import { isRecord, roundToTenth } from "./utils";
 
 export const normalizeBoundaryOut = (value: unknown): BoundaryOut => {
     const raw = trimmedText(value).toLowerCase();
@@ -154,6 +156,9 @@ export const buildDefaultClip = (
         clipLengthFromControlNet: false,
         reuseAudio: false,
         uploadedAudio: null,
+        uploadedAudioDurationSeconds: 0,
+        uploadedAudioStartSeconds: 0,
+        uploadedAudioLengthSeconds: 0,
         prompt: "",
         promptWindows: [],
         retake: null,
@@ -327,6 +332,17 @@ export const normalizeClip = (
         defaults.modelCatalog,
         resolvedArchitecture,
     )?.boundaryRules[boundaryOut];
+    const uploadedAudio = normalizeUploadedMedia(rawClip.uploadedAudio);
+    const uploadedAudioDurationSeconds = uploadedAudio
+        ? roundToTenth(nonNegativeNumber(rawClip.uploadedAudioDurationSeconds))
+        : 0;
+    const uploadedAudioRange = uploadedAudio
+        ? normalizeTimedMediaRange(
+              rawClip.uploadedAudioStartSeconds,
+              rawClip.uploadedAudioLengthSeconds,
+              uploadedAudioDurationSeconds,
+          )
+        : { startSeconds: 0, lengthSeconds: 0 };
     return {
         id: normalizeOptionalEntityId(rawClip.id),
         architectureHint: architecture,
@@ -353,7 +369,10 @@ export const normalizeClip = (
         clipLengthFromAudio,
         clipLengthFromControlNet,
         reuseAudio: !!rawClip.reuseAudio,
-        uploadedAudio: normalizeUploadedMedia(rawClip.uploadedAudio),
+        uploadedAudio,
+        uploadedAudioDurationSeconds,
+        uploadedAudioStartSeconds: uploadedAudioRange.startSeconds,
+        uploadedAudioLengthSeconds: uploadedAudioRange.lengthSeconds,
         prompt: text(rawClip.prompt),
         promptWindows: normalizePromptWindows(rawClip),
         retake,

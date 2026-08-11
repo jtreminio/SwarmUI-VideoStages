@@ -152,4 +152,81 @@ public class MiniMaxInitVideoContractTests
         live.AssertLive(upload);
         AssertShippable(bridge, workflow, live);
     }
+
+    /// <summary>
+    /// H3 conditions on keyframes through a node that takes the latent as an input, so a first
+    /// keyframe composes with source footage rather than competing for its slot. Both keyframes
+    /// survive beside an init video.
+    /// </summary>
+    [Fact]
+    public async Task Init_video_keeps_both_keyframes()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage(control: 0.5));
+        clip["duration"] = 1.0;
+        clip["initVideo"] = new JObject
+        {
+            ["data"] = "data:video/mp4;base64,ESIz",
+            ["fileName"] = "source.mp4",
+        };
+        clip["frameRefs"] = new JArray(
+            UploadedReference("RklSU1Q=", fromEnd: false),
+            UploadedReference("TEFTVA==", fromEnd: true));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
+        Assert.NotNull(keyframes.FirstFrame.Connection);
+        Assert.NotNull(keyframes.LastFrame.Connection);
+
+        live.AssertLive(keyframes);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    /// <summary>
+    /// The Refine Video shape: a low-resolution pass generated from a first keyframe becomes the
+    /// source, its spent stage drops to Control 0, and the surviving stage upscales. The keyframe
+    /// has to reach that stage at ITS resolution — reframed for the upscale, not for the pass that
+    /// produced the footage — or frame 0 drifts off the image the clip was authored around.
+    /// </summary>
+    [Fact]
+    public async Task A_refined_source_clip_reasserts_its_first_keyframe_at_the_refine_resolution()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(
+            // Control 0 is what Refine Video writes onto the stage already spent.
+            fixture.Stage(control: 0),
+            fixture.Stage("PreviousStage", control: 0.5, upscale: 1.5));
+        clip["duration"] = 1.0;
+        clip["initVideo"] = new JObject
+        {
+            ["data"] = "data:video/mp4;base64,ESIz",
+            ["fileName"] = "source.mp4",
+        };
+        clip["frameRefs"] = new JArray(UploadedReference("RklSU1Q="));
+        clip["refFraming"] = Constants.ReferenceFramingFitGreen;
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        // Only the upscaling stage samples, so only it takes a keyframe — at 768, not the 512 the
+        // source footage was generated at.
+        SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
+        SwarmFrameImageNode framed = Assert.IsType<SwarmFrameImageNode>(
+            keyframes.FirstFrame.Connection?.Node);
+        Assert.Equal(768, framed.Width.LiteralAsInt());
+        Assert.Equal(768, framed.Height.LiteralAsInt());
+        Assert.Equal(
+            "RklSU1Q=",
+            Assert.IsType<SwarmLoadImageB64Node>(framed.ImagesInput.Connection?.Node)
+                .ImageBase64.LiteralAsString());
+
+        live.AssertAllLive(keyframes, framed);
+        AssertShippable(bridge, workflow, live);
+    }
 }
