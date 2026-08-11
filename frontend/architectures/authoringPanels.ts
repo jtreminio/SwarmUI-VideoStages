@@ -42,8 +42,9 @@ const persistedIcLoraRemovalPanel = (
         label: "Persisted IC-LoRAs",
         sectionClass: "vst-detail-iclora-section",
         open,
-        items: clip.icLoras.map((_, index) => ({
+        items: clip.icLoras.map((entry, index) => ({
             label: `IC${index}`,
+            stateKey: entry.id ? `ic-lora:${entry.id}` : undefined,
             focusKey: `ic-lora-tab-${index}`,
             title: `Inspect persisted IC-LoRA ${index}`,
             active: index === entryIdx,

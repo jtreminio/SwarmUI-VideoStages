@@ -7,6 +7,7 @@ import {
     jest,
 } from "@jest/globals";
 import { minimalClip } from "../__test_helpers__/clipFixtures";
+import { resetRememberedAccordionSections } from "../detailWidgets";
 import {
     audioTrackIndicesForClipWindow,
     clipTimelineWindow,
@@ -73,6 +74,8 @@ describe("timeline-wide audio spans panel", () => {
     };
 
     beforeEach(() => {
+        localStorage.clear();
+        resetRememberedAccordionSections();
         resetSelectionForTests();
         state = config();
         host = document.createElement("div");

@@ -47,8 +47,9 @@ export const buildRefSection = (
             label: "Keyframes",
             sectionClass: "vst-detail-ref-section",
             open,
-            items: clip.frameRefs.map((_, refIdx) => ({
+            items: clip.frameRefs.map((ref, refIdx) => ({
                 label: `Keyframe ${refIdx}`,
+                stateKey: ref.id ? `keyframe:${ref.id}` : undefined,
                 focusKey: `reference-tab-${refIdx}`,
                 title: `Edit keyframe ${refIdx}`,
                 active: refIdx === activeRefIdx,

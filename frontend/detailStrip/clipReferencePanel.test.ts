@@ -78,6 +78,7 @@ const tabLabels = (body: HTMLElement): string[] =>
 
 describe("buildClipReferenceSection", () => {
     beforeEach(() => {
+        localStorage.clear();
         __resetPersistenceForTests();
         resetRememberedAccordionSections();
         document.body.innerHTML = "";

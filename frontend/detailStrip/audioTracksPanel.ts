@@ -431,6 +431,7 @@ export const buildAudioTracksPanel = (
         open: selectedTrackIndex !== null,
         items: visibleTrackIndices.map((trackIndex) => ({
             label: `A${trackIndex + 1}`,
+            stateKey: `audio-track:${tracks[trackIndex].id}`,
             focusKey: `audio-track-tab-${trackIndex}`,
             title: `Edit audio track A${trackIndex + 1}`,
             active: trackIndex === activeTrackIndex,

@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import { stubRect } from "./__test_helpers__/dom";
 import {
     buildCheckbox,
     buildField,
     buildMediaPickRow,
     buildRepeatingEditor,
     buildStaticSection,
+    type RepeatingGroupItem,
     resetRememberedAccordionSections,
 } from "./detailWidgets";
 import { setTimelineAuthoringSetting } from "./timelineAuthoringSettings";
@@ -322,6 +324,61 @@ describe("native detail groups", () => {
         }
     });
 
+    it("keeps the Add action anchored when a structural edit grows content above it", () => {
+        const frames: FrameRequestCallback[] = [];
+        const original = window.requestAnimationFrame;
+        window.requestAnimationFrame = (callback: FrameRequestCallback) => {
+            frames.push(callback);
+            return frames.length;
+        };
+        const body = document.createElement("div");
+        body.className = "vst-detail-body";
+        const host = document.createElement("div");
+        body.appendChild(host);
+        document.body.appendChild(body);
+        const items = ["LoRA 0"];
+        const render = (): void => {
+            host.replaceChildren(
+                buildRepeatingEditor({
+                    key: "add-anchor-test",
+                    label: "LoRAs",
+                    items: items.map((label) => ({ label })),
+                    add: {
+                        title: "Add LoRA",
+                        className: "test-add",
+                        onClick: () => {
+                            items.push(`LoRA ${items.length}`);
+                            render();
+                        },
+                    },
+                    remove: {
+                        title: "Delete LoRA",
+                        className: "test-remove",
+                    },
+                }).section,
+            );
+            const add = host.querySelector<HTMLElement>(".test-add");
+            if (!add) {
+                throw new Error("Add LoRA missing");
+            }
+            stubRect(add, 0, 0, items.length === 1 ? 300 : 420);
+        };
+
+        try {
+            render();
+            body.scrollTop = 100;
+            host.querySelector<HTMLButtonElement>(".test-add")?.click();
+            frames[0](0);
+            expect(body.scrollTop).toBe(220);
+        } finally {
+            if (original) {
+                window.requestAnimationFrame = original;
+            } else {
+                Reflect.deleteProperty(window, "requestAnimationFrame");
+            }
+        }
+    });
+
     it("keeps an active repeating item minimized through a rebuild", () => {
         const host = document.createElement("div");
         const render = (): void => {
@@ -380,6 +437,118 @@ describe("native detail groups", () => {
         const add = built.content.querySelector<HTMLButtonElement>(".test-add");
         expect(add).not.toBeNull();
         expect(add?.textContent).toBe("+ Add Reference Image");
+    });
+
+    it("opens a repeating parent by default when it has children", () => {
+        const built = buildRepeatingEditor({
+            key: "populated-parent-test",
+            label: "References",
+            items: [{ label: "Reference 0" }],
+            add: {
+                title: "Add reference",
+                className: "test-add",
+                onClick: () => {},
+            },
+            remove: {
+                title: "Delete reference",
+                className: "test-remove",
+            },
+        });
+
+        expect(built.section.classList.contains("input-group-open")).toBe(true);
+        expect(built.content.hidden).toBe(false);
+    });
+
+    it("restores expanded children after an in-memory reload", () => {
+        const item = {
+            label: "Reference 0",
+            stateKey: "reference-id-0",
+        } as unknown as RepeatingGroupItem;
+        const build = (): HTMLElement =>
+            buildRepeatingEditor({
+                key: "child-reload-test",
+                label: "References",
+                items: [item],
+                add: {
+                    title: "Add reference",
+                    className: "test-add",
+                    onClick: () => {},
+                },
+                remove: {
+                    title: "Delete reference",
+                    className: "test-remove",
+                },
+            }).section;
+
+        const beforeReload = build();
+        beforeReload
+            .querySelector<HTMLElement>(".vst-detail-repeating-group-header")
+            ?.click();
+        resetRememberedAccordionSections();
+        const afterReload = build();
+
+        expect(
+            afterReload
+                .querySelector(".vst-detail-repeating-group")
+                ?.classList.contains("input-group-open"),
+        ).toBe(true);
+
+        const activeItem = {
+            label: "Reference 1",
+            stateKey: "reference-id-1",
+            active: true,
+        } as unknown as RepeatingGroupItem;
+        const buildActive = (): HTMLElement =>
+            buildRepeatingEditor({
+                key: "child-closed-reload-test",
+                label: "References",
+                items: [activeItem],
+                add: {
+                    title: "Add reference",
+                    className: "test-add",
+                    onClick: () => {},
+                },
+                remove: {
+                    title: "Delete reference",
+                    className: "test-remove",
+                },
+            }).section;
+        buildActive()
+            .querySelector<HTMLElement>(".vst-detail-repeating-group-header")
+            ?.click();
+        resetRememberedAccordionSections();
+
+        expect(
+            buildActive()
+                .querySelector(".vst-detail-repeating-group")
+                ?.classList.contains("input-group-closed"),
+        ).toBe(true);
+    });
+
+    it("builds a closed child's editor when the child is expanded", () => {
+        const editor = document.createElement("div");
+        editor.className = "test-editor";
+        const built = buildRepeatingEditor({
+            key: "closed-editor-test",
+            label: "Keyframes",
+            items: [{ label: "Keyframe 0" }],
+            editorForItem: () => editor,
+            add: {
+                title: "Add keyframe",
+                className: "test-add",
+                onClick: () => {},
+            },
+            remove: {
+                title: "Delete keyframe",
+                className: "test-remove",
+            },
+        });
+
+        expect(built.section.querySelector(".test-editor")).toBeNull();
+        built.section
+            .querySelector<HTMLElement>(".vst-detail-repeating-group-header")
+            ?.click();
+        expect(built.section.querySelector(".test-editor")).not.toBeNull();
     });
 
     it("puts each item's title on its header", () => {

@@ -473,6 +473,10 @@ const closeSiblingAccordionSections = (section: HTMLElement): void => {
             sibling.classList.contains("vst-detail-section")
         ) {
             setAccordionOpen(sibling, false);
+            const key = sibling.dataset.vstAccordionKey;
+            if (key) {
+                rememberedAccordionSections.delete(key);
+            }
         }
     }
 };
@@ -500,6 +504,7 @@ export interface AccordionSectionSpec {
     label: string;
     content: HTMLElement | DocumentFragment;
     open?: boolean;
+    defaultOpen?: boolean;
     counter?: string | number;
     className?: string;
     flattenContent?: boolean;
@@ -548,12 +553,15 @@ export interface StaticSectionSpec {
 }
 
 const rememberedAccordionSections = new Set<string>();
+const seenAccordionSections = new Set<string>();
 
 export const resetRememberedAccordionSections = (): void => {
     rememberedAccordionSections.clear();
+    seenAccordionSections.clear();
     rememberedRepeaterItems.clear();
     rememberedRepeaterOpenItems.clear();
     forceOpenRepeaterKeys.clear();
+    persistedRepeaterState = null;
 };
 
 /**
@@ -617,11 +625,13 @@ export const buildAccordionSection = (
     heading: HTMLElement;
     content: HTMLElement;
 } => {
-    const autoCollapse = getTimelineAuthoringSettings().autoCollapse;
+    const firstBuild = !seenAccordionSections.has(spec.key);
     const open =
         spec.open === true ||
-        (!autoCollapse && rememberedAccordionSections.has(spec.key));
-    if (!autoCollapse && open) {
+        (firstBuild && spec.defaultOpen === true) ||
+        rememberedAccordionSections.has(spec.key);
+    seenAccordionSections.add(spec.key);
+    if (open) {
         rememberedAccordionSections.add(spec.key);
     }
     const section = document.createElement("div");
@@ -684,7 +694,7 @@ export const buildAccordionSection = (
             }
         }
         setAccordionOpen(section, opening);
-        if (opening && !collapseSiblings) {
+        if (opening) {
             rememberedAccordionSections.add(spec.key);
         } else {
             rememberedAccordionSections.delete(spec.key);
@@ -702,6 +712,7 @@ export const buildAccordionSection = (
 
 export interface RepeatingGroupItem {
     label: string;
+    stateKey?: string;
     focusKey?: string;
     title?: string;
     active?: boolean;
@@ -742,6 +753,105 @@ export interface RepeatingEditorSpec {
 const rememberedRepeaterItems = new Map<string, number>();
 const rememberedRepeaterOpenItems = new Map<string, Set<number>>();
 const forceOpenRepeaterKeys = new Set<string>();
+const REPEATER_OPEN_STORAGE_KEY = "videostages.detail.openRepeaterItems";
+interface PersistedRepeaterState {
+    open: Set<string>;
+    known: Set<string>;
+}
+let persistedRepeaterState: PersistedRepeaterState | null = null;
+
+const storedRepeaterState = (): PersistedRepeaterState => {
+    if (persistedRepeaterState) {
+        return persistedRepeaterState;
+    }
+    try {
+        const parsed: unknown = JSON.parse(
+            localStorage.getItem(REPEATER_OPEN_STORAGE_KEY) ?? "[]",
+        );
+        const strings = (value: unknown): string[] =>
+            Array.isArray(value)
+                ? value.filter(
+                      (entry): entry is string => typeof entry === "string",
+                  )
+                : [];
+        const open = strings(
+            Array.isArray(parsed)
+                ? parsed
+                : typeof parsed === "object" && parsed !== null
+                  ? Reflect.get(parsed, "open")
+                  : [],
+        );
+        const known = Array.isArray(parsed)
+            ? open
+            : strings(
+                  typeof parsed === "object" && parsed !== null
+                      ? Reflect.get(parsed, "known")
+                      : [],
+              );
+        persistedRepeaterState = {
+            open: new Set(open),
+            known: new Set(known),
+        };
+    } catch {
+        persistedRepeaterState = { open: new Set(), known: new Set() };
+    }
+    return persistedRepeaterState;
+};
+
+const writeRepeaterState = (stored: PersistedRepeaterState): void => {
+    try {
+        localStorage.setItem(
+            REPEATER_OPEN_STORAGE_KEY,
+            JSON.stringify({
+                open: [...stored.open].sort(),
+                known: [...stored.known].sort(),
+            }),
+        );
+    } catch {}
+};
+
+const persistRepeaterOpenItems = (
+    items: readonly RepeatingGroupItem[],
+    openItems: ReadonlySet<number>,
+): void => {
+    const stored = storedRepeaterState();
+    let changed = false;
+    items.forEach((item, index) => {
+        if (!item.stateKey) {
+            return;
+        }
+        if (!stored.known.has(item.stateKey)) {
+            stored.known.add(item.stateKey);
+            changed = true;
+        }
+        const open = openItems.has(index);
+        if (open !== stored.open.has(item.stateKey)) {
+            changed = true;
+            if (open) {
+                stored.open.add(item.stateKey);
+            } else {
+                stored.open.delete(item.stateKey);
+            }
+        }
+    });
+    if (!changed) {
+        return;
+    }
+    writeRepeaterState(stored);
+};
+
+const forgetRepeaterItem = (item: RepeatingGroupItem): void => {
+    if (!item.stateKey) {
+        return;
+    }
+    const stored = storedRepeaterState();
+    const removedOpen = stored.open.delete(item.stateKey);
+    const removedKnown = stored.known.delete(item.stateKey);
+    if (!removedOpen && !removedKnown) {
+        return;
+    }
+    writeRepeaterState(stored);
+};
 
 const runRepeaterStructuralAction = (
     source: HTMLElement,
@@ -750,21 +860,55 @@ const runRepeaterStructuralAction = (
     const previousBody = source.closest<HTMLElement>(".vst-detail-body");
     const detail = previousBody?.closest<HTMLElement>(".vst-detail");
     const scrollTop = previousBody?.scrollTop;
+    const repeaterKey = source.closest<HTMLElement>("[data-vst-repeater-key]")
+        ?.dataset.vstRepeaterKey;
+    const anchorTop = source.classList.contains("vst-detail-repeating-add")
+        ? source.getBoundingClientRect().top
+        : null;
     action();
     if (scrollTop === undefined) {
         return;
     }
+    const currentBody = (): HTMLElement | null =>
+        detail?.querySelector<HTMLElement>(".vst-detail-body") ??
+        (previousBody?.isConnected ? previousBody : null);
     const restore = (): void => {
-        const body =
-            detail?.querySelector<HTMLElement>(".vst-detail-body") ??
-            (previousBody?.isConnected ? previousBody : null);
-        if (body) {
-            body.scrollTop = scrollTop;
+        const body = currentBody();
+        if (!body) {
+            return;
         }
+        if (anchorTop !== null && repeaterKey) {
+            const section = Array.from(
+                body.querySelectorAll<HTMLElement>("[data-vst-repeater-key]"),
+            ).find(
+                (candidate) => candidate.dataset.vstRepeaterKey === repeaterKey,
+            );
+            const nextAdd = section?.querySelector<HTMLElement>(
+                ":scope > .input-group-content > .vst-detail-repeating-add",
+            );
+            if (nextAdd) {
+                const nextTop = nextAdd.getBoundingClientRect().top;
+                body.scrollTop =
+                    anchorTop === 0 && nextTop === 0
+                        ? scrollTop
+                        : body.scrollTop + nextTop - anchorTop;
+                return;
+            }
+        }
+        body.scrollTop = scrollTop;
     };
+    if (anchorTop !== null && typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(restore);
+        return;
+    }
     restore();
     if (typeof requestAnimationFrame === "function") {
-        requestAnimationFrame(restore);
+        requestAnimationFrame(() => {
+            const body = currentBody();
+            if (body) {
+                body.scrollTop = scrollTop;
+            }
+        });
     }
 };
 
@@ -793,6 +937,7 @@ export const buildRepeatingEditor = (
         ? rememberedIndex
         : null;
     const selectionChanged =
+        rememberedIndex !== undefined &&
         explicitActiveIndex >= 0 &&
         explicitActiveIndex !== validRememberedIndex;
     if (rememberedIndex !== undefined && validRememberedIndex === null) {
@@ -819,7 +964,22 @@ export const buildRepeatingEditor = (
     }
     const autoCollapse = getTimelineAuthoringSettings().autoCollapse;
     const rememberedOpenItems = rememberedRepeaterOpenItems.get(spec.key);
-    const openItems = new Set(rememberedOpenItems ?? []);
+    const storedState = storedRepeaterState();
+    const hasStoredItemState = spec.items.some(
+        (item) => item.stateKey && storedState.known.has(item.stateKey),
+    );
+    const newlyPopulated =
+        spec.items.length > 0 &&
+        rememberedOpenItems !== undefined &&
+        rememberedIndex === undefined;
+    const openItems = new Set(
+        rememberedOpenItems ??
+            spec.items.flatMap((item, index) =>
+                item.stateKey && storedState.open.has(item.stateKey)
+                    ? [index]
+                    : [],
+            ),
+    );
     for (const index of openItems) {
         if (index < 0 || index >= spec.items.length) {
             openItems.delete(index);
@@ -827,7 +987,10 @@ export const buildRepeatingEditor = (
     }
     if (
         activeIndex !== null &&
-        (forceOpen || selectionChanged || rememberedOpenItems === undefined)
+        (forceOpen ||
+            selectionChanged ||
+            newlyPopulated ||
+            (rememberedOpenItems === undefined && !hasStoredItemState))
     ) {
         if (autoCollapse) {
             openItems.clear();
@@ -835,6 +998,7 @@ export const buildRepeatingEditor = (
         openItems.add(activeIndex);
     }
     rememberedRepeaterOpenItems.set(spec.key, openItems);
+    persistRepeaterOpenItems(spec.items, openItems);
     const children = document.createDocumentFragment();
     spec.items.forEach((item, index) => {
         const active = index === activeIndex;
@@ -886,6 +1050,7 @@ export const buildRepeatingEditor = (
             remove.addEventListener("click", (event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                forgetRepeaterItem(item);
                 runRepeaterStructuralAction(remove, onDelete);
             });
             actions.appendChild(remove);
@@ -895,7 +1060,7 @@ export const buildRepeatingEditor = (
         const content = document.createElement("div");
         content.className =
             "input-group-content vst-detail-repeating-group-content";
-        const editor = open
+        let editor = open
             ? (item.editor ??
               spec.editorForItem?.(index) ??
               (active ? spec.editor : undefined))
@@ -939,6 +1104,10 @@ export const buildRepeatingEditor = (
                     remembered.add(index);
                     rememberedRepeaterOpenItems.set(spec.key, remembered);
                 }
+                persistRepeaterOpenItems(
+                    spec.items,
+                    rememberedRepeaterOpenItems.get(spec.key) ?? new Set(),
+                );
                 rememberedRepeaterItems.set(spec.key, index);
                 item.onSelect();
                 return;
@@ -958,6 +1127,16 @@ export const buildRepeatingEditor = (
                     }
                 }
             }
+            if (opening && !editor) {
+                editor =
+                    item.editor ??
+                    spec.editorForItem?.(index) ??
+                    (active ? spec.editor : undefined);
+                if (editor) {
+                    appendSectionContent(content, editor, true);
+                    getVideoStagesHostBridge().enableSliders(content);
+                }
+            }
             setAccordionOpen(group, opening);
             if (opening) {
                 rememberedRepeaterItems.set(spec.key, index);
@@ -973,6 +1152,10 @@ export const buildRepeatingEditor = (
             } else {
                 rememberedRepeaterOpenItems.get(spec.key)?.delete(index);
             }
+            persistRepeaterOpenItems(
+                spec.items,
+                rememberedRepeaterOpenItems.get(spec.key) ?? new Set(),
+            );
         };
         header.addEventListener("click", activateOrToggle);
         header.addEventListener("keydown", (event) => {
@@ -1029,10 +1212,9 @@ export const buildRepeatingEditor = (
         label: spec.label,
         content: children,
         counter: spec.items.length,
-        // An empty repeater has no child row that can reveal its action.
-        // Keep its outer group open so the Add button is immediately
-        // discoverable in every panel that uses this shared primitive.
+        // Empty repeaters stay open so their Add action remains reachable.
         open: forceOpen || spec.items.length === 0 || spec.open,
+        defaultOpen: spec.items.length > 0,
         className:
             `vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim(),
     });

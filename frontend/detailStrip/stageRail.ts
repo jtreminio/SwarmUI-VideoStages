@@ -25,6 +25,7 @@ export const buildStageRail = (
             const firstStage = index === 0;
             return {
                 label: `Stage ${stageChipLabel(index)}`,
+                stateKey: stage.id ? `stage:${stage.id}` : undefined,
                 focusKey: `stage-group-${index}`,
                 title: stageChipTitle(stage, index),
                 active: index === stageIdx,

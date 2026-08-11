@@ -318,6 +318,9 @@ export const buildClipReferenceSection = (
                     ? [
                           {
                               label: `<Video 1> (from Join with Clip ${incomingBoundary.leftIdx})`,
+                              stateKey: clips[incomingBoundary.leftIdx].id
+                                  ? `join-reference:${clips[incomingBoundary.leftIdx].id}`
+                                  : undefined,
                               title: `Edit the reference supplied by the Continue join from Clip ${incomingBoundary.leftIdx}`,
                               focusKey: `clip-reference-join-${incomingBoundary.leftIdx}`,
                               active: incomingSelected,
@@ -333,6 +336,9 @@ export const buildClipReferenceSection = (
                     : []),
                 ...references.map((reference, index) => ({
                     label: tags[index],
+                    stateKey: reference.id
+                        ? `clip-reference:${reference.id}`
+                        : undefined,
                     focusKey: `clip-reference-tab-${index}`,
                     title: `Edit ${CLIP_REFERENCE_KIND_INFO[reference.kind].label} reference ${tags[index]}`,
                     active: index === activeIdx,

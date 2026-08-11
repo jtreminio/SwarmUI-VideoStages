@@ -76,6 +76,7 @@ export const buildClipLorasSection = (
         editor.appendChild(buildField("Model", select));
         return {
             label: `L${loraIdx}`,
+            stateKey: clip.id ? `lora:${clip.id}:${lora.name}` : undefined,
             groupClassName: "vst-clip-lora-entry",
             editor,
             onDelete: () => {
@@ -97,7 +98,6 @@ export const buildClipLorasSection = (
         key: `clip-${clipIdx}-loras`,
         label: "LoRAs",
         sectionClass: "vst-detail-loras-section",
-        open: items.length > 0,
         defaultActiveIndex: items.length > 0 ? 0 : null,
         items,
         add: {

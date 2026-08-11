@@ -8480,6 +8480,10 @@
     for (const sibling of parent.children) {
       if (sibling instanceof HTMLElement && sibling !== section && sibling.classList.contains("vst-detail-section")) {
         setAccordionOpen(sibling, false);
+        const key = sibling.dataset.vstAccordionKey;
+        if (key) {
+          rememberedAccordionSections.delete(key);
+        }
       }
     }
   };
@@ -8515,11 +8519,14 @@
     target.appendChild(action);
   };
   var rememberedAccordionSections = /* @__PURE__ */ new Set();
+  var seenAccordionSections = /* @__PURE__ */ new Set();
   var resetRememberedAccordionSections = () => {
     rememberedAccordionSections.clear();
+    seenAccordionSections.clear();
     rememberedRepeaterItems.clear();
     rememberedRepeaterOpenItems.clear();
     forceOpenRepeaterKeys.clear();
+    persistedRepeaterState = null;
   };
   var buildStaticSection = (spec) => {
     const section = document.createElement("div");
@@ -8552,9 +8559,10 @@
     return { section, heading, content };
   };
   var buildAccordionSection = (spec) => {
-    const autoCollapse = getTimelineAuthoringSettings().autoCollapse;
-    const open = spec.open === true || !autoCollapse && rememberedAccordionSections.has(spec.key);
-    if (!autoCollapse && open) {
+    const firstBuild = !seenAccordionSections.has(spec.key);
+    const open = spec.open === true || firstBuild && spec.defaultOpen === true || rememberedAccordionSections.has(spec.key);
+    seenAccordionSections.add(spec.key);
+    if (open) {
       rememberedAccordionSections.add(spec.key);
     }
     const section = document.createElement("div");
@@ -8607,7 +8615,7 @@
         }
       }
       setAccordionOpen(section, opening);
-      if (opening && !collapseSiblings) {
+      if (opening) {
         rememberedAccordionSections.add(spec.key);
       } else {
         rememberedAccordionSections.delete(spec.key);
@@ -8625,23 +8633,129 @@
   var rememberedRepeaterItems = /* @__PURE__ */ new Map();
   var rememberedRepeaterOpenItems = /* @__PURE__ */ new Map();
   var forceOpenRepeaterKeys = /* @__PURE__ */ new Set();
+  var REPEATER_OPEN_STORAGE_KEY = "videostages.detail.openRepeaterItems";
+  var persistedRepeaterState = null;
+  var storedRepeaterState = () => {
+    if (persistedRepeaterState) {
+      return persistedRepeaterState;
+    }
+    try {
+      const parsed = JSON.parse(
+        localStorage.getItem(REPEATER_OPEN_STORAGE_KEY) ?? "[]"
+      );
+      const strings = (value) => Array.isArray(value) ? value.filter(
+        (entry) => typeof entry === "string"
+      ) : [];
+      const open = strings(
+        Array.isArray(parsed) ? parsed : typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "open") : []
+      );
+      const known = Array.isArray(parsed) ? open : strings(
+        typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "known") : []
+      );
+      persistedRepeaterState = {
+        open: new Set(open),
+        known: new Set(known)
+      };
+    } catch {
+      persistedRepeaterState = { open: /* @__PURE__ */ new Set(), known: /* @__PURE__ */ new Set() };
+    }
+    return persistedRepeaterState;
+  };
+  var writeRepeaterState = (stored) => {
+    try {
+      localStorage.setItem(
+        REPEATER_OPEN_STORAGE_KEY,
+        JSON.stringify({
+          open: [...stored.open].sort(),
+          known: [...stored.known].sort()
+        })
+      );
+    } catch {
+    }
+  };
+  var persistRepeaterOpenItems = (items, openItems) => {
+    const stored = storedRepeaterState();
+    let changed = false;
+    items.forEach((item, index) => {
+      if (!item.stateKey) {
+        return;
+      }
+      if (!stored.known.has(item.stateKey)) {
+        stored.known.add(item.stateKey);
+        changed = true;
+      }
+      const open = openItems.has(index);
+      if (open !== stored.open.has(item.stateKey)) {
+        changed = true;
+        if (open) {
+          stored.open.add(item.stateKey);
+        } else {
+          stored.open.delete(item.stateKey);
+        }
+      }
+    });
+    if (!changed) {
+      return;
+    }
+    writeRepeaterState(stored);
+  };
+  var forgetRepeaterItem = (item) => {
+    if (!item.stateKey) {
+      return;
+    }
+    const stored = storedRepeaterState();
+    const removedOpen = stored.open.delete(item.stateKey);
+    const removedKnown = stored.known.delete(item.stateKey);
+    if (!removedOpen && !removedKnown) {
+      return;
+    }
+    writeRepeaterState(stored);
+  };
   var runRepeaterStructuralAction = (source, action) => {
     const previousBody = source.closest(".vst-detail-body");
     const detail = previousBody?.closest(".vst-detail");
     const scrollTop = previousBody?.scrollTop;
+    const repeaterKey = source.closest("[data-vst-repeater-key]")?.dataset.vstRepeaterKey;
+    const anchorTop = source.classList.contains("vst-detail-repeating-add") ? source.getBoundingClientRect().top : null;
     action();
     if (scrollTop === void 0) {
       return;
     }
+    const currentBody = () => detail?.querySelector(".vst-detail-body") ?? (previousBody?.isConnected ? previousBody : null);
     const restore = () => {
-      const body = detail?.querySelector(".vst-detail-body") ?? (previousBody?.isConnected ? previousBody : null);
-      if (body) {
-        body.scrollTop = scrollTop;
+      const body = currentBody();
+      if (!body) {
+        return;
       }
+      if (anchorTop !== null && repeaterKey) {
+        const section = Array.from(
+          body.querySelectorAll("[data-vst-repeater-key]")
+        ).find(
+          (candidate) => candidate.dataset.vstRepeaterKey === repeaterKey
+        );
+        const nextAdd = section?.querySelector(
+          ":scope > .input-group-content > .vst-detail-repeating-add"
+        );
+        if (nextAdd) {
+          const nextTop = nextAdd.getBoundingClientRect().top;
+          body.scrollTop = anchorTop === 0 && nextTop === 0 ? scrollTop : body.scrollTop + nextTop - anchorTop;
+          return;
+        }
+      }
+      body.scrollTop = scrollTop;
     };
+    if (anchorTop !== null && typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(restore);
+      return;
+    }
     restore();
     if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(restore);
+      requestAnimationFrame(() => {
+        const body = currentBody();
+        if (body) {
+          body.scrollTop = scrollTop;
+        }
+      });
     }
   };
   var buildRepeatingEditor = (spec) => {
@@ -8651,7 +8765,7 @@
     const isValidIndex = (index) => index !== null && index !== void 0 && index >= 0 && index < spec.items.length;
     const rememberedIndex = rememberedRepeaterItems.get(spec.key);
     const validRememberedIndex = isValidIndex(rememberedIndex) ? rememberedIndex : null;
-    const selectionChanged = explicitActiveIndex >= 0 && explicitActiveIndex !== validRememberedIndex;
+    const selectionChanged = rememberedIndex !== void 0 && explicitActiveIndex >= 0 && explicitActiveIndex !== validRememberedIndex;
     if (rememberedIndex !== void 0 && validRememberedIndex === null) {
       rememberedRepeaterItems.delete(spec.key);
       forceOpenRepeaterKeys.delete(spec.key);
@@ -8669,19 +8783,29 @@
     }
     const autoCollapse = getTimelineAuthoringSettings().autoCollapse;
     const rememberedOpenItems = rememberedRepeaterOpenItems.get(spec.key);
-    const openItems = new Set(rememberedOpenItems ?? []);
+    const storedState = storedRepeaterState();
+    const hasStoredItemState = spec.items.some(
+      (item) => item.stateKey && storedState.known.has(item.stateKey)
+    );
+    const newlyPopulated = spec.items.length > 0 && rememberedOpenItems !== void 0 && rememberedIndex === void 0;
+    const openItems = new Set(
+      rememberedOpenItems ?? spec.items.flatMap(
+        (item, index) => item.stateKey && storedState.open.has(item.stateKey) ? [index] : []
+      )
+    );
     for (const index of openItems) {
       if (index < 0 || index >= spec.items.length) {
         openItems.delete(index);
       }
     }
-    if (activeIndex !== null && (forceOpen || selectionChanged || rememberedOpenItems === void 0)) {
+    if (activeIndex !== null && (forceOpen || selectionChanged || newlyPopulated || rememberedOpenItems === void 0 && !hasStoredItemState)) {
       if (autoCollapse) {
         openItems.clear();
       }
       openItems.add(activeIndex);
     }
     rememberedRepeaterOpenItems.set(spec.key, openItems);
+    persistRepeaterOpenItems(spec.items, openItems);
     const children = document.createDocumentFragment();
     spec.items.forEach((item, index) => {
       const active = index === activeIndex;
@@ -8727,6 +8851,7 @@
         remove.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
+          forgetRepeaterItem(item);
           runRepeaterStructuralAction(remove, onDelete);
         });
         actions.appendChild(remove);
@@ -8735,7 +8860,7 @@
       header.appendChild(labelWrap);
       const content = document.createElement("div");
       content.className = "input-group-content vst-detail-repeating-group-content";
-      const editor = open ? item.editor ?? spec.editorForItem?.(index) ?? (active ? spec.editor : void 0) : void 0;
+      let editor = open ? item.editor ?? spec.editorForItem?.(index) ?? (active ? spec.editor : void 0) : void 0;
       if (editor) {
         appendSectionContent(content, editor, true);
       }
@@ -8769,6 +8894,10 @@
             remembered.add(index);
             rememberedRepeaterOpenItems.set(spec.key, remembered);
           }
+          persistRepeaterOpenItems(
+            spec.items,
+            rememberedRepeaterOpenItems.get(spec.key) ?? /* @__PURE__ */ new Set()
+          );
           rememberedRepeaterItems.set(spec.key, index);
           item.onSelect();
           return;
@@ -8784,6 +8913,13 @@
             }
           }
         }
+        if (opening && !editor) {
+          editor = item.editor ?? spec.editorForItem?.(index) ?? (active ? spec.editor : void 0);
+          if (editor) {
+            appendSectionContent(content, editor, true);
+            getVideoStagesHostBridge().enableSliders(content);
+          }
+        }
         setAccordionOpen(group, opening);
         if (opening) {
           rememberedRepeaterItems.set(spec.key, index);
@@ -8797,6 +8933,10 @@
         } else {
           rememberedRepeaterOpenItems.get(spec.key)?.delete(index);
         }
+        persistRepeaterOpenItems(
+          spec.items,
+          rememberedRepeaterOpenItems.get(spec.key) ?? /* @__PURE__ */ new Set()
+        );
       };
       header.addEventListener("click", activateOrToggle);
       header.addEventListener("keydown", (event) => {
@@ -8847,10 +8987,9 @@
       label: spec.label,
       content: children,
       counter: spec.items.length,
-      // An empty repeater has no child row that can reveal its action.
-      // Keep its outer group open so the Add button is immediately
-      // discoverable in every panel that uses this shared primitive.
+      // Empty repeaters stay open so their Add action remains reachable.
       open: forceOpen || spec.items.length === 0 || spec.open,
+      defaultOpen: spec.items.length > 0,
       className: `vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim()
     });
     built.section.dataset.vstRepeaterKey = spec.key;
@@ -10403,6 +10542,7 @@ ${slot}`;
       open: selectedTrackIndex !== null,
       items: visibleTrackIndices.map((trackIndex) => ({
         label: `A${trackIndex + 1}`,
+        stateKey: `audio-track:${tracks[trackIndex].id}`,
         focusKey: `audio-track-tab-${trackIndex}`,
         title: `Edit audio track A${trackIndex + 1}`,
         active: trackIndex === activeTrackIndex,
@@ -11431,8 +11571,9 @@ ${slot}`;
         label: "IC-LoRAs",
         sectionClass: "vst-detail-iclora-section",
         open,
-        items: clip.icLoras.map((_, index) => ({
+        items: clip.icLoras.map((entry, index) => ({
           label: `IC${index}`,
+          stateKey: entry.id ? `ic-lora:${entry.id}` : void 0,
           focusKey: `ic-lora-tab-${index}`,
           title: `Edit IC-LoRA ${index}`,
           active: index === entryIdx,
@@ -11996,8 +12137,9 @@ ${slot}`;
       label: "Persisted IC-LoRAs",
       sectionClass: "vst-detail-iclora-section",
       open,
-      items: clip.icLoras.map((_, index) => ({
+      items: clip.icLoras.map((entry, index) => ({
         label: `IC${index}`,
+        stateKey: entry.id ? `ic-lora:${entry.id}` : void 0,
         focusKey: `ic-lora-tab-${index}`,
         title: `Inspect persisted IC-LoRA ${index}`,
         active: index === entryIdx,
@@ -12236,6 +12378,7 @@ ${slot}`;
       editor.appendChild(buildField("Model", select2));
       return {
         label: `L${loraIdx}`,
+        stateKey: clip.id ? `lora:${clip.id}:${lora.name}` : void 0,
         groupClassName: "vst-clip-lora-entry",
         editor,
         onDelete: () => {
@@ -12257,7 +12400,6 @@ ${slot}`;
       key: `clip-${clipIdx}-loras`,
       label: "LoRAs",
       sectionClass: "vst-detail-loras-section",
-      open: items.length > 0,
       defaultActiveIndex: items.length > 0 ? 0 : null,
       items,
       add: {
@@ -12570,6 +12712,7 @@ ${slot}`;
         ...incomingBoundary ? [
           {
             label: `<Video 1> (from Join with Clip ${incomingBoundary.leftIdx})`,
+            stateKey: clips[incomingBoundary.leftIdx].id ? `join-reference:${clips[incomingBoundary.leftIdx].id}` : void 0,
             title: `Edit the reference supplied by the Continue join from Clip ${incomingBoundary.leftIdx}`,
             focusKey: `clip-reference-join-${incomingBoundary.leftIdx}`,
             active: incomingSelected,
@@ -12582,6 +12725,7 @@ ${slot}`;
         ] : [],
         ...references.map((reference, index) => ({
           label: tags[index],
+          stateKey: reference.id ? `clip-reference:${reference.id}` : void 0,
           focusKey: `clip-reference-tab-${index}`,
           title: `Edit ${CLIP_REFERENCE_KIND_INFO[reference.kind].label} reference ${tags[index]}`,
           active: index === activeIdx,
@@ -13081,8 +13225,9 @@ ${slot}`;
       label: "Keyframes",
       sectionClass: "vst-detail-ref-section",
       open,
-      items: clip.frameRefs.map((_, refIdx) => ({
+      items: clip.frameRefs.map((ref, refIdx) => ({
         label: `Keyframe ${refIdx}`,
+        stateKey: ref.id ? `keyframe:${ref.id}` : void 0,
         focusKey: `reference-tab-${refIdx}`,
         title: `Edit keyframe ${refIdx}`,
         active: refIdx === activeRefIdx,
@@ -13883,6 +14028,7 @@ ${slot}`;
         const firstStage = index === 0;
         return {
           label: `Stage ${stageChipLabel(index)}`,
+          stateKey: stage.id ? `stage:${stage.id}` : void 0,
           focusKey: `stage-group-${index}`,
           title: stageChipTitle(stage, index),
           active: index === stageIdx,
@@ -14161,6 +14307,7 @@ ${slot}`;
       open,
       items: windows.map((window2, index) => ({
         label: `R${index}`,
+        stateKey: window2.id ? `relay:${window2.id}` : void 0,
         focusKey: `relay-tab-${index}`,
         title: `Relay prompt ${roundToTenth(window2.start)}–${roundToTenth(window2.start + window2.duration)} seconds`,
         active: index === activeWindowIdx,

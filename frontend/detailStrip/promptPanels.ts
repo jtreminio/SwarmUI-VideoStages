@@ -76,6 +76,7 @@ const buildRelayPromptSection = (
             open,
             items: windows.map((window, index) => ({
                 label: `R${index}`,
+                stateKey: window.id ? `relay:${window.id}` : undefined,
                 focusKey: `relay-tab-${index}`,
                 title: `Relay prompt ${roundToTenth(window.start)}–${roundToTenth(window.start + window.duration)} seconds`,
                 active: index === activeWindowIdx,
