@@ -743,6 +743,31 @@ const rememberedRepeaterItems = new Map<string, number>();
 const rememberedRepeaterOpenItems = new Map<string, Set<number>>();
 const forceOpenRepeaterKeys = new Set<string>();
 
+const runRepeaterStructuralAction = (
+    source: HTMLElement,
+    action: () => void,
+): void => {
+    const previousBody = source.closest<HTMLElement>(".vst-detail-body");
+    const detail = previousBody?.closest<HTMLElement>(".vst-detail");
+    const scrollTop = previousBody?.scrollTop;
+    action();
+    if (scrollTop === undefined) {
+        return;
+    }
+    const restore = (): void => {
+        const body =
+            detail?.querySelector<HTMLElement>(".vst-detail-body") ??
+            (previousBody?.isConnected ? previousBody : null);
+        if (body) {
+            body.scrollTop = scrollTop;
+        }
+    };
+    restore();
+    if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(restore);
+    }
+};
+
 /**
  * Canonical repeating-child section: one native outer SwarmUI accordion group,
  * containing one native group per item and the extension's Add action.
@@ -767,6 +792,9 @@ export const buildRepeatingEditor = (
     const validRememberedIndex = isValidIndex(rememberedIndex)
         ? rememberedIndex
         : null;
+    const selectionChanged =
+        explicitActiveIndex >= 0 &&
+        explicitActiveIndex !== validRememberedIndex;
     if (rememberedIndex !== undefined && validRememberedIndex === null) {
         rememberedRepeaterItems.delete(spec.key);
         forceOpenRepeaterKeys.delete(spec.key);
@@ -790,15 +818,20 @@ export const buildRepeatingEditor = (
         forceOpenRepeaterKeys.delete(spec.key);
     }
     const autoCollapse = getTimelineAuthoringSettings().autoCollapse;
-    const openItems = autoCollapse
-        ? new Set<number>()
-        : new Set(rememberedRepeaterOpenItems.get(spec.key) ?? []);
+    const rememberedOpenItems = rememberedRepeaterOpenItems.get(spec.key);
+    const openItems = new Set(rememberedOpenItems ?? []);
     for (const index of openItems) {
         if (index < 0 || index >= spec.items.length) {
             openItems.delete(index);
         }
     }
-    if (activeIndex !== null) {
+    if (
+        activeIndex !== null &&
+        (forceOpen || selectionChanged || rememberedOpenItems === undefined)
+    ) {
+        if (autoCollapse) {
+            openItems.clear();
+        }
         openItems.add(activeIndex);
     }
     rememberedRepeaterOpenItems.set(spec.key, openItems);
@@ -853,7 +886,7 @@ export const buildRepeatingEditor = (
             remove.addEventListener("click", (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                onDelete();
+                runRepeaterStructuralAction(remove, onDelete);
             });
             actions.appendChild(remove);
         }
@@ -937,9 +970,6 @@ export const buildRepeatingEditor = (
                     remembered.add(index);
                     rememberedRepeaterOpenItems.set(spec.key, remembered);
                 }
-            } else if (rememberedRepeaterItems.get(spec.key) === index) {
-                rememberedRepeaterItems.delete(spec.key);
-                rememberedRepeaterOpenItems.get(spec.key)?.delete(index);
             } else {
                 rememberedRepeaterOpenItems.get(spec.key)?.delete(index);
             }
@@ -991,7 +1021,7 @@ export const buildRepeatingEditor = (
         }
         rememberedRepeaterItems.set(spec.key, spec.items.length);
         forceOpenRepeaterKeys.add(spec.key);
-        spec.add.onClick();
+        runRepeaterStructuralAction(add, spec.add.onClick);
     });
     children.appendChild(add);
     const built = buildAccordionSection({

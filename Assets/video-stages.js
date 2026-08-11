@@ -8625,6 +8625,25 @@
   var rememberedRepeaterItems = /* @__PURE__ */ new Map();
   var rememberedRepeaterOpenItems = /* @__PURE__ */ new Map();
   var forceOpenRepeaterKeys = /* @__PURE__ */ new Set();
+  var runRepeaterStructuralAction = (source, action) => {
+    const previousBody = source.closest(".vst-detail-body");
+    const detail = previousBody?.closest(".vst-detail");
+    const scrollTop = previousBody?.scrollTop;
+    action();
+    if (scrollTop === void 0) {
+      return;
+    }
+    const restore = () => {
+      const body = detail?.querySelector(".vst-detail-body") ?? (previousBody?.isConnected ? previousBody : null);
+      if (body) {
+        body.scrollTop = scrollTop;
+      }
+    };
+    restore();
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(restore);
+    }
+  };
   var buildRepeatingEditor = (spec) => {
     const explicitActiveIndex = spec.items.findIndex(
       (item) => item.active === true
@@ -8632,6 +8651,7 @@
     const isValidIndex = (index) => index !== null && index !== void 0 && index >= 0 && index < spec.items.length;
     const rememberedIndex = rememberedRepeaterItems.get(spec.key);
     const validRememberedIndex = isValidIndex(rememberedIndex) ? rememberedIndex : null;
+    const selectionChanged = explicitActiveIndex >= 0 && explicitActiveIndex !== validRememberedIndex;
     if (rememberedIndex !== void 0 && validRememberedIndex === null) {
       rememberedRepeaterItems.delete(spec.key);
       forceOpenRepeaterKeys.delete(spec.key);
@@ -8648,13 +8668,17 @@
       forceOpenRepeaterKeys.delete(spec.key);
     }
     const autoCollapse = getTimelineAuthoringSettings().autoCollapse;
-    const openItems = autoCollapse ? /* @__PURE__ */ new Set() : new Set(rememberedRepeaterOpenItems.get(spec.key) ?? []);
+    const rememberedOpenItems = rememberedRepeaterOpenItems.get(spec.key);
+    const openItems = new Set(rememberedOpenItems ?? []);
     for (const index of openItems) {
       if (index < 0 || index >= spec.items.length) {
         openItems.delete(index);
       }
     }
-    if (activeIndex !== null) {
+    if (activeIndex !== null && (forceOpen || selectionChanged || rememberedOpenItems === void 0)) {
+      if (autoCollapse) {
+        openItems.clear();
+      }
       openItems.add(activeIndex);
     }
     rememberedRepeaterOpenItems.set(spec.key, openItems);
@@ -8703,7 +8727,7 @@
         remove.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          onDelete();
+          runRepeaterStructuralAction(remove, onDelete);
         });
         actions.appendChild(remove);
       }
@@ -8770,9 +8794,6 @@
             remembered.add(index);
             rememberedRepeaterOpenItems.set(spec.key, remembered);
           }
-        } else if (rememberedRepeaterItems.get(spec.key) === index) {
-          rememberedRepeaterItems.delete(spec.key);
-          rememberedRepeaterOpenItems.get(spec.key)?.delete(index);
         } else {
           rememberedRepeaterOpenItems.get(spec.key)?.delete(index);
         }
@@ -8818,7 +8839,7 @@
       }
       rememberedRepeaterItems.set(spec.key, spec.items.length);
       forceOpenRepeaterKeys.add(spec.key);
-      spec.add.onClick();
+      runRepeaterStructuralAction(add, spec.add.onClick);
     });
     children.appendChild(add);
     const built = buildAccordionSection({
@@ -13606,6 +13627,8 @@ ${slot}`;
   };
 
   // frontend/detailStrip/stagePanel/samplingSection.ts
+  var STEPS_SLIDER_MAX = 20;
+  var CFG_SCALE_SLIDER_MAX = 10;
   var appendStageDenoisingSection = (bindings, isRefine) => {
     const { stage, defaults, fields, slider } = bindings;
     fields.appendChild(
@@ -13618,7 +13641,8 @@ ${slot}`;
         defaults.stepsStep,
         (target, value) => {
           target.steps = Math.round(value);
-        }
+        },
+        { sliderMax: Math.min(STEPS_SLIDER_MAX, defaults.stepsMax) }
       )
     );
     fields.appendChild(
@@ -13631,7 +13655,8 @@ ${slot}`;
         defaults.cfgScaleStep,
         (target, value) => {
           target.cfgScale = value;
-        }
+        },
+        { sliderMax: Math.min(CFG_SCALE_SLIDER_MAX, defaults.cfgScaleMax) }
       )
     );
     if (isRefine) {
@@ -13809,7 +13834,11 @@ ${slot}`;
             (target) => assign(target, nextValue)
           );
         },
-        options?.title || options?.help ? { title: options.title, help: options.help } : void 0
+        options ? {
+          title: options.title,
+          help: options.help,
+          sliderMax: options.sliderMax
+        } : void 0
       ),
       focusKey
     );
@@ -14124,7 +14153,6 @@ ${slot}`;
   };
   var buildRelayPromptSection = (ctx, clip, clipIdx, selectedWindowIdx, open) => {
     const windows = clip.promptWindows ?? [];
-    const decision = ctx.authoring().capabilities.forClip(clip).decision("promptRelay");
     const activeWindowIdx = windows.length === 0 ? null : clamp(selectedWindowIdx ?? 0, 0, windows.length - 1);
     const buildSection = (editorForItem) => buildRepeatingEditor({
       key: "relay-prompts",
@@ -14145,10 +14173,9 @@ ${slot}`;
         onDelete: () => ctx.deleteWindowEntry(clipIdx, index)
       })),
       add: {
-        title: decision.supported ? "Add a relay prompt in the first available time window" : decision.reason,
+        title: "Add a relay prompt in the first available time window",
         label: "+ Add Relay Prompt",
         className: "vst-detail-add-relay",
-        disabled: !decision.supported,
         onClick: () => ctx.addPromptWindow(clipIdx)
       },
       remove: {
@@ -14250,9 +14277,6 @@ ${slot}`;
       });
       editor.rows = 4;
       editorSection.appendChild(buildField("Prompt", editor));
-      if (!decision.supported) {
-        applyPersistedCapabilityRepair(editorSection, decision);
-      }
       return editorSection;
     };
     return buildSection(buildEditor);
@@ -14260,6 +14284,7 @@ ${slot}`;
   var buildPromptBody = (ctx, selection, clips) => {
     const clipIdx = selection.clipIdx;
     const clip = clips[clipIdx];
+    const supportsRelay = ctx.authoring().capabilities.forClip(clip).decision("promptRelay").supported;
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-prompts-body";
     body.appendChild(
@@ -14267,18 +14292,20 @@ ${slot}`;
         ctx,
         clip,
         clipIdx,
-        selection.kind === "prompt-major"
+        selection.kind === "prompt-major" || !supportsRelay
       )
     );
-    body.appendChild(
-      buildRelayPromptSection(
-        ctx,
-        clip,
-        clipIdx,
-        selection.kind === "prompt-minor" ? selection.windowIdx : null,
-        selection.kind === "prompt-minor"
-      )
-    );
+    if (supportsRelay) {
+      body.appendChild(
+        buildRelayPromptSection(
+          ctx,
+          clip,
+          clipIdx,
+          selection.kind === "prompt-minor" ? selection.windowIdx : null,
+          selection.kind === "prompt-minor"
+        )
+      );
+    }
     return body;
   };
   var buildPromptMajorBody = (ctx, selection, clips) => buildPromptBody(ctx, selection, clips);
@@ -15622,6 +15649,7 @@ ${slot}`;
       }
       renderedSelection = null;
       renderEnabled = false;
+      resetRememberedAccordionSections();
     };
     const attach = (body, dock, renderImmediately = true) => {
       renderEnabled = renderImmediately;

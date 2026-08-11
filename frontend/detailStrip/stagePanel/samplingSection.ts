@@ -7,6 +7,9 @@ import { preserveSelectedOption } from "../../selectOption";
 import { disableCapabilityControls } from "../capabilityUi";
 import type { StagePanelBindings } from "./types";
 
+const STEPS_SLIDER_MAX = 20;
+const CFG_SCALE_SLIDER_MAX = 10;
+
 export const appendStageDenoisingSection = (
     bindings: StagePanelBindings,
     isRefine: boolean,
@@ -23,6 +26,7 @@ export const appendStageDenoisingSection = (
             (target, value) => {
                 target.steps = Math.round(value);
             },
+            { sliderMax: Math.min(STEPS_SLIDER_MAX, defaults.stepsMax) },
         ),
     );
     fields.appendChild(
@@ -36,6 +40,7 @@ export const appendStageDenoisingSection = (
             (target, value) => {
                 target.cfgScale = value;
             },
+            { sliderMax: Math.min(CFG_SCALE_SLIDER_MAX, defaults.cfgScaleMax) },
         ),
     );
     if (isRefine) {

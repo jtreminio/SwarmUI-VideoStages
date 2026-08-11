@@ -64,8 +64,12 @@ export const buildStageParamsColumn = (
                         assign(target, nextValue),
                     );
                 },
-                options?.title || options?.help
-                    ? { title: options.title, help: options.help }
+                options
+                    ? {
+                          title: options.title,
+                          help: options.help,
+                          sliderMax: options.sliderMax,
+                      }
                     : undefined,
             ),
             focusKey,

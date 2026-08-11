@@ -190,6 +190,51 @@ describe("stage reference strengths", () => {
 });
 
 describe("stage architecture model filtering", () => {
+    it("caps sampling sliders without capping their number inputs", () => {
+        const models = catalog();
+        const stage = minimalStage({ steps: 32, cfgScale: 12 });
+        const clip = minimalClip({ stages: [stage] });
+        const defaults = testRootDefaults(models);
+        defaults.stepsMax = 240;
+        defaults.cfgScaleMax = 30;
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            stage,
+            defaults,
+        );
+        const controls = (
+            label: string,
+        ): [HTMLInputElement, HTMLInputElement] => {
+            const holder = Array.from(
+                column.querySelectorAll<HTMLElement>(".vst-stage-slider"),
+            ).find(
+                (candidate) =>
+                    candidate.querySelector(".auto-input-name")?.textContent ===
+                    label,
+            );
+            const range = holder?.querySelector<HTMLInputElement>(
+                "input.auto-slider-range",
+            );
+            const number = holder?.querySelector<HTMLInputElement>(
+                "input.auto-slider-number",
+            );
+            if (!range || !number) {
+                throw new Error(`${label} controls missing`);
+            }
+            return [range, number];
+        };
+
+        const [stepsRange, stepsNumber] = controls("Steps");
+        const [cfgRange, cfgNumber] = controls("CFG Scale");
+        expect(stepsRange.max).toBe("20");
+        expect(stepsNumber.max).toBe("240");
+        expect(cfgRange.max).toBe("10");
+        expect(cfgNumber.max).toBe("30");
+    });
+
     it("keeps every WAN family model available for text and image roots", () => {
         const models = catalog();
         const wan = structuredClone(models.architectures[0]);

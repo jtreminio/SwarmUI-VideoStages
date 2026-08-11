@@ -13,7 +13,6 @@ import {
 import { setSelection } from "../selection";
 import type { Clip, TimelineSelection } from "../types";
 import { gridCeil, gridFloor, roundToTenth } from "../utils";
-import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
 type PromptSelection = Extract<
@@ -63,10 +62,6 @@ const buildRelayPromptSection = (
     open: boolean,
 ): HTMLElement => {
     const windows = clip.promptWindows ?? [];
-    const decision = ctx
-        .authoring()
-        .capabilities.forClip(clip)
-        .decision("promptRelay");
     const activeWindowIdx =
         windows.length === 0
             ? null
@@ -94,12 +89,9 @@ const buildRelayPromptSection = (
                 onDelete: () => ctx.deleteWindowEntry(clipIdx, index),
             })),
             add: {
-                title: decision.supported
-                    ? "Add a relay prompt in the first available time window"
-                    : decision.reason,
+                title: "Add a relay prompt in the first available time window",
                 label: "+ Add Relay Prompt",
                 className: "vst-detail-add-relay",
-                disabled: !decision.supported,
                 onClick: () => ctx.addPromptWindow(clipIdx),
             },
             remove: {
@@ -209,9 +201,6 @@ const buildRelayPromptSection = (
         });
         editor.rows = 4;
         editorSection.appendChild(buildField("Prompt", editor));
-        if (!decision.supported) {
-            applyPersistedCapabilityRepair(editorSection, decision);
-        }
         return editorSection;
     };
     return buildSection(buildEditor);
@@ -225,6 +214,10 @@ export const buildPromptBody = (
 ): HTMLElement => {
     const clipIdx = selection.clipIdx;
     const clip = clips[clipIdx];
+    const supportsRelay = ctx
+        .authoring()
+        .capabilities.forClip(clip)
+        .decision("promptRelay").supported;
     const body = document.createElement("div");
     body.className = "vst-detail-body vst-detail-prompts-body";
     body.appendChild(
@@ -232,18 +225,20 @@ export const buildPromptBody = (
             ctx,
             clip,
             clipIdx,
-            selection.kind === "prompt-major",
+            selection.kind === "prompt-major" || !supportsRelay,
         ),
     );
-    body.appendChild(
-        buildRelayPromptSection(
-            ctx,
-            clip,
-            clipIdx,
-            selection.kind === "prompt-minor" ? selection.windowIdx : null,
-            selection.kind === "prompt-minor",
-        ),
-    );
+    if (supportsRelay) {
+        body.appendChild(
+            buildRelayPromptSection(
+                ctx,
+                clip,
+                clipIdx,
+                selection.kind === "prompt-minor" ? selection.windowIdx : null,
+                selection.kind === "prompt-minor",
+            ),
+        );
+    }
     return body;
 };
 

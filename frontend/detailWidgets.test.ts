@@ -268,6 +268,96 @@ describe("native detail groups", () => {
         ).toBe(false);
     });
 
+    it("restores sidebar scroll after a repeating-item structural action settles", () => {
+        const frames: FrameRequestCallback[] = [];
+        const original = window.requestAnimationFrame;
+        window.requestAnimationFrame = (callback: FrameRequestCallback) => {
+            frames.push(callback);
+            return frames.length;
+        };
+        const body = document.createElement("div");
+        body.className = "vst-detail-body";
+        const host = document.createElement("div");
+        body.appendChild(host);
+        document.body.appendChild(body);
+        const items = ["LoRA 0"];
+        const render = (): void => {
+            host.replaceChildren(
+                buildRepeatingEditor({
+                    key: "scroll-preservation-test",
+                    label: "LoRAs",
+                    open: true,
+                    defaultActiveIndex: 0,
+                    items: items.map((label) => ({ label })),
+                    add: {
+                        title: "Add LoRA",
+                        className: "test-add",
+                        onClick: () => {
+                            items.push(`LoRA ${items.length}`);
+                            render();
+                        },
+                    },
+                    remove: {
+                        title: "Delete LoRA",
+                        className: "test-remove",
+                    },
+                }).section,
+            );
+        };
+
+        try {
+            render();
+            body.scrollTop = 140;
+            host.querySelector<HTMLButtonElement>(".test-add")?.click();
+            expect(frames).toHaveLength(1);
+            body.scrollTop = 0;
+            frames[0](0);
+            expect(body.scrollTop).toBe(140);
+        } finally {
+            if (original) {
+                window.requestAnimationFrame = original;
+            } else {
+                Reflect.deleteProperty(window, "requestAnimationFrame");
+            }
+        }
+    });
+
+    it("keeps an active repeating item minimized through a rebuild", () => {
+        const host = document.createElement("div");
+        const render = (): void => {
+            host.replaceChildren(
+                buildRepeatingEditor({
+                    key: "minimized-rebuild-test",
+                    label: "Stages",
+                    open: true,
+                    items: [{ label: "Stage 0", active: true }],
+                    editorForItem: () => document.createElement("div"),
+                    add: {
+                        title: "Add stage",
+                        className: "test-add",
+                        onClick: () => {},
+                    },
+                    remove: {
+                        title: "Delete stage",
+                        className: "test-remove",
+                    },
+                }).section,
+            );
+        };
+
+        render();
+        host.querySelector<HTMLElement>(
+            ".vst-detail-repeating-group-header",
+        )?.click();
+        render();
+
+        expect(
+            host
+                .querySelector(".vst-detail-repeating-group")
+                ?.classList.contains("input-group-closed"),
+        ).toBe(true);
+    });
+
     it("opens an empty repeater so its Add action is visible by default", () => {
         const built = buildRepeatingEditor({
             key: "empty-add-test",

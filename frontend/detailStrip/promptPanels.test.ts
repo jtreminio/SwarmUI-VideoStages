@@ -68,6 +68,24 @@ describe("detail strip prompt panels", () => {
         expect(minorEditor(0)).not.toBeNull();
     });
 
+    it("hides relay prompts when the clip model does not support them", () => {
+        h.setup([
+            {
+                duration: 5,
+                stages: [{ model: "removed-model.safetensors" }],
+                windows: [{ start: 1, duration: 2, prompt: "dormant" }],
+            },
+        ]);
+        setSelection({ kind: "prompt-major", clipIdx: 0 });
+
+        expect(
+            document.querySelector('[data-vst-repeater-key="relay-prompts"]'),
+        ).toBeNull();
+        expect(
+            document.querySelector(".vst-detail-prompt-major"),
+        ).not.toBeNull();
+    });
+
     it("does not steal focus / snap the caret when the major prompt is re-rendered in place", () => {
         h.setup([{ duration: 5, stages: [{}], prompt: "existing text" }]);
         setSelection({ kind: "prompt-major", clipIdx: 0 });

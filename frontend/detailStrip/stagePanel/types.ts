@@ -19,6 +19,7 @@ export type StageSliderBuilder = (
         title?: string;
         onValue?: (value: number) => void;
         help?: string;
+        sliderMax?: number;
     },
 ) => HTMLElement;
 export interface StagePanelBindings {

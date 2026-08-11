@@ -17,6 +17,7 @@ import { createDetailSelectionOperations } from "./detailStrip/selectionOperatio
 import { closeTimelineAuthoringSettingsModal } from "./detailStrip/settingsModal";
 import { releaseSidebarMediaPreviews } from "./detailStrip/sidebarMediaPreview";
 import { closeTrimModal } from "./detailStrip/trimModal";
+import { resetRememberedAccordionSections } from "./detailWidgets";
 import { getState } from "./persistence/repository";
 import {
     getSelection,
@@ -272,6 +273,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
         }
         renderedSelection = null;
         renderEnabled = false;
+        resetRememberedAccordionSections();
     };
 
     const attach = (
