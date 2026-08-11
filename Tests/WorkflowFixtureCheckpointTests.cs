@@ -14,7 +14,7 @@ public class WorkflowFixtureCheckpointTests
     [InlineData(VideoStagesWorkflowFixture.BaseModelFixturePath, "stable-diffusion-xl-v1-base")]
     [InlineData(MiniMaxWorkflowFixture.ModelFixturePath, "minimax-h3")]
     [InlineData(Ltx2WorkflowFixture.ModelFixturePath, "lightricks-ltx-video-2-3")]
-    [InlineData(Ltx2WorkflowFixture.NonV23ModelFixturePath, "lightricks-ltx-video-2")]
+    [InlineData(Ltx2WorkflowFixture.UnsupportedModelFixturePath, "lightricks-ltx-video-2")]
     [InlineData(WanWorkflowFixture.Wan22I2v14bFixturePath, "wan-2_2-image2video-14b")]
     [InlineData(WanWorkflowFixture.Wan22I2v14bHighNoiseFixturePath, "wan-2_2-image2video-14b")]
     [InlineData(WanWorkflowFixture.Wan22I2v14bLowNoiseFixturePath, "wan-2_2-image2video-14b")]

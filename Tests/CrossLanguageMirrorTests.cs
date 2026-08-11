@@ -296,7 +296,7 @@ public class CrossLanguageMirrorTests
         [
             TestResolvedVideoModel.Create(
                 "ltx-video-2.3.safetensors",
-                Ltx2ArchitectureModule.ProfileId,
+                Ltx2ArchitectureModule.Ltx23ProfileId,
                 Ltx2ArchitectureModule.Instance.Descriptor,
                 modelClassId: "lightricks-ltx-video-2-3",
                 compatibilityClassId: "lightricks-ltx-video-2",

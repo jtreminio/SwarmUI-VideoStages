@@ -67,7 +67,7 @@ internal static class TestPlanCompiler
 
     private static ModelProfileId ProfileFor(VideoArchitectureDescriptor descriptor) =>
         descriptor.Id == Ltx2ArchitectureModule.ArchitectureId
-            ? Ltx2ArchitectureModule.ProfileId
+            ? Ltx2ArchitectureModule.Ltx23ProfileId
             : descriptor.Id == WanArchitectureModule.ArchitectureId
                 ? WanArchitectureModule.ImageToVideoProfileId
                 : HostVideoArchitectureModule.ProfileId;

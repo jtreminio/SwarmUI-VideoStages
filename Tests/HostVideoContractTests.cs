@@ -15,10 +15,9 @@ namespace VideoStages.Tests;
 /// <summary>
 /// The generic host-video fallback that drives any video model the extension has no module for.
 /// <para>
-/// It is selected by elimination — <c>Ltx2ArchitectureModule</c> only claims model class
-/// <c>lightricks-ltx-video-2-3</c>, so even an LTX-2 checkpoint that is not 2.3 lands here. Its
-/// descriptor declares no features and a frame grid of 1, so everything a timeline can author
-/// beyond model/steps/control/upscale is warned about and dropped.
+/// It is selected when no specialized module claims the model. Its descriptor declares no
+/// features and a frame grid of 1, so everything beyond model/steps/control/upscale is warned
+/// about and dropped.
 /// </para>
 /// </summary>
 [Collection("VideoStagesTests")]
@@ -125,16 +124,16 @@ public class HostVideoContractTests
     }
 
     /// <summary>
-    /// An LTX-2 checkpoint that is not 2.3 falls to the generic runtime, which lets core build the
-    /// joint audio/video latent it always builds for the family. The document's own fps wins over
+    /// An unsupported base LTX-2 checkpoint falls to the generic runtime, which lets core build
+    /// the joint audio/video latent it always builds for the family. The document's fps wins over
     /// the request's for everything in the graph, while the request keeps the value the user set.
     /// The generic runtime declares no audio support, so the audio half is sampled and then
     /// dropped: nothing decodes it and the publication is video-only.
     /// </summary>
     [Fact]
-    public async Task Ltx2_text_entry_builds_the_host_joint_latent_but_publishes_video_only()
+    public async Task Unsupported_Ltx2_builds_the_host_joint_latent_but_publishes_video_only()
     {
-        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateNonV23();
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateUnsupported();
         JObject document = MakeDocument(MakeClip(1.0, fixture.Stage(steps: 9)));
         document["fps"] = 24;
 

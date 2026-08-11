@@ -88,7 +88,7 @@ internal class StageRunner
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageContext.GenInfo;
         WGNodeData sourceMedia = stageContext.SourceMedia;
         LtxPostVideoChain postVideoChain = stageContext.PostVideoChain;
-        if (!Ltx2ArchitectureModule.IsLtx23VideoModel(genInfo.VideoModel)
+        if (!Ltx2ArchitectureModule.IsSupportedVideoModel(genInfo.VideoModel)
             || (sourceMedia?.DataType != WGNodeData.DT_VIDEO
                 && sourceMedia?.DataType != WGNodeData.DT_IMAGE))
         {

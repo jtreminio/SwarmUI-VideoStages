@@ -8,16 +8,26 @@ namespace VideoStages.Architectures.Ltx2;
 
 internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
 {
+    private sealed record RecognizedProfile(
+        string ModelClassId,
+        ModelProfileId ProfileId);
+
     internal static ArchitectureId ArchitectureId { get; } = new("ltx2");
 
     /// <summary>
-    /// The grid an authored frame count snaps to, which for LTX-2 is also the VAE's temporal
-    /// downscale — so pixel↔latent index conversions divide by it. Matches
-    /// <c>ltx_director_guide.py</c>'s <c>downscale_index_formula[0]</c>. The two meanings coincide
-    /// only here: MiniMax's snap grid is 17 and says nothing about its VAE.
+    /// LTX-2's frame-count grid and VAE temporal downscale.
     /// </summary>
     internal const int FrameGrid = 8;
-    internal static ModelProfileId ProfileId { get; } = new("ltx-2.3");
+
+    internal static ModelProfileId Ltx23ProfileId { get; } = new("ltx-2.3");
+
+    internal static ModelProfileId Ltx25ProfileId { get; } = new("ltx-2.5");
+
+    private static IReadOnlyList<RecognizedProfile> ExactProfiles { get; } =
+    [
+        new("lightricks-ltx-video-2-3", Ltx23ProfileId),
+        new("lightricks-ltx-video-2-5", Ltx25ProfileId),
+    ];
 
     /// <summary>
     /// LTX's pixel→latent temporal mapping: the first pixel frame owns a latent frame of its own and
@@ -30,12 +40,12 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
 
     internal static Ltx2ArchitectureModule Instance { get; } = new();
 
-    internal static bool IsLtx23VideoModel(T2IModel model) =>
+    internal static bool IsSupportedVideoModel(T2IModel model) =>
         Instance.TryResolveModel(model, out _);
 
     public VideoArchitectureDescriptor Descriptor { get; } = new(
         ArchitectureId,
-        "LTX Video 2.3",
+        "LTX Video 2",
         [
             AudioSourceKind.Native,
             AudioSourceKind.Upload,
@@ -73,20 +83,23 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
 
     public bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved)
     {
+        string modelClassId = model?.ModelClass?.ID;
+        RecognizedProfile profile = ExactProfiles.SingleOrDefault(candidate =>
+            string.Equals(
+                modelClassId,
+                candidate.ModelClassId,
+                StringComparison.OrdinalIgnoreCase));
         if (model?.ModelClass?.CompatClass?.ID != T2IModelClassSorter.CompatLtxv2.ID
-            || !string.Equals(
-                model.ModelClass.ID,
-                "lightricks-ltx-video-2-3",
-                StringComparison.OrdinalIgnoreCase))
+            || profile is null)
         {
             resolved = null;
             return false;
         }
         resolved = new(
             model.Name,
-            ProfileId,
+            profile.ProfileId,
             Descriptor,
-            model.ModelClass.ID,
+            modelClassId,
             model.ModelClass.CompatClass.ID,
             [FrameReferencePosition.Any],
             model.ModelClass.CompatClass.LorasTargetTextEnc);

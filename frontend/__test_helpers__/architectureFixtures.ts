@@ -39,7 +39,7 @@ export const testArchitectureCatalog = (
     architectures: [
         {
             id: "ltx2",
-            label: "LTX Video 2.3",
+            label: "LTX Video 2",
             capabilities: testArchitectureCapabilities(),
             boundaryRules: {
                 cut: {

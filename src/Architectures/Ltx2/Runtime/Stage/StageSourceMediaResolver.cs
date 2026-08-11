@@ -49,8 +49,8 @@ internal sealed class StageSourceMediaResolver(WorkflowGenerator g)
             T2IParamTypes.VideoModel,
             null,
             sectionId: sectionId);
-        bool isLtx23Stage = Ltx2ArchitectureModule.IsLtx23VideoModel(stageVideoModel);
-        if (isLtx23Stage
+        bool isSupportedLtxStage = Ltx2ArchitectureModule.IsSupportedVideoModel(stageVideoModel);
+        if (isSupportedLtxStage
             && upscale.Mode is StageUpscaleMode.LatentModel or StageUpscaleMode.Latent)
         {
             g.CurrentMedia = source;

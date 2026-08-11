@@ -1339,7 +1339,7 @@ public class ArchitectureFoundationTests
             architectures.Values<JObject>(),
             item => item["id"]?.ToString() == "ltx2");
         Assert.Equal("ltx2", ltx["id"]);
-        Assert.Equal("LTX Video 2.3", ltx["label"]);
+        Assert.Equal("LTX Video 2", ltx["label"]);
         JObject capabilities = (JObject)ltx["capabilities"];
         Assert.Equal(
             [
@@ -1455,7 +1455,7 @@ public class ArchitectureFoundationTests
                         {
                             [stage.ClipStageRawIndex] = TestResolvedVideoModel.Create(
                                 stage.Model,
-                                Ltx2ArchitectureModule.ProfileId,
+                                Ltx2ArchitectureModule.Ltx23ProfileId,
                                 descriptor),
                         }),
                 },

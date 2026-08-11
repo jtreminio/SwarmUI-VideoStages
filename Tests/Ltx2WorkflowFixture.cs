@@ -6,12 +6,10 @@ internal sealed class Ltx2WorkflowFixture : VideoStagesWorkflowFixture
         "models/diffusion_models/Ltx2-Workflow-Test.safetensors";
 
     /// <summary>
-    /// An LTX-2 checkpoint that is not 2.3. It lives in <c>checkpoints</c> because
-    /// <c>IsDiffusionModelsFormat</c> would otherwise give it a UNET-only loader, leaving
-    /// <c>LoadingVAE</c> null — the state core rejects with "LTX2 requires the safetensors
-    /// checkpoint format".
+    /// An unsupported base LTX-2 checkpoint. It stays in <c>checkpoints</c> so core loads its
+    /// bundled VAE instead of taking the UNET-only diffusion-model path.
     /// </summary>
-    public const string NonV23ModelFixturePath =
+    public const string UnsupportedModelFixturePath =
         "models/checkpoints/Ltx2NonV23-Workflow-Test.safetensors";
 
     public const int Steps = 12;
@@ -35,8 +33,8 @@ internal sealed class Ltx2WorkflowFixture : VideoStagesWorkflowFixture
     public static Ltx2WorkflowFixture CreateWithBaseModel() =>
         new(ModelFixturePath, withBaseModel: true);
 
-    public static Ltx2WorkflowFixture CreateNonV23() =>
-        new(NonV23ModelFixturePath, withBaseModel: false);
+    public static Ltx2WorkflowFixture CreateUnsupported() =>
+        new(UnsupportedModelFixturePath, withBaseModel: false);
 
     protected override void InstallSupportModels() =>
         TestModelFactory.InstallLtx2SupportModels();
