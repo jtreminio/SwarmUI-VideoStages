@@ -2213,26 +2213,35 @@
 .vst-trim-launcher button {
     flex: none;
 }
-.vst-sidebar-video-preview-section {
+.vst-sidebar-media-preview-section {
     display: grid;
     box-sizing: border-box;
     width: 100%;
     gap: 4px;
 }
-.vst-sidebar-video-preview-label {
+.vst-sidebar-media-preview-label {
     color: var(--text-soft);
     font-size: var(--vst-font-xs);
 }
-.vst-sidebar-video-preview {
+.vst-sidebar-media-preview {
     display: block;
     box-sizing: border-box;
     width: 100%;
+    border: 1px solid var(--vst-hairline);
+    border-radius: var(--vst-radius-sm);
+}
+.vst-sidebar-video-preview {
     max-height: 260px;
     aspect-ratio: 16 / 9;
     object-fit: contain;
-    border: 1px solid var(--vst-hairline);
-    border-radius: var(--vst-radius-sm);
     background: #000;
+}
+.vst-sidebar-audio-preview {
+    height: 40px;
+}
+.vst-sidebar-media-preview-error {
+    color: var(--text-soft);
+    font-size: var(--vst-font-xs);
 }
 
 .vst-trim-modal .modal-dialog {

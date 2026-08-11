@@ -116,7 +116,12 @@ public class Ltx2AudioContractTests
                 bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
             SwarmEnsureAudioNode ensure = Assert.IsType<SwarmEnsureAudioNode>(
                 encode.Audio.Connection?.Node);
-            Assert.Same(upload.AUDIO, ensure.Audio.Connection);
+            TrimAudioDurationNode conformed = Assert.IsType<TrimAudioDurationNode>(
+                ensure.Audio.Connection?.Node);
+            AudioConcatNode padded = Assert.IsType<AudioConcatNode>(
+                conformed.Audio.Connection?.Node);
+            Assert.Same(upload.AUDIO, padded.Audio1.Connection);
+            Assert.IsType<EmptyAudioNode>(padded.Audio2.Connection?.Node);
 
             SetLatentNoiseMaskNode mask = Assert.Single(
                 bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>());
@@ -329,7 +334,12 @@ public class Ltx2AudioContractTests
 
         SwarmKSamplerNode[] stages = [StageSampler(bridge, 0), StageSampler(bridge, 1)];
         BatchImagesNodeNode batch = Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
-        AudioConcatNode audio = Assert.Single(bridge.Graph.NodesOfType<AudioConcatNode>());
+        AudioConcatNode audio = Assert.Single(
+            bridge.Graph.NodesOfType<AudioConcatNode>(),
+            candidate => ReachesUpstream(
+                bridge,
+                candidate.Audio1.Connection?.Node,
+                stages[0].Id));
 
         ComfyNode[] batched = [.. batch.Images.Items.Select(image => image.Connection?.Node)];
         Assert.Equal(2, batched.Length);

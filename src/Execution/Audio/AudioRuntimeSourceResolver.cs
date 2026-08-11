@@ -134,16 +134,43 @@ internal sealed class AudioRuntimeSourceResolver(
                 g,
                 WGNodeData.DT_AUDIO,
                 g.CurrentAudioVae?.Compat ?? g.CurrentCompat());
-            if (clip.Audio.Base.LengthSeconds > 0)
+            int frames = clip.Frames.GetValueOrDefault();
+            double clipDuration =
+                clip.Audio.LengthOwner != AudioLengthOwner.Audio
+                && frames > 0
+                && plan.FramesPerSecond > 0
+                    ? frames / (double)plan.FramesPerSecond
+                    : 0;
+            if (clip.Audio.Base.LengthSeconds > 0 || clipDuration > 0)
             {
                 using WorkflowBridge bridge = BridgeSync.For(g);
-                TrimAudioDurationNode trim = bridge.AddNode(
-                    new TrimAudioDurationNode().With(
+                INodeOutput current = bridge.ResolvePath(source.Path);
+                if (clip.Audio.Base.LengthSeconds > 0)
+                {
+                    TrimAudioDurationNode trim = bridge.AddNode(
+                        new TrimAudioDurationNode().With(
                         StartIndex: clip.Audio.Base.TrimStartSeconds,
                         Duration: clip.Audio.Base.LengthSeconds));
-                trim.Audio.ConnectFromPath(bridge, source.Path);
+                    trim.Audio.ConnectToUntyped(current);
+                    current = trim.AUDIO;
+                }
+                if (clipDuration > 0)
+                {
+                    EmptyAudioNode silence = bridge.AddNode(
+                        new EmptyAudioNode().With(Duration: clipDuration));
+                    AudioConcatNode padded = bridge.AddNode(
+                        new AudioConcatNode().With(Direction: "after"));
+                    padded.Audio1.ConnectToUntyped(current);
+                    padded.Audio2.ConnectTo(silence.AUDIO);
+                    TrimAudioDurationNode conform = bridge.AddNode(
+                        new TrimAudioDurationNode().With(
+                            StartIndex: 0,
+                            Duration: clipDuration));
+                    conform.Audio.ConnectTo(padded.AUDIO);
+                    current = conform.AUDIO;
+                }
                 source = new(
-                    WorkflowBridge.ToPath(trim.AUDIO),
+                    WorkflowBridge.ToPath(current),
                     g,
                     WGNodeData.DT_AUDIO,
                     source.Compat);

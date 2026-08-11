@@ -33,6 +33,7 @@ import {
     CAPABILITY_REPAIR_SELECTORS,
 } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
+import { buildSidebarMediaPreview } from "./sidebarMediaPreview";
 import { buildTrimLauncher, openTrimModal } from "./trimModal";
 
 export const buildAudioBody = (
@@ -330,7 +331,7 @@ export const buildAudioBody = (
                 },
             ),
         );
-        if (clip.uploadedAudio && clip.uploadedAudioDurationSeconds > 0) {
+        if (clip.uploadedAudio) {
             const limitSeconds = clip.uploadedAudioDurationSeconds;
             const shown =
                 clip.uploadedAudioLengthSeconds > 0
@@ -339,43 +340,52 @@ export const buildAudioBody = (
                           lengthSeconds: clip.uploadedAudioLengthSeconds,
                       }
                     : { startSeconds: 0, lengthSeconds: limitSeconds };
-            const range = toInOut(shown);
             base.appendChild(
-                buildTrimLauncher(
-                    `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s` +
-                        ` · Uses ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
-                    () =>
-                        openTrimModal({
-                            mediaKind: "audio",
-                            title: "Trim Base Audio",
-                            fileName:
-                                clip.uploadedAudio?.fileName ?? "Base audio",
-                            dataUri: clip.uploadedAudio?.data ?? null,
-                            range: shown,
-                            limits: {
-                                limitSeconds,
-                                minLengthSeconds: AUDIO_SPAN_MIN_LENGTH,
-                                fps: 0,
-                            },
-                            impactText: (next) =>
-                                `Uses ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
-                            onApply: (next) => {
-                                const whole =
-                                    next.startSeconds <= 0 &&
-                                    next.lengthSeconds >= limitSeconds;
-                                commitAudio((target) => {
-                                    target.uploadedAudioStartSeconds = whole
-                                        ? 0
-                                        : next.startSeconds;
-                                    target.uploadedAudioLengthSeconds = whole
-                                        ? 0
-                                        : next.lengthSeconds;
-                                });
-                                ctx.render();
-                            },
-                        }),
+                buildSidebarMediaPreview(
+                    "audio",
+                    clip.uploadedAudio.data,
+                    shown,
                 ),
             );
+            if (limitSeconds > 0) {
+                const range = toInOut(shown);
+                base.appendChild(
+                    buildTrimLauncher(
+                        `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s` +
+                            ` · Uses ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+                        () =>
+                            openTrimModal({
+                                mediaKind: "audio",
+                                title: "Trim Base Audio",
+                                fileName:
+                                    clip.uploadedAudio?.fileName ??
+                                    "Base audio",
+                                dataUri: clip.uploadedAudio?.data ?? null,
+                                range: shown,
+                                limits: {
+                                    limitSeconds,
+                                    minLengthSeconds: AUDIO_SPAN_MIN_LENGTH,
+                                    fps: 0,
+                                },
+                                impactText: (next) =>
+                                    `Uses ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+                                onApply: (next) => {
+                                    const whole =
+                                        next.startSeconds <= 0 &&
+                                        next.lengthSeconds >= limitSeconds;
+                                    commitAudio((target) => {
+                                        target.uploadedAudioStartSeconds = whole
+                                            ? 0
+                                            : next.startSeconds;
+                                        target.uploadedAudioLengthSeconds =
+                                            whole ? 0 : next.lengthSeconds;
+                                    });
+                                    ctx.render();
+                                },
+                            }),
+                    ),
+                );
+            }
         }
     }
     if (!audioDecision.supported) {

@@ -45,7 +45,7 @@ import type {
 } from "../types";
 import { roundToTenth } from "../utils";
 import type { DetailStripContext } from "./context";
-import { buildSidebarVideoPreview } from "./sidebarVideoPreview";
+import { buildSidebarMediaPreview } from "./sidebarMediaPreview";
 import { buildTrimLauncher, openTrimModal } from "./trimModal";
 
 /**
@@ -513,8 +513,10 @@ export const buildClipReferenceSection = (
                     },
                 ),
             );
-            if (reference.kind === "video" && data) {
-                fields.appendChild(buildSidebarVideoPreview(data, shownRange));
+            if (reference.kind !== "image" && data) {
+                fields.appendChild(
+                    buildSidebarMediaPreview(reference.kind, data, shownRange),
+                );
             }
         }
 

@@ -979,6 +979,9 @@ describe("createTimelineDetailStrip", () => {
         ]);
         setSelection({ kind: "audio", clipIdx: 0 });
 
+        expect(
+            document.querySelector(".vst-sidebar-audio-preview")?.tagName,
+        ).toBe("AUDIO");
         document
             .querySelector<HTMLButtonElement>(
                 ".vst-detail-audio [data-vst-open-trim]",
@@ -1004,6 +1007,11 @@ describe("createTimelineDetailStrip", () => {
             uploadedAudioStartSeconds: 2,
             uploadedAudioLengthSeconds: 3,
         });
+        const preview = document.querySelector<HTMLAudioElement>(
+            ".vst-sidebar-audio-preview",
+        );
+        preview?.dispatchEvent(new Event("loadedmetadata"));
+        expect(preview?.currentTime).toBe(2);
     });
 
     it("offers captured-stage audio reuse below three active stages", () => {

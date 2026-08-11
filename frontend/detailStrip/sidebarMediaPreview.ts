@@ -2,21 +2,30 @@ import { mediaPreviewSrc } from "../constants";
 import { getVideoStagesHostBridge } from "../host";
 import { type SourceRange, toInOut } from "../trimGeometry";
 
-export const buildSidebarVideoPreview = (
+export type SidebarMediaKind = "audio" | "video";
+
+export const buildSidebarMediaPreview = (
+    mediaKind: SidebarMediaKind,
     dataUri: string,
     range: SourceRange,
 ): HTMLElement => {
     const section = document.createElement("div");
-    section.className = "vst-sidebar-video-preview-section";
+    section.className = "vst-sidebar-media-preview-section";
     const label = document.createElement("span");
-    label.className = "vst-sidebar-video-preview-label";
+    label.className = "vst-sidebar-media-preview-label";
     label.textContent = "Preview";
-    const player = getVideoStagesHostBridge().createInitVideoElement();
-    player.className = "vst-sidebar-video-preview";
+    const player: HTMLMediaElement =
+        mediaKind === "video"
+            ? getVideoStagesHostBridge().createInitVideoElement()
+            : document.createElement("audio");
+    player.className = `vst-sidebar-media-preview vst-sidebar-${mediaKind}-preview`;
     player.controls = true;
     player.preload = "metadata";
     player.setAttribute("playsinline", "");
-    player.src = mediaPreviewSrc(dataUri);
+    const mediaError = document.createElement("div");
+    mediaError.className = "vst-sidebar-media-preview-error";
+    mediaError.textContent = `Cannot preview this ${mediaKind}.`;
+    mediaError.hidden = true;
     const bounds = () => (range.lengthSeconds > 0 ? toInOut(range) : null);
     const resetToIn = (): void => {
         const selected = bounds();
@@ -48,16 +57,24 @@ export const buildSidebarVideoPreview = (
     };
     player.addEventListener("loadedmetadata", resetToIn);
     player.addEventListener("play", keepSeekInRange);
-    player.addEventListener("seeking", keepSeekInRange);
+    player.addEventListener(
+        mediaKind === "audio" ? "seeked" : "seeking",
+        keepSeekInRange,
+    );
     player.addEventListener("timeupdate", stopAtOut);
     player.addEventListener("ended", stopAtOut);
-    section.append(label, player);
+    player.addEventListener("error", () => {
+        player.hidden = true;
+        mediaError.hidden = false;
+    });
+    player.src = mediaPreviewSrc(dataUri);
+    section.append(label, player, mediaError);
     return section;
 };
 
-export const releaseSidebarVideoPreviews = (root: ParentNode): void => {
-    for (const player of root.querySelectorAll<HTMLVideoElement>(
-        ".vst-sidebar-video-preview",
+export const releaseSidebarMediaPreviews = (root: ParentNode): void => {
+    for (const player of root.querySelectorAll<HTMLMediaElement>(
+        ".vst-sidebar-media-preview",
     )) {
         player.pause();
         player.removeAttribute("src");

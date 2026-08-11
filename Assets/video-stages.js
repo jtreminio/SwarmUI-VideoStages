@@ -9407,6 +9407,73 @@ ${slot}`;
   };
   var markInPoint = (current, inSeconds, limits) => inSeconds > toInOut(current).outSeconds ? slideRange(current, inSeconds, limits) : setInPoint(current, inSeconds, limits);
 
+  // frontend/detailStrip/sidebarMediaPreview.ts
+  var buildSidebarMediaPreview = (mediaKind, dataUri, range) => {
+    const section = document.createElement("div");
+    section.className = "vst-sidebar-media-preview-section";
+    const label = document.createElement("span");
+    label.className = "vst-sidebar-media-preview-label";
+    label.textContent = "Preview";
+    const player = mediaKind === "video" ? getVideoStagesHostBridge().createInitVideoElement() : document.createElement("audio");
+    player.className = `vst-sidebar-media-preview vst-sidebar-${mediaKind}-preview`;
+    player.controls = true;
+    player.preload = "metadata";
+    player.setAttribute("playsinline", "");
+    const mediaError = document.createElement("div");
+    mediaError.className = "vst-sidebar-media-preview-error";
+    mediaError.textContent = `Cannot preview this ${mediaKind}.`;
+    mediaError.hidden = true;
+    const bounds = () => range.lengthSeconds > 0 ? toInOut(range) : null;
+    const resetToIn = () => {
+      const selected = bounds();
+      if (selected && player.currentTime !== selected.inSeconds) {
+        player.currentTime = selected.inSeconds;
+      }
+    };
+    const keepSeekInRange = () => {
+      const selected = bounds();
+      if (selected && (player.currentTime < selected.inSeconds || player.currentTime >= selected.outSeconds)) {
+        resetToIn();
+      }
+    };
+    const stopAtOut = () => {
+      const selected = bounds();
+      if (!selected) {
+        return;
+      }
+      if (player.currentTime >= selected.outSeconds) {
+        player.pause();
+        resetToIn();
+      } else if (player.currentTime < selected.inSeconds) {
+        resetToIn();
+      }
+    };
+    player.addEventListener("loadedmetadata", resetToIn);
+    player.addEventListener("play", keepSeekInRange);
+    player.addEventListener(
+      mediaKind === "audio" ? "seeked" : "seeking",
+      keepSeekInRange
+    );
+    player.addEventListener("timeupdate", stopAtOut);
+    player.addEventListener("ended", stopAtOut);
+    player.addEventListener("error", () => {
+      player.hidden = true;
+      mediaError.hidden = false;
+    });
+    player.src = mediaPreviewSrc(dataUri);
+    section.append(label, player, mediaError);
+    return section;
+  };
+  var releaseSidebarMediaPreviews = (root) => {
+    for (const player of root.querySelectorAll(
+      ".vst-sidebar-media-preview"
+    )) {
+      player.pause();
+      player.removeAttribute("src");
+      player.load();
+    }
+  };
+
   // frontend/detailStrip/trimBar.ts
   var NUDGE_SECONDS = 0.1;
   var COARSE_NUDGE_SECONDS = 1;
@@ -10112,6 +10179,10 @@ ${slot}`;
     volumeSlider.querySelector("input.auto-slider-number")?.setAttribute("data-vst-focus-key", `audio-track-${trackId}-volume`);
     fields.appendChild(volumeSlider);
     const geometry = clamped();
+    const shown = {
+      startSeconds: span.sourceStartSeconds,
+      lengthSeconds: geometry.length
+    };
     const startInput = buildNumber(
       geometry.start,
       0,
@@ -10130,6 +10201,7 @@ ${slot}`;
             );
             nextSpan.timelineStartSeconds = next.start;
             nextSpan.timelineLengthSeconds = next.length;
+            shown.lengthSeconds = next.length;
           },
           `audio-track-${trackId}-start`
         );
@@ -10157,7 +10229,8 @@ ${slot}`;
           ctx,
           trackId,
           (_next, nextSpan) => {
-            nextSpan.sourceStartSeconds = Math.max(0, value);
+            shown.startSeconds = Math.max(0, value);
+            nextSpan.sourceStartSeconds = shown.startSeconds;
           },
           `audio-track-${trackId}-trim`
         );
@@ -10190,6 +10263,7 @@ ${slot}`;
             );
             nextSpan.timelineStartSeconds = next.start;
             nextSpan.timelineLengthSeconds = next.length;
+            shown.lengthSeconds = next.length;
           },
           `audio-track-${trackId}-length`
         );
@@ -10210,10 +10284,9 @@ ${slot}`;
     const uploadedAudio = track.source.uploadedAudio;
     const durationSeconds = track.source.mediaDurationSeconds ?? 0;
     if (uploadedAudio) {
-      const shown = {
-        startSeconds: span.sourceStartSeconds,
-        lengthSeconds: geometry.length
-      };
+      fields.appendChild(
+        buildSidebarMediaPreview("audio", uploadedAudio.data, shown)
+      );
       const limitSeconds = Math.max(
         durationSeconds,
         shown.startSeconds + shown.lengthSeconds
@@ -10654,39 +10727,48 @@ ${slot}`;
           }
         )
       );
-      if (clip.uploadedAudio && clip.uploadedAudioDurationSeconds > 0) {
+      if (clip.uploadedAudio) {
         const limitSeconds = clip.uploadedAudioDurationSeconds;
         const shown = clip.uploadedAudioLengthSeconds > 0 ? {
           startSeconds: clip.uploadedAudioStartSeconds,
           lengthSeconds: clip.uploadedAudioLengthSeconds
         } : { startSeconds: 0, lengthSeconds: limitSeconds };
-        const range = toInOut(shown);
         base.appendChild(
-          buildTrimLauncher(
-            `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · Uses ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
-            () => openTrimModal({
-              mediaKind: "audio",
-              title: "Trim Base Audio",
-              fileName: clip.uploadedAudio?.fileName ?? "Base audio",
-              dataUri: clip.uploadedAudio?.data ?? null,
-              range: shown,
-              limits: {
-                limitSeconds,
-                minLengthSeconds: AUDIO_SPAN_MIN_LENGTH,
-                fps: 0
-              },
-              impactText: (next) => `Uses ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
-              onApply: (next) => {
-                const whole = next.startSeconds <= 0 && next.lengthSeconds >= limitSeconds;
-                commitAudio((target) => {
-                  target.uploadedAudioStartSeconds = whole ? 0 : next.startSeconds;
-                  target.uploadedAudioLengthSeconds = whole ? 0 : next.lengthSeconds;
-                });
-                ctx.render();
-              }
-            })
+          buildSidebarMediaPreview(
+            "audio",
+            clip.uploadedAudio.data,
+            shown
           )
         );
+        if (limitSeconds > 0) {
+          const range = toInOut(shown);
+          base.appendChild(
+            buildTrimLauncher(
+              `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · Uses ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+              () => openTrimModal({
+                mediaKind: "audio",
+                title: "Trim Base Audio",
+                fileName: clip.uploadedAudio?.fileName ?? "Base audio",
+                dataUri: clip.uploadedAudio?.data ?? null,
+                range: shown,
+                limits: {
+                  limitSeconds,
+                  minLengthSeconds: AUDIO_SPAN_MIN_LENGTH,
+                  fps: 0
+                },
+                impactText: (next) => `Uses ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+                onApply: (next) => {
+                  const whole = next.startSeconds <= 0 && next.lengthSeconds >= limitSeconds;
+                  commitAudio((target) => {
+                    target.uploadedAudioStartSeconds = whole ? 0 : next.startSeconds;
+                    target.uploadedAudioLengthSeconds = whole ? 0 : next.lengthSeconds;
+                  });
+                  ctx.render();
+                }
+              })
+            )
+          );
+        }
       }
     }
     if (!audioDecision.supported) {
@@ -12265,62 +12347,6 @@ ${slot}`;
     return kind === "image" && (value === MEDIA_SOURCE_BASE || value === MEDIA_SOURCE_REFINER || parseBase2EditStageIndex(value) !== null);
   };
 
-  // frontend/detailStrip/sidebarVideoPreview.ts
-  var buildSidebarVideoPreview = (dataUri, range) => {
-    const section = document.createElement("div");
-    section.className = "vst-sidebar-video-preview-section";
-    const label = document.createElement("span");
-    label.className = "vst-sidebar-video-preview-label";
-    label.textContent = "Preview";
-    const player = getVideoStagesHostBridge().createInitVideoElement();
-    player.className = "vst-sidebar-video-preview";
-    player.controls = true;
-    player.preload = "metadata";
-    player.setAttribute("playsinline", "");
-    player.src = mediaPreviewSrc(dataUri);
-    const bounds = () => range.lengthSeconds > 0 ? toInOut(range) : null;
-    const resetToIn = () => {
-      const selected = bounds();
-      if (selected && player.currentTime !== selected.inSeconds) {
-        player.currentTime = selected.inSeconds;
-      }
-    };
-    const keepSeekInRange = () => {
-      const selected = bounds();
-      if (selected && (player.currentTime < selected.inSeconds || player.currentTime >= selected.outSeconds)) {
-        resetToIn();
-      }
-    };
-    const stopAtOut = () => {
-      const selected = bounds();
-      if (!selected) {
-        return;
-      }
-      if (player.currentTime >= selected.outSeconds) {
-        player.pause();
-        resetToIn();
-      } else if (player.currentTime < selected.inSeconds) {
-        resetToIn();
-      }
-    };
-    player.addEventListener("loadedmetadata", resetToIn);
-    player.addEventListener("play", keepSeekInRange);
-    player.addEventListener("seeking", keepSeekInRange);
-    player.addEventListener("timeupdate", stopAtOut);
-    player.addEventListener("ended", stopAtOut);
-    section.append(label, player);
-    return section;
-  };
-  var releaseSidebarVideoPreviews = (root) => {
-    for (const player of root.querySelectorAll(
-      ".vst-sidebar-video-preview"
-    )) {
-      player.pause();
-      player.removeAttribute("src");
-      player.load();
-    }
-  };
-
   // frontend/detailStrip/clipReferencePanel.ts
   var REFERENCE_TRIM_MIN = 0.1;
   var appendReferenceTrim = (ctx, fields, reference, shown, commitReference) => {
@@ -12690,8 +12716,10 @@ ${slot}`;
             }
           )
         );
-        if (reference.kind === "video" && data) {
-          fields.appendChild(buildSidebarVideoPreview(data, shownRange));
+        if (reference.kind !== "image" && data) {
+          fields.appendChild(
+            buildSidebarMediaPreview(reference.kind, data, shownRange)
+          );
         }
       }
       if (clipReferenceCanDriveLength(reference)) {
@@ -12865,7 +12893,7 @@ ${slot}`;
       startSeconds: source.startSeconds,
       lengthSeconds: source.lengthSeconds
     };
-    col.appendChild(buildSidebarVideoPreview(source.data, shown));
+    col.appendChild(buildSidebarMediaPreview("video", source.data, shown));
     const info = document.createElement("small");
     info.className = "vst-detail-field-hint";
     info.textContent = `Detected: ${source.fps > 0 ? `${source.fps} fps` : "unknown fps"} · ${source.durationSeconds > 0 ? `${source.durationSeconds.toFixed(1)} s` : "unknown length"}`;
@@ -14767,7 +14795,7 @@ ${slot}`;
     const savedScroll = previousBody?.scrollTop ?? 0;
     options.focus.capture();
     options.detail.className = DETAIL_CLASS;
-    releaseSidebarVideoPreviews(options.detail);
+    releaseSidebarMediaPreviews(options.detail);
     options.detail.innerHTML = "";
     options.detail.appendChild(
       buildDetailHeader(
@@ -15580,7 +15608,7 @@ ${slot}`;
         boundBody = null;
       }
       if (dockEl) {
-        releaseSidebarVideoPreviews(dockEl);
+        releaseSidebarMediaPreviews(dockEl);
         dockEl.removeEventListener(
           "keydown",
           selectionOperations.onStripKeyDown

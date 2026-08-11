@@ -241,6 +241,9 @@ describe("timeline-wide audio spans panel", () => {
         ];
         render();
 
+        expect(host.querySelector(".vst-sidebar-audio-preview")?.tagName).toBe(
+            "AUDIO",
+        );
         host.querySelector<HTMLButtonElement>("[data-vst-open-trim]")?.click();
         const audio = document.querySelector<HTMLAudioElement>(
             ".vst-trim-modal-player",
@@ -274,6 +277,11 @@ describe("timeline-wide audio spans panel", () => {
             sourceStartSeconds: 2,
             timelineLengthSeconds: 3,
         });
+        const preview = host.querySelector<HTMLAudioElement>(
+            ".vst-sidebar-audio-preview",
+        );
+        preview?.dispatchEvent(new Event("loadedmetadata"));
+        expect(preview?.currentTime).toBe(2);
     });
 
     it("offers trim for an older uploaded track without probed duration", () => {

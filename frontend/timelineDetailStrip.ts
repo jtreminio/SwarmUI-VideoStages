@@ -15,7 +15,7 @@ import {
 import { renderDetailShell } from "./detailStrip/renderShell";
 import { createDetailSelectionOperations } from "./detailStrip/selectionOperations";
 import { closeTimelineAuthoringSettingsModal } from "./detailStrip/settingsModal";
-import { releaseSidebarVideoPreviews } from "./detailStrip/sidebarVideoPreview";
+import { releaseSidebarMediaPreviews } from "./detailStrip/sidebarMediaPreview";
 import { closeTrimModal } from "./detailStrip/trimModal";
 import { getState } from "./persistence/repository";
 import {
@@ -258,7 +258,7 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
             boundBody = null;
         }
         if (dockEl) {
-            releaseSidebarVideoPreviews(dockEl);
+            releaseSidebarMediaPreviews(dockEl);
             dockEl.removeEventListener(
                 "keydown",
                 selectionOperations.onStripKeyDown,

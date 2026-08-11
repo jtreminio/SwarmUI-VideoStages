@@ -24,7 +24,7 @@ import {
 } from "../trimGeometry";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
-import { buildSidebarVideoPreview } from "./sidebarVideoPreview";
+import { buildSidebarMediaPreview } from "./sidebarMediaPreview";
 import { buildTrimLauncher, openTrimModal } from "./trimModal";
 
 const DURATION_STEP = 0.1;
@@ -133,7 +133,7 @@ export const buildInitVideoSection = (
         startSeconds: source.startSeconds,
         lengthSeconds: source.lengthSeconds,
     };
-    col.appendChild(buildSidebarVideoPreview(source.data, shown));
+    col.appendChild(buildSidebarMediaPreview("video", source.data, shown));
 
     const info = document.createElement("small");
     info.className = "vst-detail-field-hint";

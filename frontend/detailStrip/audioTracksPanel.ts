@@ -35,6 +35,7 @@ import type {
 } from "../types";
 import { roundToTenth } from "../utils";
 import type { DetailStripContext } from "./context";
+import { buildSidebarMediaPreview } from "./sidebarMediaPreview";
 import { buildTrimLauncher, openTrimModal } from "./trimModal";
 
 const timelineDuration = (state: AuthoringDocument): number =>
@@ -194,6 +195,10 @@ const buildTrackEditor = (
     fields.appendChild(volumeSlider);
 
     const geometry = clamped();
+    const shown = {
+        startSeconds: span.sourceStartSeconds,
+        lengthSeconds: geometry.length,
+    };
     const startInput = buildNumber(
         geometry.start,
         0,
@@ -213,6 +218,7 @@ const buildTrackEditor = (
                     );
                     nextSpan.timelineStartSeconds = next.start;
                     nextSpan.timelineLengthSeconds = next.length;
+                    shown.lengthSeconds = next.length;
                 },
                 `audio-track-${trackId}-start`,
             );
@@ -241,7 +247,8 @@ const buildTrackEditor = (
                 ctx,
                 trackId,
                 (_next, nextSpan) => {
-                    nextSpan.sourceStartSeconds = Math.max(0, value);
+                    shown.startSeconds = Math.max(0, value);
+                    nextSpan.sourceStartSeconds = shown.startSeconds;
                 },
                 `audio-track-${trackId}-trim`,
             );
@@ -275,6 +282,7 @@ const buildTrackEditor = (
                     );
                     nextSpan.timelineStartSeconds = next.start;
                     nextSpan.timelineLengthSeconds = next.length;
+                    shown.lengthSeconds = next.length;
                 },
                 `audio-track-${trackId}-length`,
             );
@@ -296,10 +304,9 @@ const buildTrackEditor = (
     const uploadedAudio = track.source.uploadedAudio;
     const durationSeconds = track.source.mediaDurationSeconds ?? 0;
     if (uploadedAudio) {
-        const shown = {
-            startSeconds: span.sourceStartSeconds,
-            lengthSeconds: geometry.length,
-        };
+        fields.appendChild(
+            buildSidebarMediaPreview("audio", uploadedAudio.data, shown),
+        );
         const limitSeconds = Math.max(
             durationSeconds,
             shown.startSeconds + shown.lengthSeconds,

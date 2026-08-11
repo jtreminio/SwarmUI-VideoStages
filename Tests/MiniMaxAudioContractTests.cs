@@ -73,11 +73,24 @@ public class MiniMaxAudioContractTests
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
-        TrimAudioDurationNode trim = Assert.Single(
-            bridge.Graph.NodesOfType<TrimAudioDurationNode>());
-        Assert.Equal(1.5, trim.StartIndex.LiteralAsDouble());
-        Assert.Equal(2.5, trim.Duration.LiteralAsDouble());
-        Assert.IsType<SwarmLoadAudioB64Node>(trim.Audio.Connection?.Node);
+        List<TrimAudioDurationNode> trims =
+            [.. bridge.Graph.NodesOfType<TrimAudioDurationNode>()];
+        TrimAudioDurationNode selected = Assert.Single(
+            trims,
+            trim => trim.StartIndex.LiteralAsDouble() == 1.5);
+        Assert.Equal(2.5, selected.Duration.LiteralAsDouble());
+        Assert.IsType<SwarmLoadAudioB64Node>(selected.Audio.Connection?.Node);
+
+        double clipDuration = MiniMaxWorkflowFixture.GeneratedFrames
+            / (double)MiniMaxWorkflowFixture.Fps;
+        TrimAudioDurationNode conformed = Assert.Single(
+            trims,
+            trim => trim.StartIndex.LiteralAsDouble() == 0
+                && trim.Duration.LiteralAsDouble() == clipDuration);
+        AudioConcatNode padded = Assert.IsType<AudioConcatNode>(
+            conformed.Audio.Connection?.Node);
+        Assert.Same(selected, padded.Audio1.Connection?.Node);
+        Assert.IsType<EmptyAudioNode>(padded.Audio2.Connection?.Node);
     }
 
     /// <summary>

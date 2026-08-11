@@ -500,6 +500,9 @@ describe("buildClipReferenceSection", () => {
                 0,
             );
 
+            expect(
+                body.querySelector(".vst-sidebar-audio-preview")?.tagName,
+            ).toBe("AUDIO");
             openTrim(body);
 
             expect(

@@ -1052,7 +1052,11 @@ public class Ltx2IcLoraContractTests
                 refTokens.AudioLatent.Connection?.Node);
         Assert.NotNull(referenceUpload);
         Assert.Equal("RFJJVkU=", referenceUpload.AudioBase64.LiteralAsString());
-        Assert.Empty(bridge.Graph.NodesOfType<AudioConcatNode>());
+        AudioConcatNode padded = Assert.Single(
+            bridge.Graph.NodesOfType<AudioConcatNode>());
+        SwarmLoadAudioB64Node baseUpload = Assert.IsType<SwarmLoadAudioB64Node>(
+            padded.Audio1.Connection?.Node);
+        Assert.Equal("QkFTRQ==", baseUpload.AudioBase64.LiteralAsString());
 
         live.AssertAllLive(refTokens, referenceUpload, StageSampler(bridge, 0));
         AssertShippable(bridge, workflow, live);
