@@ -69,12 +69,11 @@ internal sealed class MiniMaxGenerationSession(
         _endFrame = ResolveEndFrame(payload.LastFrameReference);
         if (clip.EntryMode == ArchitectureEntryMode.InitVideo)
         {
-            // Any other source replaces the track, and the trim branch would then be built but
-            // never consumed — nothing downstream prunes TrimAudioDuration.
+            // TrimAudioDuration is not swept when another configured source replaces this track.
             g.CurrentMedia = _entryMedia.InstallInitVideo(
                 clip,
                 _dimensions,
-                includeSourceAudio: clip.Audio.Base.Kind == AudioSourceKind.Native);
+                includeSourceAudio: UsesInitVideoSoundtrack(clip.Audio.Base));
             PrepareInitVideoAudio(clip);
             g.CurrentVae = null;
         }
@@ -520,6 +519,12 @@ internal sealed class MiniMaxGenerationSession(
             clip.Audio.Base,
             sources,
             suppressNative);
+        if (selectedAudio is null
+            && nativeAudio is not null
+            && UsesInitVideoSoundtrack(clip.Audio.Base))
+        {
+            selectedAudio = nativeAudio;
+        }
         double duration = plan.FramesPerSecond > 0
             ? frames / (double)plan.FramesPerSecond
             : 0;
@@ -541,6 +546,9 @@ internal sealed class MiniMaxGenerationSession(
             : [(0, _boundaryCarryDuration), .. spanWindows];
         return combinedAudio;
     }
+
+    private static bool UsesInitVideoSoundtrack(AudioBaseSourcePlan source) =>
+        source.Kind == AudioSourceKind.Native || !source.HasConfiguredTrack;
 
     private void AttachDecodedAudio()
     {

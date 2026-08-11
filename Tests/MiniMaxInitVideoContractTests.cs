@@ -229,4 +229,37 @@ public class MiniMaxInitVideoContractTests
         live.AssertAllLive(keyframes, framed);
         AssertShippable(bridge, workflow, live);
     }
+
+    [Fact]
+    public async Task A_refined_source_clip_reuses_its_soundtrack_when_the_upload_is_empty()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(
+            fixture.Stage(control: 0),
+            fixture.Stage("PreviousStage", control: 0.5, upscale: 1.5));
+        clip["duration"] = 1.0;
+        clip["initVideo"] = new JObject
+        {
+            ["data"] = "data:video/mp4;base64,ESIz",
+            ["fileName"] = "refine-source",
+        };
+        clip["audioSource"] = MediaSource.Upload;
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        TrimAudioDurationNode sourceAudio = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        VAEEncodeAudioNode encode = Assert.Single(
+            bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
+        SwarmKSamplerNode refine = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+
+        Assert.True(ReachesUpstream(bridge, encode, sourceAudio.Id));
+        Assert.True(ReachesUpstream(bridge, refine, sourceAudio.Id));
+
+        live.AssertAllLive(sourceAudio, encode, refine);
+        AssertShippable(bridge, workflow, live);
+    }
 }
