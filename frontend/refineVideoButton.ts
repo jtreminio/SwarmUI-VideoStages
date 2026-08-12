@@ -15,8 +15,9 @@ const REFINE_SOURCE_FILE_NAME = "refine-source";
 const REFINE_STAGE_INDEX = 1;
 
 export const refineNeedsExtraStageMessage = (): string =>
-    `Refine Video needs Clip 0 to have a Stage ${REFINE_STAGE_INDEX} defined ` +
-    `(for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
+    `Refine Video needs either Clip 0 to have Stage ${REFINE_STAGE_INDEX} defined ` +
+    `(active or inactive), or another clip in the timeline. Add a stage or clip in the ` +
+    `VideoStages panel, then click Refine Video again.`;
 
 export const hasRefinementWorkToDo = (
     state: AuthoringDocument,
@@ -29,7 +30,7 @@ export const hasRefinementWorkToDo = (
     if (!clip0 || clip0.skipped) {
         return false;
     }
-    return clip0.stages.length > REFINE_STAGE_INDEX;
+    return clip0.stages.length > REFINE_STAGE_INDEX || state.clips.length > 1;
 };
 
 /**
@@ -56,7 +57,7 @@ export const applyRefineToClipZero = (
 
 export const refineVideoButton = (): void => {
     const description =
-        "Re-runs VideoStages using this video as Clip 0's source, passes through Stage 0, and runs Stage 1.";
+        "Re-runs VideoStages using this video as Clip 0's source, passes through Stage 0, and runs Stage 1 or later clips.";
     getVideoStagesHostBridge().registerRefineVideoButton(
         (src: string): void => {
             const host = getVideoStagesHostBridge();

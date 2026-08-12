@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
-import { minimalClip, minimalStage } from "./__test_helpers__/clipFixtures";
+import {
+    initVideoFixture,
+    minimalClip,
+    minimalStage,
+} from "./__test_helpers__/clipFixtures";
 import {
     mountCheckbox,
     mountPromptBox,
     mountVideoStagesData,
 } from "./__test_helpers__/dom";
+import { MEDIA_SOURCE_PREVIOUS_CLIP } from "./generatedMediaSource";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import { __resetPersistenceForTests } from "./persistence/repository";
@@ -32,6 +37,7 @@ afterEach(() => {
 describe("hasRefinementWorkToDo", () => {
     it("only ever asks for stage 1", () => {
         expect(refineNeedsExtraStageMessage()).toContain("Stage 1 defined");
+        expect(refineNeedsExtraStageMessage()).toContain("another clip");
         expect(refineNeedsExtraStageMessage()).not.toContain("Stage 2");
     });
 
@@ -60,6 +66,21 @@ describe("hasRefinementWorkToDo", () => {
     it("returns false when clip 0 has only stage 0", () => {
         const config = makeConfig([minimalClip({ stages: [minimalStage()] })]);
         expect(hasRefinementWorkToDo(config, true)).toBe(false);
+    });
+
+    it("uses another clip when clip 0 has only stage 0", () => {
+        const config = makeConfig([
+            minimalClip({ stages: [minimalStage()] }),
+            minimalClip({
+                initVideo: initVideoFixture({
+                    source: MEDIA_SOURCE_PREVIOUS_CLIP,
+                    data: "",
+                    fileName: null,
+                }),
+                stages: [minimalStage()],
+            }),
+        ]);
+        expect(hasRefinementWorkToDo(config, true)).toBe(true);
     });
 
     it("uses a defined stage 1 even when it is inactive", () => {
