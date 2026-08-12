@@ -14466,7 +14466,32 @@ ${slot}`;
   var MODAL_CLASS2 = "vst-timeline-settings-modal";
   var BACKDROP_CLASS2 = "vst-timeline-settings-backdrop";
   var TITLE_ID2 = "vst_timeline_settings_title";
+  var STORAGE_PREFIX = "videostages";
   var currentModal3 = null;
+  var resetVideoStages = () => {
+    const empty = getState();
+    empty.dimsExplicit = false;
+    empty.clips = [];
+    empty.audioTracks = [];
+    saveState(empty, {
+      notifyDomChange: true,
+      origin: "timeline"
+    });
+    try {
+      const keys = [];
+      for (let index = 0; index < localStorage.length; index++) {
+        const key = localStorage.key(index);
+        if (key?.toLowerCase().startsWith(STORAGE_PREFIX)) {
+          keys.push(key);
+        }
+      }
+      for (const key of keys) {
+        localStorage.removeItem(key);
+      }
+    } catch {
+    }
+    resetRememberedAccordionSections();
+  };
   var closeTimelineAuthoringSettingsModal = () => {
     currentModal3?.close();
   };
@@ -14485,7 +14510,7 @@ ${slot}`;
       }
     });
     currentModal3 = managed;
-    const { header, body } = managed;
+    const { content, header, body } = managed;
     const title = document.createElement("h5");
     title.className = "modal-title";
     title.id = TITLE_ID2;
@@ -14510,6 +14535,21 @@ ${slot}`;
         }
       })
     );
+    const footer = document.createElement("div");
+    footer.className = "modal-footer";
+    footer.appendChild(
+      buildDetailActionButton({
+        label: "Reset VideoStages",
+        title: "Clear all saved VideoStages data and settings",
+        className: "small-button vst-reset-videostages",
+        variant: "interrupt",
+        onClick: () => {
+          resetVideoStages();
+          managed.close();
+        }
+      })
+    );
+    content.appendChild(footer);
     close.addEventListener("click", managed.close);
     managed.open(close);
   };

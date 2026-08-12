@@ -1,7 +1,9 @@
 import {
     buildCheckbox,
+    buildDetailActionButton,
     resetRememberedAccordionSections,
 } from "../detailWidgets";
+import { getState, saveState } from "../persistence/repository";
 import {
     getTimelineAuthoringSettings,
     setTimelineAuthoringSetting,
@@ -11,7 +13,32 @@ import { createManagedModal, type ManagedModal } from "./modalManager";
 const MODAL_CLASS = "vst-timeline-settings-modal";
 const BACKDROP_CLASS = "vst-timeline-settings-backdrop";
 const TITLE_ID = "vst_timeline_settings_title";
+const STORAGE_PREFIX = "videostages";
 let currentModal: ManagedModal | null = null;
+
+const resetVideoStages = (): void => {
+    const empty = getState();
+    empty.dimsExplicit = false;
+    empty.clips = [];
+    empty.audioTracks = [];
+    saveState(empty, {
+        notifyDomChange: true,
+        origin: "timeline",
+    });
+    try {
+        const keys: string[] = [];
+        for (let index = 0; index < localStorage.length; index++) {
+            const key = localStorage.key(index);
+            if (key?.toLowerCase().startsWith(STORAGE_PREFIX)) {
+                keys.push(key);
+            }
+        }
+        for (const key of keys) {
+            localStorage.removeItem(key);
+        }
+    } catch {}
+    resetRememberedAccordionSections();
+};
 
 export const closeTimelineAuthoringSettingsModal = (): void => {
     currentModal?.close();
@@ -33,7 +60,7 @@ export const openTimelineAuthoringSettingsModal = (): void => {
         },
     });
     currentModal = managed;
-    const { header, body } = managed;
+    const { content, header, body } = managed;
     const title = document.createElement("h5");
     title.className = "modal-title";
     title.id = TITLE_ID;
@@ -57,6 +84,21 @@ export const openTimelineAuthoringSettingsModal = (): void => {
             }
         }),
     );
+    const footer = document.createElement("div");
+    footer.className = "modal-footer";
+    footer.appendChild(
+        buildDetailActionButton({
+            label: "Reset VideoStages",
+            title: "Clear all saved VideoStages data and settings",
+            className: "small-button vst-reset-videostages",
+            variant: "interrupt",
+            onClick: () => {
+                resetVideoStages();
+                managed.close();
+            },
+        }),
+    );
+    content.appendChild(footer);
     close.addEventListener("click", managed.close);
     managed.open(close);
 };
