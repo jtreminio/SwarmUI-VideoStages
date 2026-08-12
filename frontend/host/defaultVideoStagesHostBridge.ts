@@ -1,3 +1,4 @@
+import { isRecord } from "../utils";
 import type {
     HostOptionList,
     HostRegistrySnapshot,
@@ -236,7 +237,31 @@ export const createDefaultVideoStagesHostBridge =
                 typeof mainGenHandler !== "undefined" &&
                 typeof mainGenHandler?.doGenerate === "function"
             ) {
-                mainGenHandler.doGenerate(inputOverrides, {});
+                const {
+                    extra_metadata: requestedExtraMetadata,
+                    ...generationOverrides
+                } = inputOverrides;
+                if (!isRecord(requestedExtraMetadata)) {
+                    mainGenHandler.doGenerate(generationOverrides, {});
+                    return;
+                }
+                mainGenHandler.doGenerate(
+                    generationOverrides,
+                    {},
+                    (actualInput: unknown): void => {
+                        if (!isRecord(actualInput)) {
+                            return;
+                        }
+                        const collectedExtraMetadata =
+                            actualInput.extra_metadata;
+                        actualInput.extra_metadata = {
+                            ...(isRecord(collectedExtraMetadata)
+                                ? collectedExtraMetadata
+                                : {}),
+                            ...structuredClone(requestedExtraMetadata),
+                        };
+                    },
+                );
             }
         },
     });

@@ -17,6 +17,10 @@ import {
 
 afterEach(() => {
     setVideoStagesHostBridgeForTests(null);
+    const globals = globalThis as typeof globalThis & {
+        mainGenHandler?: unknown;
+    };
+    delete globals.mainGenHandler;
 });
 
 describe("VideoStagesHostBridge compatibility facades", () => {
@@ -79,5 +83,46 @@ describe("VideoStagesHostBridge compatibility facades", () => {
         expect(globals.refreshParamsExtra).toEqual([hook]);
         cleanup?.();
         expect(globals.refreshParamsExtra).toEqual([]);
+    });
+
+    it("adds requested extra metadata after the host collects generation inputs", () => {
+        const doGenerate =
+            jest.fn<
+                (
+                    overrides: Record<string, unknown>,
+                    preOverrides: Record<string, unknown>,
+                    postCollect?: (
+                        actualInput: Record<string, unknown>,
+                    ) => void,
+                ) => void
+            >();
+        const globals = globalThis as typeof globalThis & {
+            mainGenHandler?: { doGenerate: typeof doGenerate };
+        };
+        globals.mainGenHandler = { doGenerate };
+
+        createDefaultVideoStagesHostBridge().generate({
+            prompt: "parsed prompt",
+            extra_metadata: {
+                original_prompt: "<wildcard:animal>",
+                used_wildcards: ["animal"],
+            },
+        });
+
+        expect(doGenerate).toHaveBeenCalledTimes(1);
+        const [overrides, preOverrides, postCollect] = doGenerate.mock.calls[0];
+        expect(overrides).toEqual({ prompt: "parsed prompt" });
+        expect(preOverrides).toEqual({});
+        const actualInput: Record<string, unknown> = {
+            prompt: "parsed prompt",
+            extra_metadata: { current_ui_value: "kept" },
+        };
+        expect(postCollect).toEqual(expect.any(Function));
+        postCollect?.(actualInput);
+        expect(actualInput.extra_metadata).toEqual({
+            current_ui_value: "kept",
+            original_prompt: "<wildcard:animal>",
+            used_wildcards: ["animal"],
+        });
     });
 });

@@ -138,6 +138,26 @@
     return body;
   };
 
+  // frontend/utils.ts
+  var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var toNumber = (value, fallback) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  var roundToTenth = (seconds2) => Math.round(seconds2 * 10) / 10;
+  var gridCeil = (seconds2) => Math.ceil(seconds2 * 10) / 10;
+  var gridFloor = (seconds2) => Math.floor(seconds2 * 10) / 10;
+  var safeJsonParse = (raw, fallback) => {
+    if (raw == null) {
+      return fallback;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return fallback;
+    }
+  };
+
   // frontend/host/defaultVideoStagesHostBridge.ts
   var textInput = (id) => {
     const element = document.getElementById(id);
@@ -291,7 +311,28 @@
     }),
     generate: (inputOverrides) => {
       if (typeof mainGenHandler !== "undefined" && typeof mainGenHandler?.doGenerate === "function") {
-        mainGenHandler.doGenerate(inputOverrides, {});
+        const {
+          extra_metadata: requestedExtraMetadata,
+          ...generationOverrides
+        } = inputOverrides;
+        if (!isRecord(requestedExtraMetadata)) {
+          mainGenHandler.doGenerate(generationOverrides, {});
+          return;
+        }
+        mainGenHandler.doGenerate(
+          generationOverrides,
+          {},
+          (actualInput) => {
+            if (!isRecord(actualInput)) {
+              return;
+            }
+            const collectedExtraMetadata = actualInput.extra_metadata;
+            actualInput.extra_metadata = {
+              ...isRecord(collectedExtraMetadata) ? collectedExtraMetadata : {},
+              ...structuredClone(requestedExtraMetadata)
+            };
+          }
+        );
       }
     }
   });
@@ -867,7 +908,7 @@
   };
 
   // frontend/architectures/catalogWire.ts
-  var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var isTrimmedNonEmpty = (value) => typeof value === "string" && value.length > 0 && value === value.trim();
   var isUniqueStringArray = (value) => Array.isArray(value) && value.every((entry) => isTrimmedNonEmpty(entry)) && new Set(value).size === value.length;
   var isEntryModeArray = (value) => isUniqueStringArray(value) && value.every((entry) => ENTRY_MODES.includes(entry));
@@ -879,7 +920,7 @@
   );
   var hasExactKeys = (value, expected) => Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
   var isCapabilitySupport = (value) => typeof value === "string" && RULE_SUPPORTS.includes(value);
-  var isRuleDecision = (value) => isRecord(value) && hasExactKeys(value, ["support", "code", "reason", "constraints"]) && isCapabilitySupport(value.support) && isTrimmedNonEmpty(value.code) && isTrimmedNonEmpty(value.reason) && (value.constraints === null || isRecord(value.constraints) && value.support !== "unsupported");
+  var isRuleDecision = (value) => isRecord2(value) && hasExactKeys(value, ["support", "code", "reason", "constraints"]) && isCapabilitySupport(value.support) && isTrimmedNonEmpty(value.code) && isTrimmedNonEmpty(value.reason) && (value.constraints === null || isRecord2(value.constraints) && value.support !== "unsupported");
   var isBoundaryRule = (value) => {
     if (!isRuleDecision(value)) {
       return false;
@@ -887,7 +928,7 @@
     if (value.support !== "conditional") {
       return value.constraints === null;
     }
-    if (!isRecord(value.constraints)) {
+    if (!isRecord2(value.constraints)) {
       return false;
     }
     const constraints = value.constraints;
@@ -922,26 +963,26 @@
     return frameStep > 0 && minFrames >= 0 && maxFrames >= minFrames && defaultFrames >= minFrames && defaultFrames <= maxFrames && continuityExtraFrames >= 0 && (defaultFrames - minFrames) % frameStep === 0;
   };
   var isCapabilities = (value) => {
-    if (!isRecord(value) || !hasExactKeys(value, ["features", "entryModes", "audioSourceKinds"])) {
+    if (!isRecord2(value) || !hasExactKeys(value, ["features", "entryModes", "audioSourceKinds"])) {
       return false;
     }
     return isUniqueStringArray(value.features) && isAudioSourceKindArray(value.audioSourceKinds) && isEntryModeArray(value.entryModes);
   };
   var hasCompleteBoundaryRules = (value) => {
-    if (!isRecord(value)) {
+    if (!isRecord2(value)) {
       return false;
     }
     const keys = Object.keys(value);
     return keys.length === BOUNDARY_MODES.length && BOUNDARY_MODES.every((mode) => isBoundaryRule(value[mode]));
   };
   var parseVideoArchitectureCatalog = (value) => {
-    if (!isRecord(value) || !hasExactKeys(value, ["schemaVersion", "architectures", "models"]) || value.schemaVersion !== 2 || !Array.isArray(value.architectures) || !Array.isArray(value.models)) {
+    if (!isRecord2(value) || !hasExactKeys(value, ["schemaVersion", "architectures", "models"]) || value.schemaVersion !== 2 || !Array.isArray(value.architectures) || !Array.isArray(value.models)) {
       return null;
     }
     const architectures = [];
     const architectureIds = /* @__PURE__ */ new Set();
     for (const raw of value.architectures) {
-      if (!isRecord(raw) || !hasExactKeys(raw, [
+      if (!isRecord2(raw) || !hasExactKeys(raw, [
         "id",
         "label",
         "capabilities",
@@ -969,7 +1010,7 @@
     const modelNames = /* @__PURE__ */ new Set();
     const models = [];
     for (const raw of value.models) {
-      if (!isRecord(raw) || !hasExactKeys(raw, [
+      if (!isRecord2(raw) || !hasExactKeys(raw, [
         "modelName",
         "architectureId",
         "modelProfileId",
@@ -979,7 +1020,7 @@
         "frameGridOrigin",
         "capabilities",
         "enhancements"
-      ]) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !Number.isSafeInteger(raw.frameGridOrigin) || Number(raw.frameGridOrigin) < 1 || Number(raw.frameGridOrigin) > Number(raw.frameGrid) || !isCapabilities(raw.capabilities) || !isRecord(raw.enhancements) || !hasExactKeys(raw.enhancements, ["referencePositions"]) || !isFrameReferencePositionArray(raw.enhancements.referencePositions)) {
+      ]) || !isTrimmedNonEmpty(raw.modelName) || !isTrimmedNonEmpty(raw.architectureId) || !architectureIds.has(raw.architectureId) || !isTrimmedNonEmpty(raw.modelProfileId) || !isTrimmedNonEmpty(raw.modelClassId) || !isTrimmedNonEmpty(raw.compatibilityClassId) || !Number.isSafeInteger(raw.frameGrid) || Number(raw.frameGrid) < 1 || Number(raw.frameGrid) > MAX_FRAME_GRID || !Number.isSafeInteger(raw.frameGridOrigin) || Number(raw.frameGridOrigin) < 1 || Number(raw.frameGridOrigin) > Number(raw.frameGrid) || !isCapabilities(raw.capabilities) || !isRecord2(raw.enhancements) || !hasExactKeys(raw.enhancements, ["referencePositions"]) || !isFrameReferencePositionArray(raw.enhancements.referencePositions)) {
         return null;
       }
       if (modelNames.has(raw.modelName)) {
@@ -1962,26 +2003,6 @@
     getVideoStagesHostBridge().notifyChanged(toggler);
   };
 
-  // frontend/utils.ts
-  var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-  var toNumber = (value, fallback) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-  var roundToTenth = (seconds2) => Math.round(seconds2 * 10) / 10;
-  var gridCeil = (seconds2) => Math.ceil(seconds2 * 10) / 10;
-  var gridFloor = (seconds2) => Math.floor(seconds2 * 10) / 10;
-  var safeJsonParse = (raw, fallback) => {
-    if (raw == null) {
-      return fallback;
-    }
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return fallback;
-    }
-  };
-
   // frontend/rootDefaults.ts
   var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
   var WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
@@ -2548,10 +2569,10 @@
     if (!Array.isArray(rawList)) {
       return [];
     }
-    return rawList.map((entry) => normalizePromptWindow(isRecord2(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
+    return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
   };
   var normalizeRetake = (value, clipDuration) => {
-    if (!isRecord2(value)) {
+    if (!isRecord(value)) {
       return null;
     }
     const startRaw = nonNegativeNumber(value.startSeconds);
@@ -2580,7 +2601,7 @@
     };
   };
   var normalizeInitVideo = (value) => {
-    if (!isRecord2(value)) {
+    if (!isRecord(value)) {
       return null;
     }
     const data = trimmedText(value.data);
@@ -2620,7 +2641,7 @@
     }
     let lengthClaimed = clipLengthClaimedElsewhere;
     return value.map((entry) => {
-      const raw = isRecord2(entry) ? entry : {};
+      const raw = isRecord(entry) ? entry : {};
       const kind = normalizeClipReferenceKind(raw.kind);
       const source = trimmedText(raw.source) || MEDIA_SOURCE_UPLOAD;
       const mediaDurationSeconds = roundToTenth(
@@ -2680,7 +2701,7 @@
     return index < 0 ? null : clipReferenceUsedSeconds(references[index]);
   };
   var normalizeUploadedMedia = (value) => {
-    if (!isRecord2(value)) {
+    if (!isRecord(value)) {
       return null;
     }
     const data = trimmedText(value.data);
@@ -2712,7 +2733,7 @@
     }
   };
   var normalizeAudioTrackSpan = (value) => {
-    if (!isRecord2(value)) {
+    if (!isRecord(value)) {
       return null;
     }
     const sourceStart = optionalNonNegativeNumber(value.sourceStartSeconds) ?? 0;
@@ -2744,11 +2765,11 @@
     }
     const tracks = [];
     for (const rawTrack of value) {
-      if (!isRecord2(rawTrack)) {
+      if (!isRecord(rawTrack)) {
         continue;
       }
       const rawSource = rawTrack.source;
-      const source = isRecord2(rawSource) ? rawSource : {};
+      const source = isRecord(rawSource) ? rawSource : {};
       const rawSpans = rawTrack.spans;
       const volume = rawTrack.volume === void 0 ? void 0 : clampedNumber(
         rawTrack.volume,
@@ -3230,7 +3251,7 @@
     return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
   };
   var normalizeIcLora = (raw, stageCount = 0, _initVideoClip = false) => {
-    if (!isRecord2(raw)) {
+    if (!isRecord(raw)) {
       return null;
     }
     const lora = normalizeControlNetLora(raw.lora);
@@ -3519,7 +3540,7 @@
     }
     const out = [];
     for (const entry of raw) {
-      if (!isRecord2(entry)) {
+      if (!isRecord(entry)) {
         continue;
       }
       const name = trimmedText(readRawStageProp(entry, "name"));
@@ -3854,7 +3875,7 @@
       appendLoraName(entry.name, entry.weight);
     }
     for (const rawStage of stagesRaw) {
-      if (!isRecord2(rawStage)) {
+      if (!isRecord(rawStage)) {
         continue;
       }
       for (const entry of normalizeStageLoras(rawStage.loras)) {
@@ -3872,7 +3893,7 @@
         normalizeStage(
           defaults,
           defaultStageModel,
-          isRecord2(stagesRaw[i]) ? stagesRaw[i] : {},
+          isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
           previousStage,
           refsRaw.length,
           i,
@@ -3899,7 +3920,7 @@
       fps
     );
     const frameRefs = refsRaw.map(
-      (rawRef) => normalizeRef(isRecord2(rawRef) ? rawRef : {}, refFrameMax)
+      (rawRef) => normalizeRef(isRecord(rawRef) ? rawRef : {}, refFrameMax)
     );
     const stageZero = stages[0] ?? null;
     const persistedArchitecture = trimmedText(rawClip.architectureHint);
@@ -3927,7 +3948,7 @@
     );
     for (let index = 0; index < stages.length; index++) {
       const stage = stages[index];
-      const rawStage = isRecord2(stagesRaw[index]) ? stagesRaw[index] : {};
+      const rawStage = isRecord(stagesRaw[index]) ? stagesRaw[index] : {};
       const hasLegacyControlNetStrength = Object.hasOwn(
         rawStage,
         "controlNetStrength"
@@ -4232,10 +4253,10 @@
       return true;
     }
     const value = owner[key];
-    return Array.isArray(value) && value.every(isRecord2);
+    return Array.isArray(value) && value.every(isRecord);
   };
   var hasValidStoredCollections = (parsed) => {
-    if (!Array.isArray(parsed.clips) || !parsed.clips.every(isRecord2)) {
+    if (!Array.isArray(parsed.clips) || !parsed.clips.every(isRecord)) {
       return false;
     }
     if (!hasArrayOfRecords(parsed, "audioTracks") || !hasArrayOfRecords(parsed, "clips")) {
@@ -4260,7 +4281,7 @@
     }
     const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
     return tracks.every(
-      (track) => hasArrayOfRecords(track, "spans") && (!Object.hasOwn(track, "source") || isRecord2(track.source))
+      (track) => hasArrayOfRecords(track, "spans") && (!Object.hasOwn(track, "source") || isRecord(track.source))
     );
   };
   var OUTDATED_SCHEMA_NOTICE = "VideoStages: the saved timeline was created by an older version and could not be loaded.";
@@ -4278,7 +4299,7 @@
   var numberAt = (owner, key) => typeof owner[key] === "number" && Number.isFinite(owner[key]) ? owner[key] : null;
   var storedSpanProjection = (span) => {
     const raw = span.projection;
-    if (!isRecord2(raw)) {
+    if (!isRecord(raw)) {
       return null;
     }
     const first = raw.firstClipId;
@@ -4299,9 +4320,9 @@
     }));
     const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
     for (const track of tracks) {
-      const spans = isRecord2(track) && Array.isArray(track.spans) ? track.spans : [];
+      const spans = isRecord(track) && Array.isArray(track.spans) ? track.spans : [];
       for (const span of spans) {
-        if (!isRecord2(span)) {
+        if (!isRecord(span)) {
           continue;
         }
         const stored = storedSpanProjection(span);
@@ -4350,7 +4371,7 @@
     const migrated = structuredClone(parsed);
     migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
     for (const rawClip of migrated.clips) {
-      if (!isRecord2(rawClip)) {
+      if (!isRecord(rawClip)) {
         continue;
       }
       renameKey(rawClip, "refs", "frameRefs");
@@ -4358,7 +4379,7 @@
         continue;
       }
       for (const rawStage of rawClip.stages) {
-        if (isRecord2(rawStage)) {
+        if (isRecord(rawStage)) {
           renameKey(rawStage, "refStrengths", "frameRefStrengths");
         }
       }
@@ -4368,7 +4389,7 @@
   var decodeStoredDocument = (serialized, inherited, defaults, defaultStageModel) => {
     try {
       const parsed = JSON.parse(serialized);
-      if (!isRecord2(parsed)) {
+      if (!isRecord(parsed)) {
         return null;
       }
       const current = migrateStoredDocument(parsed);
@@ -4400,7 +4421,7 @@
     }
   };
   var hasCanonicalStoredId = (value, seen) => {
-    if (!isRecord2(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id)) {
+    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id)) {
       return false;
     }
     seen.add(value.id);
@@ -4409,7 +4430,7 @@
   var storedDocumentNeedsCanonicalIdRepair = (serialized) => {
     try {
       const parsed = JSON.parse(serialized);
-      if (!isRecord2(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !Array.isArray(parsed.clips) || !Array.isArray(parsed.audioTracks)) {
+      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !Array.isArray(parsed.clips) || !Array.isArray(parsed.audioTracks)) {
         return true;
       }
       const seenIds = /* @__PURE__ */ new Set();
@@ -5686,7 +5707,7 @@
     const rawWindows = Array.isArray(stored.promptWindows) ? stored.promptWindows : [];
     const idsByWindow = /* @__PURE__ */ new Map();
     for (const rawWindow of rawWindows) {
-      if (!isRecord2(rawWindow) || typeof rawWindow.id !== "string" || !rawWindow.id.trim() || typeof rawWindow.prompt !== "string" || typeof rawWindow.start !== "number" || typeof rawWindow.duration !== "number") {
+      if (!isRecord(rawWindow) || typeof rawWindow.id !== "string" || !rawWindow.id.trim() || typeof rawWindow.prompt !== "string" || typeof rawWindow.start !== "number" || typeof rawWindow.duration !== "number") {
         continue;
       }
       const key = promptWindowKey({
@@ -5711,18 +5732,18 @@
       return;
     }
     const parsed = safeJsonParse(raw, null);
-    const storedClips = isRecord2(parsed) && Array.isArray(parsed.clips) ? parsed.clips : [];
+    const storedClips = isRecord(parsed) && Array.isArray(parsed.clips) ? parsed.clips : [];
     const storedById = /* @__PURE__ */ new Map();
     for (const stored of storedClips) {
-      if (isRecord2(stored) && typeof stored.id === "string" && stored.id.trim()) {
+      if (isRecord(stored) && typeof stored.id === "string" && stored.id.trim()) {
         storedById.set(stored.id.trim(), stored);
       }
     }
     for (let i = 0; i < clips.length; i++) {
       const clipId = clips[i].id;
       const positional = storedClips[i];
-      const stored = (clipId ? storedById.get(clipId) : void 0) ?? (isRecord2(positional) && !positional.id ? positional : void 0);
-      if (!isRecord2(stored)) {
+      const stored = (clipId ? storedById.get(clipId) : void 0) ?? (isRecord(positional) && !positional.id ? positional : void 0);
+      if (!isRecord(stored)) {
         continue;
       }
       if (typeof stored.hue === "number" && Number.isFinite(stored.hue)) {
@@ -5749,7 +5770,7 @@
   var DURABLE_AUTHORING_VERSION = 1;
   var isFiniteNumber = (value) => typeof value === "number" && Number.isFinite(value);
   var readPrompt = (value) => {
-    if (!isRecord2(value) || typeof value.prompt !== "string") {
+    if (!isRecord(value) || typeof value.prompt !== "string") {
       return null;
     }
     if (!Array.isArray(value.windows)) {
@@ -5757,7 +5778,7 @@
     }
     const windows = [];
     for (const window2 of value.windows) {
-      if (!isRecord2(window2) || typeof window2.prompt !== "string" || !isFiniteNumber(window2.start) || !isFiniteNumber(window2.duration)) {
+      if (!isRecord(window2) || typeof window2.prompt !== "string" || !isFiniteNumber(window2.start) || !isFiniteNumber(window2.duration)) {
         return null;
       }
       windows.push({
@@ -5775,7 +5796,7 @@
         return null;
       }
       const parsed = JSON.parse(raw);
-      if (!isRecord2(parsed) || parsed.version !== DURABLE_AUTHORING_VERSION || typeof parsed.document !== "string" || !Array.isArray(parsed.prompts)) {
+      if (!isRecord(parsed) || parsed.version !== DURABLE_AUTHORING_VERSION || typeof parsed.document !== "string" || !Array.isArray(parsed.prompts)) {
         return null;
       }
       const prompts = [];
@@ -6100,30 +6121,9 @@
 
   // frontend/refineVideoButton.ts
   var REFINE_SOURCE_FILE_NAME = "refine-source";
-  var refineNeedsExtraStageMessage = (skipCount) => `Refine Video needs Clip 0 to have at least one active stage after Stage ${skipCount - 1} (for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
-  var countActiveStagesInMetadataClip0 = (videostagesJson) => {
-    const parsed = safeJsonParse(videostagesJson, null);
-    if (!isRecord2(parsed)) {
-      return 0;
-    }
-    const clips = readProp(parsed, "clips");
-    if (!Array.isArray(clips) || clips.length === 0) {
-      return 0;
-    }
-    const clip0 = clips[0];
-    if (!isRecord2(clip0) || readProp(clip0, "skipped") === true) {
-      return 0;
-    }
-    const stages = readProp(clip0, "stages");
-    if (!Array.isArray(stages)) {
-      return 0;
-    }
-    const firstSkipped = stages.findIndex(
-      (stage) => isRecord2(stage) && readProp(stage, "skipped") === true
-    );
-    return firstSkipped < 0 ? stages.length : firstSkipped;
-  };
-  var hasRefinementWorkToDo = (state, enabled, skipCount) => {
+  var REFINE_STAGE_INDEX = 1;
+  var refineNeedsExtraStageMessage = () => `Refine Video needs Clip 0 to have a Stage ${REFINE_STAGE_INDEX} defined (for example, an upscale or refine stage). Add a stage in the VideoStages panel, then click Refine Video again.`;
+  var hasRefinementWorkToDo = (state, enabled) => {
     if (!enabled) {
       return false;
     }
@@ -6131,28 +6131,24 @@
     if (!clip0 || clip0.skipped) {
       return false;
     }
-    return activeStageCount(clip0) > skipCount;
+    return clip0.stages.length > REFINE_STAGE_INDEX;
   };
-  var applyRefineToClipZero = (clip, data, probe, skipCount) => {
+  var applyRefineToClipZero = (clip, data, probe) => {
     clip.initVideo = initVideoFromProbe(
       probe,
       data,
       REFINE_SOURCE_FILE_NAME,
       clip.duration
     );
-    let activeIndex = 0;
-    for (const stage of clip.stages) {
-      if (stage.skipped) {
-        break;
-      }
-      if (activeIndex < skipCount) {
-        stage.control = 0;
-      }
-      activeIndex++;
+    if (clip.stages.length > REFINE_STAGE_INDEX) {
+      applySkipSuffix(clip.stages, REFINE_STAGE_INDEX, false);
+    }
+    if (clip.stages[0]) {
+      clip.stages[0].control = 0;
     }
   };
   var refineVideoButton = () => {
-    const description = "Re-runs VideoStages using this video as the source for Clip 0 (skips the first N stage samplers, where N is read from the source video's metadata). Requires an extra stage beyond those.";
+    const description = "Re-runs VideoStages using this video as Clip 0's source, passes through Stage 0, and runs Stage 1.";
     getVideoStagesHostBridge().registerRefineVideoButton(
       (src) => {
         const host = getVideoStagesHostBridge();
@@ -6170,31 +6166,23 @@
               );
             }
           }
-          const params = isRecord2(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
-          const sourceVideostages = isRecord2(params) ? readProp(params, "videostages") : void 0;
-          const skipCount = Math.max(
-            1,
-            typeof sourceVideostages === "string" ? countActiveStagesInMetadataClip0(sourceVideostages) : 0
-          );
-          if (!hasRefinementWorkToDo(
-            getState(),
-            isVideoStagesEnabled(),
-            skipCount
-          )) {
-            host.showError(refineNeedsExtraStageMessage(skipCount));
+          const params = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
+          const initialState = getState();
+          if (!hasRefinementWorkToDo(initialState, isVideoStagesEnabled())) {
+            host.showError(refineNeedsExtraStageMessage());
             return;
           }
           const videoDataUrl = await host.toDataUrl(src);
           const probe = await probeInitVideo(videoDataUrl);
           const state = getState();
           const clipZero = state.clips[0];
-          if (!clipZero) {
-            host.showError(refineNeedsExtraStageMessage(skipCount));
+          if (!clipZero || !hasRefinementWorkToDo(state, isVideoStagesEnabled())) {
+            host.showError(refineNeedsExtraStageMessage());
             return;
           }
           const clips = [...state.clips];
           clips[0] = structuredClone(clipZero);
-          applyRefineToClipZero(clips[0], videoDataUrl, probe, skipCount);
+          applyRefineToClipZero(clips[0], videoDataUrl, probe);
           reconcileClipArchitectureIdentity(
             clips[0],
             captureAuthoringTransactionSnapshot().capabilities.catalog
@@ -6203,9 +6191,21 @@
             videostages: serializeStateForStorage({ ...state, clips }),
             images: 1
           };
-          const seed = isRecord2(params) ? readProp(params, "seed") : void 0;
+          const prompt = isRecord(params) ? readProp(params, "prompt") : void 0;
+          if (typeof prompt === "string") {
+            inputOverrides.prompt = prompt;
+          }
+          const negativePrompt = isRecord(params) ? readProp(params, "negativeprompt") : void 0;
+          if (typeof negativePrompt === "string") {
+            inputOverrides.negativeprompt = negativePrompt;
+          }
+          const seed = isRecord(params) ? readProp(params, "seed") : void 0;
           if (typeof seed === "number") {
             inputOverrides.seed = seed;
+          }
+          const sourceExtraMetadata = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_extra_data") : void 0;
+          if (isRecord(sourceExtraMetadata)) {
+            inputOverrides.extra_metadata = structuredClone(sourceExtraMetadata);
           }
           host.generate(inputOverrides);
         };
