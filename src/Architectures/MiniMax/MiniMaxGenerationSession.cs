@@ -71,7 +71,7 @@ internal sealed class MiniMaxGenerationSession(
         {
             // TrimAudioDuration is not swept when another configured source replaces this track.
             g.CurrentMedia = _entryMedia.InstallInitVideo(
-                clip,
+                context,
                 _dimensions,
                 includeSourceAudio: UsesInitVideoSoundtrack(clip.Audio.Base));
             PrepareInitVideoAudio(clip);

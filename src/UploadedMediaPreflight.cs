@@ -19,7 +19,9 @@ internal sealed class UploadedMediaPreflight(T2IParamInput input)
         List<PlanDiagnostic> diagnostics = [];
         foreach (ClipPlan clip in plan.Clips)
         {
-            if (!UploadedMedia.TryGetInitVideo(
+            if (clip.InitVideo is not null
+                && !StringUtils.Equals(clip.InitVideo.Source, MediaSource.PreviousClip)
+                && !UploadedMedia.TryGetInitVideo(
                 input, clip.InitVideo, out _, out string videoError))
             {
                 diagnostics.Add(Unreadable(videoError, clip.ClipId));

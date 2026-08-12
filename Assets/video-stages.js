@@ -532,6 +532,7 @@
   var MEDIA_SOURCE_ACE_STEP_FUN = "AceStepFun";
   var MEDIA_SOURCE_BASE = "Base";
   var MEDIA_SOURCE_REFINER = "Refiner";
+  var MEDIA_SOURCE_PREVIOUS_CLIP = "Previous Clip";
   var CONTROLNET_SOURCE_OPTIONS = [
     "ControlNet 1",
     "ControlNet 2",
@@ -2183,6 +2184,7 @@
   var initVideoFromProbe = (probe, data, fileName, clipDuration) => {
     const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
     return {
+      source: MEDIA_SOURCE_UPLOAD,
       data,
       fileName,
       fps: probe?.fps ?? 0,
@@ -2604,8 +2606,10 @@
     if (!isRecord(value)) {
       return null;
     }
+    const source = trimmedText(value.source) || MEDIA_SOURCE_UPLOAD;
+    const previousClip = source === MEDIA_SOURCE_PREVIOUS_CLIP;
     const data = trimmedText(value.data);
-    if (!data) {
+    if (!previousClip && !data) {
       return null;
     }
     const durationSeconds = nonNegativeNumber(value.durationSeconds);
@@ -2625,6 +2629,7 @@
       return null;
     }
     return {
+      source: previousClip ? MEDIA_SOURCE_PREVIOUS_CLIP : MEDIA_SOURCE_UPLOAD,
       data,
       fileName: normalizeUploadFileName(
         value.fileName == null ? null : text(value.fileName)
@@ -4080,6 +4085,7 @@
         uploadedAudioStartSeconds: clip.uploadedAudioStartSeconds,
         uploadedAudioLengthSeconds: clip.uploadedAudioLengthSeconds,
         initVideo: clip.initVideo ? {
+          source: clip.initVideo.source ?? MEDIA_SOURCE_UPLOAD,
           data: clip.initVideo.data,
           fileName: clip.initVideo.fileName,
           fps: clip.initVideo.fps,
@@ -4222,7 +4228,7 @@
         clip.uploadedAudioStartSeconds = 0;
         clip.uploadedAudioLengthSeconds = 0;
       }
-      if (clip.initVideo && isTransientBrowserMedia({ data: clip.initVideo.data })) {
+      if (clip.initVideo && clip.initVideo.source !== MEDIA_SOURCE_PREVIOUS_CLIP && isTransientBrowserMedia({ data: clip.initVideo.data })) {
         clip.initVideo = null;
       }
       for (const ref of clip.frameRefs) {
@@ -13051,24 +13057,80 @@ ${slot}`;
         return "render";
       });
     };
+    const sourceKind = source?.source === MEDIA_SOURCE_PREVIOUS_CLIP ? MEDIA_SOURCE_PREVIOUS_CLIP : MEDIA_SOURCE_UPLOAD;
+    if (clipIdx > 0) {
+      const sourceSelect = buildOptionSelect(
+        [
+          { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
+          {
+            value: MEDIA_SOURCE_PREVIOUS_CLIP,
+            label: "Previous Clip Output"
+          }
+        ],
+        sourceKind,
+        (value) => {
+          context.structuralCommit((clips) => {
+            const target = clips[clipIdx];
+            const previous = clips[clipIdx - 1];
+            if (!target || !previous) {
+              return null;
+            }
+            if (value === MEDIA_SOURCE_PREVIOUS_CLIP) {
+              const duration = previous.duration;
+              target.initVideo = {
+                source: MEDIA_SOURCE_PREVIOUS_CLIP,
+                data: "",
+                fileName: null,
+                fps: getTimelineStore().getState().fps,
+                durationSeconds: duration,
+                startSeconds: 0,
+                lengthSeconds: duration
+              };
+              applyClipDurationResize(
+                target,
+                duration,
+                context.authoring().defaults
+              );
+            } else if (target.initVideo?.source === MEDIA_SOURCE_PREVIOUS_CLIP) {
+              target.initVideo = null;
+            }
+            reconcileClipArchitectureIdentity(
+              target,
+              context.authoring().capabilities.catalog
+            );
+            reconcileArchitectureIncomingIcLoraDrives(
+              clips,
+              context.authoring().generatedEntryMode,
+              context.authoring().capabilities.catalog
+            );
+            return "render";
+          });
+        }
+      );
+      sourceSelect.classList.add("vst-init-video-source");
+      col.appendChild(buildField("Video source", sourceSelect));
+    }
     const hint = document.createElement("small");
     hint.className = "vst-detail-field-hint";
-    hint.textContent = "Use an existing video file as this clip instead of generating it.";
+    const sourceIsPrevious = sourceKind === MEDIA_SOURCE_PREVIOUS_CLIP;
+    hint.textContent = sourceIsPrevious ? "Uses the previous clip's decoded output as this clip's starting footage." : "Use an existing video file as this clip instead of generating it.";
     col.appendChild(hint);
-    col.appendChild(
-      buildMediaPickRow(
-        "Video file",
-        "video/*",
-        ["video"],
-        source?.fileName ?? null,
-        (data, fileName) => {
-          if (clip.id) {
-            applyPickedInitVideo(context, clip.id, data, fileName);
-          }
-        },
-        removeSource
-      )
-    );
+    if (!sourceIsPrevious) {
+      col.appendChild(
+        buildMediaPickRow(
+          "Video file",
+          "video/*",
+          ["video"],
+          source?.fileName ?? null,
+          (data, fileName) => {
+            if (clip.id) {
+              applyPickedInitVideo(context, clip.id, data, fileName);
+            }
+          },
+          removeSource
+        )
+      );
+    }
     if (!source) {
       return wrap;
     }
@@ -13076,10 +13138,12 @@ ${slot}`;
       startSeconds: source.startSeconds,
       lengthSeconds: source.lengthSeconds
     };
-    col.appendChild(buildSidebarMediaPreview("video", source.data, shown));
+    if (!sourceIsPrevious) {
+      col.appendChild(buildSidebarMediaPreview("video", source.data, shown));
+    }
     const info = document.createElement("small");
     info.className = "vst-detail-field-hint";
-    info.textContent = `Detected: ${source.fps > 0 ? `${source.fps} fps` : "unknown fps"} · ${source.durationSeconds > 0 ? `${source.durationSeconds.toFixed(1)} s` : "unknown length"}`;
+    info.textContent = sourceIsPrevious ? `Previous output: ${source.durationSeconds.toFixed(1)} s` : `Detected: ${source.fps > 0 ? `${source.fps} fps` : "unknown fps"} · ${source.durationSeconds > 0 ? `${source.durationSeconds.toFixed(1)} s` : "unknown length"}`;
     col.appendChild(info);
     const fileLimit = sourceLimitSeconds(source);
     const fps = getTimelineStore().getState().fps;
@@ -13136,7 +13200,7 @@ ${slot}`;
         "Where inside the source file this clip's footage ends. This also becomes the clip's duration."
       )
     );
-    if (source.durationSeconds > 0) {
+    if (!sourceIsPrevious && source.durationSeconds > 0) {
       const range = toInOut(shown);
       col.appendChild(
         buildTrimLauncher(

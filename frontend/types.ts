@@ -107,6 +107,7 @@ export interface Retake {
 
 /** Source Video is stored under the `initVideo` wire key. */
 export interface InitVideo {
+    source?: string;
     data: string;
     fileName: string | null;
     fps: number;

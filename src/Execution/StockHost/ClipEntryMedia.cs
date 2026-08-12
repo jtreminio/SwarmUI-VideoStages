@@ -14,10 +14,11 @@ internal sealed class ClipEntryMedia(
 
     /// <summary>Conforms the footage to the timeline's dimensions, not the clip's own.</summary>
     internal WGNodeData InstallInitVideo(
-        ClipPlan clip,
+        ArchitectureClipRuntimeContext context,
         (int Width, int Height) dimensions,
         bool includeSourceAudio)
     {
+        ClipPlan clip = context.Clip;
         InitVideoPlan source = clip.InitVideo
             ?? throw Invariant.Failure(
                 $"{architectureLabel} clip {clip.ClipId} has no init-video plan.");
@@ -29,7 +30,10 @@ internal sealed class ClipEntryMedia(
                 TargetHeight = dimensions.Height,
             },
         };
-        return _installer.TryInstall(installPlan, includeSourceAudio)
+        return _installer.TryInstall(
+            installPlan,
+            context.PreviousTimelineClipOutput?.ToHostMedia(g),
+            includeSourceAudio)
             ?? throw Invariant.Failure(
                 $"clip {clip.ClipId} source video could not be installed.");
     }

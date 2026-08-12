@@ -21,6 +21,7 @@ public static class MediaSource
     public const string AceStepFun = "AceStepFun";
     public const string Base = "Base";
     public const string Refiner = "Refiner";
+    public const string PreviousClip = "Previous Clip";
     public const string Generated = "Generated";
     public const string PreviousStage = "PreviousStage";
 
@@ -43,6 +44,7 @@ public static class MediaSource
         Line($"export const MEDIA_SOURCE_ACE_STEP_FUN = \"{AceStepFun}\";");
         Line($"export const MEDIA_SOURCE_BASE = \"{Base}\";");
         Line($"export const MEDIA_SOURCE_REFINER = \"{Refiner}\";");
+        Line($"export const MEDIA_SOURCE_PREVIOUS_CLIP = \"{PreviousClip}\";");
         Line();
         Line("/** The per-slot spellings, in slot order. */");
         Line("export const CONTROLNET_SOURCE_OPTIONS = [");

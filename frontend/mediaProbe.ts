@@ -1,3 +1,4 @@
+import { MEDIA_SOURCE_UPLOAD } from "./generatedMediaSource";
 import { getVideoStagesHostBridge } from "./host";
 import type { InitVideo } from "./types";
 import { roundToTenth } from "./utils";
@@ -15,6 +16,7 @@ export const initVideoFromProbe = (
 ): InitVideo => {
     const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
     return {
+        source: MEDIA_SOURCE_UPLOAD,
         data,
         fileName,
         fps: probe?.fps ?? 0,

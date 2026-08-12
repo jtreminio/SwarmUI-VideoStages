@@ -8,6 +8,7 @@ export const MEDIA_SOURCE_CONTROLNET = "ControlNet";
 export const MEDIA_SOURCE_ACE_STEP_FUN = "AceStepFun";
 export const MEDIA_SOURCE_BASE = "Base";
 export const MEDIA_SOURCE_REFINER = "Refiner";
+export const MEDIA_SOURCE_PREVIOUS_CLIP = "Previous Clip";
 
 /** The per-slot spellings, in slot order. */
 export const CONTROLNET_SOURCE_OPTIONS = [

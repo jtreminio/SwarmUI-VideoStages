@@ -88,6 +88,7 @@ const contractState = (): AuthoringDocument => ({
                 strength: 0.7,
             },
             initVideo: {
+                source: "Upload",
                 data: "data:video/mp4;base64,REVG",
                 fileName: "source.mp4",
                 fps: 30,

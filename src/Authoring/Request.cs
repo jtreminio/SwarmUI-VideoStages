@@ -109,15 +109,14 @@ public enum IcLoraDriveData
 
 /// <summary>
 /// Pre-existing footage used as the clip's starting point instead of a from-scratch generation.
-/// <c>Data</c> is the uploaded video; <c>StartSeconds</c> is how far into the file the
-/// used range begins — its length is the clip's own duration. The backend conforms the range to
-/// the timeline (fps resample, frame window, resize) and supplies it as the clip's architecture-owned
-/// source input. The architecture decides how each stage consumes or transforms that source.
+/// <c>Source</c> selects an upload or the previous clip's decoded output. <c>Data</c> carries only
+/// an upload; <c>StartSeconds</c> is the source offset. The clip duration owns the range length.
 /// </summary>
 public sealed record InitVideoSpec(
     string Data,
     string FileName,
-    double StartSeconds
+    double StartSeconds,
+    string Source = MediaSource.Upload
 );
 
 /// <summary>

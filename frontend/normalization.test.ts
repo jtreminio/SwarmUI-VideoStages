@@ -13,7 +13,9 @@ import {
 import { clipReferenceTags } from "./clipReferenceAuthoring";
 import {
     MEDIA_SOURCE_BASE,
+    MEDIA_SOURCE_PREVIOUS_CLIP,
     MEDIA_SOURCE_REFINER,
+    MEDIA_SOURCE_UPLOAD,
 } from "./generatedMediaSource";
 import {
     buildDefaultClip,
@@ -1288,6 +1290,7 @@ describe("normalizeInitVideo", () => {
                 lengthSeconds: 5.06,
             }),
         ).toEqual({
+            source: MEDIA_SOURCE_UPLOAD,
             data,
             fileName: "shot.mp4",
             fps: 24,
@@ -1303,6 +1306,24 @@ describe("normalizeInitVideo", () => {
         expect(normalizeInitVideo({ data: " ", lengthSeconds: 2 })).toBeNull();
     });
 
+    it("keeps a previous-clip source without an upload", () => {
+        expect(
+            normalizeInitVideo({
+                source: MEDIA_SOURCE_PREVIOUS_CLIP,
+                durationSeconds: 3.2,
+                lengthSeconds: 3.2,
+            }),
+        ).toEqual({
+            source: MEDIA_SOURCE_PREVIOUS_CLIP,
+            data: "",
+            fileName: null,
+            fps: 0,
+            durationSeconds: 3.2,
+            startSeconds: 0,
+            lengthSeconds: 3.2,
+        });
+    });
+
     it("clamps the range inside a known file duration", () => {
         expect(
             normalizeInitVideo({
@@ -1313,6 +1334,7 @@ describe("normalizeInitVideo", () => {
                 lengthSeconds: 4,
             }),
         ).toEqual({
+            source: MEDIA_SOURCE_UPLOAD,
             data,
             fileName: null,
             fps: 0,
@@ -1330,6 +1352,7 @@ describe("normalizeInitVideo", () => {
                 startSeconds: 3,
             }),
         ).toEqual({
+            source: MEDIA_SOURCE_UPLOAD,
             data,
             fileName: null,
             fps: 0,

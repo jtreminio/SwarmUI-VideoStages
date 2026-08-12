@@ -32,7 +32,7 @@ You can also carry the outgoing clip's audio tail across a non-cut join. Joins b
 
 ## Starting material
 
-A clip can start from nothing (text to video), from an image, or from an existing **source video** you upload. A init-video clip is conformed for you — resampled to the timeline frame rate, trimmed to the clip's length, and scaled to the timeline resolution — and can then be refined by stages, or left alone as plain footage on the timeline.
+A clip can start from nothing (text to video), from an image, from an uploaded **source video**, or—on Clip 1 and later—from the previous clip's output. Source footage is conformed for you—resampled to the timeline frame rate, trimmed to the clip's length, and scaled to the timeline resolution—and can then be refined by stages or left alone as plain footage on the timeline.
 
 There is also a global **Refine Video** action for taking one finished video back through the timeline.
 

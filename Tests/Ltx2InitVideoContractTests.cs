@@ -155,6 +155,33 @@ public class Ltx2InitVideoContractTests
     }
 
     [Fact]
+    public async Task A_clip_can_refine_the_previous_clip_output_as_its_source_video()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        JObject next = MakeClip(ClipDuration, SourcedStage(fixture));
+        next["initVideo"] = new JObject
+        {
+            ["source"] = MediaSource.PreviousClip,
+            ["startSeconds"] = 0,
+        };
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            MakeDocument(GeneratedClip(fixture), next));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmKSamplerNode previous = StageSampler(bridge, 0);
+        SwarmKSamplerNode refine = StageSampler(bridge, 1);
+        SwarmFrameWindowNode window = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+        Assert.Equal(0, window.StartFrame.LiteralAsInt());
+        Assert.True(ReachesUpstream(bridge, window, previous.Id));
+        ImageFromBatchNode footage = Assert.IsType<ImageFromBatchNode>(
+            FootageEncodeOf(refine).Pixels.Connection?.Node);
+        Assert.True(ReachesUpstream(bridge, footage, previous.Id));
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+    }
+
+    [Fact]
     public async Task A_sourced_clip_conforms_to_a_non_default_timeline_rate()
     {
         const int Rate = 30;

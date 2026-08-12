@@ -72,7 +72,7 @@ internal sealed class StockHostVideoGenerationSession(
         if (clip.EntryMode == ArchitectureEntryMode.InitVideo)
         {
             g.CurrentMedia = _entryMedia.InstallInitVideo(
-                clip,
+                context,
                 _dimensions,
                 includeSourceAudio: false);
             g.CurrentVae = null;

@@ -6,6 +6,7 @@ import {
     fieldByLabel,
 } from "../__test_helpers__/detailStrip";
 import { lastSavedClips } from "../__test_helpers__/dom";
+import { MEDIA_SOURCE_PREVIOUS_CLIP } from "../generatedMediaSource";
 import { setSelection } from "../selection";
 import type { Clip } from "../types";
 import { closeTrimModal } from "./trimModal";
@@ -74,6 +75,38 @@ describe("source video trim", () => {
         lastSavedClips<Clip[]>(h.saveSpy)[0].initVideo;
 
     afterEach(closeTrimModal);
+
+    it("offers the previous clip output as Clip 1+ source footage", () => {
+        h.setup([
+            { duration: 3.2, stages: [{}] },
+            { duration: 4.2, stages: [{}] },
+        ]);
+        setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
+        const source = document.querySelector<HTMLSelectElement>(
+            ".vst-init-video-source",
+        );
+
+        expect(
+            Array.from(source?.options ?? []).map(
+                (option) => option.textContent,
+            ),
+        ).toContain("Previous Clip Output");
+
+        if (!source) {
+            throw new Error("source selector missing");
+        }
+        source.value = MEDIA_SOURCE_PREVIOUS_CLIP;
+        source.dispatchEvent(new Event("change", { bubbles: true }));
+
+        expect(lastSavedClips<Clip[]>(h.saveSpy)[1]).toMatchObject({
+            duration: 3.2,
+            initVideo: {
+                source: MEDIA_SOURCE_PREVIOUS_CLIP,
+                startSeconds: 0,
+                lengthSeconds: 3.2,
+            },
+        });
+    });
 
     it("shows the stored start and length as the in and out limits", () => {
         openPanel();

@@ -37,7 +37,9 @@ internal sealed class SourceOnlyGenerationSession(
             throw Invariant.Failure(
                 $"Clip {context.Clip.ClipId} has no init-video-only architecture payload.");
         }
-        WGNodeData initVideoMedia = _sourceInstaller.TryInstall(context.Clip)
+        WGNodeData initVideoMedia = _sourceInstaller.TryInstall(
+            context.Clip,
+            context.PreviousTimelineClipOutput?.ToHostMedia(generator))
             ?? throw Invariant.Failure(
                 $"clip {context.Clip.ClipId} source video could not be installed.");
         generator.CurrentMedia = initVideoMedia;

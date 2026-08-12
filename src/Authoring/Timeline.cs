@@ -35,9 +35,17 @@ internal static class AuthoringTimeline
         int clipIndex,
         Action<string> warn = null)
     {
-        UploadedMediaSpec upload = DocumentJson.GetEmbeddedUpload(
-            clipObject, UploadContainers.ClipInitVideo);
-        if (upload is null)
+        JObject container = DocumentJson.GetObject(clipObject, UploadContainers.ClipInitVideo);
+        if (container is null)
+        {
+            return null;
+        }
+        string source = DocumentJson.GetString(container, "source") ?? MediaSource.Upload;
+        bool usesPreviousClip = StringUtils.Equals(source, MediaSource.PreviousClip);
+        UploadedMediaSpec upload = usesPreviousClip
+            ? null
+            : DocumentJson.GetEmbeddedUpload(clipObject, UploadContainers.ClipInitVideo);
+        if ((!usesPreviousClip && upload is null) || (usesPreviousClip && clipIndex == 0))
         {
             return null;
         }
@@ -50,7 +58,6 @@ internal static class AuthoringTimeline
             return null;
         }
 
-        JObject container = DocumentJson.GetObject(clipObject, UploadContainers.ClipInitVideo);
         double start = DocumentJson.GetOptionalDouble(
             container, "startSeconds", 0, $"Clip {clipIndex} InitVideo", warn);
         if (!double.IsFinite(start) || start < 0)
@@ -66,7 +73,11 @@ internal static class AuthoringTimeline
                     + "frame range; ignoring the source video.");
             return null;
         }
-        return new InitVideoSpec(upload.Data, upload.FileName, roundedStart);
+        return new InitVideoSpec(
+            upload?.Data,
+            upload?.FileName,
+            roundedStart,
+            usesPreviousClip ? MediaSource.PreviousClip : MediaSource.Upload);
     }
 
     public static RetakeWindowSpec ReadRetake(

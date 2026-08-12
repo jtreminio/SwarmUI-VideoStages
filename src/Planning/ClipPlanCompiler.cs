@@ -68,7 +68,8 @@ internal static class ClipPlanCompiler
                 source.StartSeconds,
                 width,
                 height,
-                framesPerSecond);
+                framesPerSecond,
+                source.Source);
 
     private static StageInputKind ResolveStageInput(
         ArchitectureEntryMode entryMode,

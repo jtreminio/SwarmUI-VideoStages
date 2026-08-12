@@ -1,5 +1,9 @@
 import { sealSkipSuffix } from "../clipSemantics";
 import { ROOT_DIMENSION_MIN } from "../constants";
+import {
+    MEDIA_SOURCE_PREVIOUS_CLIP,
+    MEDIA_SOURCE_UPLOAD,
+} from "../generatedMediaSource";
 import { getVideoStagesHostBridge } from "../host";
 import {
     ensureAuthoringDocumentIdentity,
@@ -114,6 +118,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
             uploadedAudioLengthSeconds: clip.uploadedAudioLengthSeconds,
             initVideo: clip.initVideo
                 ? {
+                      source: clip.initVideo.source ?? MEDIA_SOURCE_UPLOAD,
                       data: clip.initVideo.data,
                       fileName: clip.initVideo.fileName,
                       fps: clip.initVideo.fps,
@@ -302,6 +307,7 @@ export const serializeStateForDurableStorage = (
         }
         if (
             clip.initVideo &&
+            clip.initVideo.source !== MEDIA_SOURCE_PREVIOUS_CLIP &&
             isTransientBrowserMedia({ data: clip.initVideo.data })
         ) {
             clip.initVideo = null;

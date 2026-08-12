@@ -71,7 +71,8 @@ internal sealed record InitVideoPlan(
     double StartSeconds,
     int TargetWidth,
     int TargetHeight,
-    int TargetFramesPerSecond);
+    int TargetFramesPerSecond,
+    string Source = MediaSource.Upload);
 
 internal sealed record StagePlan(
     int StageId,

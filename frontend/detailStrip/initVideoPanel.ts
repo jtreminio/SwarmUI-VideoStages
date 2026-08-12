@@ -9,8 +9,13 @@ import {
     appendHelp,
     buildField,
     buildMediaPickRow,
+    buildOptionSelect,
     buildStackSection,
 } from "../detailWidgets";
+import {
+    MEDIA_SOURCE_PREVIOUS_CLIP,
+    MEDIA_SOURCE_UPLOAD,
+} from "../generatedMediaSource";
 import { initVideoFromProbe, probeInitVideo } from "../mediaProbe";
 import { getTimelineStore } from "../persistence/repository";
 import { applyClipDurationResize } from "../timelineEdit";
@@ -105,26 +110,88 @@ export const buildInitVideoSection = (
             return "render";
         });
     };
+    const sourceKind =
+        source?.source === MEDIA_SOURCE_PREVIOUS_CLIP
+            ? MEDIA_SOURCE_PREVIOUS_CLIP
+            : MEDIA_SOURCE_UPLOAD;
+    if (clipIdx > 0) {
+        const sourceSelect = buildOptionSelect(
+            [
+                { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
+                {
+                    value: MEDIA_SOURCE_PREVIOUS_CLIP,
+                    label: "Previous Clip Output",
+                },
+            ],
+            sourceKind,
+            (value) => {
+                context.structuralCommit((clips) => {
+                    const target = clips[clipIdx];
+                    const previous = clips[clipIdx - 1];
+                    if (!target || !previous) {
+                        return null;
+                    }
+                    if (value === MEDIA_SOURCE_PREVIOUS_CLIP) {
+                        const duration = previous.duration;
+                        target.initVideo = {
+                            source: MEDIA_SOURCE_PREVIOUS_CLIP,
+                            data: "",
+                            fileName: null,
+                            fps: getTimelineStore().getState().fps,
+                            durationSeconds: duration,
+                            startSeconds: 0,
+                            lengthSeconds: duration,
+                        };
+                        applyClipDurationResize(
+                            target,
+                            duration,
+                            context.authoring().defaults,
+                        );
+                    } else if (
+                        target.initVideo?.source === MEDIA_SOURCE_PREVIOUS_CLIP
+                    ) {
+                        target.initVideo = null;
+                    }
+                    reconcileClipArchitectureIdentity(
+                        target,
+                        context.authoring().capabilities.catalog,
+                    );
+                    reconcileArchitectureIncomingIcLoraDrives(
+                        clips,
+                        context.authoring().generatedEntryMode,
+                        context.authoring().capabilities.catalog,
+                    );
+                    return "render";
+                });
+            },
+        );
+        sourceSelect.classList.add("vst-init-video-source");
+        col.appendChild(buildField("Video source", sourceSelect));
+    }
 
     const hint = document.createElement("small");
     hint.className = "vst-detail-field-hint";
-    hint.textContent =
-        "Use an existing video file as this clip instead of generating it.";
+    const sourceIsPrevious = sourceKind === MEDIA_SOURCE_PREVIOUS_CLIP;
+    hint.textContent = sourceIsPrevious
+        ? "Uses the previous clip's decoded output as this clip's starting footage."
+        : "Use an existing video file as this clip instead of generating it.";
     col.appendChild(hint);
-    col.appendChild(
-        buildMediaPickRow(
-            "Video file",
-            "video/*",
-            ["video"],
-            source?.fileName ?? null,
-            (data, fileName) => {
-                if (clip.id) {
-                    applyPickedInitVideo(context, clip.id, data, fileName);
-                }
-            },
-            removeSource,
-        ),
-    );
+    if (!sourceIsPrevious) {
+        col.appendChild(
+            buildMediaPickRow(
+                "Video file",
+                "video/*",
+                ["video"],
+                source?.fileName ?? null,
+                (data, fileName) => {
+                    if (clip.id) {
+                        applyPickedInitVideo(context, clip.id, data, fileName);
+                    }
+                },
+                removeSource,
+            ),
+        );
+    }
     if (!source) {
         return wrap;
     }
@@ -133,17 +200,21 @@ export const buildInitVideoSection = (
         startSeconds: source.startSeconds,
         lengthSeconds: source.lengthSeconds,
     };
-    col.appendChild(buildSidebarMediaPreview("video", source.data, shown));
+    if (!sourceIsPrevious) {
+        col.appendChild(buildSidebarMediaPreview("video", source.data, shown));
+    }
 
     const info = document.createElement("small");
     info.className = "vst-detail-field-hint";
-    info.textContent = `Detected: ${
-        source.fps > 0 ? `${source.fps} fps` : "unknown fps"
-    } · ${
-        source.durationSeconds > 0
-            ? `${source.durationSeconds.toFixed(1)} s`
-            : "unknown length"
-    }`;
+    info.textContent = sourceIsPrevious
+        ? `Previous output: ${source.durationSeconds.toFixed(1)} s`
+        : `Detected: ${
+              source.fps > 0 ? `${source.fps} fps` : "unknown fps"
+          } · ${
+              source.durationSeconds > 0
+                  ? `${source.durationSeconds.toFixed(1)} s`
+                  : "unknown length"
+          }`;
     col.appendChild(info);
 
     const fileLimit = sourceLimitSeconds(source);
@@ -218,7 +289,7 @@ export const buildInitVideoSection = (
         ),
     );
 
-    if (source.durationSeconds > 0) {
+    if (!sourceIsPrevious && source.durationSeconds > 0) {
         const range = toInOut(shown);
         col.appendChild(
             buildTrimLauncher(

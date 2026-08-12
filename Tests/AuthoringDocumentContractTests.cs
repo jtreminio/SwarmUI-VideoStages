@@ -160,6 +160,7 @@ public class AuthoringDocumentContractTests
         Assert.Equal("clip.wav", clip.UploadedAudio.FileName);
         Assert.Equal("source.mp4", clip.InitVideo.FileName);
         Assert.Equal(1, clip.InitVideo.StartSeconds);
+        Assert.Equal(MediaSource.Upload, clip.InitVideo.Source);
 
         FrameRefSpec reference = Assert.Single(clip.FrameRefs);
         Assert.Equal("Upload", reference.Source);

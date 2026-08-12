@@ -12,7 +12,10 @@ import {
     RETAKE_STRENGTH_MAX,
     RETAKE_STRENGTH_MIN,
 } from "./constants";
-import { MEDIA_SOURCE_UPLOAD } from "./generatedMediaSource";
+import {
+    MEDIA_SOURCE_PREVIOUS_CLIP,
+    MEDIA_SOURCE_UPLOAD,
+} from "./generatedMediaSource";
 import { REFERENCE_SCALE_FULL } from "./generatedReferenceScale";
 import {
     clampedNumber,
@@ -100,17 +103,18 @@ export const normalizeRetake = (
 };
 
 /**
- * A stored source video needs at least a data blob and a positive used-range
- * length. The range is clamped inside the probed file duration when one is
- * known; unknown metadata (fps/duration 0) is preserved — the backend detects
- * fps at runtime, so a failed probe still produces a usable clip.
+ * An uploaded source needs a data blob; the previous-clip source does not.
+ * Both need a positive used range. Known durations clamp that range, while
+ * unknown upload metadata survives for runtime detection.
  */
 export const normalizeInitVideo = (value: unknown): InitVideo | null => {
     if (!isRecord(value)) {
         return null;
     }
+    const source = trimmedText(value.source) || MEDIA_SOURCE_UPLOAD;
+    const previousClip = source === MEDIA_SOURCE_PREVIOUS_CLIP;
     const data = trimmedText(value.data);
-    if (!data) {
+    if (!previousClip && !data) {
         return null;
     }
     const durationSeconds = nonNegativeNumber(value.durationSeconds);
@@ -130,6 +134,7 @@ export const normalizeInitVideo = (value: unknown): InitVideo | null => {
         return null;
     }
     return {
+        source: previousClip ? MEDIA_SOURCE_PREVIOUS_CLIP : MEDIA_SOURCE_UPLOAD,
         data,
         fileName: normalizeUploadFileName(
             value.fileName == null ? null : text(value.fileName),

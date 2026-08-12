@@ -1407,6 +1407,24 @@ public class RequestReaderTests
     }
 
     [Fact]
+    public void ReadClip_PreviousClipSourceNeedsNoUpload()
+    {
+        JObject first = MakeClip(stages: [MakeStage("model-a")], duration: 3.0);
+        JObject second = MakeClip(stages: [MakeStage("model-a")], duration: 3.0);
+        second["initVideo"] = new JObject
+        {
+            ["source"] = MediaSource.PreviousClip,
+            ["startSeconds"] = 0.0,
+        };
+        T2IParamInput input = BuildInputWithJson(
+            JsonConvert.SerializeObject(new JArray(first, second)));
+
+        TimelineSpec spec = RequestReader.Read(input);
+
+        Assert.NotNull(spec.Clips[1].InitVideo);
+    }
+
+    [Fact]
     public void ReadClip_InitVideoStartBeyondFrameRange_WarnsAndDropsTheSource()
     {
         JObject clip = MakeClip(stages: [MakeStage("model-a")], duration: 3.0);

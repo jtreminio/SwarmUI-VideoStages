@@ -34,7 +34,7 @@ internal sealed class Ltx2GenerationSession(
             rootSources.SourceMedia,
             rootSources.SourceVae);
 
-        WGNodeData initVideoMedia = InstallSourceIfPlanned(clip);
+        WGNodeData initVideoMedia = InstallSourceIfPlanned(context);
         clipContext.IcLoraEntryIncomingMedia =
             initVideoMedia
             ?? context.PreviousTimelineClipOutput?.ToHostMedia(g)
@@ -70,13 +70,16 @@ internal sealed class Ltx2GenerationSession(
 
     public void Dispose() => _stageScope.Dispose();
 
-    private WGNodeData InstallSourceIfPlanned(ClipPlan clip)
+    private WGNodeData InstallSourceIfPlanned(ArchitectureClipRuntimeContext context)
     {
+        ClipPlan clip = context.Clip;
         if (clip.EntryMode != ArchitectureEntryMode.InitVideo)
         {
             return null;
         }
-        WGNodeData initVideoMedia = _initVideoClipInstaller.TryInstall(clip);
+        WGNodeData initVideoMedia = _initVideoClipInstaller.TryInstall(
+            clip,
+            context.PreviousTimelineClipOutput?.ToHostMedia(g));
         if (initVideoMedia is null)
         {
             throw Invariant.Failure(

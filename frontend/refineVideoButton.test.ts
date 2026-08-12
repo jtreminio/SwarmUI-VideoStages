@@ -112,6 +112,7 @@ describe("applyRefineToClipZero", () => {
             fps: 24,
         });
         expect(clip.initVideo).toEqual({
+            source: "Upload",
             data: "data:video/mp4;base64,AA==",
             fileName: "refine-source",
             fps: 24,
