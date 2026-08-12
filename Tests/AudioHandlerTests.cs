@@ -63,6 +63,24 @@ public class AudioHandlerTests
         return generator;
     }
 
+    private static WGNodeData AttachNativeAudio(WorkflowGenerator generator)
+    {
+        WGNodeData audio = new(
+            new JArray("901", 0),
+            generator,
+            WGNodeData.DT_AUDIO,
+            T2IModelClassSorter.CompatLtxv2);
+        generator.CurrentMedia = new WGNodeData(
+            new JArray("900", 0),
+            generator,
+            WGNodeData.DT_VIDEO,
+            T2IModelClassSorter.CompatLtxv2)
+        {
+            AttachedAudio = audio,
+        };
+        return audio;
+    }
+
     private static VideoExecutionPlan Plan(params ClipPlan[] clips) => new(
         Width: 512,
         Height: 512,
@@ -87,15 +105,7 @@ public class AudioHandlerTests
             generator,
             new RootVideoStageResizer(generator)));
 
-    /// <summary>
-    /// These ids are minted by a different extension. SwarmUI-AceStepFun's
-    /// <c>AudioWorkflow.GetTrackNodeId</c> feeds <c>GetStableDynamicID(64100 + branch*1000 +
-    /// track*100 + 60, 0)</c>, and that helper returns <c>1000 + index</c> — so branch 0's decode
-    /// lands on 65160 + track*100, which is the id <see cref="AudioHandler"/> looks the decode up by.
-    /// Every other test here seeds through <c>MakeAceStepFunDecodeId</c>, so a drifted base would
-    /// seed the drifted value and still pass while real AceStepFun audio stopped being found.
-    /// Pinning the literal once is the only thing that catches that.
-    /// </summary>
+    /// <summary>Pins AceStepFun's external node-id formula; helper-seeded tests cannot catch drift.</summary>
     [Theory]
     [InlineData(0, "65160")]
     [InlineData(1, "65260")]
@@ -187,6 +197,7 @@ public class AudioHandlerTests
     public void Runtime_source_resolver_warns_when_AceStepFun_track_is_absent()
     {
         WorkflowGenerator generator = CreateGenerator([]);
+        WGNodeData nativeAudio = AttachNativeAudio(generator);
         ClipPlan clip = Clip(0, "audio7", saveAudioTrack: false);
 
         AudioRuntimeSources sources =
@@ -196,13 +207,47 @@ public class AudioHandlerTests
         Assert.Empty(sources.ClipAudios);
         Assert.Contains(
             RequestWarnings(generator),
-            warning => warning.Contains("not present in the workflow"));
+            warning => warning.Contains("AceStepFun")
+                && warning.Contains("using native audio instead"));
+        Assert.Same(
+            nativeAudio,
+            PlannedAudioSourceSelector.Select(
+                clip.ClipId,
+                clip.Audio.Base,
+                sources,
+                suppressNative: false));
+    }
+
+    [Fact]
+    public void Runtime_source_resolver_warns_and_uses_native_for_upload_without_a_file()
+    {
+        WorkflowGenerator generator = CreateGenerator([]);
+        WGNodeData nativeAudio = AttachNativeAudio(generator);
+        ClipPlan clip = Clip(0, MediaSource.Upload, saveAudioTrack: false);
+
+        AudioRuntimeSources sources =
+            new AudioRuntimeSourceResolver(generator, new AudioHandler(generator))
+                .Resolve(Plan(clip));
+
+        Assert.Empty(sources.UploadedAudios);
+        Assert.Contains(
+            RequestWarnings(generator),
+            warning => warning.Contains("no uploaded file is attached")
+                && warning.Contains("using native audio instead"));
+        Assert.Same(
+            nativeAudio,
+            PlannedAudioSourceSelector.Select(
+                clip.ClipId,
+                clip.Audio.Base,
+                sources,
+                suppressNative: false));
     }
 
     [Fact]
     public void Runtime_source_resolver_warns_when_ControlNet_source_is_ambiguous()
     {
         WorkflowGenerator generator = CreateGenerator([]);
+        WGNodeData nativeAudio = AttachNativeAudio(generator);
         ClipPlan clip = Clip(0, MediaSource.ControlNet, saveAudioTrack: false);
 
         AudioRuntimeSources sources =
@@ -212,7 +257,15 @@ public class AudioHandlerTests
         Assert.Empty(sources.ClipAudios);
         Assert.Contains(
             RequestWarnings(generator),
-            warning => warning.Contains("without a unique valid ControlNet 1-3 drive source"));
+            warning => warning.Contains("no active ControlNet")
+                && warning.Contains("using native audio instead"));
+        Assert.Same(
+            nativeAudio,
+            PlannedAudioSourceSelector.Select(
+                clip.ClipId,
+                clip.Audio.Base,
+                sources,
+                suppressNative: false));
     }
 
     [Fact]

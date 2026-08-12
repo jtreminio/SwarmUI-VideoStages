@@ -41,7 +41,8 @@ internal sealed class AudioRuntimeSourceResolver(
                         RequestWarnings.Track(
                             g.UserInput,
                             $"VideoStages: clip {clip.ClipId} selects an AceStepFun audio source "
-                            + "without a valid track; continuing without that source.");
+                            + "without a valid track; continuing without that source and using "
+                            + "native audio instead.");
                         break;
                     }
                     WGNodeData audio = audioHandler.DetectAceStepFunAudio(track);
@@ -50,7 +51,8 @@ internal sealed class AudioRuntimeSourceResolver(
                         RequestWarnings.Track(
                             g.UserInput,
                             $"VideoStages: clip {clip.ClipId} selects AceStepFun audio{track}, "
-                            + "but that track is not present in the workflow; continuing without that source.");
+                            + "but AceStepFun did not publish that track; continuing without that "
+                            + "source and using native audio instead.");
                         break;
                     }
                     sources[clip.ClipId] = audio;
@@ -71,7 +73,7 @@ internal sealed class AudioRuntimeSourceResolver(
                             g.UserInput,
                             $"VideoStages: clip {clip.ClipId} selects ControlNet "
                             + $"{sourceIndex.Value + 1} audio, but captured video audio is unavailable; "
-                            + "using silence instead.");
+                            + "using native audio instead (not using silence).");
                         break;
                     }
                     sources[clip.ClipId] = audio;
@@ -105,10 +107,13 @@ internal sealed class AudioRuntimeSourceResolver(
             return capturedIndices[0];
         }
 
+        string unavailable = capturedIndices.Count == 0
+            ? "but no active ControlNet source has captured audio"
+            : "without a unique valid ControlNet 1-3 drive source";
         RequestWarnings.Track(
             g.UserInput,
-            $"VideoStages: clip {clip.ClipId} selects ControlNet audio without a "
-            + "unique valid ControlNet 1-3 drive source; using silence instead.");
+            $"VideoStages: clip {clip.ClipId} selects ControlNet audio {unavailable}; "
+            + "using native audio instead (not using silence).");
         return null;
     }
 
@@ -119,6 +124,14 @@ internal sealed class AudioRuntimeSourceResolver(
         {
             if (clip.Audio.Base.Kind != AudioSourceKind.Upload)
             {
+                continue;
+            }
+            if (!clip.Audio.Base.HasConfiguredTrack)
+            {
+                RequestWarnings.Track(
+                    g.UserInput,
+                    $"VideoStages: clip {clip.ClipId} selects uploaded audio, but no uploaded "
+                    + "file is attached; using native audio instead.");
                 continue;
             }
             AudioFile uploaded = UploadedMedia.GetAudio(

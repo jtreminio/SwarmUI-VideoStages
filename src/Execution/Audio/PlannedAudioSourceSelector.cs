@@ -3,7 +3,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Execution.Audio;
 
-/// <summary>Selects one already-resolved runtime source from a compiled base-audio policy.</summary>
+/// <summary>Resolves a compiled selection, using native audio when its external source is absent.</summary>
 internal static class PlannedAudioSourceSelector
 {
     public static WGNodeData Select(
@@ -14,12 +14,14 @@ internal static class PlannedAudioSourceSelector
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(sources);
+        WGNodeData nativeAudio = suppressNative ? null : sources.NativeAudio;
         return plan.Kind switch
         {
-            AudioSourceKind.Native => suppressNative ? null : sources.NativeAudio,
-            AudioSourceKind.Upload => ForClip(sources.UploadedAudios, clipId),
+            AudioSourceKind.Native => nativeAudio,
+            AudioSourceKind.Upload =>
+                ForClip(sources.UploadedAudios, clipId) ?? nativeAudio,
             AudioSourceKind.AceStepFun or AudioSourceKind.ControlNet =>
-                ForClip(sources.ClipAudios, clipId),
+                ForClip(sources.ClipAudios, clipId) ?? nativeAudio,
             _ => null,
         };
     }
