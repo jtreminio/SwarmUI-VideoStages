@@ -48,6 +48,7 @@ const contractState = (): AuthoringDocument => ({
             boundaryOutOverlap: 8,
             duration: 3,
             refFraming: "fit-green",
+            h3AttentionWindowSeconds: 2.5,
             audioSource: "Native",
             loras: [{ name: "style.safetensors" }],
             icLoras: [
@@ -191,6 +192,7 @@ const contractState = (): AuthoringDocument => ({
             boundaryOutOverlap: 1,
             duration: 2,
             refFraming: "crop",
+            h3AttentionWindowSeconds: 0,
             audioSource: "Native",
             loras: [],
             icLoras: [],

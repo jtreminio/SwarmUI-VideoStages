@@ -211,7 +211,8 @@ public sealed record ClipSpec(
     // ArchitectureFeature.ClipReferences consume them.
     IReadOnlyList<ClipReferenceSpec> References = null,
     double UploadedAudioStartSeconds = 0,
-    double UploadedAudioLengthSeconds = 0
+    double UploadedAudioLengthSeconds = 0,
+    double H3AttentionWindowSeconds = 0
 )
 {
     /// <summary>Persisted repair/diagnostic hint. Resolved stage models own behavior.</summary>

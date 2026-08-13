@@ -63,6 +63,7 @@ export const STORED_CLIP_KEYS = [
     "boundaryOutOverlap",
     "duration",
     "refFraming",
+    "h3AttentionWindowSeconds",
     "audioSource",
     "loras",
     "icLoras",

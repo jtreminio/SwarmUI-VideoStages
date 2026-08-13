@@ -265,6 +265,7 @@ describe("persistence", () => {
             const clips = [
                 minimalClip({
                     duration: 3,
+                    h3AttentionWindowSeconds: 2.5,
                     loras: [{ name: "detail.safetensors" }],
                     icLoras: [
                         {
@@ -322,6 +323,7 @@ describe("persistence", () => {
                     boundaryOutOverlap: 8,
                     duration: 3,
                     refFraming: "crop",
+                    h3AttentionWindowSeconds: 2.5,
                     audioSource: "Native",
                     loras: [{ name: "detail.safetensors" }],
                     icLoras: [

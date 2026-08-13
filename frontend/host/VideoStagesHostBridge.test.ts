@@ -19,11 +19,41 @@ afterEach(() => {
     setVideoStagesHostBridgeForTests(null);
     const globals = globalThis as typeof globalThis & {
         mainGenHandler?: unknown;
+        genericRequest?: unknown;
+        registerMediaButton?: unknown;
     };
     delete globals.mainGenHandler;
+    Reflect.deleteProperty(globals, "genericRequest");
+    Reflect.deleteProperty(globals, "registerMediaButton");
+    document.body.innerHTML = "";
 });
 
 describe("VideoStagesHostBridge compatibility facades", () => {
+    it("registers both refine actions together as primary video buttons", () => {
+        const registerMediaButton = jest.fn();
+        const globals = globalThis as typeof globalThis & {
+            registerMediaButton?: typeof registerMediaButton;
+        };
+        globals.registerMediaButton = registerMediaButton;
+        const bridge = createDefaultVideoStagesHostBridge();
+        const refine = jest.fn();
+        const comfy = jest.fn();
+
+        bridge.registerRefineVideoButton(refine, "refine description");
+        bridge.registerRefineVideoToComfyButton(comfy, "comfy description");
+
+        expect(registerMediaButton.mock.calls).toEqual([
+            ["Refine Video", refine, "refine description", ["video"], true],
+            [
+                "Refine Video to ComfyUI",
+                comfy,
+                "comfy description",
+                ["video"],
+                true,
+            ],
+        ]);
+    });
+
     it("routes carriers, registries, and media paths through an injected bridge", () => {
         const data = document.createElement("textarea");
         data.value = "before";
@@ -123,6 +153,79 @@ describe("VideoStagesHostBridge compatibility facades", () => {
             current_ui_value: "kept",
             original_prompt: "<wildcard:animal>",
             used_wildcards: ["animal"],
+        });
+    });
+
+    it("loads collected overrides into the ComfyUI tab without generating", async () => {
+        const doGenerate = jest.fn();
+        const getGenInput = jest.fn<
+            (
+                overrides: Record<string, unknown>,
+                preOverrides: Record<string, unknown>,
+            ) => Record<string, unknown>
+        >((overrides) => ({
+            model: "current-model.safetensors",
+            ...overrides,
+            extra_metadata: { current_ui_value: "kept" },
+        }));
+        const genericRequest = jest.fn(
+            (
+                url: string,
+                data: Record<string, unknown>,
+                callback: (response: unknown) => void,
+            ) => {
+                expect(url).toBe("ComfyGetGeneratedWorkflow");
+                expect(data).toEqual({
+                    model: "current-model.safetensors",
+                    videostages: "refine-document",
+                    images: 1,
+                    extra_metadata: {
+                        current_ui_value: "kept",
+                        original_prompt: "authored prompt",
+                    },
+                });
+                callback({ workflow: '{"1":{"class_type":"PreviewImage"}}' });
+            },
+        );
+        const globals = globalThis as typeof globalThis & {
+            mainGenHandler?: {
+                doGenerate: typeof doGenerate;
+                getGenInput: typeof getGenInput;
+            };
+            genericRequest?: typeof genericRequest;
+        };
+        globals.mainGenHandler = { doGenerate, getGenInput };
+        globals.genericRequest = genericRequest;
+
+        const tab = document.createElement("button");
+        tab.id = "maintab_comfyworkflow";
+        const tabClick = jest.fn();
+        tab.addEventListener("click", tabClick);
+        document.body.appendChild(tab);
+        const frame = document.createElement("iframe");
+        frame.id = "comfy_workflow_frame";
+        document.body.appendChild(frame);
+        const loadApiJson = jest.fn();
+        const cloneObject = jest.fn((workflow: unknown) => workflow);
+        Object.assign(frame.contentWindow as Window, {
+            app: { loadApiJson },
+            LiteGraph: { cloneObject },
+        });
+
+        await createDefaultVideoStagesHostBridge().sendToComfyUi({
+            videostages: "refine-document",
+            images: 1,
+            extra_metadata: { original_prompt: "authored prompt" },
+        });
+
+        expect(doGenerate).not.toHaveBeenCalled();
+        expect(getGenInput).toHaveBeenCalledWith(
+            { videostages: "refine-document", images: 1 },
+            {},
+        );
+        expect(tabClick).toHaveBeenCalledTimes(1);
+        expect(loadApiJson).toHaveBeenCalledWith({
+            "1": { class_type: "PreviewImage" },
         });
     });
 });

@@ -22,6 +22,7 @@ import {
     STAGE_REF_STRENGTH_DEFAULT,
 } from "./constants";
 import { REFERENCE_SCALE_FULL } from "./generatedReferenceScale";
+import { normalizeH3AttentionWindowSeconds } from "./h3AttentionWindow";
 import { defaultLoraWeight } from "./loraAuthoring";
 import {
     clipReferenceDurationSeconds,
@@ -148,6 +149,7 @@ export const buildDefaultClip = (
                   defaults.fps,
               ),
         refFraming: "crop",
+        h3AttentionWindowSeconds: 0,
         audioSource: AUDIO_SOURCE_NATIVE,
         loras,
         icLoras: [],
@@ -362,6 +364,9 @@ export const normalizeClip = (
         ),
         duration,
         refFraming: normalizeReferenceFraming(rawClip.refFraming),
+        h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
+            rawClip.h3AttentionWindowSeconds,
+        ),
         audioSource,
         loras,
         icLoras,

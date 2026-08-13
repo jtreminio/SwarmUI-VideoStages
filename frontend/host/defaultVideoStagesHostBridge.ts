@@ -55,6 +55,78 @@ const withSuppressedPromptCompletion = (fn: () => void): void => {
     }
 };
 
+const requestJson = (
+    url: string,
+    data: Record<string, unknown> = {},
+): Promise<unknown> =>
+    new Promise((resolve, reject) => {
+        if (typeof genericRequest !== "function") {
+            reject(new Error("Swarm genericRequest is unavailable."));
+            return;
+        }
+        genericRequest(
+            url,
+            data,
+            (response) => resolve(response),
+            0,
+            (error) => reject(error),
+        );
+    });
+
+const collectGenerationInput = (
+    inputOverrides: Record<string, unknown>,
+): Record<string, unknown> => {
+    if (
+        typeof mainGenHandler === "undefined" ||
+        typeof mainGenHandler?.getGenInput !== "function"
+    ) {
+        throw new Error("Swarm generation input collection is unavailable.");
+    }
+    const { extra_metadata: requestedExtraMetadata, ...generationOverrides } =
+        inputOverrides;
+    const actualInput = mainGenHandler.getGenInput(generationOverrides, {});
+    if (isRecord(requestedExtraMetadata)) {
+        actualInput.extra_metadata = {
+            ...(isRecord(actualInput.extra_metadata)
+                ? actualInput.extra_metadata
+                : {}),
+            ...structuredClone(requestedExtraMetadata),
+        };
+    }
+    return actualInput;
+};
+
+type ComfyWorkflowWindow = Window & {
+    app?: { loadApiJson: (workflow: unknown) => void };
+    LiteGraph?: { cloneObject: (workflow: unknown) => unknown };
+};
+
+const loadWorkflowInComfyUi = async (workflowJson: string): Promise<void> => {
+    const tab = document.getElementById("maintab_comfyworkflow");
+    if (!(tab instanceof HTMLElement)) {
+        throw new Error("The ComfyUI tab is unavailable.");
+    }
+    tab.click();
+
+    const workflow = JSON.parse(workflowJson) as unknown;
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+        const frame = document.getElementById("comfy_workflow_frame");
+        const comfyWindow =
+            frame instanceof HTMLIFrameElement
+                ? (frame.contentWindow as ComfyWorkflowWindow | null)
+                : null;
+        if (comfyWindow?.app && comfyWindow.LiteGraph) {
+            comfyWindow.app.loadApiJson(
+                comfyWindow.LiteGraph.cloneObject(workflow),
+            );
+            return;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 100));
+    }
+    throw new Error("Timed out waiting for the ComfyUI tab to load.");
+};
+
 export const createDefaultVideoStagesHostBridge =
     (): VideoStagesHostBridge => ({
         hasElement: (id) => document.getElementById(id) !== null,
@@ -79,6 +151,10 @@ export const createDefaultVideoStagesHostBridge =
                     : [...param.values];
             return { values: [...param.values], labels };
         },
+        hasBackendFeature: (feature) =>
+            typeof currentBackendFeatureSet !== "undefined" &&
+            Array.isArray(currentBackendFeatureSet) &&
+            currentBackendFeatureSet.includes(feature),
         notifyChanged: (element, suppressPromptCompletion = false) => {
             const notify = (): void => triggerChangeFor(element);
             if (suppressPromptCompletion) {
@@ -129,20 +205,7 @@ export const createDefaultVideoStagesHostBridge =
                 finiteWeight(preferenceRaw)
             );
         },
-        requestJson: (url, data = {}) =>
-            new Promise((resolve, reject) => {
-                if (typeof genericRequest !== "function") {
-                    reject(new Error("Swarm genericRequest is unavailable."));
-                    return;
-                }
-                genericRequest(
-                    url,
-                    data,
-                    (response) => resolve(response),
-                    0,
-                    (error) => reject(error),
-                );
-            }),
+        requestJson,
 
         registerPromptPrefix: (
             prefix: string,
@@ -213,6 +276,18 @@ export const createDefaultVideoStagesHostBridge =
                 true,
             );
         },
+        registerRefineVideoToComfyButton: (onSelect, description) => {
+            if (typeof registerMediaButton !== "function") {
+                return;
+            }
+            registerMediaButton(
+                "Refine Video to ComfyUI",
+                onSelect,
+                description,
+                ["video"],
+                true,
+            );
+        },
         getCurrentMediaMetadata: () =>
             typeof currentMetadataVal === "string" ? currentMetadataVal : null,
         interpretMediaMetadata: (metadata) =>
@@ -263,5 +338,20 @@ export const createDefaultVideoStagesHostBridge =
                     },
                 );
             }
+        },
+        sendToComfyUi: async (inputOverrides) => {
+            const actualInput = collectGenerationInput(inputOverrides);
+            const response = await requestJson(
+                "ComfyGetGeneratedWorkflow",
+                actualInput,
+            );
+            if (!isRecord(response) || typeof response.workflow !== "string") {
+                const message =
+                    isRecord(response) && typeof response.error === "string"
+                        ? response.error
+                        : "SwarmUI returned no generated ComfyUI workflow.";
+                throw new Error(message);
+            }
+            await loadWorkflowInComfyUi(response.workflow);
         },
     });

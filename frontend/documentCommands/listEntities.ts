@@ -120,6 +120,7 @@ const CLIP_ENTITY = defineList<CanonicalAuthoringDocument, CanonicalClip>()({
         "boundaryOutOverlap",
         "duration",
         "refFraming",
+        "h3AttentionWindowSeconds",
         "audioSource",
         "loras",
         "icLoras",

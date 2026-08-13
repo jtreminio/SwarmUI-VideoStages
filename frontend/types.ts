@@ -178,6 +178,7 @@ export interface Clip {
     boundaryOutOverlap: number;
     duration: number;
     refFraming: ReferenceFraming;
+    h3AttentionWindowSeconds: number;
     audioSource: string;
     loras: ClipLora[];
     icLoras: IcLora[];

@@ -190,6 +190,54 @@
       completion.blockInput = previous;
     }
   };
+  var requestJson = (url, data = {}) => new Promise((resolve, reject) => {
+    if (typeof genericRequest !== "function") {
+      reject(new Error("Swarm genericRequest is unavailable."));
+      return;
+    }
+    genericRequest(
+      url,
+      data,
+      (response) => resolve(response),
+      0,
+      (error) => reject(error)
+    );
+  });
+  var collectGenerationInput = (inputOverrides) => {
+    if (typeof mainGenHandler === "undefined" || typeof mainGenHandler?.getGenInput !== "function") {
+      throw new Error("Swarm generation input collection is unavailable.");
+    }
+    const { extra_metadata: requestedExtraMetadata, ...generationOverrides } = inputOverrides;
+    const actualInput = mainGenHandler.getGenInput(generationOverrides, {});
+    if (isRecord(requestedExtraMetadata)) {
+      actualInput.extra_metadata = {
+        ...isRecord(actualInput.extra_metadata) ? actualInput.extra_metadata : {},
+        ...structuredClone(requestedExtraMetadata)
+      };
+    }
+    return actualInput;
+  };
+  var loadWorkflowInComfyUi = async (workflowJson) => {
+    const tab = document.getElementById("maintab_comfyworkflow");
+    if (!(tab instanceof HTMLElement)) {
+      throw new Error("The ComfyUI tab is unavailable.");
+    }
+    tab.click();
+    const workflow = JSON.parse(workflowJson);
+    const deadline = Date.now() + 3e4;
+    while (Date.now() < deadline) {
+      const frame = document.getElementById("comfy_workflow_frame");
+      const comfyWindow = frame instanceof HTMLIFrameElement ? frame.contentWindow : null;
+      if (comfyWindow?.app && comfyWindow.LiteGraph) {
+        comfyWindow.app.loadApiJson(
+          comfyWindow.LiteGraph.cloneObject(workflow)
+        );
+        return;
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+    }
+    throw new Error("Timed out waiting for the ComfyUI tab to load.");
+  };
   var createDefaultVideoStagesHostBridge = () => ({
     hasElement: (id) => document.getElementById(id) !== null,
     getTextInput: textInput,
@@ -208,6 +256,7 @@
       const labels = Array.isArray(param.value_names) && param.value_names.length === param.values.length ? [...param.value_names] : [...param.values];
       return { values: [...param.values], labels };
     },
+    hasBackendFeature: (feature) => typeof currentBackendFeatureSet !== "undefined" && Array.isArray(currentBackendFeatureSet) && currentBackendFeatureSet.includes(feature),
     notifyChanged: (element, suppressPromptCompletion = false) => {
       const notify2 = () => triggerChangeFor(element);
       if (suppressPromptCompletion) {
@@ -230,19 +279,7 @@
       };
       return finiteWeight(browserRaw) ?? finiteWeight(helperRaw) ?? finiteWeight(preferenceRaw);
     },
-    requestJson: (url, data = {}) => new Promise((resolve, reject) => {
-      if (typeof genericRequest !== "function") {
-        reject(new Error("Swarm genericRequest is unavailable."));
-        return;
-      }
-      genericRequest(
-        url,
-        data,
-        (response) => resolve(response),
-        0,
-        (error) => reject(error)
-      );
-    }),
+    requestJson,
     registerPromptPrefix: (prefix, description, examples, isMulti) => {
       if (typeof promptTabComplete === "undefined") {
         return;
@@ -295,6 +332,18 @@
         true
       );
     },
+    registerRefineVideoToComfyButton: (onSelect, description) => {
+      if (typeof registerMediaButton !== "function") {
+        return;
+      }
+      registerMediaButton(
+        "Refine Video to ComfyUI",
+        onSelect,
+        description,
+        ["video"],
+        true
+      );
+    },
     getCurrentMediaMetadata: () => typeof currentMetadataVal === "string" ? currentMetadataVal : null,
     interpretMediaMetadata: (metadata) => typeof interpretMetadata === "function" ? interpretMetadata(metadata) : metadata,
     showError: (message) => {
@@ -334,6 +383,18 @@
           }
         );
       }
+    },
+    sendToComfyUi: async (inputOverrides) => {
+      const actualInput = collectGenerationInput(inputOverrides);
+      const response = await requestJson(
+        "ComfyGetGeneratedWorkflow",
+        actualInput
+      );
+      if (!isRecord(response) || typeof response.workflow !== "string") {
+        const message = isRecord(response) && typeof response.error === "string" ? response.error : "SwarmUI returned no generated ComfyUI workflow.";
+        throw new Error(message);
+      }
+      await loadWorkflowInComfyUi(response.workflow);
     }
   });
 
@@ -3457,6 +3518,23 @@
     return `hsl(${resolved} ${HUE_SATURATION}% ${HUE_LIGHTNESS}%)`;
   };
 
+  // frontend/h3AttentionWindow.ts
+  var H3_ATTENTION_WINDOW_FEATURE = "h3_window_attention";
+  var H3_ATTENTION_WINDOW_MIN_SECONDS = 0;
+  var H3_ATTENTION_WINDOW_MAX_SECONDS = 20;
+  var H3_ATTENTION_WINDOW_STEP_SECONDS = 0.5;
+  var normalizeH3AttentionWindowSeconds = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return H3_ATTENTION_WINDOW_MIN_SECONDS;
+    }
+    return clamp(
+      Math.round(numeric / H3_ATTENTION_WINDOW_STEP_SECONDS) * H3_ATTENTION_WINDOW_STEP_SECONDS,
+      H3_ATTENTION_WINDOW_MIN_SECONDS,
+      H3_ATTENTION_WINDOW_MAX_SECONDS
+    );
+  };
+
   // frontend/loraAuthoring.ts
   var LORA_WEIGHT_DEFAULT = 1;
   var LORA_WEIGHT_STEP = 0.05;
@@ -3826,6 +3904,7 @@
         defaults.fps
       ),
       refFraming: "crop",
+      h3AttentionWindowSeconds: 0,
       audioSource: AUDIO_SOURCE_NATIVE,
       loras,
       icLoras: [],
@@ -3996,6 +4075,9 @@
       ),
       duration,
       refFraming: normalizeReferenceFraming(rawClip.refFraming),
+      h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
+        rawClip.h3AttentionWindowSeconds
+      ),
       audioSource,
       loras,
       icLoras,
@@ -4059,6 +4141,7 @@
         boundaryOutOverlap: clip.boundaryOutOverlap,
         duration: clip.duration,
         refFraming: clip.refFraming,
+        h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
         audioSource: clip.audioSource,
         loras: clip.loras.map((entry) => ({
           name: entry.name
@@ -4542,6 +4625,7 @@
       "boundaryOutOverlap",
       "duration",
       "refFraming",
+      "h3AttentionWindowSeconds",
       "audioSource",
       "loras",
       "icLoras",
@@ -6184,95 +6268,108 @@
       clip.stages[0].control = 0;
     }
   };
+  var buildRefineVideoPayload = async (src) => {
+    const host = getVideoStagesHostBridge();
+    let parsedMetadata = null;
+    const currentMetadata = host.getCurrentMediaMetadata();
+    if (currentMetadata) {
+      try {
+        const readable = host.interpretMediaMetadata(currentMetadata);
+        parsedMetadata = readable ? JSON.parse(readable) : null;
+      } catch (error) {
+        console.warn(
+          "VideoStages: failed to parse source video metadata",
+          error
+        );
+      }
+    }
+    const params = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
+    const initialState = getState();
+    if (!hasRefinementWorkToDo(initialState, isVideoStagesEnabled())) {
+      host.showError(refineNeedsExtraStageMessage());
+      return null;
+    }
+    const videoDataUrl = await host.toDataUrl(src);
+    const probe = await probeInitVideo(videoDataUrl);
+    const state = getState();
+    const clipZero = state.clips[0];
+    if (!clipZero || !hasRefinementWorkToDo(state, isVideoStagesEnabled())) {
+      host.showError(refineNeedsExtraStageMessage());
+      return null;
+    }
+    const bakesAceStepFunAudio = isAceStepFunAudioSource(clipZero.audioSource);
+    const refinesWithinClipZero = clipZero.stages.length > REFINE_STAGE_INDEX;
+    const clips = state.clips.slice(refinesWithinClipZero ? 0 : 1);
+    clips[0] = structuredClone(clips[0]);
+    if (refinesWithinClipZero) {
+      applyRefineToClipZero(clips[0], videoDataUrl, probe);
+    } else {
+      installRefineSource(clips[0], videoDataUrl, probe);
+    }
+    reconcileClipArchitectureIdentity(
+      clips[0],
+      captureAuthoringTransactionSnapshot().capabilities.catalog
+    );
+    const inputOverrides = {
+      videostages: serializeStateForStorage({ ...state, clips }),
+      images: 1
+    };
+    const sourceExtraMetadata = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_extra_data") : void 0;
+    const originalPrompt = isRecord(sourceExtraMetadata) ? readProp(sourceExtraMetadata, "original_prompt") : void 0;
+    if (isRecord(params) && typeof originalPrompt === "string") {
+      Object.assign(
+        inputOverrides,
+        resolvedPromptParameterOverrides(originalPrompt, params)
+      );
+    }
+    if (bakesAceStepFunAudio) {
+      const aceStepFunModelParam = cleanParamName("AceStepFun Model");
+      if (aceStepFunModelParam) {
+        inputOverrides[aceStepFunModelParam] = null;
+      }
+    }
+    const prompt = isRecord(params) ? readProp(params, "prompt") : void 0;
+    if (typeof prompt === "string") {
+      inputOverrides.prompt = prompt;
+    }
+    const negativePrompt = isRecord(params) ? readProp(params, "negativeprompt") : void 0;
+    if (typeof negativePrompt === "string") {
+      inputOverrides.negativeprompt = negativePrompt;
+    }
+    const seed = isRecord(params) ? readProp(params, "seed") : void 0;
+    if (typeof seed === "number") {
+      inputOverrides.seed = seed;
+    }
+    if (isRecord(sourceExtraMetadata)) {
+      inputOverrides.extra_metadata = structuredClone(sourceExtraMetadata);
+    }
+    return inputOverrides;
+  };
+  var dispatchRefineVideo = (src, destination) => {
+    const host = getVideoStagesHostBridge();
+    void buildRefineVideoPayload(src).then((payload) => payload ? destination(host, payload) : void 0).catch((error) => {
+      console.error("VideoStages: failed to prepare Refine Video", error);
+      host.showError(
+        error instanceof Error ? error.message : "Failed to prepare Refine Video."
+      );
+    });
+  };
   var refineVideoButton = () => {
+    const host = getVideoStagesHostBridge();
     const description = "Uses this video as the source for the next refinement stage or clip.";
-    getVideoStagesHostBridge().registerRefineVideoButton(
-      (src) => {
-        const host = getVideoStagesHostBridge();
-        const run = async () => {
-          let parsedMetadata = null;
-          const currentMetadata = host.getCurrentMediaMetadata();
-          if (currentMetadata) {
-            try {
-              const readable = host.interpretMediaMetadata(currentMetadata);
-              parsedMetadata = readable ? JSON.parse(readable) : null;
-            } catch (error) {
-              console.warn(
-                "VideoStages: failed to parse source video metadata",
-                error
-              );
-            }
-          }
-          const params = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
-          const initialState = getState();
-          if (!hasRefinementWorkToDo(initialState, isVideoStagesEnabled())) {
-            host.showError(refineNeedsExtraStageMessage());
-            return;
-          }
-          const videoDataUrl = await host.toDataUrl(src);
-          const probe = await probeInitVideo(videoDataUrl);
-          const state = getState();
-          const clipZero = state.clips[0];
-          if (!clipZero || !hasRefinementWorkToDo(state, isVideoStagesEnabled())) {
-            host.showError(refineNeedsExtraStageMessage());
-            return;
-          }
-          const bakesAceStepFunAudio = isAceStepFunAudioSource(
-            clipZero.audioSource
-          );
-          const refinesWithinClipZero = clipZero.stages.length > REFINE_STAGE_INDEX;
-          const clips = state.clips.slice(refinesWithinClipZero ? 0 : 1);
-          clips[0] = structuredClone(clips[0]);
-          if (refinesWithinClipZero) {
-            applyRefineToClipZero(clips[0], videoDataUrl, probe);
-          } else {
-            installRefineSource(clips[0], videoDataUrl, probe);
-          }
-          reconcileClipArchitectureIdentity(
-            clips[0],
-            captureAuthoringTransactionSnapshot().capabilities.catalog
-          );
-          const inputOverrides = {
-            videostages: serializeStateForStorage({ ...state, clips }),
-            images: 1
-          };
-          const sourceExtraMetadata = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_extra_data") : void 0;
-          const originalPrompt = isRecord(sourceExtraMetadata) ? readProp(sourceExtraMetadata, "original_prompt") : void 0;
-          if (isRecord(params) && typeof originalPrompt === "string") {
-            Object.assign(
-              inputOverrides,
-              resolvedPromptParameterOverrides(
-                originalPrompt,
-                params
-              )
-            );
-          }
-          if (bakesAceStepFunAudio) {
-            const aceStepFunModelParam = cleanParamName("AceStepFun Model");
-            if (aceStepFunModelParam) {
-              inputOverrides[aceStepFunModelParam] = null;
-            }
-          }
-          const prompt = isRecord(params) ? readProp(params, "prompt") : void 0;
-          if (typeof prompt === "string") {
-            inputOverrides.prompt = prompt;
-          }
-          const negativePrompt = isRecord(params) ? readProp(params, "negativeprompt") : void 0;
-          if (typeof negativePrompt === "string") {
-            inputOverrides.negativeprompt = negativePrompt;
-          }
-          const seed = isRecord(params) ? readProp(params, "seed") : void 0;
-          if (typeof seed === "number") {
-            inputOverrides.seed = seed;
-          }
-          if (isRecord(sourceExtraMetadata)) {
-            inputOverrides.extra_metadata = structuredClone(sourceExtraMetadata);
-          }
-          host.generate(inputOverrides);
-        };
-        void run();
-      },
+    host.registerRefineVideoButton(
+      (src) => dispatchRefineVideo(
+        src,
+        (target, payload) => target.generate(payload)
+      ),
       description
+    );
+    host.registerRefineVideoToComfyButton(
+      (src) => dispatchRefineVideo(
+        src,
+        (target, payload) => target.sendToComfyUi(payload)
+      ),
+      `${description} Opens the generated workflow in the ComfyUI tab without running it.`
     );
   };
 
@@ -12328,7 +12425,7 @@ ${slot}`;
   // frontend/detailStrip/clipBasics.ts
   var DURATION_STEP = 0.1;
   var REFERENCE_LENGTH_HINT = "(derived from a reference's media length)";
-  var buildClipColumn = (context, clip, clipIdx, referenceFramingState) => {
+  var buildClipColumn = (context, clip, clipIdx, referenceFramingState, showH3AttentionWindow = false) => {
     const column = document.createElement("div");
     column.className = "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
     const initVideoClip = !!clip.initVideo;
@@ -12404,6 +12501,29 @@ ${slot}`;
         });
       }
       column.appendChild(field);
+    }
+    if (showH3AttentionWindow) {
+      const attentionWindow = buildSlider(
+        "Attention window (s)",
+        clip.h3AttentionWindowSeconds,
+        H3_ATTENTION_WINDOW_MIN_SECONDS,
+        H3_ATTENTION_WINDOW_MAX_SECONDS,
+        H3_ATTENTION_WINDOW_STEP_SECONDS,
+        (value) => {
+          context.debouncedCommit("h3AttentionWindowSeconds", (clips) => {
+            const target = clips[clipIdx];
+            if (target) {
+              target.h3AttentionWindowSeconds = value;
+            }
+          });
+        },
+        {
+          hint: "0 disables JuanAttn for this clip.",
+          help: "Total centered temporal attention window. Dense transformer layers remain fixed at 0,9,19,29,39,49."
+        }
+      );
+      attentionWindow.dataset.vstH3AttentionWindow = "true";
+      column.appendChild(attentionWindow);
     }
     return column;
   };
@@ -14223,7 +14343,10 @@ ${slot}`;
           context,
           clip,
           clipIdx,
-          referenceFramingState
+          referenceFramingState,
+          capabilityView.architectureId === "minimax" && getVideoStagesHostBridge().hasBackendFeature(
+            H3_ATTENTION_WINDOW_FEATURE
+          )
         ),
         flattenContent: true,
         headerActions: clipIdx === 0 ? [] : [

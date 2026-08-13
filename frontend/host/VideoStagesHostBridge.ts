@@ -18,6 +18,7 @@ export interface VideoStagesHostBridge {
     getSelect(id: string): HTMLSelectElement | null;
     getSelectOptions(select: HTMLSelectElement | null): HostOptionList;
     getParamOptions(paramId: string): HostOptionList | null;
+    hasBackendFeature(feature: string): boolean;
     notifyChanged(
         element: HTMLElement,
         suppressPromptCompletion?: boolean,
@@ -45,9 +46,14 @@ export interface VideoStagesHostBridge {
         onSelect: (src: string) => void,
         description: string,
     ): void;
+    registerRefineVideoToComfyButton(
+        onSelect: (src: string) => void,
+        description: string,
+    ): void;
     getCurrentMediaMetadata(): string | null;
     interpretMediaMetadata(metadata: string): string | null;
     showError(message: string): void;
     toDataUrl(src: string): Promise<string>;
     generate(inputOverrides: Record<string, unknown>): void;
+    sendToComfyUi(inputOverrides: Record<string, unknown>): Promise<void>;
 }

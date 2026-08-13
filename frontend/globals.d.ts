@@ -1,5 +1,9 @@
 declare const mainGenHandler: {
     doGenerate: (...args: unknown[]) => void;
+    getGenInput: (
+        inputOverrides?: Record<string, unknown>,
+        inputPreOverrides?: Record<string, unknown>,
+    ) => Record<string, unknown>;
 };
 
 declare function showError(message: string): void;
@@ -32,6 +36,7 @@ declare let postParamBuildSteps: (() => void)[] | undefined;
 // refresh button in the model browsers). Unlike postParamBuildSteps, this does
 // NOT re-run our init, so we hook it to re-read the fresh dropdown options.
 declare let refreshParamsExtra: (() => unknown)[] | undefined;
+declare let currentBackendFeatureSet: string[] | undefined;
 
 declare function getImageOutPrefix(): string;
 

@@ -250,6 +250,85 @@ describe("applyRefineToClipZero", () => {
 });
 
 describe("refineVideoButton", () => {
+    it("sends the refine payload to ComfyUI without starting generation", async () => {
+        mountVideoStagesData(
+            makeConfig([
+                minimalClip({
+                    stages: [minimalStage(), minimalStage({ control: 0.5 })],
+                }),
+            ]),
+        );
+        mountPromptBox("current panel prompt");
+        mountCheckbox("input_group_content_videostages_toggle", {
+            checked: true,
+        });
+
+        const comfyCallbacks: ((src: string) => void)[] = [];
+        const generate = jest.fn();
+        let resolveSent: ((value: Record<string, unknown>) => void) | null =
+            null;
+        const sent = new Promise<Record<string, unknown>>((resolve) => {
+            resolveSent = resolve;
+        });
+        const base = createDefaultVideoStagesHostBridge();
+        setVideoStagesHostBridgeForTests({
+            ...base,
+            registerRefineVideoButton: jest.fn(),
+            registerRefineVideoToComfyButton: (
+                callback: (src: string) => void,
+            ) => {
+                comfyCallbacks.push(callback);
+            },
+            getCurrentMediaMetadata: () =>
+                JSON.stringify({
+                    sui_image_params: {
+                        prompt: "selected result prompt",
+                        seed: 123,
+                    },
+                }),
+            interpretMediaMetadata: (metadata: string) => metadata,
+            toDataUrl: async () => "data:video/mp4;base64,AA==",
+            createInitVideoElement: () => {
+                const video = document.createElement("video");
+                video.pause = jest.fn();
+                video.load = jest.fn();
+                queueMicrotask(() => video.dispatchEvent(new Event("error")));
+                return video;
+            },
+            generate,
+            sendToComfyUi: (overrides: Record<string, unknown>) => {
+                resolveSent?.(overrides);
+                return Promise.resolve();
+            },
+        });
+
+        refineVideoButton();
+
+        expect(comfyCallbacks).toHaveLength(1);
+        comfyCallbacks[0]("source.mp4");
+        const overrides = await sent;
+        expect(generate).not.toHaveBeenCalled();
+        expect(overrides).toMatchObject({
+            images: 1,
+            prompt: "selected result prompt",
+            seed: 123,
+        });
+        const refinedDocument = JSON.parse(
+            String(overrides.videostages),
+        ) as AuthoringDocument;
+        expect(refinedDocument.clips[0]).toMatchObject({
+            initVideo: {
+                source: "Upload",
+                data: "data:video/mp4;base64,AA==",
+                fileName: "refine-source",
+            },
+            stages: [
+                { skipped: false, control: 0 },
+                { skipped: false, control: 0.5 },
+            ],
+        });
+    });
+
     it("promotes the next clip instead of joining the rendered source again", async () => {
         mountVideoStagesData(
             makeConfig([

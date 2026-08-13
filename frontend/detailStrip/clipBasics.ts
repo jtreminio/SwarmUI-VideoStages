@@ -5,8 +5,14 @@ import {
     buildField,
     buildNumber,
     buildOptionSelect,
+    buildSlider,
     type SectionHeaderAction,
 } from "../detailWidgets";
+import {
+    H3_ATTENTION_WINDOW_MAX_SECONDS,
+    H3_ATTENTION_WINDOW_MIN_SECONDS,
+    H3_ATTENTION_WINDOW_STEP_SECONDS,
+} from "../h3AttentionWindow";
 import { skipGlyph, skipTitle } from "../skipVocabulary";
 import { applyClipDurationResize } from "../timelineEdit";
 import type { Clip, ReferenceFraming } from "../types";
@@ -21,6 +27,7 @@ export const buildClipColumn = (
     clip: Clip,
     clipIdx: number,
     referenceFramingState?: AuthoringState,
+    showH3AttentionWindow = false,
 ): HTMLElement => {
     const column = document.createElement("div");
     column.className =
@@ -111,6 +118,29 @@ export const buildClipColumn = (
             });
         }
         column.appendChild(field);
+    }
+    if (showH3AttentionWindow) {
+        const attentionWindow = buildSlider(
+            "Attention window (s)",
+            clip.h3AttentionWindowSeconds,
+            H3_ATTENTION_WINDOW_MIN_SECONDS,
+            H3_ATTENTION_WINDOW_MAX_SECONDS,
+            H3_ATTENTION_WINDOW_STEP_SECONDS,
+            (value) => {
+                context.debouncedCommit("h3AttentionWindowSeconds", (clips) => {
+                    const target = clips[clipIdx];
+                    if (target) {
+                        target.h3AttentionWindowSeconds = value;
+                    }
+                });
+            },
+            {
+                hint: "0 disables JuanAttn for this clip.",
+                help: "Total centered temporal attention window. Dense transformer layers remain fixed at 0,9,19,29,39,49.",
+            },
+        );
+        attentionWindow.dataset.vstH3AttentionWindow = "true";
+        column.appendChild(attentionWindow);
     }
     return column;
 };

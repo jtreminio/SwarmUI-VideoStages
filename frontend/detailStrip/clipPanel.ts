@@ -1,6 +1,8 @@
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
 import { executableBoundaryForLeftClip } from "../clipSemantics";
 import { buildStaticSection } from "../detailWidgets";
+import { H3_ATTENTION_WINDOW_FEATURE } from "../h3AttentionWindow";
+import { getVideoStagesHostBridge } from "../host";
 import type { AuthoringDocument, TimelineSelection } from "../types";
 import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import { buildClipColumn, buildClipSkipAction } from "./clipBasics";
@@ -71,6 +73,10 @@ export const buildClipBody = (
                 clip,
                 clipIdx,
                 referenceFramingState,
+                capabilityView.architectureId === "minimax" &&
+                    getVideoStagesHostBridge().hasBackendFeature(
+                        H3_ATTENTION_WINDOW_FEATURE,
+                    ),
             ),
             flattenContent: true,
             headerActions:

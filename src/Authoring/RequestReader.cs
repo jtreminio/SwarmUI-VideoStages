@@ -229,7 +229,13 @@ internal static class RequestReader
                     "uploadedAudioLengthSeconds",
                     0,
                     location,
-                    context.Warn)))
+                    context.Warn)),
+            H3AttentionWindowSeconds: DocumentJson.GetOptionalDouble(
+                clipObject,
+                "h3AttentionWindowSeconds",
+                0,
+                location,
+                context.Warn))
         {
             AuthoredArchitectureHint = DocumentJson.GetString(
                 clipObject,

@@ -95,129 +95,139 @@ export const applyRefineToClipZero = (
     }
 };
 
+const buildRefineVideoPayload = async (
+    src: string,
+): Promise<Record<string, unknown> | null> => {
+    const host = getVideoStagesHostBridge();
+    let parsedMetadata: unknown = null;
+    const currentMetadata = host.getCurrentMediaMetadata();
+    if (currentMetadata) {
+        try {
+            const readable = host.interpretMediaMetadata(currentMetadata);
+            parsedMetadata = readable ? JSON.parse(readable) : null;
+        } catch (error) {
+            console.warn(
+                "VideoStages: failed to parse source video metadata",
+                error,
+            );
+        }
+    }
+
+    const params = isRecord(parsedMetadata)
+        ? readProp(parsedMetadata, "sui_image_params")
+        : null;
+    const initialState = getState();
+
+    if (!hasRefinementWorkToDo(initialState, isVideoStagesEnabled())) {
+        host.showError(refineNeedsExtraStageMessage());
+        return null;
+    }
+
+    const videoDataUrl = await host.toDataUrl(src);
+    const probe = await probeInitVideo(videoDataUrl);
+    const state = getState();
+    const clipZero = state.clips[0];
+    if (!clipZero || !hasRefinementWorkToDo(state, isVideoStagesEnabled())) {
+        host.showError(refineNeedsExtraStageMessage());
+        return null;
+    }
+    const bakesAceStepFunAudio = isAceStepFunAudioSource(clipZero.audioSource);
+    const refinesWithinClipZero = clipZero.stages.length > REFINE_STAGE_INDEX;
+    const clips = state.clips.slice(refinesWithinClipZero ? 0 : 1);
+    clips[0] = structuredClone(clips[0]);
+    if (refinesWithinClipZero) {
+        applyRefineToClipZero(clips[0], videoDataUrl, probe);
+    } else {
+        installRefineSource(clips[0], videoDataUrl, probe);
+    }
+    reconcileClipArchitectureIdentity(
+        clips[0],
+        captureAuthoringTransactionSnapshot().capabilities.catalog,
+    );
+    const inputOverrides: Record<string, unknown> = {
+        videostages: serializeStateForStorage({ ...state, clips }),
+        images: 1,
+    };
+
+    const sourceExtraMetadata = isRecord(parsedMetadata)
+        ? readProp(parsedMetadata, "sui_extra_data")
+        : undefined;
+    const originalPrompt = isRecord(sourceExtraMetadata)
+        ? readProp(sourceExtraMetadata, "original_prompt")
+        : undefined;
+    if (isRecord(params) && typeof originalPrompt === "string") {
+        Object.assign(
+            inputOverrides,
+            resolvedPromptParameterOverrides(originalPrompt, params),
+        );
+    }
+    if (bakesAceStepFunAudio) {
+        const aceStepFunModelParam = cleanParamName("AceStepFun Model");
+        if (aceStepFunModelParam) {
+            inputOverrides[aceStepFunModelParam] = null;
+        }
+    }
+
+    const prompt = isRecord(params) ? readProp(params, "prompt") : undefined;
+    if (typeof prompt === "string") {
+        inputOverrides.prompt = prompt;
+    }
+
+    const negativePrompt = isRecord(params)
+        ? readProp(params, "negativeprompt")
+        : undefined;
+    if (typeof negativePrompt === "string") {
+        inputOverrides.negativeprompt = negativePrompt;
+    }
+
+    const seed = isRecord(params) ? readProp(params, "seed") : undefined;
+    if (typeof seed === "number") {
+        inputOverrides.seed = seed;
+    }
+
+    if (isRecord(sourceExtraMetadata)) {
+        inputOverrides.extra_metadata = structuredClone(sourceExtraMetadata);
+    }
+
+    return inputOverrides;
+};
+
+const dispatchRefineVideo = (
+    src: string,
+    destination: (
+        host: ReturnType<typeof getVideoStagesHostBridge>,
+        payload: Record<string, unknown>,
+    ) => void | Promise<void>,
+): void => {
+    const host = getVideoStagesHostBridge();
+    void buildRefineVideoPayload(src)
+        .then((payload) => (payload ? destination(host, payload) : undefined))
+        .catch((error) => {
+            console.error("VideoStages: failed to prepare Refine Video", error);
+            host.showError(
+                error instanceof Error
+                    ? error.message
+                    : "Failed to prepare Refine Video.",
+            );
+        });
+};
+
 export const refineVideoButton = (): void => {
+    const host = getVideoStagesHostBridge();
     const description =
         "Uses this video as the source for the next refinement stage or clip.";
-    getVideoStagesHostBridge().registerRefineVideoButton(
-        (src: string): void => {
-            const host = getVideoStagesHostBridge();
-            const run = async (): Promise<void> => {
-                let parsedMetadata: unknown = null;
-                const currentMetadata = host.getCurrentMediaMetadata();
-                if (currentMetadata) {
-                    try {
-                        const readable =
-                            host.interpretMediaMetadata(currentMetadata);
-                        parsedMetadata = readable ? JSON.parse(readable) : null;
-                    } catch (error) {
-                        console.warn(
-                            "VideoStages: failed to parse source video metadata",
-                            error,
-                        );
-                    }
-                }
-
-                const params = isRecord(parsedMetadata)
-                    ? readProp(parsedMetadata, "sui_image_params")
-                    : null;
-                const initialState = getState();
-
-                if (
-                    !hasRefinementWorkToDo(initialState, isVideoStagesEnabled())
-                ) {
-                    host.showError(refineNeedsExtraStageMessage());
-                    return;
-                }
-
-                const videoDataUrl = await host.toDataUrl(src);
-                const probe = await probeInitVideo(videoDataUrl);
-                // The author may edit the timeline while the video probe runs.
-                const state = getState();
-                const clipZero = state.clips[0];
-                if (
-                    !clipZero ||
-                    !hasRefinementWorkToDo(state, isVideoStagesEnabled())
-                ) {
-                    host.showError(refineNeedsExtraStageMessage());
-                    return;
-                }
-                const bakesAceStepFunAudio = isAceStepFunAudioSource(
-                    clipZero.audioSource,
-                );
-                const refinesWithinClipZero =
-                    clipZero.stages.length > REFINE_STAGE_INDEX;
-                const clips = state.clips.slice(refinesWithinClipZero ? 0 : 1);
-                clips[0] = structuredClone(clips[0]);
-                if (refinesWithinClipZero) {
-                    applyRefineToClipZero(clips[0], videoDataUrl, probe);
-                } else {
-                    // The selected video already contains Clip 0. Clip 1 replaces it as the
-                    // refinement pass instead of joining the rendered footage to itself.
-                    installRefineSource(clips[0], videoDataUrl, probe);
-                }
-                // Adding init video can invalidate the clip's architecture identity.
-                reconcileClipArchitectureIdentity(
-                    clips[0],
-                    captureAuthoringTransactionSnapshot().capabilities.catalog,
-                );
-                const inputOverrides: Record<string, unknown> = {
-                    videostages: serializeStateForStorage({ ...state, clips }),
-                    images: 1,
-                };
-
-                const sourceExtraMetadata = isRecord(parsedMetadata)
-                    ? readProp(parsedMetadata, "sui_extra_data")
-                    : undefined;
-                const originalPrompt = isRecord(sourceExtraMetadata)
-                    ? readProp(sourceExtraMetadata, "original_prompt")
-                    : undefined;
-                if (isRecord(params) && typeof originalPrompt === "string") {
-                    Object.assign(
-                        inputOverrides,
-                        resolvedPromptParameterOverrides(
-                            originalPrompt,
-                            params,
-                        ),
-                    );
-                }
-                if (bakesAceStepFunAudio) {
-                    const aceStepFunModelParam =
-                        cleanParamName("AceStepFun Model");
-                    if (aceStepFunModelParam) {
-                        inputOverrides[aceStepFunModelParam] = null;
-                    }
-                }
-
-                const prompt = isRecord(params)
-                    ? readProp(params, "prompt")
-                    : undefined;
-                if (typeof prompt === "string") {
-                    inputOverrides.prompt = prompt;
-                }
-
-                const negativePrompt = isRecord(params)
-                    ? readProp(params, "negativeprompt")
-                    : undefined;
-                if (typeof negativePrompt === "string") {
-                    inputOverrides.negativeprompt = negativePrompt;
-                }
-
-                const seed = isRecord(params)
-                    ? readProp(params, "seed")
-                    : undefined;
-                if (typeof seed === "number") {
-                    inputOverrides.seed = seed;
-                }
-
-                if (isRecord(sourceExtraMetadata)) {
-                    inputOverrides.extra_metadata =
-                        structuredClone(sourceExtraMetadata);
-                }
-
-                host.generate(inputOverrides);
-            };
-            void run();
-        },
+    host.registerRefineVideoButton(
+        (src) =>
+            dispatchRefineVideo(src, (target, payload) =>
+                target.generate(payload),
+            ),
         description,
+    );
+    host.registerRefineVideoToComfyButton(
+        (src) =>
+            dispatchRefineVideo(src, (target, payload) =>
+                target.sendToComfyUi(payload),
+            ),
+        `${description} Opens the generated workflow in the ComfyUI tab without running it.`,
     );
 };

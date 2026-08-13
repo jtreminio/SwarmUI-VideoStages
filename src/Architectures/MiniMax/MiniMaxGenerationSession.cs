@@ -275,7 +275,9 @@ internal sealed class MiniMaxGenerationSession(
         try
         {
             g.IsImageToVideo = true;
-            PrepModelAndPrompt(clip, genInfo, clip.RequireMiniMaxPayload().References);
+            MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
+            PrepModelAndPrompt(clip, genInfo, payload.References);
+            MiniMaxAttentionWindowGraph.Apply(g, payload.AttentionWindowSeconds, genInfo);
             int frames = genInfo.Frames
                 ?? throw Invariant.Failure(
                     "A MiniMax H3 stage has no resolved frame count.");

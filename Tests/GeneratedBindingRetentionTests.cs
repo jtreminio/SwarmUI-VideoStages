@@ -11,6 +11,7 @@ public class GeneratedBindingRetentionTests
     // else in the namespace is force-kept by comfytyped.keep.json.
     private static readonly string[] DirectlyReferencedProductionBindings =
     [
+        nameof(H3WindowAttentionPatchNode),
         nameof(SwarmAudioLengthToFramesNode),
         nameof(SwarmFrameWindowNode),
         nameof(SwarmPromptRelayEncodeNode),
