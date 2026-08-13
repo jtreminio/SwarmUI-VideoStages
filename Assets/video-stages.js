@@ -6146,6 +6146,13 @@
       REFINE_SOURCE_FILE_NAME,
       clip.duration
     );
+    clip.audioSource = MEDIA_SOURCE_UPLOAD;
+    clip.saveAudioTrack = false;
+    clip.clipLengthFromAudio = false;
+    clip.uploadedAudio = null;
+    clip.uploadedAudioDurationSeconds = 0;
+    clip.uploadedAudioStartSeconds = 0;
+    clip.uploadedAudioLengthSeconds = 0;
     if (clip.stages.length > REFINE_STAGE_INDEX) {
       applySkipSuffix(clip.stages, REFINE_STAGE_INDEX, false);
     }
@@ -15809,7 +15816,6 @@ ${slot}`;
         return;
       }
       focus.beginSelectionSession();
-      settingsMode = null;
       const active = document.activeElement;
       revealSelectionOnNextRender = !(active instanceof HTMLElement && dockEl?.contains(active));
       render();

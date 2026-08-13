@@ -1,6 +1,7 @@
 import { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity";
 import { captureAuthoringTransactionSnapshot } from "./authoringSnapshot";
 import { applySkipSuffix } from "./clipSemantics";
+import { MEDIA_SOURCE_UPLOAD } from "./generatedMediaSource";
 import { getVideoStagesHostBridge } from "./host";
 import type { InitVideoProbe } from "./mediaProbe";
 import { initVideoFromProbe, probeInitVideo } from "./mediaProbe";
@@ -47,6 +48,13 @@ export const applyRefineToClipZero = (
         REFINE_SOURCE_FILE_NAME,
         clip.duration,
     );
+    clip.audioSource = MEDIA_SOURCE_UPLOAD;
+    clip.saveAudioTrack = false;
+    clip.clipLengthFromAudio = false;
+    clip.uploadedAudio = null;
+    clip.uploadedAudioDurationSeconds = 0;
+    clip.uploadedAudioStartSeconds = 0;
+    clip.uploadedAudioLengthSeconds = 0;
     if (clip.stages.length > REFINE_STAGE_INDEX) {
         applySkipSuffix(clip.stages, REFINE_STAGE_INDEX, false);
     }

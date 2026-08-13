@@ -143,6 +143,34 @@ describe("applyRefineToClipZero", () => {
         });
     });
 
+    it("uses the source video's baked soundtrack instead of regenerating selected audio", () => {
+        const clip = minimalClip({
+            audioSource: "audio0",
+            saveAudioTrack: true,
+            clipLengthFromAudio: true,
+            uploadedAudio: {
+                data: "data:audio/wav;base64,QQ==",
+                fileName: "old.wav",
+            },
+            uploadedAudioDurationSeconds: 9,
+            uploadedAudioStartSeconds: 1,
+            uploadedAudioLengthSeconds: 4,
+            stages: [minimalStage(), minimalStage()],
+        });
+
+        applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", null);
+
+        expect(clip).toMatchObject({
+            audioSource: "Upload",
+            saveAudioTrack: false,
+            clipLengthFromAudio: false,
+            uploadedAudio: null,
+            uploadedAudioDurationSeconds: 0,
+            uploadedAudioStartSeconds: 0,
+            uploadedAudioLengthSeconds: 0,
+        });
+    });
+
     it("falls back to the authored clip duration when the probe reports none", () => {
         const clip = minimalClip({ duration: 7, stages: [minimalStage()] });
         applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", null);

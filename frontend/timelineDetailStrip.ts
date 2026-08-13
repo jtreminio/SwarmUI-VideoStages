@@ -210,7 +210,6 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
             return;
         }
         focus.beginSelectionSession();
-        settingsMode = null;
         const active = document.activeElement;
         revealSelectionOnNextRender = !(
             active instanceof HTMLElement && dockEl?.contains(active)

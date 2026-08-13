@@ -5,6 +5,7 @@ import {
     fieldByLabel,
     sliderNumberByLabel,
 } from "../__test_helpers__/detailStrip";
+import { setSelection } from "../selection";
 
 describe("detail strip timeline settings panel", () => {
     const h = detailStripHarness();
@@ -105,5 +106,27 @@ describe("detail strip timeline settings panel", () => {
             detail()?.querySelector(".vst-settings-calculated-dims"),
         ).toBeNull();
         expect(h.refreshSpy).toHaveBeenCalled();
+    });
+
+    it("keeps Custom selected after editing a clip and reopening settings", () => {
+        h.setup([{ duration: 4, stages: [{}] }]);
+        const ratio =
+            fieldByLabel("Aspect Ratio").querySelector<HTMLSelectElement>(
+                "select",
+            );
+        if (!ratio) {
+            throw new Error("aspect-ratio select missing");
+        }
+        ratio.value = "custom";
+        ratio.dispatchEvent(new Event("change", { bubbles: true }));
+
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        setSelection({ kind: "none" });
+
+        expect(
+            fieldByLabel("Aspect Ratio").querySelector<HTMLSelectElement>(
+                "select",
+            )?.value,
+        ).toBe("custom");
     });
 });
