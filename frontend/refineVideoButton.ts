@@ -1,4 +1,5 @@
 import { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity";
+import { isAceStepFunAudioSource } from "./audioSource";
 import { captureAuthoringTransactionSnapshot } from "./authoringSnapshot";
 import { applySkipSuffix } from "./clipSemantics";
 import { MEDIA_SOURCE_UPLOAD } from "./generatedMediaSource";
@@ -14,6 +15,30 @@ import { isRecord } from "./utils";
 
 const REFINE_SOURCE_FILE_NAME = "refine-source";
 const REFINE_STAGE_INDEX = 1;
+const REFINE_OWNED_PARAMS = new Set(["images", "videostages"]);
+
+const resolvedPromptParameterOverrides = (
+    originalPrompt: string,
+    sourceParams: Record<string, unknown>,
+): Record<string, unknown> => {
+    const sourceKeys = new Map(
+        Object.keys(sourceParams).map((key) => [cleanParamName(key), key]),
+    );
+    const overrides: Record<string, unknown> = {};
+    for (const match of originalPrompt.matchAll(/<param\[([^\]]+)\]\s*:/gi)) {
+        const authoredId = cleanParamName(match[1]) ?? "";
+        const resolvedId = window.parameter_remaps?.[authoredId] ?? authoredId;
+        if (REFINE_OWNED_PARAMS.has(resolvedId)) {
+            continue;
+        }
+        const sourceKey = sourceKeys.get(resolvedId);
+        if (!sourceKey) {
+            continue;
+        }
+        overrides[resolvedId] = structuredClone(sourceParams[sourceKey]);
+    }
+    return overrides;
+};
 
 export const refineNeedsExtraStageMessage = (): string =>
     `Refine Video needs either Clip 0 to have Stage ${REFINE_STAGE_INDEX} defined ` +
@@ -48,6 +73,7 @@ export const applyRefineToClipZero = (
         REFINE_SOURCE_FILE_NAME,
         clip.duration,
     );
+    clip.duration = clip.initVideo.lengthSeconds;
     clip.audioSource = MEDIA_SOURCE_UPLOAD;
     clip.saveAudioTrack = false;
     clip.clipLengthFromAudio = false;
@@ -111,6 +137,9 @@ export const refineVideoButton = (): void => {
                 }
                 const clips = [...state.clips];
                 clips[0] = structuredClone(clipZero);
+                const bakesAceStepFunAudio = isAceStepFunAudioSource(
+                    clips[0].audioSource,
+                );
                 applyRefineToClipZero(clips[0], videoDataUrl, probe);
                 // Adding init video can invalidate the clip's architecture identity.
                 reconcileClipArchitectureIdentity(
@@ -121,6 +150,29 @@ export const refineVideoButton = (): void => {
                     videostages: serializeStateForStorage({ ...state, clips }),
                     images: 1,
                 };
+
+                const sourceExtraMetadata = isRecord(parsedMetadata)
+                    ? readProp(parsedMetadata, "sui_extra_data")
+                    : undefined;
+                const originalPrompt = isRecord(sourceExtraMetadata)
+                    ? readProp(sourceExtraMetadata, "original_prompt")
+                    : undefined;
+                if (isRecord(params) && typeof originalPrompt === "string") {
+                    Object.assign(
+                        inputOverrides,
+                        resolvedPromptParameterOverrides(
+                            originalPrompt,
+                            params,
+                        ),
+                    );
+                }
+                if (bakesAceStepFunAudio) {
+                    const aceStepFunModelParam =
+                        cleanParamName("AceStepFun Model");
+                    if (aceStepFunModelParam) {
+                        inputOverrides[aceStepFunModelParam] = null;
+                    }
+                }
 
                 const prompt = isRecord(params)
                     ? readProp(params, "prompt")
@@ -143,9 +195,6 @@ export const refineVideoButton = (): void => {
                     inputOverrides.seed = seed;
                 }
 
-                const sourceExtraMetadata = isRecord(parsedMetadata)
-                    ? readProp(parsedMetadata, "sui_extra_data")
-                    : undefined;
                 if (isRecord(sourceExtraMetadata)) {
                     inputOverrides.extra_metadata =
                         structuredClone(sourceExtraMetadata);

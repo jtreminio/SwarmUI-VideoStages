@@ -6128,6 +6128,26 @@
   // frontend/refineVideoButton.ts
   var REFINE_SOURCE_FILE_NAME = "refine-source";
   var REFINE_STAGE_INDEX = 1;
+  var REFINE_OWNED_PARAMS = /* @__PURE__ */ new Set(["images", "videostages"]);
+  var resolvedPromptParameterOverrides = (originalPrompt, sourceParams) => {
+    const sourceKeys = new Map(
+      Object.keys(sourceParams).map((key) => [cleanParamName(key), key])
+    );
+    const overrides = {};
+    for (const match of originalPrompt.matchAll(/<param\[([^\]]+)\]\s*:/gi)) {
+      const authoredId = cleanParamName(match[1]) ?? "";
+      const resolvedId = window.parameter_remaps?.[authoredId] ?? authoredId;
+      if (REFINE_OWNED_PARAMS.has(resolvedId)) {
+        continue;
+      }
+      const sourceKey = sourceKeys.get(resolvedId);
+      if (!sourceKey) {
+        continue;
+      }
+      overrides[resolvedId] = structuredClone(sourceParams[sourceKey]);
+    }
+    return overrides;
+  };
   var refineNeedsExtraStageMessage = () => `Refine Video needs either Clip 0 to have Stage ${REFINE_STAGE_INDEX} defined (active or inactive), or another clip in the timeline. Add a stage or clip in the VideoStages panel, then click Refine Video again.`;
   var hasRefinementWorkToDo = (state, enabled) => {
     if (!enabled) {
@@ -6146,6 +6166,7 @@
       REFINE_SOURCE_FILE_NAME,
       clip.duration
     );
+    clip.duration = clip.initVideo.lengthSeconds;
     clip.audioSource = MEDIA_SOURCE_UPLOAD;
     clip.saveAudioTrack = false;
     clip.clipLengthFromAudio = false;
@@ -6195,6 +6216,9 @@
           }
           const clips = [...state.clips];
           clips[0] = structuredClone(clipZero);
+          const bakesAceStepFunAudio = isAceStepFunAudioSource(
+            clips[0].audioSource
+          );
           applyRefineToClipZero(clips[0], videoDataUrl, probe);
           reconcileClipArchitectureIdentity(
             clips[0],
@@ -6204,6 +6228,23 @@
             videostages: serializeStateForStorage({ ...state, clips }),
             images: 1
           };
+          const sourceExtraMetadata = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_extra_data") : void 0;
+          const originalPrompt = isRecord(sourceExtraMetadata) ? readProp(sourceExtraMetadata, "original_prompt") : void 0;
+          if (isRecord(params) && typeof originalPrompt === "string") {
+            Object.assign(
+              inputOverrides,
+              resolvedPromptParameterOverrides(
+                originalPrompt,
+                params
+              )
+            );
+          }
+          if (bakesAceStepFunAudio) {
+            const aceStepFunModelParam = cleanParamName("AceStepFun Model");
+            if (aceStepFunModelParam) {
+              inputOverrides[aceStepFunModelParam] = null;
+            }
+          }
           const prompt = isRecord(params) ? readProp(params, "prompt") : void 0;
           if (typeof prompt === "string") {
             inputOverrides.prompt = prompt;
@@ -6216,7 +6257,6 @@
           if (typeof seed === "number") {
             inputOverrides.seed = seed;
           }
-          const sourceExtraMetadata = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_extra_data") : void 0;
           if (isRecord(sourceExtraMetadata)) {
             inputOverrides.extra_metadata = structuredClone(sourceExtraMetadata);
           }

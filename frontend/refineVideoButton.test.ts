@@ -141,6 +141,7 @@ describe("applyRefineToClipZero", () => {
             startSeconds: 0,
             lengthSeconds: 3.5,
         });
+        expect(clip.duration).toBe(3.5);
     });
 
     it("uses the source video's baked soundtrack instead of regenerating selected audio", () => {
@@ -272,6 +273,8 @@ describe("refineVideoButton", () => {
         mountVideoStagesData(
             makeConfig([
                 minimalClip({
+                    audioSource: "audio0",
+                    clipLengthFromAudio: true,
                     stages: [minimalStage(), minimalStage()],
                 }),
             ]),
@@ -293,13 +296,22 @@ describe("refineVideoButton", () => {
                 prompt: "final parsed prompt with blue bird",
                 negativeprompt: "final parsed negative prompt",
                 seed: 123,
+                textaudiobpm: 146,
+                textaudiokeyscale: "Ab major",
+                textaudiosigmashift: 6,
+                textaudiostyle: "Female voice, eurodance",
                 ...(sourceVideostages === undefined
                     ? {}
                     : { videostages: sourceVideostages }),
             },
             sui_extra_data: {
                 original_prompt:
-                    "<setvar:animal=bird><wildcard:colors> <getvar:animal>",
+                    "<setvar:animal=bird>" +
+                    "<param[text2audio bpm]:<random:120-180>>" +
+                    "<param[text2audio keyscale]:<wc:music/key_scale>>" +
+                    "<param[text2audio sigma shift]:6>" +
+                    "<param[text2audio style]:Female voice, eurodance>" +
+                    "<wildcard:colors> <getvar:animal>",
                 original_negativeprompt: "<random:blur|noise>",
                 used_wildcards: ["colors"],
                 prompt_variables: { animal: "bird" },
@@ -334,6 +346,11 @@ describe("refineVideoButton", () => {
             prompt: "final parsed prompt with blue bird",
             negativeprompt: "final parsed negative prompt",
             seed: 123,
+            acestepfunmodel: null,
+            textaudiobpm: 146,
+            textaudiokeyscale: "Ab major",
+            textaudiosigmashift: 6,
+            textaudiostyle: "Female voice, eurodance",
             extra_metadata: sourceMetadata.sui_extra_data,
         });
         const refinedDocument = JSON.parse(

@@ -8,6 +8,7 @@ declare function textPromptAddKeydownHandler(element: HTMLElement): void;
 declare function getParamById(
     id: string,
 ): { values?: string[]; value_names?: string[] } | null;
+declare function cleanParamName(name: string | null): string | null;
 
 declare function makeSliderInput(
     featureid: string | null,
@@ -135,6 +136,7 @@ declare const loraHelper:
 interface Window {
     /** When true, VideoStages frontend logs reaction points to the console (see debugLog.ts). */
     __VIDEO_STAGES_DEBUG__?: boolean;
+    parameter_remaps?: Record<string, string>;
     base2editStageRegistry?: Base2EditStageRegistry;
     acestepfunTrackRegistry?: AceStepFunTrackRegistry;
 }
