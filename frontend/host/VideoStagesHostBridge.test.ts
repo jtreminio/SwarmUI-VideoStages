@@ -18,18 +18,22 @@ import {
 afterEach(() => {
     setVideoStagesHostBridgeForTests(null);
     const globals = globalThis as typeof globalThis & {
+        copyText?: unknown;
         mainGenHandler?: unknown;
         genericRequest?: unknown;
         registerMediaButton?: unknown;
+        showError?: unknown;
     };
+    Reflect.deleteProperty(globals, "copyText");
     delete globals.mainGenHandler;
     Reflect.deleteProperty(globals, "genericRequest");
     Reflect.deleteProperty(globals, "registerMediaButton");
+    Reflect.deleteProperty(globals, "showError");
     document.body.innerHTML = "";
 });
 
 describe("VideoStagesHostBridge compatibility facades", () => {
-    it("registers both refine actions together as primary video buttons", () => {
+    it("registers Refine Video as a primary Generate-tab button", () => {
         const registerMediaButton = jest.fn();
         const globals = globalThis as typeof globalThis & {
             registerMediaButton?: typeof registerMediaButton;
@@ -37,20 +41,11 @@ describe("VideoStagesHostBridge compatibility facades", () => {
         globals.registerMediaButton = registerMediaButton;
         const bridge = createDefaultVideoStagesHostBridge();
         const refine = jest.fn();
-        const comfy = jest.fn();
 
         bridge.registerRefineVideoButton(refine, "refine description");
-        bridge.registerRefineVideoToComfyButton(comfy, "comfy description");
 
         expect(registerMediaButton.mock.calls).toEqual([
             ["Refine Video", refine, "refine description", ["video"], true],
-            [
-                "Refine Video to ComfyUI",
-                comfy,
-                "comfy description",
-                ["video"],
-                true,
-            ],
         ]);
     });
 
@@ -156,7 +151,19 @@ describe("VideoStagesHostBridge compatibility facades", () => {
         });
     });
 
-    it("loads collected overrides into the ComfyUI tab without generating", async () => {
+    it("reads the selected Generate-tab video source", () => {
+        document.body.innerHTML =
+            '<video id="current_image_img" data-src="/Output/refine.mp4"></video>';
+        const bridge = createDefaultVideoStagesHostBridge();
+
+        expect(bridge.getCurrentVideoSource()).toBe("/Output/refine.mp4");
+
+        document.body.innerHTML =
+            '<img id="current_image_img" data-src="/Output/still.png">';
+        expect(bridge.getCurrentVideoSource()).toBeNull();
+    });
+
+    it("loads and saves collected overrides without generating", async () => {
         const doGenerate = jest.fn();
         const getGenInput = jest.fn<
             (
@@ -168,34 +175,44 @@ describe("VideoStagesHostBridge compatibility facades", () => {
             ...overrides,
             extra_metadata: { current_ui_value: "kept" },
         }));
+        const requests: [string, Record<string, unknown>][] = [];
         const genericRequest = jest.fn(
             (
                 url: string,
                 data: Record<string, unknown>,
                 callback: (response: unknown) => void,
             ) => {
-                expect(url).toBe("ComfyGetGeneratedWorkflow");
-                expect(data).toEqual({
-                    model: "current-model.safetensors",
-                    videostages: "refine-document",
-                    images: 1,
-                    extra_metadata: {
-                        current_ui_value: "kept",
-                        original_prompt: "authored prompt",
-                    },
+                requests.push([url, data]);
+                if (url === "ComfyGetGeneratedWorkflow") {
+                    callback({
+                        workflow: '{"1":{"class_type":"PreviewImage"}}',
+                    });
+                    return;
+                }
+                callback({
+                    success: true,
+                    payloadPath: "/server/refine_payload.json",
+                    workflowPath: "/server/refine_workflow.json",
+                    payloadLocalPath: "~/swarm/refine_payload.json",
+                    workflowLocalPath: "~/swarm/refine_workflow.json",
                 });
-                callback({ workflow: '{"1":{"class_type":"PreviewImage"}}' });
             },
         );
+        const copyText = jest.fn();
+        const showError = jest.fn();
         const globals = globalThis as typeof globalThis & {
+            copyText?: typeof copyText;
             mainGenHandler?: {
                 doGenerate: typeof doGenerate;
                 getGenInput: typeof getGenInput;
             };
             genericRequest?: typeof genericRequest;
+            showError?: typeof showError;
         };
+        globals.copyText = copyText;
         globals.mainGenHandler = { doGenerate, getGenInput };
         globals.genericRequest = genericRequest;
+        globals.showError = showError;
 
         const tab = document.createElement("button");
         tab.id = "maintab_comfyworkflow";
@@ -205,14 +222,16 @@ describe("VideoStagesHostBridge compatibility facades", () => {
         const frame = document.createElement("iframe");
         frame.id = "comfy_workflow_frame";
         document.body.appendChild(frame);
-        const loadApiJson = jest.fn();
+        const loadApiJson = jest.fn((_workflow: unknown) => {
+            throw new Error("editor load failed");
+        });
         const cloneObject = jest.fn((workflow: unknown) => workflow);
         Object.assign(frame.contentWindow as Window, {
             app: { loadApiJson },
             LiteGraph: { cloneObject },
         });
 
-        await createDefaultVideoStagesHostBridge().sendToComfyUi({
+        await createDefaultVideoStagesHostBridge().sendToComfyUiAndSave({
             videostages: "refine-document",
             images: 1,
             extra_metadata: { original_prompt: "authored prompt" },
@@ -223,9 +242,45 @@ describe("VideoStagesHostBridge compatibility facades", () => {
             { videostages: "refine-document", images: 1 },
             {},
         );
+        expect(requests).toEqual([
+            [
+                "ComfyGetGeneratedWorkflow",
+                {
+                    model: "current-model.safetensors",
+                    videostages: "refine-document",
+                    images: 1,
+                    extra_metadata: {
+                        current_ui_value: "kept",
+                        original_prompt: "authored prompt",
+                    },
+                },
+            ],
+            [
+                "WhatTheDuckSaveComfyWorkflow",
+                {
+                    payload: JSON.stringify({
+                        model: "current-model.safetensors",
+                        videostages: "refine-document",
+                        images: 1,
+                        extra_metadata: {
+                            current_ui_value: "kept",
+                            original_prompt: "authored prompt",
+                        },
+                    }),
+                    workflow: '{"1":{"class_type":"PreviewImage"}}',
+                },
+            ],
+        ]);
         expect(tabClick).toHaveBeenCalledTimes(1);
         expect(loadApiJson).toHaveBeenCalledWith({
             "1": { class_type: "PreviewImage" },
         });
+        expect(showError).toHaveBeenCalledWith(
+            expect.stringContaining("editor load failed") as unknown as string,
+        );
+        expect(copyText).toHaveBeenCalledWith(
+            "Payload: ~/swarm/refine_payload.json, " +
+                "Generated Workflow: ~/swarm/refine_workflow.json",
+        );
     });
 });

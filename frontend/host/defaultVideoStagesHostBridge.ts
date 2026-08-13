@@ -101,6 +101,21 @@ type ComfyWorkflowWindow = Window & {
     LiteGraph?: { cloneObject: (workflow: unknown) => unknown };
 };
 
+interface SaveWorkflowResponse {
+    success?: boolean;
+    payloadPath?: string;
+    workflowPath?: string;
+    payloadLocalPath?: string;
+    workflowLocalPath?: string;
+    error?: string;
+}
+
+const clipboardLine = (response: SaveWorkflowResponse): string => {
+    const payload = response.payloadLocalPath || response.payloadPath || "";
+    const workflow = response.workflowLocalPath || response.workflowPath || "";
+    return `Payload: ${payload}, Generated Workflow: ${workflow}`;
+};
+
 const loadWorkflowInComfyUi = async (workflowJson: string): Promise<void> => {
     const tab = document.getElementById("maintab_comfyworkflow");
     if (!(tab instanceof HTMLElement)) {
@@ -276,17 +291,11 @@ export const createDefaultVideoStagesHostBridge =
                 true,
             );
         },
-        registerRefineVideoToComfyButton: (onSelect, description) => {
-            if (typeof registerMediaButton !== "function") {
-                return;
-            }
-            registerMediaButton(
-                "Refine Video to ComfyUI",
-                onSelect,
-                description,
-                ["video"],
-                true,
-            );
+        getCurrentVideoSource: () => {
+            const media = document.getElementById("current_image_img");
+            return media instanceof HTMLVideoElement && media.dataset.src
+                ? media.dataset.src
+                : null;
         },
         getCurrentMediaMetadata: () =>
             typeof currentMetadataVal === "string" ? currentMetadataVal : null,
@@ -339,7 +348,7 @@ export const createDefaultVideoStagesHostBridge =
                 );
             }
         },
-        sendToComfyUi: async (inputOverrides) => {
+        sendToComfyUiAndSave: async (inputOverrides) => {
             const actualInput = collectGenerationInput(inputOverrides);
             const response = await requestJson(
                 "ComfyGetGeneratedWorkflow",
@@ -352,6 +361,28 @@ export const createDefaultVideoStagesHostBridge =
                         : "SwarmUI returned no generated ComfyUI workflow.";
                 throw new Error(message);
             }
-            await loadWorkflowInComfyUi(response.workflow);
+            try {
+                await loadWorkflowInComfyUi(response.workflow);
+            } catch (error) {
+                if (typeof showError === "function") {
+                    showError(
+                        `Failed to load workflow into the ComfyUI tab: ${error}`,
+                    );
+                }
+            }
+            const saved = await requestJson("WhatTheDuckSaveComfyWorkflow", {
+                payload: JSON.stringify(actualInput),
+                workflow: response.workflow,
+            });
+            if (!isRecord(saved) || saved.success !== true) {
+                const message =
+                    isRecord(saved) && typeof saved.error === "string"
+                        ? saved.error
+                        : "Failed to save the refine workflow.";
+                throw new Error(message);
+            }
+            if (typeof copyText === "function") {
+                copyText(clipboardLine(saved));
+            }
         },
     });

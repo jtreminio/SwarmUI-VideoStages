@@ -32,6 +32,7 @@ const makeConfig = (clips: Clip[]): AuthoringDocument => ({
 afterEach(() => {
     __resetPersistenceForTests();
     setVideoStagesHostBridgeForTests(null);
+    document.body.innerHTML = "";
 });
 
 describe("hasRefinementWorkToDo", () => {
@@ -250,6 +251,49 @@ describe("applyRefineToClipZero", () => {
 });
 
 describe("refineVideoButton", () => {
+    it("puts the Comfy action below WhatTheDuck instead of in Generate", () => {
+        document.body.innerHTML = `
+            <div id="comfy_workflow_buttons">
+                <div id="comfy_quickload" class="comfy_quickload wtd-comfy-save-row">
+                    <button id="wtd_comfy_save_workflow_button">Import & Save To Server</button>
+                    <select></select>
+                </div>
+            </div>`;
+        const base = createDefaultVideoStagesHostBridge();
+        const registerRefineVideoButton = jest.fn();
+        setVideoStagesHostBridgeForTests({
+            ...base,
+            registerRefineVideoButton,
+        });
+
+        refineVideoButton();
+
+        const whatTheDuckRow = document.getElementById("comfy_quickload");
+        const refineButton = document.getElementById(
+            "video_stages_refine_to_comfy_button",
+        );
+        expect(refineButton).not.toBeNull();
+        expect(whatTheDuckRow?.nextElementSibling?.contains(refineButton)).toBe(
+            true,
+        );
+        expect(registerRefineVideoButton).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not add the Comfy action without WhatTheDuck", () => {
+        document.body.innerHTML = '<div id="comfy_workflow_buttons"></div>';
+        const base = createDefaultVideoStagesHostBridge();
+        setVideoStagesHostBridgeForTests({
+            ...base,
+            registerRefineVideoButton: jest.fn(),
+        });
+
+        refineVideoButton();
+
+        expect(
+            document.getElementById("video_stages_refine_to_comfy_button"),
+        ).toBeNull();
+    });
+
     it("sends the refine payload to ComfyUI without starting generation", async () => {
         mountVideoStagesData(
             makeConfig([
@@ -263,7 +307,15 @@ describe("refineVideoButton", () => {
             checked: true,
         });
 
-        const comfyCallbacks: ((src: string) => void)[] = [];
+        document.body.insertAdjacentHTML(
+            "beforeend",
+            `<video id="current_image_img" data-src="source.mp4"></video>
+             <div id="comfy_workflow_buttons">
+                 <div id="comfy_quickload" class="comfy_quickload wtd-comfy-save-row">
+                     <button id="wtd_comfy_save_workflow_button">Import & Save To Server</button>
+                 </div>
+             </div>`,
+        );
         const generate = jest.fn();
         let resolveSent: ((value: Record<string, unknown>) => void) | null =
             null;
@@ -274,11 +326,6 @@ describe("refineVideoButton", () => {
         setVideoStagesHostBridgeForTests({
             ...base,
             registerRefineVideoButton: jest.fn(),
-            registerRefineVideoToComfyButton: (
-                callback: (src: string) => void,
-            ) => {
-                comfyCallbacks.push(callback);
-            },
             getCurrentMediaMetadata: () =>
                 JSON.stringify({
                     sui_image_params: {
@@ -296,7 +343,7 @@ describe("refineVideoButton", () => {
                 return video;
             },
             generate,
-            sendToComfyUi: (overrides: Record<string, unknown>) => {
+            sendToComfyUiAndSave: (overrides: Record<string, unknown>) => {
                 resolveSent?.(overrides);
                 return Promise.resolve();
             },
@@ -304,8 +351,7 @@ describe("refineVideoButton", () => {
 
         refineVideoButton();
 
-        expect(comfyCallbacks).toHaveLength(1);
-        comfyCallbacks[0]("source.mp4");
+        document.getElementById("video_stages_refine_to_comfy_button")?.click();
         const overrides = await sent;
         expect(generate).not.toHaveBeenCalled();
         expect(overrides).toMatchObject({

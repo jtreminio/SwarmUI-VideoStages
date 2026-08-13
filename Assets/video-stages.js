@@ -217,6 +217,11 @@
     }
     return actualInput;
   };
+  var clipboardLine = (response) => {
+    const payload = response.payloadLocalPath || response.payloadPath || "";
+    const workflow = response.workflowLocalPath || response.workflowPath || "";
+    return `Payload: ${payload}, Generated Workflow: ${workflow}`;
+  };
   var loadWorkflowInComfyUi = async (workflowJson) => {
     const tab = document.getElementById("maintab_comfyworkflow");
     if (!(tab instanceof HTMLElement)) {
@@ -332,17 +337,9 @@
         true
       );
     },
-    registerRefineVideoToComfyButton: (onSelect, description) => {
-      if (typeof registerMediaButton !== "function") {
-        return;
-      }
-      registerMediaButton(
-        "Refine Video to ComfyUI",
-        onSelect,
-        description,
-        ["video"],
-        true
-      );
+    getCurrentVideoSource: () => {
+      const media = document.getElementById("current_image_img");
+      return media instanceof HTMLVideoElement && media.dataset.src ? media.dataset.src : null;
     },
     getCurrentMediaMetadata: () => typeof currentMetadataVal === "string" ? currentMetadataVal : null,
     interpretMediaMetadata: (metadata) => typeof interpretMetadata === "function" ? interpretMetadata(metadata) : metadata,
@@ -384,7 +381,7 @@
         );
       }
     },
-    sendToComfyUi: async (inputOverrides) => {
+    sendToComfyUiAndSave: async (inputOverrides) => {
       const actualInput = collectGenerationInput(inputOverrides);
       const response = await requestJson(
         "ComfyGetGeneratedWorkflow",
@@ -394,7 +391,26 @@
         const message = isRecord(response) && typeof response.error === "string" ? response.error : "SwarmUI returned no generated ComfyUI workflow.";
         throw new Error(message);
       }
-      await loadWorkflowInComfyUi(response.workflow);
+      try {
+        await loadWorkflowInComfyUi(response.workflow);
+      } catch (error) {
+        if (typeof showError === "function") {
+          showError(
+            `Failed to load workflow into the ComfyUI tab: ${error}`
+          );
+        }
+      }
+      const saved = await requestJson("WhatTheDuckSaveComfyWorkflow", {
+        payload: JSON.stringify(actualInput),
+        workflow: response.workflow
+      });
+      if (!isRecord(saved) || saved.success !== true) {
+        const message = isRecord(saved) && typeof saved.error === "string" ? saved.error : "Failed to save the refine workflow.";
+        throw new Error(message);
+      }
+      if (typeof copyText === "function") {
+        copyText(clipboardLine(saved));
+      }
     }
   });
 
@@ -6213,6 +6229,12 @@
   var REFINE_SOURCE_FILE_NAME = "refine-source";
   var REFINE_STAGE_INDEX = 1;
   var REFINE_OWNED_PARAMS = /* @__PURE__ */ new Set(["images", "videostages"]);
+  var COMFY_BUTTON_ID = "video_stages_refine_to_comfy_button";
+  var COMFY_ROW_ID = "video_stages_refine_to_comfy_row";
+  var COMFY_MARK_CLASS = "video-stages-refine-comfy-mark";
+  var DONE_TIMEOUT_MS = 2500;
+  var comfyButtonObserver = null;
+  var markTimer = null;
   var resolvedPromptParameterOverrides = (originalPrompt, sourceParams) => {
     const sourceKeys = new Map(
       Object.keys(sourceParams).map((key) => [cleanParamName(key), key])
@@ -6345,32 +6367,131 @@
     }
     return inputOverrides;
   };
-  var dispatchRefineVideo = (src, destination) => {
+  var dispatchRefineVideo = async (src, destination) => {
     const host = getVideoStagesHostBridge();
-    void buildRefineVideoPayload(src).then((payload) => payload ? destination(host, payload) : void 0).catch((error) => {
+    try {
+      const payload = await buildRefineVideoPayload(src);
+      if (!payload) {
+        return false;
+      }
+      await destination(host, payload);
+      return true;
+    } catch (error) {
       console.error("VideoStages: failed to prepare Refine Video", error);
       host.showError(
         error instanceof Error ? error.message : "Failed to prepare Refine Video."
       );
+      return false;
+    }
+  };
+  var setComfyButtonMark = (mark, timeoutMs = 0) => {
+    const button2 = document.getElementById(COMFY_BUTTON_ID);
+    if (!button2) {
+      return;
+    }
+    if (markTimer !== null) {
+      clearTimeout(markTimer);
+      markTimer = null;
+    }
+    let marker = button2.querySelector(`.${COMFY_MARK_CLASS}`);
+    if (!mark) {
+      marker?.remove();
+      return;
+    }
+    if (!marker) {
+      marker = document.createElement("span");
+      marker.className = COMFY_MARK_CLASS;
+      marker.style.marginLeft = "0.3rem";
+      marker.style.fontWeight = "bold";
+      button2.appendChild(marker);
+    }
+    marker.textContent = mark;
+    if (timeoutMs > 0) {
+      const shown = marker;
+      markTimer = setTimeout(() => {
+        shown.remove();
+        markTimer = null;
+      }, timeoutMs);
+    }
+  };
+  var refineCurrentVideoToComfy = () => {
+    const host = getVideoStagesHostBridge();
+    const src = host.getCurrentVideoSource();
+    if (!src) {
+      host.showError("Select a video on the Generate tab first.");
+      return;
+    }
+    setComfyButtonMark("…");
+    void dispatchRefineVideo(
+      src,
+      (target, payload) => target.sendToComfyUiAndSave(payload)
+    ).then((success2) => {
+      setComfyButtonMark(success2 ? "✓" : "", success2 ? DONE_TIMEOUT_MS : 0);
+    });
+  };
+  var injectRefineVideoToComfyButton = (rootDoc) => {
+    if (rootDoc.getElementById(COMFY_BUTTON_ID)) {
+      return true;
+    }
+    const whatTheDuckButton = rootDoc.getElementById(
+      "wtd_comfy_save_workflow_button"
+    );
+    const whatTheDuckRow = whatTheDuckButton?.closest(".wtd-comfy-save-row") ?? whatTheDuckButton?.parentElement;
+    if (!whatTheDuckRow) {
+      return false;
+    }
+    const row = rootDoc.createElement("div");
+    row.id = COMFY_ROW_ID;
+    row.className = "comfy-second-button-row";
+    row.style.clear = "both";
+    row.style.overflow = "hidden";
+    const button2 = rootDoc.createElement("button");
+    button2.type = "button";
+    button2.id = COMFY_BUTTON_ID;
+    button2.className = "basic-button comfy-small-button comfy-left-button";
+    button2.title = "Use the selected Generate-tab video for the next VideoStages refinement, open the workflow in ComfyUI, and save the payload and workflow to the server.";
+    button2.textContent = "Refine Video to ComfyUI";
+    button2.addEventListener("click", refineCurrentVideoToComfy);
+    row.appendChild(button2);
+    whatTheDuckRow.insertAdjacentElement("afterend", row);
+    return true;
+  };
+  var initRefineVideoToComfyButton = () => {
+    if (injectRefineVideoToComfyButton(document) || comfyButtonObserver) {
+      return;
+    }
+    if (!document.body) {
+      document.addEventListener(
+        "DOMContentLoaded",
+        initRefineVideoToComfyButton,
+        {
+          once: true
+        }
+      );
+      return;
+    }
+    comfyButtonObserver = new MutationObserver(() => {
+      if (injectRefineVideoToComfyButton(document)) {
+        comfyButtonObserver?.disconnect();
+        comfyButtonObserver = null;
+      }
+    });
+    comfyButtonObserver.observe(document.body, {
+      childList: true,
+      subtree: true
     });
   };
   var refineVideoButton = () => {
     const host = getVideoStagesHostBridge();
     const description = "Uses this video as the source for the next refinement stage or clip.";
     host.registerRefineVideoButton(
-      (src) => dispatchRefineVideo(
+      (src) => void dispatchRefineVideo(
         src,
         (target, payload) => target.generate(payload)
       ),
       description
     );
-    host.registerRefineVideoToComfyButton(
-      (src) => dispatchRefineVideo(
-        src,
-        (target, payload) => target.sendToComfyUi(payload)
-      ),
-      `${description} Opens the generated workflow in the ComfyUI tab without running it.`
-    );
+    initRefineVideoToComfyButton();
   };
 
   // frontend/architectureCatalogStatusView.ts

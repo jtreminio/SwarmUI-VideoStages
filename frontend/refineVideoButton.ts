@@ -16,6 +16,13 @@ import { isRecord } from "./utils";
 const REFINE_SOURCE_FILE_NAME = "refine-source";
 const REFINE_STAGE_INDEX = 1;
 const REFINE_OWNED_PARAMS = new Set(["images", "videostages"]);
+const COMFY_BUTTON_ID = "video_stages_refine_to_comfy_button";
+const COMFY_ROW_ID = "video_stages_refine_to_comfy_row";
+const COMFY_MARK_CLASS = "video-stages-refine-comfy-mark";
+const DONE_TIMEOUT_MS = 2500;
+
+let comfyButtonObserver: MutationObserver | null = null;
+let markTimer: ReturnType<typeof setTimeout> | null = null;
 
 const resolvedPromptParameterOverrides = (
     originalPrompt: string,
@@ -192,24 +199,136 @@ const buildRefineVideoPayload = async (
     return inputOverrides;
 };
 
-const dispatchRefineVideo = (
+const dispatchRefineVideo = async (
     src: string,
     destination: (
         host: ReturnType<typeof getVideoStagesHostBridge>,
         payload: Record<string, unknown>,
     ) => void | Promise<void>,
-): void => {
+): Promise<boolean> => {
     const host = getVideoStagesHostBridge();
-    void buildRefineVideoPayload(src)
-        .then((payload) => (payload ? destination(host, payload) : undefined))
-        .catch((error) => {
-            console.error("VideoStages: failed to prepare Refine Video", error);
-            host.showError(
-                error instanceof Error
-                    ? error.message
-                    : "Failed to prepare Refine Video.",
-            );
-        });
+    try {
+        const payload = await buildRefineVideoPayload(src);
+        if (!payload) {
+            return false;
+        }
+        await destination(host, payload);
+        return true;
+    } catch (error) {
+        console.error("VideoStages: failed to prepare Refine Video", error);
+        host.showError(
+            error instanceof Error
+                ? error.message
+                : "Failed to prepare Refine Video.",
+        );
+        return false;
+    }
+};
+
+const setComfyButtonMark = (mark: string, timeoutMs = 0): void => {
+    const button = document.getElementById(COMFY_BUTTON_ID);
+    if (!button) {
+        return;
+    }
+    if (markTimer !== null) {
+        clearTimeout(markTimer);
+        markTimer = null;
+    }
+    let marker = button.querySelector<HTMLElement>(`.${COMFY_MARK_CLASS}`);
+    if (!mark) {
+        marker?.remove();
+        return;
+    }
+    if (!marker) {
+        marker = document.createElement("span");
+        marker.className = COMFY_MARK_CLASS;
+        marker.style.marginLeft = "0.3rem";
+        marker.style.fontWeight = "bold";
+        button.appendChild(marker);
+    }
+    marker.textContent = mark;
+    if (timeoutMs > 0) {
+        const shown = marker;
+        markTimer = setTimeout(() => {
+            shown.remove();
+            markTimer = null;
+        }, timeoutMs);
+    }
+};
+
+const refineCurrentVideoToComfy = (): void => {
+    const host = getVideoStagesHostBridge();
+    const src = host.getCurrentVideoSource();
+    if (!src) {
+        host.showError("Select a video on the Generate tab first.");
+        return;
+    }
+    setComfyButtonMark("…");
+    void dispatchRefineVideo(src, (target, payload) =>
+        target.sendToComfyUiAndSave(payload),
+    ).then((success) => {
+        setComfyButtonMark(success ? "✓" : "", success ? DONE_TIMEOUT_MS : 0);
+    });
+};
+
+export const injectRefineVideoToComfyButton = (rootDoc: Document): boolean => {
+    if (rootDoc.getElementById(COMFY_BUTTON_ID)) {
+        return true;
+    }
+    const whatTheDuckButton = rootDoc.getElementById(
+        "wtd_comfy_save_workflow_button",
+    );
+    const whatTheDuckRow =
+        whatTheDuckButton?.closest(".wtd-comfy-save-row") ??
+        whatTheDuckButton?.parentElement;
+    if (!whatTheDuckRow) {
+        return false;
+    }
+
+    const row = rootDoc.createElement("div");
+    row.id = COMFY_ROW_ID;
+    row.className = "comfy-second-button-row";
+    row.style.clear = "both";
+    row.style.overflow = "hidden";
+
+    const button = rootDoc.createElement("button");
+    button.type = "button";
+    button.id = COMFY_BUTTON_ID;
+    button.className = "basic-button comfy-small-button comfy-left-button";
+    button.title =
+        "Use the selected Generate-tab video for the next VideoStages refinement, " +
+        "open the workflow in ComfyUI, and save the payload and workflow to the server.";
+    button.textContent = "Refine Video to ComfyUI";
+    button.addEventListener("click", refineCurrentVideoToComfy);
+    row.appendChild(button);
+    whatTheDuckRow.insertAdjacentElement("afterend", row);
+    return true;
+};
+
+const initRefineVideoToComfyButton = (): void => {
+    if (injectRefineVideoToComfyButton(document) || comfyButtonObserver) {
+        return;
+    }
+    if (!document.body) {
+        document.addEventListener(
+            "DOMContentLoaded",
+            initRefineVideoToComfyButton,
+            {
+                once: true,
+            },
+        );
+        return;
+    }
+    comfyButtonObserver = new MutationObserver(() => {
+        if (injectRefineVideoToComfyButton(document)) {
+            comfyButtonObserver?.disconnect();
+            comfyButtonObserver = null;
+        }
+    });
+    comfyButtonObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+    });
 };
 
 export const refineVideoButton = (): void => {
@@ -218,16 +337,10 @@ export const refineVideoButton = (): void => {
         "Uses this video as the source for the next refinement stage or clip.";
     host.registerRefineVideoButton(
         (src) =>
-            dispatchRefineVideo(src, (target, payload) =>
+            void dispatchRefineVideo(src, (target, payload) =>
                 target.generate(payload),
             ),
         description,
     );
-    host.registerRefineVideoToComfyButton(
-        (src) =>
-            dispatchRefineVideo(src, (target, payload) =>
-                target.sendToComfyUi(payload),
-            ),
-        `${description} Opens the generated workflow in the ComfyUI tab without running it.`,
-    );
+    initRefineVideoToComfyButton();
 };

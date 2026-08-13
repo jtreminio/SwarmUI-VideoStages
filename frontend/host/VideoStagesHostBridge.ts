@@ -46,14 +46,13 @@ export interface VideoStagesHostBridge {
         onSelect: (src: string) => void,
         description: string,
     ): void;
-    registerRefineVideoToComfyButton(
-        onSelect: (src: string) => void,
-        description: string,
-    ): void;
+    getCurrentVideoSource(): string | null;
     getCurrentMediaMetadata(): string | null;
     interpretMediaMetadata(metadata: string): string | null;
     showError(message: string): void;
     toDataUrl(src: string): Promise<string>;
     generate(inputOverrides: Record<string, unknown>): void;
-    sendToComfyUi(inputOverrides: Record<string, unknown>): Promise<void>;
+    sendToComfyUiAndSave(
+        inputOverrides: Record<string, unknown>,
+    ): Promise<void>;
 }

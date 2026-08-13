@@ -7,6 +7,7 @@ declare const mainGenHandler: {
 };
 
 declare function showError(message: string): void;
+declare function copyText(text: string): void;
 declare function triggerChangeFor(element: HTMLElement): void;
 declare function textPromptAddKeydownHandler(element: HTMLElement): void;
 declare function getParamById(
