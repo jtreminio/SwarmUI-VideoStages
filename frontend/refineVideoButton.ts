@@ -59,10 +59,7 @@ export const hasRefinementWorkToDo = (
     return clip0.stages.length > REFINE_STAGE_INDEX || state.clips.length > 1;
 };
 
-/**
- * Already-generated stages become passthroughs; skipping them would truncate refinement.
- */
-export const applyRefineToClipZero = (
+const installRefineSource = (
     clip: Clip,
     data: string,
     probe: InitVideoProbe | null,
@@ -81,6 +78,15 @@ export const applyRefineToClipZero = (
     clip.uploadedAudioDurationSeconds = 0;
     clip.uploadedAudioStartSeconds = 0;
     clip.uploadedAudioLengthSeconds = 0;
+};
+
+/** Stage 0 becomes a passthrough; skipping it would truncate the refinement stages. */
+export const applyRefineToClipZero = (
+    clip: Clip,
+    data: string,
+    probe: InitVideoProbe | null,
+): void => {
+    installRefineSource(clip, data, probe);
     if (clip.stages.length > REFINE_STAGE_INDEX) {
         applySkipSuffix(clip.stages, REFINE_STAGE_INDEX, false);
     }
@@ -91,7 +97,7 @@ export const applyRefineToClipZero = (
 
 export const refineVideoButton = (): void => {
     const description =
-        "Re-runs VideoStages using this video as Clip 0's source, passes through Stage 0, and runs Stage 1 or later clips.";
+        "Uses this video as the source for the next refinement stage or clip.";
     getVideoStagesHostBridge().registerRefineVideoButton(
         (src: string): void => {
             const host = getVideoStagesHostBridge();
@@ -135,12 +141,20 @@ export const refineVideoButton = (): void => {
                     host.showError(refineNeedsExtraStageMessage());
                     return;
                 }
-                const clips = [...state.clips];
-                clips[0] = structuredClone(clipZero);
                 const bakesAceStepFunAudio = isAceStepFunAudioSource(
-                    clips[0].audioSource,
+                    clipZero.audioSource,
                 );
-                applyRefineToClipZero(clips[0], videoDataUrl, probe);
+                const refinesWithinClipZero =
+                    clipZero.stages.length > REFINE_STAGE_INDEX;
+                const clips = state.clips.slice(refinesWithinClipZero ? 0 : 1);
+                clips[0] = structuredClone(clips[0]);
+                if (refinesWithinClipZero) {
+                    applyRefineToClipZero(clips[0], videoDataUrl, probe);
+                } else {
+                    // The selected video already contains Clip 0. Clip 1 replaces it as the
+                    // refinement pass instead of joining the rendered footage to itself.
+                    installRefineSource(clips[0], videoDataUrl, probe);
+                }
                 // Adding init video can invalidate the clip's architecture identity.
                 reconcileClipArchitectureIdentity(
                     clips[0],

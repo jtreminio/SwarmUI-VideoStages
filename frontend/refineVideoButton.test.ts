@@ -250,6 +250,76 @@ describe("applyRefineToClipZero", () => {
 });
 
 describe("refineVideoButton", () => {
+    it("promotes the next clip instead of joining the rendered source again", async () => {
+        mountVideoStagesData(
+            makeConfig([
+                minimalClip({
+                    id: "rendered-clip",
+                    stages: [minimalStage()],
+                }),
+                minimalClip({
+                    id: "refinement-clip",
+                    initVideo: initVideoFixture({
+                        source: MEDIA_SOURCE_PREVIOUS_CLIP,
+                        data: "",
+                        fileName: null,
+                    }),
+                    stages: [minimalStage({ control: 0.5, upscale: 2 })],
+                }),
+            ]),
+        );
+        mountPromptBox("current panel prompt");
+        mountCheckbox("input_group_content_videostages_toggle", {
+            checked: true,
+        });
+
+        const callbacks: ((src: string) => void)[] = [];
+        let resolveGenerated:
+            | ((value: Record<string, unknown>) => void)
+            | null = null;
+        const generated = new Promise<Record<string, unknown>>((resolve) => {
+            resolveGenerated = resolve;
+        });
+        const base = createDefaultVideoStagesHostBridge();
+        setVideoStagesHostBridgeForTests({
+            ...base,
+            registerRefineVideoButton: (callback) => {
+                callbacks.push(callback);
+            },
+            getCurrentMediaMetadata: () =>
+                JSON.stringify({ sui_image_params: {} }),
+            interpretMediaMetadata: (metadata) => metadata,
+            toDataUrl: async () => "data:video/mp4;base64,AA==",
+            createInitVideoElement: () => {
+                const video = document.createElement("video");
+                video.pause = jest.fn();
+                video.load = jest.fn();
+                queueMicrotask(() => video.dispatchEvent(new Event("error")));
+                return video;
+            },
+            showError: (message) => resolveGenerated?.({ error: message }),
+            generate: (overrides) => resolveGenerated?.(overrides),
+        });
+
+        refineVideoButton();
+        callbacks[0]("source.mp4");
+
+        const overrides = await generated;
+        const refinedDocument = JSON.parse(
+            String(overrides.videostages),
+        ) as AuthoringDocument;
+        expect(refinedDocument.clips).toHaveLength(1);
+        expect(refinedDocument.clips[0]).toMatchObject({
+            id: "refinement-clip",
+            initVideo: {
+                source: "Upload",
+                data: "data:video/mp4;base64,AA==",
+                fileName: "refine-source",
+            },
+            stages: [{ skipped: false, control: 0.5, upscale: 2 }],
+        });
+    });
+
     it.each([
         [
             "two active source stages",

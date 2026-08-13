@@ -6159,7 +6159,7 @@
     }
     return clip0.stages.length > REFINE_STAGE_INDEX || state.clips.length > 1;
   };
-  var applyRefineToClipZero = (clip, data, probe) => {
+  var installRefineSource = (clip, data, probe) => {
     clip.initVideo = initVideoFromProbe(
       probe,
       data,
@@ -6174,6 +6174,9 @@
     clip.uploadedAudioDurationSeconds = 0;
     clip.uploadedAudioStartSeconds = 0;
     clip.uploadedAudioLengthSeconds = 0;
+  };
+  var applyRefineToClipZero = (clip, data, probe) => {
+    installRefineSource(clip, data, probe);
     if (clip.stages.length > REFINE_STAGE_INDEX) {
       applySkipSuffix(clip.stages, REFINE_STAGE_INDEX, false);
     }
@@ -6182,7 +6185,7 @@
     }
   };
   var refineVideoButton = () => {
-    const description = "Re-runs VideoStages using this video as Clip 0's source, passes through Stage 0, and runs Stage 1 or later clips.";
+    const description = "Uses this video as the source for the next refinement stage or clip.";
     getVideoStagesHostBridge().registerRefineVideoButton(
       (src) => {
         const host = getVideoStagesHostBridge();
@@ -6214,12 +6217,17 @@
             host.showError(refineNeedsExtraStageMessage());
             return;
           }
-          const clips = [...state.clips];
-          clips[0] = structuredClone(clipZero);
           const bakesAceStepFunAudio = isAceStepFunAudioSource(
-            clips[0].audioSource
+            clipZero.audioSource
           );
-          applyRefineToClipZero(clips[0], videoDataUrl, probe);
+          const refinesWithinClipZero = clipZero.stages.length > REFINE_STAGE_INDEX;
+          const clips = state.clips.slice(refinesWithinClipZero ? 0 : 1);
+          clips[0] = structuredClone(clips[0]);
+          if (refinesWithinClipZero) {
+            applyRefineToClipZero(clips[0], videoDataUrl, probe);
+          } else {
+            installRefineSource(clips[0], videoDataUrl, probe);
+          }
           reconcileClipArchitectureIdentity(
             clips[0],
             captureAuthoringTransactionSnapshot().capabilities.catalog
