@@ -8,6 +8,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Execution.Graph;
 using VideoStages.Generated;
 using VideoStages.Architectures.Ltx2.Planning;
+using VideoStages.Architectures.Ltx2.Runtime.Chain;
 
 namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
@@ -35,6 +36,9 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
         NodeInput<LatentType> latentInput;
         NodeInput<ImageType> image;
         NodeInput<FloatType> downscale;
+        NodeInput<BooleanType> useTiledEncode;
+        NodeInput<IntType> tileSize;
+        NodeInput<IntType> tileOverlap;
         NodeOutput<LatentType> latentOut;
         if (entry.AttentionStrength < 1)
         {
@@ -47,6 +51,9 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
             latentInput = advanced.LatentInput;
             image = advanced.Image;
             downscale = advanced.LatentDownscaleFactor;
+            useTiledEncode = advanced.UseTiledEncode;
+            tileSize = advanced.TileSize;
+            tileOverlap = advanced.TileOverlap;
             latentOut = advanced.Latent;
         }
         else
@@ -58,7 +65,18 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
             latentInput = basic.LatentInput;
             image = basic.Image;
             downscale = basic.LatentDownscaleFactor;
+            useTiledEncode = basic.UseTiledEncode;
+            tileSize = basic.TileSize;
+            tileOverlap = basic.TileOverlap;
             latentOut = basic.Latent;
+        }
+
+        LtxVaeTilingConfig tiling = LtxVaeTilingConfig.FromUserSelection(g);
+        useTiledEncode.Set(tiling.Enabled);
+        if (tiling.Enabled)
+        {
+            tileSize.Set(tiling.TileSize);
+            tileOverlap.Set(tiling.Overlap);
         }
 
         IConditioningPairNode guide = (IConditioningPairNode)guideNode;

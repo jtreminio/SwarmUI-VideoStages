@@ -212,7 +212,7 @@ internal sealed class LtxPostVideoChain
             bridge,
             vaeSource,
             separate.VideoLatent,
-            LtxDecodeConfig.From(generator)).Id;
+            LtxVaeTilingConfig.ForDecode(generator)).Id;
 
         WGNodeData detachedGuide = WithCurrentMediaDimensions(new WGNodeData(
             new JArray(decodeNodeId, 0),
@@ -290,7 +290,7 @@ internal sealed class LtxPostVideoChain
             bridge,
             vaeOutput,
             newSeparate.VideoLatent,
-            LtxDecodeConfig.From(generator),
+            LtxVaeTilingConfig.ForDecode(generator),
             preserveId: oldDecode.Id);
 
         bridge.Graph.RetargetConnections(oldImageOutput, newDecode.Outputs[0]);
@@ -328,7 +328,7 @@ internal sealed class LtxPostVideoChain
             bridge,
             spliceVae.Output,
             newSeparate.VideoLatent,
-            LtxDecodeConfig.From(generator));
+            LtxVaeTilingConfig.ForDecode(generator));
 
         MediaRef result = new()
         {

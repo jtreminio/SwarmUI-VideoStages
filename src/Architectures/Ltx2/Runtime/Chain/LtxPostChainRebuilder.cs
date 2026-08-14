@@ -54,10 +54,10 @@ internal static class LtxPostChainRebuilder
         WorkflowBridge bridge,
         INodeOutput vaeOutput,
         INodeOutput samplesOutput,
-        LtxDecodeConfig config,
+        LtxVaeTilingConfig config,
         string preserveId = null)
     {
-        if (config.UseTiledDecode)
+        if (config.Enabled)
         {
             VAEDecodeTiledNode tiled = new VAEDecodeTiledNode().With(
                 TileSize: config.TileSize,

@@ -68,7 +68,7 @@ public class DecisionOwnerRegressionTests
                     bridge,
                     bridge.ResolvePath(vae.Path),
                     bridge.ResolvePath(latent.Path),
-                    LtxDecodeConfig.From(generator));
+                    LtxVaeTilingConfig.ForDecode(generator));
                 return latent;
             });
 

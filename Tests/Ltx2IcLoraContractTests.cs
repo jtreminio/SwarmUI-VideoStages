@@ -459,6 +459,47 @@ public class Ltx2IcLoraContractTests
     }
 
     [Fact]
+    public async Task Basic_and_advanced_guides_use_the_selected_vae_tiling()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        fixture.InstallModel("LoRA", "UnitTest_IcLoraA.safetensors")
+            .InstallModel("LoRA", "UnitTest_IcLoraB.safetensors");
+
+        JObject workflow = await fixture.GenerateAsync(
+            MakeDocument(IcLoraClip(
+                [fixture.Stage()],
+                MakeIcLora("UnitTest_IcLoraA", driveMediaData: DriveVideo),
+                MakeIcLora(
+                    "UnitTest_IcLoraB",
+                    attentionStrength: 0.65,
+                    driveMediaData: OtherDriveVideo))),
+            post =>
+            {
+                post["vaetilesize"] = 768;
+                post["vaetileoverlap"] = 96;
+            });
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        LTXAddVideoICLoRAGuideNode basic = OnlyGuide(bridge);
+        LTXAddVideoICLoRAGuideAdvancedNode advanced = Assert.Single(
+            bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideAdvancedNode>());
+        Assert.Equal(0.65, advanced.AttentionStrength.LiteralAsDouble());
+        Assert.Equal(true, basic.UseTiledEncode.LiteralValue);
+        Assert.Equal(768, basic.TileSize.LiteralAsInt());
+        Assert.Equal(96, basic.TileOverlap.LiteralAsInt());
+        Assert.Equal(true, advanced.UseTiledEncode.LiteralValue);
+        Assert.Equal(768, advanced.TileSize.LiteralAsInt());
+        Assert.Equal(96, advanced.TileOverlap.LiteralAsInt());
+        Assert.Same(basic, advanced.PositiveInput.Connection?.Node);
+        Assert.Same(basic, advanced.LatentInput.Connection?.Node);
+        Assert.True(ReachesUpstream(bridge, StageSampler(bridge, 0), advanced.Id));
+
+        live.AssertAllLive(basic, advanced);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    [Fact]
     public async Task Attention_strength_below_one_selects_advanced_guide()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
@@ -479,6 +520,8 @@ public class Ltx2IcLoraContractTests
         LTXAddVideoICLoRAGuideAdvancedNode advanced = Assert.Single(
             bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideAdvancedNode>());
         Assert.Equal(0.65, advanced.AttentionStrength.LiteralAsDouble());
+        Assert.Equal(false, basic.UseTiledEncode.LiteralValue);
+        Assert.Equal(false, advanced.UseTiledEncode.LiteralValue);
         Assert.Same(basic, advanced.PositiveInput.Connection?.Node);
         Assert.Same(basic, advanced.LatentInput.Connection?.Node);
         Assert.True(ReachesUpstream(bridge, StageSampler(bridge, 0), advanced.Id));
