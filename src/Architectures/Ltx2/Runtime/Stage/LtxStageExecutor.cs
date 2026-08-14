@@ -49,7 +49,6 @@ internal sealed class LtxStageExecutor
         LtxPostVideoChain postVideoChain = stageContext.PostVideoChain;
         bool incomingIcLoraMediaIncludesContinueHandle =
             stageContext.ClipContext.ContinueHandleMaterialized;
-        postVideoChain?.AttachSourceAudio(sourceMedia);
         g.IsImageToVideo = true;
 
         try
@@ -68,6 +67,25 @@ internal sealed class LtxStageExecutor
                 includeConditioning: true);
             WGNodeData effectiveSourceMedia = g.CurrentMedia ?? sourceMedia;
             modelPromptPreparer.Prepare(genInfo, stageContext, effectiveSourceMedia);
+            if (postVideoChain is not null)
+            {
+                if (!postVideoChain.MatchesLoadedVaes(
+                        genInfo.VideoModel,
+                        genInfo.Vae,
+                        g.CurrentAudioVae))
+                {
+                    postVideoChain = null;
+                    stageContext.PostVideoChain = null;
+                }
+                else
+                {
+                    postVideoChain.AttachSourceAudio(sourceMedia);
+                    if (!ReferenceEquals(sourceMedia, effectiveSourceMedia))
+                    {
+                        postVideoChain.AttachSourceAudio(effectiveSourceMedia);
+                    }
+                }
+            }
             bool canReuseLatent =
                 postVideoChain?.CanReuseCurrentOutputAsStageInput(effectiveSourceMedia) == true;
             if (!canReuseLatent && resolveFallbackGuide is not null)

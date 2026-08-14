@@ -32,7 +32,7 @@ internal sealed class StageContext
     public ClipContext ClipContext { get; }
     public JArray PriorOutputPath { get; }
     public bool ClaimsTextToVideoRoot { get; }
-    public LtxPostVideoChain PostVideoChain { get; }
+    public LtxPostVideoChain PostVideoChain { get; set; }
     public WGNodeData SourceMedia { get; }
     public WorkflowGenerator.ImageToVideoGenInfo GenInfo { get; }
     public bool RequiresDedicatedOutput { get; }

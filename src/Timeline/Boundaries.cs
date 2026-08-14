@@ -110,14 +110,25 @@ internal sealed class Boundaries
                 $"timeline merge expected {_plan.Clips.Count} clip outputs "
                 + $"but received {clipOutputs.Count}.");
         }
-        if (clipOutputs.Count == 1)
+        List<DecodedClipArtifact> publishedOutputs = [clipOutputs[0]];
+        List<BoundaryPlan> publishedBoundaries = [];
+        for (int clipIndex = 1; clipIndex < clipOutputs.Count; clipIndex++)
         {
-            // A single clip has no boundary to merge, but publication must still use the clip
-            // result rather than ambient media.
-            using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
-            return RuntimeArtifact.FromDecoded(_generator, bridge, clipOutputs[0]);
+            ClipPlan clip = _plan.Clips[clipIndex];
+            if (StringUtils.Equals(clip.InitVideo?.Source, MediaSource.PreviousClip))
+            {
+                publishedOutputs[^1] = clipOutputs[clipIndex];
+                continue;
+            }
+            publishedOutputs.Add(clipOutputs[clipIndex]);
+            publishedBoundaries.Add(_effectiveBoundaries[clipIndex - 1]);
         }
-        return _merger.Merge(clipOutputs, _effectiveBoundaries);
+        if (publishedOutputs.Count == 1)
+        {
+            using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+            return RuntimeArtifact.FromDecoded(_generator, bridge, publishedOutputs[0]);
+        }
+        return _merger.Merge(publishedOutputs, publishedBoundaries);
     }
 
     private int BoundaryIndex(int fromClipId) =>

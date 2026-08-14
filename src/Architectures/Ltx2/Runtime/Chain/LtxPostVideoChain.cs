@@ -17,8 +17,9 @@ internal sealed class LtxPostVideoChain
     private readonly LtxAudioReferenceResolver audioReferences;
     private readonly JArray avLatentPath;
     private readonly JArray audioLatentPath;
-    private readonly JArray videoVaePath;
-    private readonly JArray audioVaePath;
+    private readonly NodeRef videoVae;
+    private readonly NodeRef audioVae;
+    private readonly string producerVaeOwnerModelName;
     private readonly string videoDecodeNodeId;
     private readonly string audioDecodeNodeId;
     private bool isSpliced;
@@ -28,14 +29,32 @@ internal sealed class LtxPostVideoChain
     public string VideoDecodeNodeId => videoDecodeNodeId;
     public bool HasPostDecodeWrappers { get; }
 
+    public bool MatchesLoadedVaes(
+        T2IModel loadedModel,
+        WGNodeData videoVae,
+        WGNodeData audioVae)
+    {
+        if (this.videoVae == NodeRef.From(videoVae?.Path)
+            && this.audioVae == NodeRef.From(audioVae?.Path))
+        {
+            return true;
+        }
+        // Core can reload one model's VAEs under new node IDs.
+        return !string.IsNullOrWhiteSpace(producerVaeOwnerModelName)
+            && string.Equals(
+                producerVaeOwnerModelName,
+                loadedModel?.Name,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
     private LtxPostVideoChain(
         WorkflowGenerator generator,
         Ltx2ClipAudioReuseState audioReuse,
         WGNodeData currentOutputMedia,
         JArray avLatentPath,
         JArray audioLatentPath,
-        JArray videoVaePath,
-        JArray audioVaePath,
+        NodeRef videoVae,
+        NodeRef audioVae,
         string videoDecodeNodeId,
         string audioDecodeNodeId,
         bool hasPostDecodeWrappers,
@@ -45,8 +64,9 @@ internal sealed class LtxPostVideoChain
         CurrentOutputMedia = currentOutputMedia;
         this.avLatentPath = CopyPath(avLatentPath);
         this.audioLatentPath = CopyPath(audioLatentPath);
-        this.videoVaePath = CopyPath(videoVaePath);
-        this.audioVaePath = CopyPath(audioVaePath);
+        this.videoVae = videoVae;
+        this.audioVae = audioVae;
+        producerVaeOwnerModelName = generator.FinalLoadedModel?.Name;
         this.videoDecodeNodeId = videoDecodeNodeId;
         this.audioDecodeNodeId = audioDecodeNodeId;
         HasPostDecodeWrappers = hasPostDecodeWrappers;
@@ -113,8 +133,8 @@ internal sealed class LtxPostVideoChain
             CloneMedia(generator, generator.CurrentMedia),
             WorkflowBridge.ToPath(avLatentSource),
             new JArray(separate.Id, 1),
-            WorkflowBridge.ToPath(videoVaeSource),
-            WorkflowBridge.ToPath(audioVaeSource),
+            NodeRef.Of(videoVaeSource),
+            NodeRef.Of(audioVaeSource),
             decode.Id,
             audioDecode?.Id,
             !ReferenceEquals(currentMedia.Output.Node, decode),
@@ -150,7 +170,7 @@ internal sealed class LtxPostVideoChain
     }
 
     public WGNodeData CreateStageInputVae() => new(
-        CopyPath(videoVaePath),
+        videoVae.ToJArray(),
         generator,
         WGNodeData.DT_VAE,
         T2IModelClassSorter.CompatLtxv2);
@@ -293,7 +313,7 @@ internal sealed class LtxPostVideoChain
         MediaRef stageOutput = MediaRef.FromWGNodeData(generator.CurrentMedia, bridge);
         MediaRef spliceVae = MediaRef.FromWGNodeData(vae, bridge)
             ?? MediaRef.FromWGNodeData(generator.CurrentVae, bridge);
-        INodeOutput audioVaeSource = bridge.ResolvePath(audioVaePath);
+        INodeOutput audioVaeSource = bridge.ResolvePath(audioVae.ToJArray());
         if (captured is null
             || stageOutput is null
             || spliceVae is null
