@@ -1,4 +1,4 @@
-namespace VideoStages.Architectures.Ltx2.Planning;
+namespace VideoStages.Planning;
 
 internal enum FrameRefSourceKind
 {
@@ -25,8 +25,13 @@ internal sealed record FrameRefPlan(
     string UploadFileName,
     string InlineData)
 {
-    /// <summary>
-    /// The clip's very first frame, which LTX merges in place instead of adding as a guide.
-    /// </summary>
     internal bool IsOpeningFrame => FrameOrigin == FrameRefEdge.Start && Frame == 1;
+
+    internal bool IsClosingFrame => FrameOrigin == FrameRefEdge.End && Frame == 1;
+
+    internal bool IsEndpoint => IsOpeningFrame || IsClosingFrame;
+
+    internal int GuideFrameIndex => FrameOrigin == FrameRefEdge.End
+        ? -Math.Max(1, Frame)
+        : Math.Max(1, Frame);
 }

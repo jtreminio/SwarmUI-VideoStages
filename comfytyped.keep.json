@@ -1,4 +1,4 @@
 {
     "keep_modules": ["custom_nodes.ComfyUI-LTXVideo"],
-    "keep_class_types": ["SwarmFrameImage"]
+    "keep_class_types": ["MiniMaxH3AddGuide", "SwarmFrameImage"]
 }

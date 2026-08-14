@@ -286,7 +286,12 @@ internal sealed class MiniMaxGenerationSession(
                 ? EntryJointLatent(clip, genInfo, frames, claim.Latent)
                 : JointLatent(incoming, genInfo);
             ApplyLatentInterpolation(stageUpscale);
-            AttachKeyframes(genInfo);
+            AttachKeyframes(
+                genInfo,
+                stage.RequireStockHostVideoPayload(
+                        ArchitectureId,
+                        MiniMaxArchitectureModule.Instance.Descriptor.DisplayName)
+                    .FrameReferences);
             string sampled = g.CreateKSampler(
                 genInfo.Model.Path,
                 genInfo.PosCond,
@@ -365,11 +370,29 @@ internal sealed class MiniMaxGenerationSession(
         };
     }
 
-    private void AttachKeyframes(WorkflowGenerator.ImageToVideoGenInfo genInfo)
+    private void AttachKeyframes(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        IReadOnlyList<FrameRefPlan> frameReferences)
     {
-        if (_firstFrame is null && _endFrame is null)
+        FrameRefPlan[] arbitrary = [.. (frameReferences ?? []).Where(reference =>
+            !reference.IsEndpoint && reference.Strength > 0)];
+        if (_firstFrame is null && _endFrame is null && arbitrary.Length == 0)
         {
             return;
+        }
+        List<(FrameRefPlan Reference, WGNodeData Image)> resolved = [];
+        foreach (FrameRefPlan reference in arbitrary)
+        {
+            WGNodeData image = ResolveFrameReference(
+                new NativeFrameReferencePlan(
+                    reference.RawSource,
+                    reference.UploadFileName,
+                    reference.InlineData),
+                $"MiniMax H3 frame {reference.GuideFrameIndex} keyframe");
+            if (image?.Path is JArray)
+            {
+                resolved.Add((reference, image));
+            }
         }
         int targetWidth = g.CurrentMedia?.Width ?? (int)genInfo.Width;
         int targetHeight = g.CurrentMedia?.Height ?? (int)genInfo.Height;
@@ -392,14 +415,35 @@ internal sealed class MiniMaxGenerationSession(
                 _referenceFraming,
                 unwrapExistingFraming: false)
             : null;
-        SwarmMiniMaxH3AddKeyframesNode keyframes = bridge.AddNode(
-            new SwarmMiniMaxH3AddKeyframesNode());
-        keyframes.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
-        keyframes.Latent.ConnectFromPath(bridge, g.CurrentMedia.Path);
-        keyframes.ConditioningInput.ConnectFromPath(bridge, genInfo.PosCond);
-        keyframes.FirstFrame.TryConnectFromPath(bridge, firstFramePath);
-        keyframes.LastFrame.TryConnectFromPath(bridge, lastFramePath);
-        genInfo.PosCond = WorkflowBridge.ToPath(keyframes.Conditioning);
+        if (firstFramePath is not null || lastFramePath is not null)
+        {
+            SwarmMiniMaxH3AddKeyframesNode keyframes = bridge.AddNode(
+                new SwarmMiniMaxH3AddKeyframesNode());
+            keyframes.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
+            keyframes.Latent.ConnectFromPath(bridge, g.CurrentMedia.Path);
+            keyframes.ConditioningInput.ConnectFromPath(bridge, genInfo.PosCond);
+            keyframes.FirstFrame.TryConnectFromPath(bridge, firstFramePath);
+            keyframes.LastFrame.TryConnectFromPath(bridge, lastFramePath);
+            genInfo.PosCond = WorkflowBridge.ToPath(keyframes.Conditioning);
+        }
+        foreach ((FrameRefPlan reference, WGNodeData image) in resolved)
+        {
+            JArray imagePath = (JArray)image.Path;
+            JArray framed = ReferenceFramingGraph.Frame(
+                bridge,
+                imagePath,
+                targetWidth,
+                targetHeight,
+                _referenceFraming,
+                unwrapExistingFraming: false);
+            MiniMaxH3AddGuideNode guide = bridge.AddNode(new MiniMaxH3AddGuideNode().With(
+                FrameIdx: reference.GuideFrameIndex));
+            guide.PositiveInput.ConnectFromPath(bridge, genInfo.PosCond);
+            guide.Latent.ConnectFromPath(bridge, g.CurrentMedia.Path);
+            guide.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
+            guide.Image.ConnectFromPath(bridge, framed);
+            genInfo.PosCond = WorkflowBridge.ToPath(guide.Positive);
+        }
     }
 
     private WGNodeData EntryJointLatent(

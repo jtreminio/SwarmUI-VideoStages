@@ -18,11 +18,38 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
         ArchitectureRequestPreflightContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+        UploadedMediaPreflight media = new(generator.UserInput);
         List<PlanDiagnostic> diagnostics = [
             .. MiniMaxClipReferences.PreflightUploads(
-                new UploadedMediaPreflight(generator.UserInput),
+                media,
                 context.Plan)
         ];
+        foreach (ClipPlan clip in context.Plan.Clips.Where(
+            clip => clip.Architecture.Id == ArchitectureId))
+        {
+            foreach (StagePlan stage in clip.Stages)
+            {
+                foreach (FrameRefPlan reference in
+                    stage.RequireStockHostVideoPayload(
+                            ArchitectureId,
+                            MiniMaxArchitectureModule.Instance.Descriptor.DisplayName)
+                        .FrameReferences
+                        .Where(reference =>
+                            !reference.IsEndpoint
+                            && reference.SourceKind == FrameRefSourceKind.Upload))
+                {
+                    if (media.ImageDiagnostic(
+                        reference.InlineData,
+                        reference.UploadFileName,
+                        $"clip {clip.ClipId} keyframe",
+                        clip.ClipId,
+                        stage.StageId) is { } unreadable)
+                    {
+                        diagnostics.Add(unreadable);
+                    }
+                }
+            }
+        }
         if (generator.UserInput.TryGet(
                 T2IParamTypes.Video2VideoCreativity,
                 out double creativity)
@@ -82,14 +109,24 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
     /// </summary>
     private static bool AnyClipReferences(VideoExecutionPlan plan, string source) =>
         plan.Clips
-            .Select(clip => clip.ArchitecturePayload as MiniMaxClipPayload)
-            .Where(payload => payload is not null)
-            .SelectMany(payload => new[]
+            .Where(clip => clip.Architecture.Id == MiniMaxArchitectureModule.ArchitectureId)
+            .SelectMany(clip =>
+            {
+                MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
+                return new[]
                 {
                     payload.FirstFrameReference?.Source,
                     payload.LastFrameReference?.Source,
                 }
-                .Concat(payload.References.Select(reference => reference.Source)))
+                    .Concat(payload.References.Select(reference => reference.Source))
+                    .Concat(clip.Stages.SelectMany(stage =>
+                        stage.RequireStockHostVideoPayload(
+                                MiniMaxArchitectureModule.ArchitectureId,
+                                MiniMaxArchitectureModule.Instance.Descriptor.DisplayName)
+                            .FrameReferences
+                            .Where(reference => !reference.IsEndpoint)
+                            .Select(reference => reference.RawSource)));
+            })
             .Any(candidate => StringUtils.Equals(candidate, source));
 
     public IVideoGenerationSession CreateSession(

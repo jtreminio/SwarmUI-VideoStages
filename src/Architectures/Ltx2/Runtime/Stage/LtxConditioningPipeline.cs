@@ -3,7 +3,6 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Planning;
 using VideoStages.Architectures.Ltx2.Runtime.Guide;
 
@@ -100,11 +99,9 @@ internal sealed class LtxConditioningPipeline(
             JArray preprocessed = guidePreprocessReuse.ResolvePreprocessedGuidePath(
                 frameRef.Image.Path,
                 g.CurrentMedia);
-            int frameIdx = ComputeLtxvAddGuideFrameIndex(frameRef.Reference);
-
             using WorkflowBridge bridge = BridgeSync.For(g);
             LTXVAddGuideNode addGuide = bridge.AddNode(new LTXVAddGuideNode()).With(
-                FrameIdx: frameIdx,
+                FrameIdx: frameRef.Reference.GuideFrameIndex,
                 Strength: frameRef.Strength);
             addGuide.ConnectConditioning(bridge, genInfo);
             addGuide.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
@@ -184,8 +181,4 @@ internal sealed class LtxConditioningPipeline(
         return node.Id;
     }
 
-    private static int ComputeLtxvAddGuideFrameIndex(FrameRefPlan reference) =>
-        reference.FrameOrigin == FrameRefEdge.End
-            ? -Math.Max(1, reference.Frame)
-            : Math.Max(1, reference.Frame);
 }

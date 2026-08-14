@@ -1,7 +1,7 @@
 using System.Collections.Immutable;
 using VideoStages.Authoring;
 
-namespace VideoStages.Architectures.Ltx2.Planning;
+namespace VideoStages.Planning;
 
 internal static class FrameRefPlanCompiler
 {

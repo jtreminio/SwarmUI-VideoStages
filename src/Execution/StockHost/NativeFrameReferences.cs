@@ -51,7 +51,8 @@ internal static class NativeFrameReferences
                 ? null
                 : stageModels.GetValueOrDefault(stage.ClipStageRawIndex);
             modelName = model?.ModelName ?? "<missing>";
-            return model?.FrameReferencePositions?.Contains(position) == true;
+            return model?.FrameReferencePositions?.Any(candidate =>
+                candidate is FrameReferencePosition.Any || candidate == position) == true;
         }
 
         foreach (FrameRefSpec reference in clip.FrameRefs ?? [])
@@ -60,6 +61,14 @@ internal static class NativeFrameReferences
             bool isLast = reference.FromEnd && reference.Frame == 1;
             if (!isFirst && !isLast)
             {
+                if (activeStages.Any(stage =>
+                    !StagePassthroughPolicy.IsPassthrough(stage, architecture)
+                    && stageModels.GetValueOrDefault(stage.ClipStageRawIndex)
+                        ?.FrameReferencePositions
+                        ?.Contains(FrameReferencePosition.Any) == true))
+                {
+                    continue;
+                }
                 Ignore(
                     "middle-frame-reference-ignored",
                     $"Clip {clip.Id} has a {label} keyframe at "

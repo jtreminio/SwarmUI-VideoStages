@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 using VideoStages.Planning;
@@ -13,6 +14,9 @@ internal sealed record StockHostVideoStagePayload(
     IArchitectureStagePayload
 {
     public bool ContinuesSamplingFromPreviousStage { get; init; }
+
+    public ImmutableArray<FrameRefPlan> FrameReferences { get; init; } =
+        ImmutableArray<FrameRefPlan>.Empty;
 
     internal static StockHostVideoStagePayload Compile(
         ArchitectureId architectureId,

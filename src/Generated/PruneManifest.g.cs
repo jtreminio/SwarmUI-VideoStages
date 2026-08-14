@@ -82,6 +82,7 @@ public static class PruneManifest
         "LowVRAMAudioVAELoaderNode",
         "LowVRAMCheckpointLoaderNode",
         "LowVRAMLatentUpscaleModelLoaderNode",
+        "MiniMaxH3AddGuideNode",
         "ModifyLTXModelNode",
         "MultiPromptProviderNode",
         "MultimodalGuiderNode",

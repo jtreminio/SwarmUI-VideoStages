@@ -112,7 +112,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             Descriptor,
             model.ModelClass.ID,
             model.ModelClass.CompatClass.ID,
-            [FrameReferencePosition.First, FrameReferencePosition.Last],
+            [FrameReferencePosition.Any],
             model.ModelClass.CompatClass.LorasTargetTextEnc);
         return true;
     }
@@ -200,11 +200,15 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             }
 
             stages[stage.ClipStageRawIndex] = StockHostVideoStagePayload.Compile(
-                ArchitectureId,
-                clip,
-                stage,
-                resolved,
-                resolved.LoraTarget);
+                    ArchitectureId,
+                    clip,
+                    stage,
+                    resolved,
+                    resolved.LoraTarget)
+                with
+                {
+                    FrameReferences = FrameRefPlanCompiler.Compile(clip, stage),
+                };
         }
 
         return new(

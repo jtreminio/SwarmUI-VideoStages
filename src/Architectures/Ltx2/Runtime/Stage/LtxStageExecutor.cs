@@ -5,6 +5,7 @@ using VideoStages.Architectures.Ltx2.Planning;
 using VideoStages.Execution.Graph;
 using VideoStages.Architectures.Ltx2.Runtime.Chain;
 using VideoStages.Architectures.Ltx2.Runtime.Guide;
+using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
 

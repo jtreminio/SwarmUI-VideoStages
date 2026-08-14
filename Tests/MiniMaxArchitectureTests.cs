@@ -83,6 +83,9 @@ public class MiniMaxArchitectureTests
         Assert.Equal(17, model.Value<int>("frameGrid"));
         Assert.Equal(5, model.Value<int>("frameGridOrigin"));
         Assert.Equal(
+            ["any"],
+            model["enhancements"]["referencePositions"].Values<string>());
+        Assert.Equal(
             ["Native", "Upload", "ControlNet", "AceStepFun"],
             architecture["capabilities"]["audioSourceKinds"].Values<string>());
         Assert.Equal(
@@ -375,7 +378,7 @@ public class MiniMaxArchitectureTests
     }
 
     [Fact]
-    public void Bounded_first_and_last_frame_references_compile_and_others_are_dropped()
+    public void First_last_and_arbitrary_frame_references_compile_without_bounded_warnings()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
@@ -395,11 +398,7 @@ public class MiniMaxArchitectureTests
 
         Assert.NotNull(payload.FirstFrameReference);
         Assert.NotNull(payload.LastFrameReference);
-
-        Assert.Single(
-            compilation.Diagnostics,
-            diagnostic => diagnostic.Code
-                == "effective-request.minimax-middle-frame-reference-ignored");
+        Assert.Empty(compilation.Diagnostics);
     }
 
     [Fact]

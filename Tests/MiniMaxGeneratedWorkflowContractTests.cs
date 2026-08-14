@@ -380,12 +380,42 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A reference the compiler drops must leave no loader behind; the diagnostic alone does not
-    /// prove the upload never reached the graph.
-    /// </summary>
     [Fact]
-    public async Task Authored_frame_uploads_are_framed_and_an_ignored_reference_loads_nothing()
+    public async Task Arbitrary_frame_references_chain_core_guides_around_the_sampled_joint_latent()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["frameRefs"] = new JArray(
+            UploadedReference("U1RBUlQ=", frame: 9),
+            UploadedReference("RU5E", fromEnd: true, frame: 4));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        MiniMaxH3AddGuideNode[] guides =
+            [.. bridge.Graph.NodesOfType<MiniMaxH3AddGuideNode>()];
+        Assert.Equal([9, -4], guides.Select(guide => guide.FrameIdx.LiteralAsInt()));
+        Assert.All(guides, guide =>
+        {
+            Assert.NotNull(guide.Image.Connection);
+            Assert.NotNull(guide.Vae.Connection);
+        });
+        Assert.Same(guides[0], guides[1].PositiveInput.Connection?.Node);
+
+        SwarmKSamplerNode sampler = StageSampler(bridge, 0);
+        Assert.Same(guides[1], sampler.Positive.Connection?.Node);
+        Assert.All(
+            guides,
+            guide => Assert.Same(sampler.LatentImage.Connection, guide.Latent.Connection));
+
+        live.AssertAllLive(guides);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    [Fact]
+    public async Task Endpoint_and_arbitrary_frame_references_share_the_conditioning_chain()
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         JObject clip = MakeClip(fixture.Stage());
@@ -404,10 +434,7 @@ public class MiniMaxGeneratedWorkflowContractTests
 
         SwarmLoadImageB64Node[] uploads =
             [.. bridge.Graph.NodesOfType<SwarmLoadImageB64Node>()];
-        Assert.Equal(2, uploads.Length);
-        Assert.DoesNotContain(
-            uploads,
-            node => node.ImageBase64.LiteralAsString() == "SUdOT1JF");
+        Assert.Equal(3, uploads.Length);
 
         SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
             bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
@@ -434,9 +461,19 @@ public class MiniMaxGeneratedWorkflowContractTests
             "TEFTVA==",
             Assert.IsType<SwarmLoadImageB64Node>(lastFrame.ImagesInput.Connection?.Node)
                 .ImageBase64.LiteralAsString());
-        Assert.Same(keyframes, StageSampler(bridge, 0).Positive.Connection?.Node);
+        MiniMaxH3AddGuideNode guide = Assert.Single(
+            bridge.Graph.NodesOfType<MiniMaxH3AddGuideNode>());
+        Assert.Equal(9, guide.FrameIdx.LiteralAsInt());
+        SwarmFrameImageNode arbitrary = Assert.IsType<SwarmFrameImageNode>(
+            guide.Image.Connection?.Node);
+        Assert.Equal(
+            "SUdOT1JF",
+            Assert.IsType<SwarmLoadImageB64Node>(arbitrary.ImagesInput.Connection?.Node)
+                .ImageBase64.LiteralAsString());
+        Assert.Same(keyframes, guide.PositiveInput.Connection?.Node);
+        Assert.Same(guide, StageSampler(bridge, 0).Positive.Connection?.Node);
 
-        live.AssertAllLive([keyframes, firstFrame, lastFrame, .. uploads]);
+        live.AssertAllLive([keyframes, guide, firstFrame, lastFrame, arbitrary, .. uploads]);
         AssertShippable(bridge, workflow, live);
     }
 
