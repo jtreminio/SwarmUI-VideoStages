@@ -45,6 +45,12 @@ export const IC_LORA_WEIGHTS = [
         dimensionDownscaleFactor: 2,
     },
     {
+        id: "pixel-spatial-upscaler-2.5-x2",
+        weightsUrl:
+            "https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors",
+        dimensionDownscaleFactor: 2,
+    },
+    {
         id: "pixel-spatial-upscaler-x4",
         weightsUrl:
             "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors",

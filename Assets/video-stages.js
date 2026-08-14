@@ -2913,6 +2913,11 @@
       dimensionDownscaleFactor: 2
     },
     {
+      id: "pixel-spatial-upscaler-2.5-x2",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors",
+      dimensionDownscaleFactor: 2
+    },
+    {
       id: "pixel-spatial-upscaler-x4",
       weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors",
       dimensionDownscaleFactor: 4
@@ -3043,14 +3048,21 @@
       driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT
     },
     "pixel-spatial-upscaler-x2": {
-      displayName: "Pixel Spatial Upscaler ×2",
+      displayName: "Pixel Spatial Upscaler 2.3 ×2",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
+    },
+    "pixel-spatial-upscaler-2.5-x2": {
+      displayName: "Pixel Spatial Upscaler 2.5 ×2",
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
       note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
     },
     "pixel-spatial-upscaler-x4": {
-      displayName: "Pixel Spatial Upscaler ×4",
+      displayName: "Pixel Spatial Upscaler 2.3 ×4",
       triggerPhrase: "",
       strength: 1,
       controlType: "none",
