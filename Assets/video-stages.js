@@ -7679,8 +7679,10 @@
   var SETTINGS_KEY = "videostages.timeline.authoringSettings";
   var DEFAULT_SETTINGS = {
     snap: true,
-    autoCollapse: true
+    autoCollapse: true,
+    dimensionSnap: "disabled"
   };
+  var dimensionSnapSetting = (value) => value === 32 || value === 64 ? value : "disabled";
   var getTimelineAuthoringSettings = () => {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
@@ -7690,7 +7692,8 @@
       const parsed = JSON.parse(raw);
       return {
         snap: typeof parsed.snap === "boolean" ? parsed.snap : DEFAULT_SETTINGS.snap,
-        autoCollapse: typeof parsed.autoCollapse === "boolean" ? parsed.autoCollapse : DEFAULT_SETTINGS.autoCollapse
+        autoCollapse: typeof parsed.autoCollapse === "boolean" ? parsed.autoCollapse : DEFAULT_SETTINGS.autoCollapse,
+        dimensionSnap: dimensionSnapSetting(parsed.dimensionSnap)
       };
     } catch {
       return { ...DEFAULT_SETTINGS };
@@ -14978,10 +14981,12 @@ ${slot}`;
       height: defaults.height,
       fps: defaults.fps
     };
-    const multiple = activeDocumentDimensionMultiple(
+    const architectureMultiple = activeDocumentDimensionMultiple(
       state.clips,
       defaults.modelCatalog
     );
+    const dimensionSnap = getTimelineAuthoringSettings().dimensionSnap;
+    const multiple = dimensionSnap === "disabled" ? architectureMultiple : Math.max(architectureMultiple, dimensionSnap);
     const defaultMode = !state.dimsExplicit ? SETTINGS_INHERIT : matchAspectRatio(state.width, state.height, multiple) ?? SETTINGS_CUSTOM;
     const mode = ctx.getSettingsMode() ?? defaultMode;
     const isCustom = mode === SETTINGS_CUSTOM;
@@ -15042,6 +15047,21 @@ ${slot}`;
       ctx.render();
     });
     body.appendChild(buildField("Aspect Ratio", ratioSelect));
+    const dimensionSnapSpecs = [
+      { value: "disabled", label: "Disabled" },
+      { value: "32", label: "Multiples of 32" },
+      { value: "64", label: "Multiples of 64" }
+    ];
+    const dimensionSnapSelect = buildOptionSelect(
+      dimensionSnapSpecs,
+      `${dimensionSnap}`,
+      (value) => {
+        const selected = value === "32" ? 32 : value === "64" ? 64 : "disabled";
+        setTimelineAuthoringSetting("dimensionSnap", selected);
+        ctx.render();
+      }
+    );
+    body.appendChild(buildField("Dimension Snap", dimensionSnapSelect));
     if (isCustom) {
       const widthSlider = tagFocus(
         buildSlider(

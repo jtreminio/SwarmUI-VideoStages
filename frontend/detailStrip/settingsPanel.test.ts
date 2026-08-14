@@ -1,10 +1,12 @@
-import { describe, expect, it } from "@jest/globals";
+import { describe, expect, it, jest } from "@jest/globals";
 import {
     detail,
     detailStripHarness,
     fieldByLabel,
     sliderNumberByLabel,
 } from "../__test_helpers__/detailStrip";
+import { dimensionsFor } from "../dimensionPresets";
+import { snapDimensions } from "../dimensionSnap";
 import { setSelection } from "../selection";
 
 describe("detail strip timeline settings panel", () => {
@@ -128,5 +130,94 @@ describe("detail strip timeline settings panel", () => {
                 "select",
             )?.value,
         ).toBe("custom");
+    });
+
+    it("snaps aspect-ratio and side-length changes to the selected grid", () => {
+        h.setup([{ duration: 4, stages: [{}] }]);
+        const snap =
+            fieldByLabel("Dimension Snap").querySelector<HTMLSelectElement>(
+                "select",
+            );
+        if (!snap) {
+            throw new Error("dimension-snap select missing");
+        }
+        expect(snap.value).toBe("disabled");
+        snap.value = "64";
+        snap.dispatchEvent(new Event("change", { bubbles: true }));
+
+        const ratio =
+            fieldByLabel("Aspect Ratio").querySelector<HTMLSelectElement>(
+                "select",
+            );
+        if (!ratio) {
+            throw new Error("aspect-ratio select missing");
+        }
+        ratio.value = "16:9";
+        ratio.dispatchEvent(new Event("change", { bubbles: true }));
+
+        jest.useFakeTimers();
+        const sideLength = sliderNumberByLabel("Side Length");
+        sideLength.value = "1050";
+        sideLength.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+
+        const raw = dimensionsFor("16:9", 1056);
+        if (!raw) {
+            throw new Error("16:9 dimensions missing");
+        }
+        const expected = snapDimensions(raw.width, raw.height, 64);
+        const stored = JSON.parse(
+            document.querySelector<HTMLTextAreaElement>("#input_videostages")
+                ?.value ?? "{}",
+        ) as Record<string, unknown>;
+        expect({ width: stored.width, height: stored.height }).toEqual(
+            expected,
+        );
+    });
+
+    it("waits for a custom dimension field to lose focus before snapping", () => {
+        h.setup([{ duration: 4, stages: [{}] }]);
+        const ratio =
+            fieldByLabel("Aspect Ratio").querySelector<HTMLSelectElement>(
+                "select",
+            );
+        if (!ratio) {
+            throw new Error("aspect-ratio select missing");
+        }
+        ratio.value = "custom";
+        ratio.dispatchEvent(new Event("change", { bubbles: true }));
+
+        const snap =
+            fieldByLabel("Dimension Snap").querySelector<HTMLSelectElement>(
+                "select",
+            );
+        if (!snap) {
+            throw new Error("dimension-snap select missing");
+        }
+        snap.value = "64";
+        snap.dispatchEvent(new Event("change", { bubbles: true }));
+
+        jest.useFakeTimers();
+        const width = sliderNumberByLabel("Width");
+        width.focus();
+        width.value = "1232";
+        width.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+        let stored = JSON.parse(
+            document.querySelector<HTMLTextAreaElement>("#input_videostages")
+                ?.value ?? "{}",
+        ) as Record<string, unknown>;
+        expect(stored.width).toBe(1024);
+        expect(stored.height).toBe(1024);
+
+        width.blur();
+        jest.advanceTimersByTime(200);
+        stored = JSON.parse(
+            document.querySelector<HTMLTextAreaElement>("#input_videostages")
+                ?.value ?? "{}",
+        ) as Record<string, unknown>;
+        expect({ width: stored.width, height: stored.height }).toEqual(
+            snapDimensions(1232, 1024, 64),
+        );
     });
 });

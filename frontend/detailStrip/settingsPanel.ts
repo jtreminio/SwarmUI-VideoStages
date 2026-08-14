@@ -24,6 +24,11 @@ import {
 import { snapDimensions } from "../dimensionSnap";
 import { activeDocumentDimensionMultiple } from "../documentDimensionSnap";
 import { getVideoStagesHostBridge } from "../host";
+import {
+    type DimensionSnapSetting,
+    getTimelineAuthoringSettings,
+    setTimelineAuthoringSetting,
+} from "../timelineAuthoringSettings";
 import type { AuthoringDocument, TimelineSelection } from "../types";
 import type { DetailStripContext } from "./context";
 
@@ -95,10 +100,15 @@ export const buildSettingsBody = (
         height: defaults.height,
         fps: defaults.fps,
     };
-    const multiple = activeDocumentDimensionMultiple(
+    const architectureMultiple = activeDocumentDimensionMultiple(
         state.clips,
         defaults.modelCatalog,
     );
+    const dimensionSnap = getTimelineAuthoringSettings().dimensionSnap;
+    const multiple =
+        dimensionSnap === "disabled"
+            ? architectureMultiple
+            : Math.max(architectureMultiple, dimensionSnap);
     const defaultMode = !state.dimsExplicit
         ? SETTINGS_INHERIT
         : (matchAspectRatio(state.width, state.height, multiple) ??
@@ -174,6 +184,23 @@ export const buildSettingsBody = (
         ctx.render();
     });
     body.appendChild(buildField("Aspect Ratio", ratioSelect));
+
+    const dimensionSnapSpecs: OptionSpec[] = [
+        { value: "disabled", label: "Disabled" },
+        { value: "32", label: "Multiples of 32" },
+        { value: "64", label: "Multiples of 64" },
+    ];
+    const dimensionSnapSelect = buildOptionSelect(
+        dimensionSnapSpecs,
+        `${dimensionSnap}`,
+        (value) => {
+            const selected: DimensionSnapSetting =
+                value === "32" ? 32 : value === "64" ? 64 : "disabled";
+            setTimelineAuthoringSetting("dimensionSnap", selected);
+            ctx.render();
+        },
+    );
+    body.appendChild(buildField("Dimension Snap", dimensionSnapSelect));
 
     if (isCustom) {
         const widthSlider = tagFocus(

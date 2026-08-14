@@ -9,15 +9,18 @@ import type { Clip } from "./types";
 describe("timeline authoring settings", () => {
     beforeEach(() => localStorage.clear());
 
-    it("defaults Snap and Auto-collapse on and persists changes", () => {
+    it("defaults authoring preferences and persists changes", () => {
         expect(getTimelineAuthoringSettings()).toEqual({
             snap: true,
             autoCollapse: true,
+            dimensionSnap: "disabled",
         });
         setTimelineAuthoringSetting("snap", false);
+        setTimelineAuthoringSetting("dimensionSnap", 64);
         expect(getTimelineAuthoringSettings()).toEqual({
             snap: false,
             autoCollapse: true,
+            dimensionSnap: 64,
         });
     });
 
@@ -29,11 +32,13 @@ describe("timeline authoring settings", () => {
         expect(getTimelineAuthoringSettings()).toEqual({
             snap: false,
             autoCollapse: true,
+            dimensionSnap: "disabled",
         });
         localStorage.setItem("videostages.timeline.authoringSettings", "{bad");
         expect(getTimelineAuthoringSettings()).toEqual({
             snap: true,
             autoCollapse: true,
+            dimensionSnap: "disabled",
         });
     });
 });
