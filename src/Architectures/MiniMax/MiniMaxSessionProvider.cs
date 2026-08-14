@@ -1,6 +1,7 @@
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Authoring;
 using VideoStages.Execution.StockHost;
 using VideoStages.Planning;
 
@@ -27,6 +28,17 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
         foreach (ClipPlan clip in context.Plan.Clips.Where(
             clip => clip.Architecture.Id == ArchitectureId))
         {
+            MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
+            if (payload.TextEncoder != MiniMaxTextEncoder.Default
+                && !generator.Features.Contains(MiniMaxTextEncoderGraph.FeatureFlag))
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "minimax.text-encoder.clipproj-required",
+                    "MiniMax H3's 8B and 4B text encoders require ClipProj. Install "
+                        + $"{MiniMaxTextEncoderGraph.NodeUrl} and restart ComfyUI.",
+                    clip.ClipId));
+            }
             foreach (StagePlan stage in clip.Stages)
             {
                 foreach (FrameRefPlan reference in

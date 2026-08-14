@@ -155,6 +155,12 @@ declare function genericRequest(
     errorHandle?: (error: unknown) => void,
 ): void;
 
+declare function installFeatureById(
+    ids: string,
+    buttonId?: string | null,
+    modalId?: string | null,
+): void;
+
 declare const browserUtil: {
     makeVisible(elem: Element | Document): void;
 };

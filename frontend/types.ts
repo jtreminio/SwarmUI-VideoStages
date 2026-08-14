@@ -9,6 +9,7 @@ import type {
     VideoArchitectureId,
 } from "./architectures/types";
 import type { AudioTrackSourceKind } from "./generatedMediaSource";
+import type { H3TextEncoder } from "./generatedMiniMaxTextEncoder";
 
 export interface RootDefaults {
     modelValues: string[];
@@ -179,6 +180,7 @@ export interface Clip {
     duration: number;
     refFraming: ReferenceFraming;
     h3AttentionWindowSeconds: number;
+    h3TextEncoder: H3TextEncoder;
     audioSource: string;
     loras: ClipLora[];
     icLoras: IcLora[];

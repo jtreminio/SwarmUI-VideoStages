@@ -57,6 +57,17 @@ export const showHostPopover = (id: string, event?: Event): void => {
     }
 };
 
+export const installHostFeature = (
+    featureId: string,
+    buttonContainerId: string,
+): boolean => {
+    if (typeof installFeatureById !== "function") {
+        return false;
+    }
+    installFeatureById(featureId, buttonContainerId);
+    return true;
+};
+
 export interface HostSliderSpec {
     id: string;
     label: string;

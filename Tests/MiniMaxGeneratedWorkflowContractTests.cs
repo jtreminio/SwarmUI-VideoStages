@@ -19,6 +19,114 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class MiniMaxGeneratedWorkflowContractTests
 {
+    [Theory]
+    [InlineData(
+        "8b",
+        "qwen3vl_8b.safetensors",
+        "boogu",
+        "mmh3-8b-ClipProj-v3-mlp.safetensors")]
+    [InlineData(
+        "4b",
+        "qwen3vl_4b.safetensors",
+        "krea2",
+        "mmh3-4b-ClipProj-v3-mlp.safetensors")]
+    public async Task Selected_text_encoder_retargets_core_loader_then_projects_its_clip(
+        string selection,
+        string expectedEncoder,
+        string expectedLoaderType,
+        string expectedProjection)
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        fixture.InstallModel("Clip", expectedEncoder);
+        string projectionDirectory = Path.Join(
+            SwarmUI.Core.Program.ServerSettings.Paths.ActualModelRoot,
+            MiniMaxTextEncoderGraph.ProjectionFolder);
+        string projectionPath = Path.Join(projectionDirectory, expectedProjection);
+        Directory.CreateDirectory(projectionDirectory);
+        bool removeProjectionStub = !File.Exists(projectionPath);
+        if (removeProjectionStub)
+        {
+            File.WriteAllBytes(projectionPath, []);
+        }
+        JObject clip = MakeClip(
+            fixture.Stage(),
+            fixture.Stage("PreviousStage", control: 0.5));
+        clip["duration"] = 1.0;
+        clip["h3TextEncoder"] = selection;
+
+        JObject workflow;
+        try
+        {
+            workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+                fixture.Post(MakeDocument(clip)),
+                extraFeatures: [MiniMaxTextEncoderGraph.FeatureFlag]);
+        }
+        finally
+        {
+            if (removeProjectionStub)
+            {
+                File.Delete(projectionPath);
+            }
+        }
+        JProperty projection = Assert.Single(
+            workflow.Properties(),
+            property => property.Value["class_type"]?.Value<string>()
+                == ClipProjApplyNode.ClassType);
+        JProperty loader = Assert.Single(
+            workflow.Properties(),
+            property => property.Value["class_type"]?.Value<string>() == CLIPLoaderNode.ClassType);
+        JObject loaderInputs = (JObject)loader.Value["inputs"];
+        JObject projectionInputs = (JObject)projection.Value["inputs"];
+
+        Assert.Equal(expectedEncoder, loaderInputs["clip_name"]?.Value<string>());
+        Assert.Equal(expectedLoaderType, loaderInputs["type"]?.Value<string>());
+        Assert.Equal(expectedProjection, projectionInputs["projection"]?.Value<string>());
+        Assert.Equal(loader.Name, projectionInputs["clip"]?[0]?.Value<string>());
+        JProperty[] encodes = [.. workflow.Properties().Where(property =>
+            property.Value["class_type"]?.Value<string>() == CLIPTextEncodeNode.ClassType)];
+        Assert.NotEmpty(encodes);
+        Assert.All(
+            encodes,
+            encode => Assert.Equal(
+                projection.Name,
+                encode.Value["inputs"]?["clip"]?[0]?.Value<string>()));
+    }
+
+    [Fact]
+    public async Task Default_text_encoder_keeps_core_MiniMax_conditioning_graph()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["h3TextEncoder"] = "default";
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        JProperty loader = Assert.Single(
+            workflow.Properties(),
+            property => property.Value["class_type"]?.Value<string>() == CLIPLoaderNode.ClassType);
+
+        Assert.Equal(
+            "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+            loader.Value["inputs"]?["clip_name"]?.Value<string>());
+        Assert.DoesNotContain(workflow.Properties(), property =>
+            property.Value["class_type"]?.Value<string>() == ClipProjApplyNode.ClassType);
+    }
+
+    [Fact]
+    public async Task Selected_text_encoder_requires_ClipProj()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        fixture.InstallModel("Clip", "qwen3vl_8b.safetensors");
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["h3TextEncoder"] = "8b";
+
+        SwarmReadableErrorException error = await Assert.ThrowsAsync<SwarmReadableErrorException>(
+            () => fixture.GenerateAsync(MakeDocument(clip)));
+
+        Assert.Contains("ClipProj", error.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Clip_attention_window_patches_the_model_used_by_every_H3_sampler()
     {

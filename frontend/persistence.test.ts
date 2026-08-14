@@ -266,6 +266,7 @@ describe("persistence", () => {
                 minimalClip({
                     duration: 3,
                     h3AttentionWindowSeconds: 2.5,
+                    h3TextEncoder: "8b",
                     loras: [{ name: "detail.safetensors" }],
                     icLoras: [
                         {
@@ -324,6 +325,7 @@ describe("persistence", () => {
                     duration: 3,
                     refFraming: "crop",
                     h3AttentionWindowSeconds: 2.5,
+                    h3TextEncoder: "8b",
                     audioSource: "Native",
                     loras: [{ name: "detail.safetensors" }],
                     icLoras: [

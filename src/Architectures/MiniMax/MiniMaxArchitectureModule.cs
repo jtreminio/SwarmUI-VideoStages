@@ -217,6 +217,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 clip.ReuseAudio && activeStages.Count >= 3,
                 MiniMaxAttentionWindowGraph.NormalizeSeconds(
                     clip.H3AttentionWindowSeconds),
+                clip.H3TextEncoder,
                 first,
                 last,
                 MiniMaxClipReferences.Compile(clip, diagnostics)),
@@ -229,6 +230,7 @@ internal sealed record MiniMaxClipPayload(
     ReferenceFramingMode ReferenceFraming,
     bool ReuseAudio,
     double AttentionWindowSeconds,
+    MiniMaxTextEncoder TextEncoder,
     NativeFrameReferencePlan FirstFrameReference,
     NativeFrameReferencePlan LastFrameReference,
     IReadOnlyList<MiniMaxReferencePlan> References) :

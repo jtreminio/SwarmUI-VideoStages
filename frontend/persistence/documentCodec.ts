@@ -92,6 +92,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
             duration: clip.duration,
             refFraming: clip.refFraming,
             h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
+            h3TextEncoder: clip.h3TextEncoder,
             audioSource: clip.audioSource,
             loras: clip.loras.map((entry) => ({
                 name: entry.name,

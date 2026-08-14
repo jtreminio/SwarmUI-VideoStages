@@ -40,6 +40,13 @@
       doPopover(id, event);
     }
   };
+  var installHostFeature = (featureId, buttonContainerId) => {
+    if (typeof installFeatureById !== "function") {
+      return false;
+    }
+    installFeatureById(featureId, buttonContainerId);
+    return true;
+  };
   var renderHostSlider = (spec) => makeSliderInput(
     null,
     spec.id,
@@ -3563,6 +3570,14 @@
     );
   };
 
+  // frontend/generatedMiniMaxTextEncoder.ts
+  var H3_TEXT_ENCODER_FEATURE = "clipproj";
+  var H3_TEXT_ENCODERS = ["default", "8b", "4b"];
+  var H3_TEXT_ENCODER_DEFAULT = "default";
+
+  // frontend/h3TextEncoder.ts
+  var normalizeH3TextEncoder = (value) => H3_TEXT_ENCODERS.includes(value) ? value : H3_TEXT_ENCODER_DEFAULT;
+
   // frontend/loraAuthoring.ts
   var LORA_WEIGHT_DEFAULT = 1;
   var LORA_WEIGHT_STEP = 0.05;
@@ -3933,6 +3948,7 @@
       ),
       refFraming: "crop",
       h3AttentionWindowSeconds: 0,
+      h3TextEncoder: "default",
       audioSource: AUDIO_SOURCE_NATIVE,
       loras,
       icLoras: [],
@@ -4106,6 +4122,7 @@
       h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
         rawClip.h3AttentionWindowSeconds
       ),
+      h3TextEncoder: normalizeH3TextEncoder(rawClip.h3TextEncoder),
       audioSource,
       loras,
       icLoras,
@@ -4170,6 +4187,7 @@
         duration: clip.duration,
         refFraming: clip.refFraming,
         h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
+        h3TextEncoder: clip.h3TextEncoder,
         audioSource: clip.audioSource,
         loras: clip.loras.map((entry) => ({
           name: entry.name
@@ -4654,6 +4672,7 @@
       "duration",
       "refFraming",
       "h3AttentionWindowSeconds",
+      "h3TextEncoder",
       "audioSource",
       "loras",
       "icLoras",
@@ -12561,7 +12580,20 @@ ${slot}`;
   // frontend/detailStrip/clipBasics.ts
   var DURATION_STEP = 0.1;
   var REFERENCE_LENGTH_HINT = "(derived from a reference's media length)";
-  var buildClipColumn = (context, clip, clipIdx, referenceFramingState, showH3AttentionWindow = false) => {
+  var CLIP_PROJ_REPO = "https://github.com/nicolab28/ComfyUI-ClipProj";
+  var appendClipProjRepoLink = (field) => {
+    const help = field.querySelector(".sui-info-popover");
+    if (!help) {
+      return;
+    }
+    const repo = document.createElement("a");
+    repo.href = CLIP_PROJ_REPO;
+    repo.target = "_blank";
+    repo.rel = "noopener noreferrer";
+    repo.textContent = "ComfyUI-ClipProj";
+    help.append(repo, ".");
+  };
+  var buildClipColumn = (context, clip, clipIdx, referenceFramingState, showH3AttentionWindow = false, h3TextEncoderState = "hidden") => {
     const column = document.createElement("div");
     column.className = "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
     const initVideoClip = !!clip.initVideo;
@@ -12660,6 +12692,51 @@ ${slot}`;
       );
       attentionWindow.dataset.vstH3AttentionWindow = "true";
       column.appendChild(attentionWindow);
+    }
+    if (h3TextEncoderState === "ready") {
+      const textEncoder = buildOptionSelect(
+        H3_TEXT_ENCODERS.map((value) => ({ value, label: value })),
+        clip.h3TextEncoder,
+        (value) => {
+          context.commit((clips) => {
+            const target = clips[clipIdx];
+            if (target) {
+              target.h3TextEncoder = normalizeH3TextEncoder(value);
+            }
+          });
+        }
+      );
+      textEncoder.dataset.vstH3TextEncoder = "true";
+      const textEncoderField = buildField(
+        "Text Encoder",
+        textEncoder,
+        void 0,
+        "Default uses MiniMax H3's full 32B encoder. The 8B and 4B options use less VRAM; VideoStages will download the matching projection automatically. Requires "
+      );
+      appendClipProjRepoLink(textEncoderField);
+      column.appendChild(textEncoderField);
+    } else if (h3TextEncoderState === "install") {
+      const install = document.createElement("button");
+      install.type = "button";
+      install.className = "basic-button";
+      install.dataset.vstInstallClipproj = "true";
+      install.textContent = "Install ComfyUI-ClipProj";
+      const installField = buildField(
+        "Text Encoder",
+        install,
+        void 0,
+        "Install the custom node required for MiniMax H3's smaller text encoders. SwarmUI will restart managed ComfyUI backends. See "
+      );
+      installField.id = `vst_clip_${clipIdx}_clipproj_install`;
+      appendClipProjRepoLink(installField);
+      install.addEventListener("click", () => {
+        if (!installHostFeature(H3_TEXT_ENCODER_FEATURE, installField.id)) {
+          getVideoStagesHostBridge().showError(
+            "SwarmUI's ComfyUI feature installer is unavailable."
+          );
+        }
+      });
+      column.appendChild(installField);
     }
     return column;
   };
@@ -14482,7 +14559,10 @@ ${slot}`;
           referenceFramingState,
           capabilityView.architectureId === "minimax" && getVideoStagesHostBridge().hasBackendFeature(
             H3_ATTENTION_WINDOW_FEATURE
-          )
+          ),
+          capabilityView.architectureId !== "minimax" ? "hidden" : getVideoStagesHostBridge().hasBackendFeature(
+            H3_TEXT_ENCODER_FEATURE
+          ) ? "ready" : "install"
         ),
         flattenContent: true,
         headerActions: clipIdx === 0 ? [] : [

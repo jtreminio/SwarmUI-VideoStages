@@ -103,6 +103,7 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     duration: 2,
     refFraming: "crop",
     h3AttentionWindowSeconds: 0,
+    h3TextEncoder: "default",
     audioSource: "Native",
     loras: [],
     icLoras: [],

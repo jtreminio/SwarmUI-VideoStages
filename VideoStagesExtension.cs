@@ -7,6 +7,7 @@ using SwarmUI.Utils;
 using SwarmUI.Text2Image;
 using SwarmUI.WebAPI;
 using VideoStages.Architectures;
+using VideoStages.Architectures.MiniMax;
 using VideoStages.Authoring;
 
 namespace VideoStages;
@@ -20,6 +21,7 @@ public class VideoStagesExtension : Extension
 
     public override void OnPreInit()
     {
+        MiniMaxTextEncoderGraph.RegisterDependencies();
         PromptRegion.RegisterCustomPrefix(PromptSyntax.ClipTagName);
         T2IPromptHandling.PromptTagBasicProcessors[PromptSyntax.ClipTagName] = PromptTags.ProcessVideoClip;
         T2IPromptHandling.PromptTagBasicProcessors[PromptSyntax.StagesTagName] = PromptTags.ProcessVideoStages;

@@ -64,6 +64,7 @@ export const STORED_CLIP_KEYS = [
     "duration",
     "refFraming",
     "h3AttentionWindowSeconds",
+    "h3TextEncoder",
     "audioSource",
     "loras",
     "icLoras",

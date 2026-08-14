@@ -121,6 +121,7 @@ const CLIP_ENTITY = defineList<CanonicalAuthoringDocument, CanonicalClip>()({
         "duration",
         "refFraming",
         "h3AttentionWindowSeconds",
+        "h3TextEncoder",
         "audioSource",
         "loras",
         "icLoras",

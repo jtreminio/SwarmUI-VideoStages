@@ -1,6 +1,7 @@
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
 import { executableBoundaryForLeftClip } from "../clipSemantics";
 import { buildStaticSection } from "../detailWidgets";
+import { H3_TEXT_ENCODER_FEATURE } from "../generatedMiniMaxTextEncoder";
 import { H3_ATTENTION_WINDOW_FEATURE } from "../h3AttentionWindow";
 import { getVideoStagesHostBridge } from "../host";
 import type { AuthoringDocument, TimelineSelection } from "../types";
@@ -77,6 +78,13 @@ export const buildClipBody = (
                     getVideoStagesHostBridge().hasBackendFeature(
                         H3_ATTENTION_WINDOW_FEATURE,
                     ),
+                capabilityView.architectureId !== "minimax"
+                    ? "hidden"
+                    : getVideoStagesHostBridge().hasBackendFeature(
+                            H3_TEXT_ENCODER_FEATURE,
+                        )
+                      ? "ready"
+                      : "install",
             ),
             flattenContent: true,
             headerActions:

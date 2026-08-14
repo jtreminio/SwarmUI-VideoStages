@@ -49,6 +49,7 @@ const contractState = (): AuthoringDocument => ({
             duration: 3,
             refFraming: "fit-green",
             h3AttentionWindowSeconds: 2.5,
+            h3TextEncoder: "8b",
             audioSource: "Native",
             loras: [{ name: "style.safetensors" }],
             icLoras: [
@@ -193,6 +194,7 @@ const contractState = (): AuthoringDocument => ({
             duration: 2,
             refFraming: "crop",
             h3AttentionWindowSeconds: 0,
+            h3TextEncoder: "default",
             audioSource: "Native",
             loras: [],
             icLoras: [],

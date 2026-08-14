@@ -335,6 +335,10 @@ internal sealed class MiniMaxGenerationSession(
                 null,
                 true,
                 sectionId: genInfo.ContextID);
+        textEncoder = MiniMaxTextEncoderGraph.Apply(
+            g,
+            clip.RequireMiniMaxPayload().TextEncoder,
+            textEncoder);
         genInfo.Clip = textEncoder;
         // H3's reference conditioning reads the host VAE, which this session leaves unset so no
         // foreign root VAE binds to an uploaded frame. The model just loaded its own.

@@ -212,7 +212,8 @@ public sealed record ClipSpec(
     IReadOnlyList<ClipReferenceSpec> References = null,
     double UploadedAudioStartSeconds = 0,
     double UploadedAudioLengthSeconds = 0,
-    double H3AttentionWindowSeconds = 0
+    double H3AttentionWindowSeconds = 0,
+    MiniMaxTextEncoder H3TextEncoder = MiniMaxTextEncoder.Default
 )
 {
     /// <summary>Persisted repair/diagnostic hint. Resolved stage models own behavior.</summary>

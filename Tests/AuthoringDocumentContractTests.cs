@@ -155,6 +155,7 @@ public class AuthoringDocumentContractTests
         Assert.False(clip.BoundaryOutReferenceIncludeSoundtrack);
         Assert.Equal(ReferenceFramingMode.FitGreen, clip.ReferenceFraming);
         Assert.Equal(2.5, clip.H3AttentionWindowSeconds);
+        Assert.Equal(MiniMaxTextEncoder.Qwen3Vl8B, clip.H3TextEncoder);
         Assert.Equal("ltx2", clip.AuthoredArchitectureHint);
         Assert.Equal("ltx-2.3", clip.AuthoredModelProfileHint);
         Assert.Equal("data:audio/wav;base64,QUJD", clip.UploadedAudio.Data);
