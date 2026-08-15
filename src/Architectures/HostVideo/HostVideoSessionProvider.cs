@@ -22,7 +22,7 @@ internal sealed class HostVideoSessionProvider(WorkflowGenerator generator) :
             return [];
         }
         List<PlanDiagnostic> diagnostics = [];
-        if (generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null) is not null)
+        if (generator.UserInput.Get(T2IParamTypes.VideoEndImage, null) is not null)
         {
             diagnostics.Add(Ignored(
                 "host-video.end-frame.ignored",
@@ -108,7 +108,7 @@ internal static class HostVideoCorePassIsolation
         {
             genInfo.VideoSwapModel = null;
             genInfo.VideoSwapPercent = 0.5;
-            genInfo.VideoEndFrame = null;
+            genInfo.VideoEndImage = null;
             genInfo.StartStep = 0;
 
             // Reuse the live base model state so the discarded core pass never loads the selected

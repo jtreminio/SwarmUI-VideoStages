@@ -120,7 +120,7 @@ internal sealed class StageContextBuilder(
             BatchIndex = batchIndex,
             BatchLen = batchLen,
             ContextID = sectionId,
-            VideoEndFrame = g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
+            VideoEndImage = g.UserInput.Get(T2IParamTypes.VideoEndImage, null)
         };
     }
 

@@ -111,7 +111,7 @@ public class WanRequestRefusalWorkflowTests
                 extraSteps:
                 [
                     new(g => endFrameBeforeStages =
-                            g.UserInput.Get(T2IParamTypes.VideoEndFrame, null),
+                            g.UserInput.Get(T2IParamTypes.VideoEndImage, null),
                         Constants.WorkflowStepPriority.RunConfiguredStages - 0.01),
                 ]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -137,7 +137,7 @@ public class WanRequestRefusalWorkflowTests
         Assert.NotNull(endFrameBeforeStages);
         Assert.Same(
             endFrameBeforeStages,
-            generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null));
+            generator.UserInput.Get(T2IParamTypes.VideoEndImage, null));
 
         live.AssertAllLive(first);
         AssertShippable(bridge, workflow, live);

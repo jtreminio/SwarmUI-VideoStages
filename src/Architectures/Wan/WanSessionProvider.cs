@@ -20,9 +20,9 @@ internal sealed class WanSessionProvider(WorkflowGenerator generator) :
     {
         ArgumentNullException.ThrowIfNull(context);
         List<PlanDiagnostic> diagnostics = [];
-        if (generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null) is not null)
+        if (generator.UserInput.Get(T2IParamTypes.VideoEndImage, null) is not null)
         {
-            if (!WanVideoEndFramePolicy.TryResolveTarget(
+            if (!WanVideoEndImagePolicy.TryResolveTarget(
                     context.Plan,
                     out _,
                     out _))

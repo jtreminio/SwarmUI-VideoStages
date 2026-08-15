@@ -119,7 +119,7 @@ public class HostVideoRuntimeFlowTests
             JsonSingleClipStages(
                 MakeStage(models.VideoModel.Name, "Generated", steps: 8)));
         input.Set(T2IParamTypes.Video2VideoCreativity, 0.25);
-        input.Set(T2IParamTypes.VideoEndFrame, new Image([0x01], MediaType.ImagePng));
+        input.Set(T2IParamTypes.VideoEndImage, new Image([0x01], MediaType.ImagePng));
         WorkflowGenerator generator = new()
         {
             UserInput = input,
@@ -174,7 +174,7 @@ public class HostVideoRuntimeFlowTests
             ContextID = T2IParamInput.SectionID_Video,
             VideoSwapModel = models.VideoModel,
             VideoSwapPercent = 0.2,
-            VideoEndFrame = new Image([0x01], MediaType.ImagePng),
+            VideoEndImage = new Image([0x01], MediaType.ImagePng),
             StartStep = 4,
         };
 

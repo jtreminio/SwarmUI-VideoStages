@@ -7,7 +7,7 @@ namespace VideoStages.Architectures.Wan;
 /// Maps SwarmUI's one request-global final image to the only unambiguous WAN timeline target.
 /// This decision uses executable clip shape and host model facts rather than profile aliases.
 /// </summary>
-internal static class WanVideoEndFramePolicy
+internal static class WanVideoEndImagePolicy
 {
     internal static bool TryResolveTarget(
         VideoExecutionPlan plan,
