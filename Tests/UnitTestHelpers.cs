@@ -165,6 +165,12 @@ internal static class UnitTestStubs
         Ensure(ref ComfyUIBackendExtension.Sam2PointCoordsNegative, "SAM2 Negative Points", "[]");
         Ensure(ref ComfyUIBackendExtension.Sam2BBox, "SAM2 BBox", "");
         Ensure(ref ComfyUIBackendExtension.PixelDecoderModel, "Pixel Decoder Model", "");
+        Ensure(ref ComfyUIBackendExtension.SeedVRModel, "SeedVR Model", "None");
+        Ensure(ref ComfyUIBackendExtension.SeedVRUpscale, "SeedVR Upscale", "1");
+        Ensure(ref ComfyUIBackendExtension.SeedVRUpscaleMethod, "SeedVR Upscale Method", "pixel-lanczos");
+        Ensure(ref ComfyUIBackendExtension.SeedVRColorCorrectionBehavior, "SeedVR Color Correction Behavior", "lab");
+        Ensure(ref ComfyUIBackendExtension.SeedVRSplitLatent, "SeedVR Split Latent", "false");
+        Ensure(ref ComfyUIBackendExtension.SeedVRTemporalVideoOverlap, "SeedVR Temporal Video Overlap", "0");
         // Core reads these through TryGet without a null guard.
         Ensure(ref ComfyUIBackendExtension.RefinerHyperTile, "Refiner HyperTile", "256");
         Ensure(ref ComfyUIBackendExtension.RefinerSamplerParam, "Refiner Sampler", "euler");
@@ -383,7 +389,7 @@ internal static class TestModelFactory
             CommonModels.RegisterCoreSet();
         }
         Install("Clip", "gemma_3_12B_it.safetensors");
-        Install("Clip", "LTX-2/ltx-2.3_text_projection_bf16.safetensors");
+        Install("Clip", "ltx-2.3_text_projection_bf16.safetensors");
         Install("VAE", CommonModels.Known["ltx2-3-video-vae"].FileName);
         Install("VAE", CommonModels.Known["ltx2-3-audio-vae"].FileName);
     }
