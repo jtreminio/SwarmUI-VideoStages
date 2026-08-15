@@ -971,7 +971,7 @@ internal sealed class MiniMaxGenerationSession(
             return ResolveFrameReference(authored, "MiniMax H3 final keyframe");
         }
         Image global = plan.Clips.Count == 1
-            ? g.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
+            ? g.UserInput.Get(T2IParamTypes.VideoEndImage, null)
             : null;
         return global is null
             ? null

@@ -70,12 +70,12 @@ public class MiniMaxRuntimeFlowTests
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
         Image endFrame = new([0x01], MediaType.ImagePng);
         T2IParamInput single = Request(fixture, MakeClip(1.0, fixture.Stage()));
-        single.Set(T2IParamTypes.VideoEndFrame, endFrame);
+        single.Set(T2IParamTypes.VideoEndImage, endFrame);
         T2IParamInput multi = Request(
             fixture,
             MakeClip(1.0, fixture.Stage()),
             MakeClip(1.0, fixture.Stage()));
-        multi.Set(T2IParamTypes.VideoEndFrame, endFrame);
+        multi.Set(T2IParamTypes.VideoEndImage, endFrame);
 
         Assert.Empty(Preflight(single));
         PlanDiagnostic warning = Assert.Single(Preflight(multi));

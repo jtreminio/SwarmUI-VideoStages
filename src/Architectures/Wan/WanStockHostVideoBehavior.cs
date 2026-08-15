@@ -51,8 +51,8 @@ internal sealed class WanStockHostVideoBehavior(
         {
             return authored;
         }
-        return WanVideoEndFramePolicy.ShouldApply(plan, clip, stage)
-            ? generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null)
+        return WanVideoEndImagePolicy.ShouldApply(plan, clip, stage)
+            ? generator.UserInput.Get(T2IParamTypes.VideoEndImage, null)
             : null;
     }
 
@@ -91,7 +91,7 @@ internal sealed class WanStockHostVideoBehavior(
         int frames)
     {
         WGNodeData endFrame = generator.LoadImage(
-            genInfo.VideoEndFrame,
+            genInfo.VideoEndImage,
             "${videostageswanlastframe}",
             false);
         int width = (int)genInfo.Width;

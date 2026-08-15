@@ -106,27 +106,27 @@ public class WanRuntimeFlowTests
         Assert.Equal(0.31, customInfo.VideoSwapPercent);
 
         Image endFrame = new([0x44], MediaType.ImagePng);
-        input.Set(T2IParamTypes.VideoEndFrame, endFrame);
+        input.Set(T2IParamTypes.VideoEndImage, endFrame);
         WorkflowGenerator.ImageToVideoGenInfo coreInfo = new()
         {
             Generator = generator,
             ContextID = T2IParamInput.SectionID_Video,
-            VideoEndFrame = endFrame,
+            VideoEndImage = endFrame,
         };
         InvalidOperationException completedError = Assert.Throws<InvalidOperationException>(
             () => WanHostHandlers.IsolateCoreSettings(coreInfo));
         Assert.Contains("Completed", completedError.Message);
-        Assert.Same(endFrame, coreInfo.VideoEndFrame);
-        Assert.Same(endFrame, input.Get(T2IParamTypes.VideoEndFrame, null));
+        Assert.Same(endFrame, coreInfo.VideoEndImage);
+        Assert.Same(endFrame, input.Get(T2IParamTypes.VideoEndImage, null));
 
         WorkflowGenerator.ImageToVideoGenInfo authoredEndFrameInfo = new()
         {
             Generator = generator,
             ContextID = VideoStagesExtension.SectionIdForStage(0),
-            VideoEndFrame = endFrame,
+            VideoEndImage = endFrame,
         };
         WanHostHandlers.IsolateCoreSettings(authoredEndFrameInfo);
-        Assert.Same(endFrame, authoredEndFrameInfo.VideoEndFrame);
+        Assert.Same(endFrame, authoredEndFrameInfo.VideoEndImage);
 
         AssertNoDanglingNodeRefs(workflow);
         AssertAcyclic(bridge);

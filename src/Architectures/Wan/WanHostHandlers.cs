@@ -36,7 +36,7 @@ internal static class WanHostHandlers
         {
             genInfo.VideoSwapModel = null;
             genInfo.VideoSwapPercent = 0.5;
-            genInfo.VideoEndFrame = null;
+            genInfo.VideoEndImage = null;
         });
     }
 }

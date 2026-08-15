@@ -374,7 +374,7 @@ internal sealed class StockHostVideoGenerationSession(
             g.IsImageToVideo = true;
             int frames = RequireTextFrames(clip, stage, genInfo);
             genInfo.PrepModelAndCond(g);
-            if (genInfo.VideoEndFrame is not null)
+            if (genInfo.VideoEndImage is not null)
             {
                 _wanBehavior.BuildNativeLastFrameConditioning(
                     stage,
@@ -502,7 +502,7 @@ internal sealed class StockHostVideoGenerationSession(
         string positive,
         string negative,
         int? frames,
-        Image videoEndFrame)
+        Image videoEndImage)
     {
         StageCorePlan core = stage.Core;
         T2IModel videoModel = g.UserInput.Get(T2IParamTypes.VideoModel, null, sectionId: sectionId)
@@ -548,7 +548,7 @@ internal sealed class StockHostVideoGenerationSession(
             Steps = core.Steps,
             Seed = g.UserInput.Get(T2IParamTypes.Seed) + 42 + stage.StageId,
             ContextID = sectionId,
-            VideoEndFrame = videoEndFrame,
+            VideoEndImage = videoEndImage,
         };
     }
 

@@ -73,7 +73,7 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
                 "'Video2Video Creativity' is ignored for MiniMax H3 clips: H3 conditions on "
                     + "keyframe images rather than on a denoise start step."));
         }
-        if (generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null) is not null
+        if (generator.UserInput.Get(T2IParamTypes.VideoEndImage, null) is not null
             && context.Plan.Clips.Count != 1)
         {
             diagnostics.Add(new(

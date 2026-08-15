@@ -240,7 +240,7 @@ public class WanFrameReferenceWorkflowTests
         // The global end image really was accepted by the request — it is simply never used, and
         // the extension leaves it on the input rather than consuming it. Its payload is what proves
         // that: the two uploads above are the clip's own, and the request's is nowhere in the graph.
-        Assert.NotNull(generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null));
+        Assert.NotNull(generator.UserInput.Get(T2IParamTypes.VideoEndImage, null));
         Assert.DoesNotContain(
             uploads,
             upload => upload.ImageBase64.LiteralAsString() == WanWorkflowFixture.EndImageBase64);
@@ -338,7 +338,7 @@ public class WanFrameReferenceWorkflowTests
             Assert.Same(last.Latent, terminal.LatentImage.Connection);
         }
         // The request keeps the end image; the extension consumes it per stage, not off the input.
-        Assert.NotNull(generator.UserInput.Get(T2IParamTypes.VideoEndFrame, null));
+        Assert.NotNull(generator.UserInput.Get(T2IParamTypes.VideoEndImage, null));
         Assert.True(ReachesUpstream(
             bridge, live.FinalVideoSave().Images.Connection?.Node, terminal.Id));
 
