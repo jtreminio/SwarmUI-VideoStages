@@ -21,4 +21,17 @@ describe("LTX IC-LoRA drive-media contracts", () => {
             driveData: "audio",
         });
     });
+
+    it("makes Detailer a model-only refinement patch", () => {
+        const detailer = findIcLoraPreset("detailer");
+        expect(detailer).toMatchObject({
+            displayName: "Detailer",
+            strength: 1,
+            controlType: "none",
+        });
+        expect(icLoraDriveMediaContract(detailer)).toEqual({
+            acceptedKinds: [],
+            driveData: "none",
+        });
+    });
 });

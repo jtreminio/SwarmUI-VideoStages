@@ -98,6 +98,14 @@ const IC_LORA_PRESENTATION: Record<IcLoraPresetId, IcLoraPresetPresentation> = {
         note: "Generates new speech + lips from the prompt's words. The drive source supplies the speaker sample: audio is used directly, and video sources contribute only their audio while their frames are ignored.",
         driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT,
     },
+    detailer: {
+        displayName: "Detailer",
+        triggerPhrase: "",
+        strength: 1,
+        controlType: "none",
+        note: "Enhances fine details and textures. Apply to a low-control refine stage. Trained on LTX-2 19B.",
+        driveMedia: icLoraDriveMediaContractForData("none"),
+    },
     "pixel-spatial-upscaler-x2": {
         displayName: "Pixel Spatial Upscaler 2.3 ×2",
         triggerPhrase: "",
