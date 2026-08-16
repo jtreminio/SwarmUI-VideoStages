@@ -612,6 +612,10 @@ internal sealed class MiniMaxGenerationSession(
             throw Invariant.Failure(
                 "MiniMax H3 produced latent audio but no audio VAE was loaded to decode it.");
         }
+        using ParamSnapshot ignoredAudioTiling = ParamSnapshot.Of(
+            g.UserInput,
+            T2IParamTypes.VAETileSize.Type);
+        g.UserInput.InternalSet.ValuesInput.Remove(T2IParamTypes.VAETileSize.Type.ID);
         g.CurrentMedia.AttachedAudio = attached.DecodeLatents(g.CurrentAudioVae, true);
     }
 
