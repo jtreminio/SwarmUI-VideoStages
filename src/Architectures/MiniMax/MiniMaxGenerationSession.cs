@@ -67,6 +67,12 @@ internal sealed class MiniMaxGenerationSession(
             payload.FirstFrameReference,
             "MiniMax H3 first keyframe");
         _endFrame = ResolveEndFrame(payload.LastFrameReference);
+        bool hasExplicitKeyframe = payload.FirstFrameReference is not null
+            || payload.LastFrameReference is not null
+            || clip.Stages.Any(stage =>
+                stage.ArchitecturePayload is StockHostVideoStagePayload stagePayload
+                && stagePayload.FrameReferences.Any(reference =>
+                    !reference.IsEndpoint && reference.Strength > 0));
         if (clip.EntryMode == ArchitectureEntryMode.InitVideo)
         {
             // TrimAudioDuration is not swept when another configured source replaces this track.
@@ -80,8 +86,11 @@ internal sealed class MiniMaxGenerationSession(
         else
         {
             _entryMedia.SelectGenerated(clip, _firstFrame);
-            // A host image the clip fell back to is also its first frame.
-            _firstFrame ??= g.CurrentMedia;
+            // A host image is the opening frame only when the clip has no authored keyframe.
+            if (!hasExplicitKeyframe)
+            {
+                _firstFrame = g.CurrentMedia;
+            }
         }
         if (clip.EntryMode != ArchitectureEntryMode.InitVideo
             && g.CurrentMedia is not null)
