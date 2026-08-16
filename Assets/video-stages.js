@@ -1830,6 +1830,49 @@
     return null;
   };
 
+  // frontend/loraFolderFilter.ts
+  var ROOT_LORA_FOLDER = "";
+  var topLevelPathSegment = (value, rootWhenUnnested) => {
+    const normalized = `${value}`.trim().replaceAll("\\", "/");
+    const separator = normalized.indexOf("/");
+    if (separator < 0) {
+      return rootWhenUnnested ? ROOT_LORA_FOLDER : normalized;
+    }
+    return normalized.slice(0, separator);
+  };
+  var topLevelLoraFolder = (modelName) => topLevelPathSegment(modelName, true);
+  var isLoraNoneOption = (value) => `${value}`.replace(/\s+/g, "").toLowerCase() === "(none)";
+  var availableLoraFolders = (modelNames) => {
+    const folders = /* @__PURE__ */ new Set();
+    for (const modelName of modelNames) {
+      if (!isLoraNoneOption(modelName)) {
+        folders.add(topLevelLoraFolder(modelName));
+      }
+    }
+    return [...folders].sort((left, right) => {
+      if (left === ROOT_LORA_FOLDER) return -1;
+      if (right === ROOT_LORA_FOLDER) return 1;
+      return left.localeCompare(right);
+    });
+  };
+  var normalizeLoraFolders = (value) => {
+    if (!Array.isArray(value)) {
+      return null;
+    }
+    const folders = [];
+    for (const raw of value) {
+      if (typeof raw !== "string") {
+        continue;
+      }
+      const folder = topLevelPathSegment(raw, false);
+      if (!folders.includes(folder)) {
+        folders.push(folder);
+      }
+    }
+    return folders;
+  };
+  var isLoraFolderIncluded = (modelName, includedFolders) => includedFolders === null || includedFolders.has(topLevelLoraFolder(modelName));
+
   // frontend/promptSegments.ts
   var BOUNDARY_RE = /<videoclip(?=[>[])|<videostages\[/gi;
   var TAG_RE = /^<videoclip(?:\[([^\]]*)\])?(?::([^>]*))?>$/i;
@@ -2088,6 +2131,44 @@
     getVideoStagesHostBridge().notifyChanged(toggler);
   };
 
+  // frontend/timelineAuthoringSettings.ts
+  var SETTINGS_KEY = "videostages.timeline.authoringSettings";
+  var TIMELINE_AUTHORING_SETTINGS_CHANGED = "videostages:timeline-authoring-settings-changed";
+  var DEFAULT_SETTINGS = {
+    snap: true,
+    autoCollapse: true,
+    dimensionSnap: "disabled",
+    loraFolders: null
+  };
+  var dimensionSnapSetting = (value) => value === 32 || value === 64 ? value : "disabled";
+  var getTimelineAuthoringSettings = () => {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (!raw) {
+        return { ...DEFAULT_SETTINGS };
+      }
+      const parsed = JSON.parse(raw);
+      return {
+        snap: typeof parsed.snap === "boolean" ? parsed.snap : DEFAULT_SETTINGS.snap,
+        autoCollapse: typeof parsed.autoCollapse === "boolean" ? parsed.autoCollapse : DEFAULT_SETTINGS.autoCollapse,
+        dimensionSnap: dimensionSnapSetting(parsed.dimensionSnap),
+        loraFolders: normalizeLoraFolders(parsed.loraFolders)
+      };
+    } catch {
+      return { ...DEFAULT_SETTINGS };
+    }
+  };
+  var setTimelineAuthoringSetting = (key, value) => {
+    const next = {
+      ...getTimelineAuthoringSettings(),
+      [key]: value
+    };
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    } catch {
+    }
+  };
+
   // frontend/rootDefaults.ts
   var trimDomValue = (el) => `${el?.value ?? ""}`.trim();
   var WIDTH_INPUT_IDS = ["input_width", "input_aspectratiowidth"];
@@ -2158,9 +2239,11 @@
       modelCatalog = buildModelCatalog();
     }
     const rawLoras = getDropdownOptions("loras", "input_loras");
+    const savedLoraFolders = getTimelineAuthoringSettings().loraFolders;
+    const includedLoraFolders = savedLoraFolders === null ? null : new Set(savedLoraFolders);
     const loras = { values: [], labels: [] };
     rawLoras.values.forEach((value, i) => {
-      if (`${value}`.replace(/\s+/g, "").toLowerCase() !== "(none)") {
+      if (!isLoraNoneOption(value) && isLoraFolderIncluded(value, includedLoraFolders)) {
         loras.values.push(value);
         loras.labels.push(rawLoras.labels[i] ?? value);
       }
@@ -2915,6 +2998,11 @@
       dimensionDownscaleFactor: 1
     },
     {
+      id: "detailer",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2-19b-IC-LoRA-Detailer/resolve/main/ltx-2-19b-ic-lora-detailer.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
       id: "pixel-spatial-upscaler-x2",
       weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors",
       dimensionDownscaleFactor: 2
@@ -3053,6 +3141,14 @@
       controlType: "none",
       note: "Generates new speech + lips from the prompt's words. The drive source supplies the speaker sample: audio is used directly, and video sources contribute only their audio while their frames are ignored.",
       driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT
+    },
+    detailer: {
+      displayName: "Detailer",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Enhances fine details and textures. Apply to a low-control refine stage. Trained on LTX-2 19B.",
+      driveMedia: icLoraDriveMediaContractForData("none")
     },
     "pixel-spatial-upscaler-x2": {
       displayName: "Pixel Spatial Upscaler 2.3 ×2",
@@ -7693,41 +7789,6 @@
     (boundary) => boundary.rightIdx === rightClipIdx && boundary.effectiveMode === "continue" && capabilities.forBoundaryIndex(clips, boundary.leftIdx).windowConstraints("continue").continueMode === "reference"
   ) ?? null;
   var timelineDisplaySeconds = (clips, timing) => timing.outputGeometryAvailable ? timing.outputSeconds : clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
-
-  // frontend/timelineAuthoringSettings.ts
-  var SETTINGS_KEY = "videostages.timeline.authoringSettings";
-  var DEFAULT_SETTINGS = {
-    snap: true,
-    autoCollapse: true,
-    dimensionSnap: "disabled"
-  };
-  var dimensionSnapSetting = (value) => value === 32 || value === 64 ? value : "disabled";
-  var getTimelineAuthoringSettings = () => {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) {
-        return { ...DEFAULT_SETTINGS };
-      }
-      const parsed = JSON.parse(raw);
-      return {
-        snap: typeof parsed.snap === "boolean" ? parsed.snap : DEFAULT_SETTINGS.snap,
-        autoCollapse: typeof parsed.autoCollapse === "boolean" ? parsed.autoCollapse : DEFAULT_SETTINGS.autoCollapse,
-        dimensionSnap: dimensionSnapSetting(parsed.dimensionSnap)
-      };
-    } catch {
-      return { ...DEFAULT_SETTINGS };
-    }
-  };
-  var setTimelineAuthoringSetting = (key, value) => {
-    const next = {
-      ...getTimelineAuthoringSettings(),
-      [key]: value
-    };
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-    } catch {
-    }
-  };
 
   // frontend/trackDomUtils.ts
   var livePxPerSecond = (body) => {
@@ -12761,17 +12822,16 @@ ${slot}`;
     };
     const items = clip.loras.map((lora, loraIdx) => {
       const editor = document.createElement("div");
-      const options = defaults.loraValues.filter(
-        (value) => value === lora.name || !clip.loras.some(
+      const options = defaults.loraValues.flatMap(
+        (value, optionIdx) => value === lora.name || !clip.loras.some(
           (entry, index) => index !== loraIdx && entry.name === value
-        )
-      ).map((value) => {
-        const optionIdx = defaults.loraValues.indexOf(value);
-        return {
-          value,
-          label: defaults.loraLabels[optionIdx] ?? value
-        };
-      });
+        ) ? [
+          {
+            value,
+            label: defaults.loraLabels[optionIdx] ?? value
+          }
+        ] : []
+      );
       preserveSelectedOption(options, lora.name, "start", (value) => ({
         value,
         label: `${value} (unsupported persisted value)`,
@@ -14926,6 +14986,83 @@ ${slot}`;
   var TITLE_ID2 = "vst_timeline_settings_title";
   var STORAGE_PREFIX = "videostages";
   var currentModal3 = null;
+  var buildLoraFolderSetting = (onChange) => {
+    const folders = availableLoraFolders(
+      getDropdownOptions("loras", "input_loras").values
+    );
+    const saved = getTimelineAuthoringSettings().loraFolders;
+    const selected = new Set(saved ?? folders);
+    const section = document.createElement("fieldset");
+    section.className = "vst-lora-folder-setting";
+    const legend = document.createElement("legend");
+    legend.textContent = "LoRA folders";
+    const hint = document.createElement("small");
+    hint.textContent = "Only checked top-level folders appear in VideoStages LoRA dropdowns.";
+    const options = document.createElement("div");
+    options.className = "vst-lora-folder-options";
+    const actions = document.createElement("div");
+    actions.className = "vst-lora-folder-actions";
+    const save = () => {
+      const included = folders.filter((folder) => selected.has(folder));
+      setTimelineAuthoringSetting(
+        "loraFolders",
+        included.length === folders.length ? null : included
+      );
+      onChange();
+    };
+    for (const folder of folders) {
+      const row = buildCheckbox(
+        folder === ROOT_LORA_FOLDER ? "(Root)" : folder,
+        selected.has(folder),
+        (checked) => {
+          if (checked) {
+            selected.add(folder);
+          } else {
+            selected.delete(folder);
+          }
+          save();
+        }
+      );
+      row.classList.add("vst-lora-folder-option");
+      const input2 = row.querySelector(
+        "input[type='checkbox']"
+      );
+      if (input2) {
+        input2.value = folder;
+      }
+      options.appendChild(row);
+    }
+    const selectAll = (checked) => {
+      selected.clear();
+      if (checked) {
+        for (const folder of folders) {
+          selected.add(folder);
+        }
+      }
+      for (const input2 of options.querySelectorAll(
+        "input[type='checkbox']"
+      )) {
+        input2.checked = checked;
+      }
+      save();
+    };
+    actions.append(
+      buildDetailActionButton({
+        label: "All",
+        title: "Include every LoRA folder",
+        className: "small-button vst-lora-folders-all",
+        onClick: () => selectAll(true)
+      }),
+      buildDetailActionButton({
+        label: "None",
+        title: "Exclude every LoRA folder",
+        className: "small-button vst-lora-folders-none",
+        onClick: () => selectAll(false)
+      })
+    );
+    section.append(legend, hint, actions, options);
+    return section;
+  };
   var resetVideoStages = () => {
     const empty = getState();
     empty.dimsExplicit = false;
@@ -14956,6 +15093,7 @@ ${slot}`;
   var openTimelineAuthoringSettingsModal = () => {
     closeTimelineAuthoringSettingsModal();
     const settings = getTimelineAuthoringSettings();
+    let refreshOnClose = false;
     let managed;
     managed = createManagedModal({
       modalClass: MODAL_CLASS2,
@@ -14964,6 +15102,11 @@ ${slot}`;
       onClose: () => {
         if (currentModal3 === managed) {
           currentModal3 = null;
+        }
+        if (refreshOnClose) {
+          window.dispatchEvent(
+            new Event(TIMELINE_AUTHORING_SETTINGS_CHANGED)
+          );
         }
       }
     });
@@ -14991,6 +15134,9 @@ ${slot}`;
         if (value) {
           resetRememberedAccordionSections();
         }
+      }),
+      buildLoraFolderSetting(() => {
+        refreshOnClose = true;
       })
     );
     const footer = document.createElement("div");
@@ -18378,6 +18524,11 @@ ${slot}`;
       });
       rebaseHistoryIfReady();
       hostLifecycle.bind();
+      window.removeEventListener(
+        TIMELINE_AUTHORING_SETTINGS_CHANGED,
+        refresh
+      );
+      window.addEventListener(TIMELINE_AUTHORING_SETTINGS_CHANGED, refresh);
       catalogUnsub?.();
       catalogUnsub = subscribeArchitectureCatalog((snapshot) => {
         if (snapshot.status === "ready" && snapshot.catalog) {
@@ -18393,6 +18544,10 @@ ${slot}`;
       catalogUnsub?.();
       catalogUnsub = null;
       hostLifecycle.dispose();
+      window.removeEventListener(
+        TIMELINE_AUTHORING_SETTINGS_CHANGED,
+        refresh
+      );
       retakeTrack.dispose();
       audioSpanTrack.dispose();
       linking.dispose();

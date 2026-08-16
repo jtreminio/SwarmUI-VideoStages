@@ -1732,12 +1732,38 @@
     line-height: 1.2;
 }
 .vst-timeline-settings-modal .modal-dialog {
-    max-width: 320px;
+    max-width: 420px;
 }
 .vst-timeline-settings-modal .modal-body {
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+.vst-lora-folder-setting {
+    min-width: 0;
+    margin: 4px 0 0;
+    padding: 8px;
+    border: 1px solid var(--vst-hairline);
+    border-radius: var(--vst-radius-sm);
+}
+.vst-lora-folder-setting legend {
+    padding: 0 4px;
+    font-weight: 600;
+}
+.vst-lora-folder-setting > small {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-soft);
+}
+.vst-lora-folder-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.vst-lora-folder-options {
+    max-height: 240px;
+    overflow-y: auto;
 }
 .vst-detail-body {
     flex: 1 1 auto;

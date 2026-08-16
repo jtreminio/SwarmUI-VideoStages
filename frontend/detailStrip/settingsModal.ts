@@ -3,10 +3,13 @@ import {
     buildDetailActionButton,
     resetRememberedAccordionSections,
 } from "../detailWidgets";
+import { availableLoraFolders, ROOT_LORA_FOLDER } from "../loraFolderFilter";
 import { getState, saveState } from "../persistence/repository";
+import { getDropdownOptions } from "../swarmInputs";
 import {
     getTimelineAuthoringSettings,
     setTimelineAuthoringSetting,
+    TIMELINE_AUTHORING_SETTINGS_CHANGED,
 } from "../timelineAuthoringSettings";
 import { createManagedModal, type ManagedModal } from "./modalManager";
 
@@ -15,6 +18,86 @@ const BACKDROP_CLASS = "vst-timeline-settings-backdrop";
 const TITLE_ID = "vst_timeline_settings_title";
 const STORAGE_PREFIX = "videostages";
 let currentModal: ManagedModal | null = null;
+
+const buildLoraFolderSetting = (onChange: () => void): HTMLElement => {
+    const folders = availableLoraFolders(
+        getDropdownOptions("loras", "input_loras").values,
+    );
+    const saved = getTimelineAuthoringSettings().loraFolders;
+    const selected = new Set(saved ?? folders);
+    const section = document.createElement("fieldset");
+    section.className = "vst-lora-folder-setting";
+    const legend = document.createElement("legend");
+    legend.textContent = "LoRA folders";
+    const hint = document.createElement("small");
+    hint.textContent =
+        "Only checked top-level folders appear in VideoStages LoRA dropdowns.";
+    const options = document.createElement("div");
+    options.className = "vst-lora-folder-options";
+    const actions = document.createElement("div");
+    actions.className = "vst-lora-folder-actions";
+
+    const save = (): void => {
+        const included = folders.filter((folder) => selected.has(folder));
+        setTimelineAuthoringSetting(
+            "loraFolders",
+            included.length === folders.length ? null : included,
+        );
+        onChange();
+    };
+    for (const folder of folders) {
+        const row = buildCheckbox(
+            folder === ROOT_LORA_FOLDER ? "(Root)" : folder,
+            selected.has(folder),
+            (checked) => {
+                if (checked) {
+                    selected.add(folder);
+                } else {
+                    selected.delete(folder);
+                }
+                save();
+            },
+        );
+        row.classList.add("vst-lora-folder-option");
+        const input = row.querySelector<HTMLInputElement>(
+            "input[type='checkbox']",
+        );
+        if (input) {
+            input.value = folder;
+        }
+        options.appendChild(row);
+    }
+    const selectAll = (checked: boolean): void => {
+        selected.clear();
+        if (checked) {
+            for (const folder of folders) {
+                selected.add(folder);
+            }
+        }
+        for (const input of options.querySelectorAll<HTMLInputElement>(
+            "input[type='checkbox']",
+        )) {
+            input.checked = checked;
+        }
+        save();
+    };
+    actions.append(
+        buildDetailActionButton({
+            label: "All",
+            title: "Include every LoRA folder",
+            className: "small-button vst-lora-folders-all",
+            onClick: () => selectAll(true),
+        }),
+        buildDetailActionButton({
+            label: "None",
+            title: "Exclude every LoRA folder",
+            className: "small-button vst-lora-folders-none",
+            onClick: () => selectAll(false),
+        }),
+    );
+    section.append(legend, hint, actions, options);
+    return section;
+};
 
 const resetVideoStages = (): void => {
     const empty = getState();
@@ -47,6 +130,7 @@ export const closeTimelineAuthoringSettingsModal = (): void => {
 export const openTimelineAuthoringSettingsModal = (): void => {
     closeTimelineAuthoringSettingsModal();
     const settings = getTimelineAuthoringSettings();
+    let refreshOnClose = false;
 
     let managed: ManagedModal;
     managed = createManagedModal({
@@ -56,6 +140,11 @@ export const openTimelineAuthoringSettingsModal = (): void => {
         onClose: () => {
             if (currentModal === managed) {
                 currentModal = null;
+            }
+            if (refreshOnClose) {
+                window.dispatchEvent(
+                    new Event(TIMELINE_AUTHORING_SETTINGS_CHANGED),
+                );
             }
         },
     });
@@ -82,6 +171,9 @@ export const openTimelineAuthoringSettingsModal = (): void => {
             if (value) {
                 resetRememberedAccordionSections();
             }
+        }),
+        buildLoraFolderSetting(() => {
+            refreshOnClose = true;
         }),
     );
     const footer = document.createElement("div");

@@ -678,7 +678,7 @@ describe("createTimelineDetailStrip", () => {
         );
         expect(modal?.getAttribute("role")).toBe("dialog");
         const checks = modal?.querySelectorAll<HTMLInputElement>(
-            'input[type="checkbox"]',
+            'input[data-name="Snap"], input[data-name="Auto-collapse"]',
         );
         expect(checks).toHaveLength(2);
         expect(checks?.[0].checked).toBe(true);

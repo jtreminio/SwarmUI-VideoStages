@@ -35,6 +35,7 @@ import {
     setVideoStagesEnabled,
 } from "./swarmInputs";
 import { createTimelineAudioSpanTrack } from "./timelineAudioSpanTrack";
+import { TIMELINE_AUTHORING_SETTINGS_CHANGED } from "./timelineAuthoringSettings";
 import { safeFps } from "./timelineDetail";
 import { createTimelineDetailStrip } from "./timelineDetailStrip";
 import { createTimelineHistory } from "./timelineHistory";
@@ -393,6 +394,11 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         });
         rebaseHistoryIfReady();
         hostLifecycle.bind();
+        window.removeEventListener(
+            TIMELINE_AUTHORING_SETTINGS_CHANGED,
+            refresh,
+        );
+        window.addEventListener(TIMELINE_AUTHORING_SETTINGS_CHANGED, refresh);
         catalogUnsub?.();
         catalogUnsub = subscribeArchitectureCatalog((snapshot) => {
             if (snapshot.status === "ready" && snapshot.catalog) {
@@ -409,6 +415,10 @@ export const videoStagesTimeline = (): VideoStagesTimeline => {
         catalogUnsub?.();
         catalogUnsub = null;
         hostLifecycle.dispose();
+        window.removeEventListener(
+            TIMELINE_AUTHORING_SETTINGS_CHANGED,
+            refresh,
+        );
         retakeTrack.dispose();
         audioSpanTrack.dispose();
         linking.dispose();

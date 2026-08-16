@@ -37,22 +37,20 @@ export const buildClipLorasSection = (
     };
     const items = clip.loras.map((lora, loraIdx) => {
         const editor = document.createElement("div");
-        const options: OptionSpec[] = defaults.loraValues
-            .filter(
-                (value) =>
-                    value === lora.name ||
-                    !clip.loras.some(
-                        (entry, index) =>
-                            index !== loraIdx && entry.name === value,
-                    ),
-            )
-            .map((value) => {
-                const optionIdx = defaults.loraValues.indexOf(value);
-                return {
-                    value,
-                    label: defaults.loraLabels[optionIdx] ?? value,
-                };
-            });
+        const options: OptionSpec[] = defaults.loraValues.flatMap(
+            (value, optionIdx) =>
+                value === lora.name ||
+                !clip.loras.some(
+                    (entry, index) => index !== loraIdx && entry.name === value,
+                )
+                    ? [
+                          {
+                              value,
+                              label: defaults.loraLabels[optionIdx] ?? value,
+                          },
+                      ]
+                    : [],
+        );
         preserveSelectedOption(options, lora.name, "start", (value) => ({
             value,
             label: `${value} (unsupported persisted value)`,

@@ -1,4 +1,9 @@
+import { normalizeLoraFolders } from "./loraFolderFilter";
+
 const SETTINGS_KEY = "videostages.timeline.authoringSettings";
+
+export const TIMELINE_AUTHORING_SETTINGS_CHANGED =
+    "videostages:timeline-authoring-settings-changed";
 
 export type DimensionSnapSetting = "disabled" | 32 | 64;
 
@@ -6,6 +11,7 @@ export interface TimelineAuthoringSettings {
     snap: boolean;
     autoCollapse: boolean;
     dimensionSnap: DimensionSnapSetting;
+    loraFolders: string[] | null;
 }
 
 export type TimelineAuthoringSetting = keyof TimelineAuthoringSettings;
@@ -14,6 +20,7 @@ const DEFAULT_SETTINGS: TimelineAuthoringSettings = {
     snap: true,
     autoCollapse: true,
     dimensionSnap: "disabled",
+    loraFolders: null,
 };
 
 const dimensionSnapSetting = (value: unknown): DimensionSnapSetting =>
@@ -29,6 +36,7 @@ export const getTimelineAuthoringSettings = (): TimelineAuthoringSettings => {
             snap?: unknown;
             autoCollapse?: unknown;
             dimensionSnap?: unknown;
+            loraFolders?: unknown;
         };
         return {
             snap:
@@ -40,6 +48,7 @@ export const getTimelineAuthoringSettings = (): TimelineAuthoringSettings => {
                     ? parsed.autoCollapse
                     : DEFAULT_SETTINGS.autoCollapse,
             dimensionSnap: dimensionSnapSetting(parsed.dimensionSnap),
+            loraFolders: normalizeLoraFolders(parsed.loraFolders),
         };
     } catch {
         return { ...DEFAULT_SETTINGS };

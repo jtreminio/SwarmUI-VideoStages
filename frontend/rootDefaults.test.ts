@@ -14,6 +14,7 @@ const mountNumber = (id: string, value: number): HTMLInputElement => {
 
 describe("root dimension defaults", () => {
     beforeEach(() => {
+        localStorage.clear();
         document.body.innerHTML = "";
         mountSelect("input_aspectratio", {
             value: "16:9",
@@ -79,6 +80,33 @@ describe("root dimension defaults", () => {
             cfgScaleMin: -5,
             cfgScaleMax: 30,
             cfgScaleStep: 0.25,
+        });
+    });
+
+    it("includes only LoRAs from the selected top-level folders", () => {
+        mountSelect("input_loras", {
+            options: [
+                "(None)",
+                "root.safetensors",
+                "styles/anime.safetensors",
+                "styles/realistic/film.safetensors",
+                "motion\\camera.safetensors",
+            ],
+        });
+        localStorage.setItem(
+            "videostages.timeline.authoringSettings",
+            JSON.stringify({ loraFolders: ["styles"] }),
+        );
+
+        expect(getRootDefaults()).toMatchObject({
+            loraValues: [
+                "styles/anime.safetensors",
+                "styles/realistic/film.safetensors",
+            ],
+            loraLabels: [
+                "styles/anime.safetensors",
+                "styles/realistic/film.safetensors",
+            ],
         });
     });
 });

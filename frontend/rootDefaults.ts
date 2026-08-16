@@ -10,11 +10,13 @@ import type {
 import { ROOT_DIMENSION_MIN } from "./constants";
 import { dimensionsFor } from "./dimensionPresets";
 import { getVideoStagesHostBridge } from "./host";
+import { isLoraFolderIncluded, isLoraNoneOption } from "./loraFolderFilter";
 import {
     getDropdownOptions,
     getRootModelInput,
     isRootTextToVideoModel,
 } from "./swarmInputs";
+import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
 import type { RootDefaults } from "./types";
 import { toNumber } from "./utils";
 
@@ -112,13 +114,16 @@ export const getRootDefaults = (
         modelOptions = getVideoStagesHostBridge().getSelectOptions(model);
         modelCatalog = buildModelCatalog();
     }
-    // The host's lora list can lead with a "(None)" sentinel; it's meaningless
-    // in our add-a-lora lists and a freshly-added entry seeded with it would be
-    // dropped as "no lora" on the next normalize pass.
     const rawLoras = getDropdownOptions("loras", "input_loras");
+    const savedLoraFolders = getTimelineAuthoringSettings().loraFolders;
+    const includedLoraFolders =
+        savedLoraFolders === null ? null : new Set(savedLoraFolders);
     const loras = { values: [] as string[], labels: [] as string[] };
     rawLoras.values.forEach((value, i) => {
-        if (`${value}`.replace(/\s+/g, "").toLowerCase() !== "(none)") {
+        if (
+            !isLoraNoneOption(value) &&
+            isLoraFolderIncluded(value, includedLoraFolders)
+        ) {
             loras.values.push(value);
             loras.labels.push(rawLoras.labels[i] ?? value);
         }
