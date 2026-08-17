@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    jest,
+} from "@jest/globals";
 import { stubRect } from "./__test_helpers__/dom";
 import {
     buildAccordionSection,
@@ -183,6 +190,73 @@ describe("buildMediaPickRow", () => {
         expect(
             row.querySelector<HTMLInputElement>('input[type="file"]'),
         ).not.toBeNull();
+    });
+
+    it("accepts a dropped file as the row's declared media kind", async () => {
+        let finishPick: (picked: [string, string]) => void = () => {};
+        const picked = new Promise<[string, string]>((resolve) => {
+            finishPick = resolve;
+        });
+        const onFile = jest.fn((data: string, fileName: string) =>
+            finishPick([data, fileName]),
+        );
+        const row = buildMediaPickRow(
+            "Image Upload",
+            "image/*",
+            ["image"],
+            null,
+            onFile,
+            () => {},
+        );
+        const outerDrop = jest.fn();
+        const shell = document.createElement("div");
+        shell.addEventListener("drop", outerDrop);
+        shell.appendChild(row);
+        const dragover = new Event("dragover", {
+            bubbles: true,
+            cancelable: true,
+        });
+        const dragoverTransfer = {
+            files: [],
+            types: ["Files"],
+            dropEffect: "none",
+        };
+        Object.defineProperty(dragover, "dataTransfer", {
+            value: dragoverTransfer,
+        });
+        row.dispatchEvent(dragover);
+
+        expect(dragover.defaultPrevented).toBe(true);
+        expect(dragoverTransfer.dropEffect).toBe("copy");
+
+        const event = new Event("drop", {
+            bubbles: true,
+            cancelable: true,
+        });
+        Object.defineProperty(event, "dataTransfer", {
+            value: {
+                files: [
+                    new File(["not inspected"], "still.mp4", {
+                        type: "video/mp4",
+                    }),
+                ],
+                dropEffect: "none",
+            },
+        });
+
+        row.dispatchEvent(event);
+        const result = await Promise.race([
+            picked,
+            new Promise<null>((resolve) =>
+                setTimeout(() => resolve(null), 100),
+            ),
+        ]);
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(outerDrop).not.toHaveBeenCalled();
+        expect(result?.[0]).toMatch(/^data:video\/mp4;base64,/);
+        expect(result?.[1]).toBe("still.mp4");
+        expect(onFile).toHaveBeenCalledTimes(1);
     });
 });
 

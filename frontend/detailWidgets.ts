@@ -1,4 +1,6 @@
 import { clamp } from "./constants";
+import { fileAsDataUri } from "./fileDataUri";
+import { hasDroppedFiles } from "./fileDrop";
 import { getVideoStagesHostBridge } from "./host";
 import {
     enhanceHostPromptEditor,
@@ -318,20 +320,6 @@ export const buildTextarea = (
     return editor;
 };
 
-const readFileAsDataUri = (
-    file: File,
-    onFile: (data: string, fileName: string) => void,
-): void => {
-    const reader = new FileReader();
-    reader.onload = () => {
-        const data = `${reader.result ?? ""}`;
-        if (data) {
-            onFile(data, file.name);
-        }
-    };
-    reader.readAsDataURL(file);
-};
-
 let mediaPickCounter = 0;
 
 /** Host server picks arrive through `dataset.filedata`; all picks become data URIs. */
@@ -381,10 +369,17 @@ export const buildMediaPickRow = (
         "basic-button auto-file-input-button vst-audio-upload-clear";
     clearBtn.textContent = "Clear";
     clearBtn.hidden = !name;
+    const acceptFile = (file: File): void => {
+        void fileAsDataUri(file).then((data) => {
+            if (data) {
+                onFile(data, file.name);
+            }
+        });
+    };
     fileInput.addEventListener("change", () => {
         const file = fileInput.files?.[0];
         if (file) {
-            readFileAsDataUri(file, onFile);
+            acceptFile(file);
             return;
         }
         const picked = fileInput.dataset.filedata ?? "";
@@ -399,6 +394,25 @@ export const buildMediaPickRow = (
         void getVideoStagesHostBridge()
             .toDataUrl(picked)
             .then((data) => onFile(data, pickedName));
+    });
+    row.addEventListener("dragover", (event) => {
+        if (!hasDroppedFiles(event.dataTransfer)) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = "copy";
+        }
+    });
+    row.addEventListener("drop", (event) => {
+        const file = event.dataTransfer?.files[0];
+        if (!file) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        acceptFile(file);
     });
     clearBtn.addEventListener("click", () => onClear());
     if (hasHostInputBrowser()) {

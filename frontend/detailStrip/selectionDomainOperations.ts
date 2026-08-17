@@ -18,6 +18,7 @@ import {
     STAGE_REF_STRENGTH_DEFAULT,
 } from "../constants";
 import type { DocumentCommand } from "../documentCommands";
+import { MEDIA_SOURCE_UPLOAD } from "../generatedMediaSource";
 import { IC_LORA_STAGE_ALL } from "../icLoraAuthoring";
 import { createEntityId } from "../identity";
 import { defaultLoraWeight } from "../loraAuthoring";
@@ -29,7 +30,12 @@ import {
 import { nextAllowedReferencePosition } from "../referenceAuthoring";
 import { getDefaultStageModel } from "../rootDefaults";
 import { selectionAfterRemoval, setSelection } from "../selection";
-import type { Clip, TimelineSelection } from "../types";
+import type {
+    Clip,
+    ClipReference,
+    TimelineSelection,
+    UploadedMedia,
+} from "../types";
 import { roundToTenth } from "../utils";
 import type { StructuralCommand } from "./draftQueue";
 
@@ -65,8 +71,16 @@ const refStrengthPatches = (
 
 export interface DetailSelectionDomainOperations {
     addRefEntry(clipIdx: number): void;
+    addRefEntries(clipId: string, uploads: readonly UploadedMedia[]): number;
     deleteRefEntry(clipIdx: number, refIdx: number): void;
     addClipReference(clipIdx: number): void;
+    addClipReferences(
+        clipId: string,
+        references: readonly Pick<
+            ClipReference,
+            "kind" | "uploadedMedia" | "mediaDurationSeconds"
+        >[],
+    ): void;
     deleteClipReference(clipIdx: number, referenceIdx: number): void;
     addPromptWindow(clipIdx: number): void;
     deleteWindowEntry(clipIdx: number, windowIdx: number): void;
@@ -196,6 +210,75 @@ export const createDetailSelectionDomainOperations = (
         });
     };
 
+    const addRefEntries = (
+        clipId: string,
+        uploads: readonly UploadedMedia[],
+    ): number => {
+        if (uploads.length === 0) {
+            return 0;
+        }
+        let added = 0;
+        structuralCommit((clips) => {
+            const clipIdx = clips.findIndex((clip) => clip.id === clipId);
+            const clip = clips[clipIdx];
+            const { capabilities, defaults } = captureAuthoringTransaction();
+            if (
+                !clip ||
+                !capabilities.forClip(clip).decision("frameReferences")
+                    .supported
+            ) {
+                return null;
+            }
+            const refs = [...clip.frameRefs];
+            const additions = uploads.flatMap((upload) => {
+                const position = nextAllowedReferencePosition(
+                    refs,
+                    getReferenceFrameMax(defaults, clip),
+                    referenceEndpointPolicy(clip, defaults.modelCatalog)
+                        .positions,
+                );
+                if (!position) {
+                    return [];
+                }
+                const ref = {
+                    ...buildDefaultRef(MEDIA_SOURCE_UPLOAD),
+                    ...position,
+                    id: createEntityId("ref"),
+                    uploadFileName: upload.fileName,
+                    uploadedImage: upload,
+                };
+                refs.push(ref);
+                return [ref];
+            });
+            if (additions.length === 0) {
+                return null;
+            }
+            added = additions.length;
+            return {
+                command: {
+                    type: "batch",
+                    commands: [
+                        ...additions.map((ref) => ({
+                            type: "ref.add" as const,
+                            clipId,
+                            ref,
+                        })),
+                        ...refStrengthPatches(clip, (strengths) => [
+                            ...strengths,
+                            ...additions.map(() => STAGE_REF_STRENGTH_DEFAULT),
+                        ]),
+                    ],
+                },
+                selection: {
+                    kind: "ref",
+                    clipIdx,
+                    refIdx: clip.frameRefs.length + additions.length - 1,
+                },
+            };
+        });
+        return added;
+    };
+
     const addClipReference = (clipIdx: number): void => {
         structuralCommit((clips) => {
             const clip = clips[clipIdx];
@@ -223,6 +306,45 @@ export const createDetailSelectionDomainOperations = (
             };
         });
     };
+
+    const addClipReferences: DetailSelectionDomainOperations["addClipReferences"] =
+        (clipId, references) => {
+            if (references.length === 0) {
+                return;
+            }
+            structuralCommit((clips) => {
+                const clipIdx = clips.findIndex((clip) => clip.id === clipId);
+                const clip = clips[clipIdx];
+                const { capabilities } = captureAuthoringTransaction();
+                if (
+                    !clip ||
+                    !capabilities.forClip(clip).decision("clipReferences")
+                        .supported
+                ) {
+                    return null;
+                }
+                return {
+                    command: {
+                        type: "batch",
+                        commands: references.map((reference) => ({
+                            type: "clip-reference.add" as const,
+                            clipId,
+                            reference: {
+                                ...buildDefaultClipReference(reference.kind),
+                                ...reference,
+                                id: createEntityId("clip_reference"),
+                            },
+                        })),
+                    },
+                    selection: {
+                        kind: "clip-ref",
+                        clipIdx,
+                        referenceIdx:
+                            clip.references.length + references.length - 1,
+                    },
+                };
+            });
+        };
 
     const deleteClipReference = (
         clipIdx: number,
@@ -606,8 +728,10 @@ export const createDetailSelectionDomainOperations = (
 
     return {
         addRefEntry,
+        addRefEntries,
         deleteRefEntry,
         addClipReference,
+        addClipReferences,
         deleteClipReference,
         addPromptWindow,
         deleteWindowEntry,

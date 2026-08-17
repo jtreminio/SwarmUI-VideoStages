@@ -41,8 +41,8 @@ export const buildRefSection = (
             : clamp(selectedRefIdx ?? 0, 0, clip.frameRefs.length - 1);
     const buildSection = (
         editorForItem?: (index: number) => HTMLElement | undefined,
-    ): HTMLElement =>
-        buildRepeatingEditor({
+    ): HTMLElement => {
+        const section = buildRepeatingEditor({
             key: "references",
             label: "Keyframes",
             sectionClass: "vst-detail-ref-section",
@@ -77,6 +77,12 @@ export const buildRefSection = (
             },
             editorForItem,
         }).section;
+        const add = section.querySelector<HTMLElement>(".vst-detail-add-ref");
+        if (add && clip.id) {
+            add.dataset.vstClipId = clip.id;
+        }
+        return section;
+    };
 
     if (activeRefIdx === null) {
         return buildSection();

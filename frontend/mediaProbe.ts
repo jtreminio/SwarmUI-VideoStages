@@ -10,6 +10,11 @@ export interface InitVideoProbe {
     height: number | null;
 }
 
+interface ReferenceVideoProbe {
+    durationSeconds: number;
+    hasMultipleFrames: boolean;
+}
+
 export const initVideoFromProbe = (
     probe: InitVideoProbe | null,
     data: string,
@@ -146,6 +151,51 @@ export const probeInitVideo = (
                 .play()
                 ?.catch(() =>
                     finish({ durationSeconds, fps: null, ...dimensions }),
+                );
+        },
+    );
+
+/** Seeks from the first decoded frame to the last to distinguish still videos. */
+export const probeReferenceVideo = (
+    src: string,
+    timeoutMs = 8000,
+): Promise<ReferenceVideoProbe | null> =>
+    withProbedMedia<ReferenceVideoProbe | null>(
+        src,
+        timeoutMs,
+        null,
+        (video, durationSeconds, finish) => {
+            const requestFrame = video.requestVideoFrameCallback?.bind(video);
+            if (!requestFrame) {
+                finish({ durationSeconds, hasMultipleFrames: true });
+                return;
+            }
+            let firstMediaTime: number | null = null;
+            const inspect = (
+                _now: number,
+                metadata: VideoFrameMetadataLike,
+            ): void => {
+                if (firstMediaTime === null) {
+                    firstMediaTime = metadata.mediaTime;
+                    requestFrame(inspect);
+                    video.currentTime = Math.max(
+                        0,
+                        durationSeconds - Math.min(0.001, durationSeconds / 2),
+                    );
+                    return;
+                }
+                finish({
+                    durationSeconds,
+                    hasMultipleFrames:
+                        Math.abs(metadata.mediaTime - firstMediaTime) >=
+                        MIN_FRAME_DELTA_SECONDS,
+                });
+            };
+            requestFrame(inspect);
+            video
+                .play()
+                ?.catch(() =>
+                    finish({ durationSeconds, hasMultipleFrames: true }),
                 );
         },
     );

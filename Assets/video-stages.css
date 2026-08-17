@@ -1852,7 +1852,8 @@
     transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
-.vst-detail .vst-detail-repeating-add:hover {
+.vst-detail .vst-detail-repeating-add:hover,
+.vst-detail .vst-detail-repeating-add.vst-file-drop-hover {
     border-color: var(--emphasis);
     color: var(--emphasis);
     background: color-mix(in srgb, var(--emphasis) 8%, transparent);

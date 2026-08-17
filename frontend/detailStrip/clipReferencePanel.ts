@@ -307,8 +307,8 @@ export const buildClipReferenceSection = (
     };
     const buildSection = (
         editorForItem?: (index: number) => HTMLElement | undefined,
-    ): HTMLElement =>
-        buildRepeatingEditor({
+    ): HTMLElement => {
+        const section = buildRepeatingEditor({
             key: "clip-references",
             label: "References",
             sectionClass: "vst-detail-clip-ref-section",
@@ -378,6 +378,14 @@ export const buildClipReferenceSection = (
                           return editorForItem?.(itemIndex - itemOffset);
                       },
         }).section;
+        const add = section.querySelector<HTMLElement>(
+            ".vst-detail-add-clip-ref",
+        );
+        if (add && clip.id) {
+            add.dataset.vstClipId = clip.id;
+        }
+        return section;
+    };
 
     const buildEditor = (editorIdx: number): HTMLElement | undefined => {
         const reference = references[editorIdx];

@@ -107,6 +107,306 @@ describe("createTimelineDetailStrip", () => {
         expect(dock.querySelector(".vst-detail-body")).toBe(rendered);
     });
 
+    it("creates one reference per media file dropped on Add Reference", async () => {
+        const catalog = testArchitectureCatalog();
+        catalog.architectures[0].capabilities = testArchitectureCapabilities({
+            features: [
+                ...catalog.architectures[0].capabilities.features,
+                "clipReferences",
+            ],
+        });
+        resetArchitectureCatalogForTests();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(catalog),
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        const body = h.setup([{ duration: 4, stages: [{}], references: [] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        h.refreshSpy.mockClear();
+        const dock = dockHost(body);
+        const addReference = dock.querySelector<HTMLButtonElement>(
+            ".vst-detail-add-clip-ref",
+        );
+        if (!addReference) {
+            throw new Error("add reference button missing");
+        }
+        const backgroundDragover = new Event("dragover", {
+            bubbles: true,
+            cancelable: true,
+        });
+        Object.defineProperty(backgroundDragover, "dataTransfer", {
+            value: {
+                files: [],
+                types: ["Files"],
+                dropEffect: "none",
+                getData: () => "",
+            },
+        });
+        dock.dispatchEvent(backgroundDragover);
+
+        expect(backgroundDragover.defaultPrevented).toBe(false);
+
+        const dragover = new Event("dragover", {
+            bubbles: true,
+            cancelable: true,
+        });
+        const dragoverTransfer = {
+            files: [],
+            types: ["Files"],
+            dropEffect: "none",
+            getData: () => "",
+        };
+        Object.defineProperty(dragover, "dataTransfer", {
+            value: dragoverTransfer,
+        });
+        addReference.dispatchEvent(dragover);
+
+        expect(dragover.defaultPrevented).toBe(true);
+        expect(dragoverTransfer.dropEffect).toBe("copy");
+        expect(addReference.classList).toContain("vst-file-drop-hover");
+
+        const event = new Event("drop", {
+            bubbles: true,
+            cancelable: true,
+        });
+        Object.defineProperty(event, "dataTransfer", {
+            value: {
+                files: [
+                    new File(["png"], "first.png", { type: "image/png" }),
+                    new File(["webp"], "second.webp", {
+                        type: "image/webp",
+                    }),
+                ],
+                dropEffect: "none",
+                getData: () => "",
+            },
+        });
+
+        addReference.dispatchEvent(event);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(addReference.classList).not.toContain("vst-file-drop-hover");
+        expect(
+            committedClips()[0].references.map((reference) => ({
+                kind: reference.kind,
+                fileName: reference.uploadedMedia?.fileName,
+            })),
+        ).toEqual([
+            { kind: "image", fileName: "first.png" },
+            { kind: "image", fileName: "second.webp" },
+        ]);
+        expect(getSelection()).toEqual({
+            kind: "clip-ref",
+            clipIdx: 0,
+            referenceIdx: 1,
+        });
+        expect(h.refreshSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("drops clip references onto the right clip from a boundary-reference view", async () => {
+        const catalog = testArchitectureCatalog();
+        catalog.architectures[0].capabilities = testArchitectureCapabilities({
+            features: [
+                ...catalog.architectures[0].capabilities.features,
+                "clipReferences",
+            ],
+        });
+        const constraints =
+            catalog.architectures[0].boundaryRules.continue.constraints;
+        if (!constraints) {
+            throw new Error("continue constraints missing");
+        }
+        constraints.continueMode = "reference";
+        constraints.continuityExtraFrames = 0;
+        resetArchitectureCatalogForTests();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(catalog),
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        const body = h.setup([
+            { duration: 4, boundaryOut: "continue", stages: [{}] },
+            { duration: 4, stages: [{}], references: [] },
+        ]);
+        setSelection({ kind: "boundary-ref", leftClipIdx: 0 });
+        const addReference = dockHost(body).querySelector<HTMLButtonElement>(
+            ".vst-detail-add-clip-ref",
+        );
+        if (!addReference) {
+            throw new Error("add reference button missing");
+        }
+        const drop = new Event("drop", {
+            bubbles: true,
+            cancelable: true,
+        });
+        Object.defineProperty(drop, "dataTransfer", {
+            value: {
+                files: [
+                    new File(["png"], "boundary.png", {
+                        type: "image/png",
+                    }),
+                ],
+                types: ["Files"],
+                dropEffect: "none",
+                getData: () => "",
+            },
+        });
+
+        addReference.dispatchEvent(drop);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        expect(drop.defaultPrevented).toBe(true);
+        expect(committedClips()[0].references).toHaveLength(0);
+        expect(committedClips()[1].references[0].uploadedMedia?.fileName).toBe(
+            "boundary.png",
+        );
+    });
+
+    it("creates forced-image keyframes for every file in a dropped folder", async () => {
+        const body = h.setup([{ duration: 4, stages: [{}], frameRefs: [] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        h.refreshSpy.mockClear();
+        const addKeyframe = dockHost(body).querySelector<HTMLButtonElement>(
+            ".vst-detail-add-ref",
+        );
+        if (!addKeyframe) {
+            throw new Error("add keyframe button missing");
+        }
+        const video = new File(["video"], "first.mp4", {
+            type: "video/mp4",
+        });
+        const audio = new File(["audio"], "second.wav", {
+            type: "audio/wav",
+        });
+        const fileEntry = (file: File) => ({
+            isFile: true,
+            isDirectory: false,
+            file: (accept: (picked: File) => void) => accept(file),
+        });
+        let nestedRead = false;
+        const nestedFolder = {
+            isFile: false,
+            isDirectory: true,
+            createReader: () => ({
+                readEntries: (accept: (entries: unknown[]) => void) => {
+                    accept(nestedRead ? [] : [fileEntry(audio)]);
+                    nestedRead = true;
+                },
+            }),
+        };
+        let rootRead = false;
+        const folder = {
+            isFile: false,
+            isDirectory: true,
+            createReader: () => ({
+                readEntries: (accept: (entries: unknown[]) => void) => {
+                    accept(rootRead ? [] : [fileEntry(video), nestedFolder]);
+                    rootRead = true;
+                },
+            }),
+        };
+        const transfer = {
+            files: [],
+            items: [
+                {
+                    kind: "file",
+                    getAsFile: () => null,
+                    webkitGetAsEntry: () => folder,
+                },
+            ],
+            types: ["Files"],
+            dropEffect: "none",
+            getData: () => "",
+        };
+        const dragover = new Event("dragover", {
+            bubbles: true,
+            cancelable: true,
+        });
+        Object.defineProperty(dragover, "dataTransfer", { value: transfer });
+        addKeyframe.dispatchEvent(dragover);
+
+        expect(addKeyframe.classList).toContain("vst-file-drop-hover");
+
+        const drop = new Event("drop", {
+            bubbles: true,
+            cancelable: true,
+        });
+        Object.defineProperty(drop, "dataTransfer", { value: transfer });
+        addKeyframe.dispatchEvent(drop);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        expect(
+            committedClips()[0].frameRefs.map((reference) => ({
+                source: reference.source,
+                fileName: reference.uploadedImage?.fileName,
+                data: reference.uploadedImage?.data,
+            })),
+        ).toEqual([
+            {
+                source: "Upload",
+                fileName: "first.mp4",
+                data: expect.stringMatching(/^data:video\/mp4;base64,/),
+            },
+            {
+                source: "Upload",
+                fileName: "second.wav",
+                data: expect.stringMatching(/^data:audio\/wav;base64,/),
+            },
+        ]);
+        expect(getSelection()).toEqual({
+            kind: "ref",
+            clipIdx: 0,
+            refIdx: 1,
+        });
+        expect(h.refreshSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports keyframe files that exceed the available positions", async () => {
+        const catalog = testArchitectureCatalog();
+        catalog.entries[0].enhancements = { referencePositions: ["first"] };
+        const showError = jest.fn();
+        resetArchitectureCatalogForTests();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(catalog),
+            showError,
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        const body = h.setup([{ duration: 4, stages: [{}], frameRefs: [] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        const addKeyframe = dockHost(body).querySelector<HTMLButtonElement>(
+            ".vst-detail-add-ref",
+        );
+        if (!addKeyframe) {
+            throw new Error("add keyframe button missing");
+        }
+        const drop = new Event("drop", {
+            bubbles: true,
+            cancelable: true,
+        });
+        Object.defineProperty(drop, "dataTransfer", {
+            value: {
+                files: [
+                    new File(["a"], "first.png", { type: "image/png" }),
+                    new File(["b"], "extra.png", { type: "image/png" }),
+                ],
+                types: ["Files"],
+                dropEffect: "none",
+                getData: () => "",
+            },
+        });
+
+        addKeyframe.dispatchEvent(drop);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        expect(committedClips()[0].frameRefs).toHaveLength(1);
+        expect(showError).toHaveBeenCalledWith(
+            expect.stringMatching(/Added 1 of 2 keyframes/),
+        );
+    });
+
     it("renders the clip/stage columns when a stage chip is clicked", () => {
         const body = h.setup([{ duration: 4, stages: [{}, {}] }]);
         clickRegionStageChip(body, 0, 1);
