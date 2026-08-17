@@ -19,12 +19,16 @@ afterEach(() => {
     setVideoStagesHostBridgeForTests(null);
     const globals = globalThis as typeof globalThis & {
         copyText?: unknown;
+        currentMetadataVal?: unknown;
+        getImageFullSrc?: unknown;
         mainGenHandler?: unknown;
         genericRequest?: unknown;
         registerMediaButton?: unknown;
         showError?: unknown;
     };
     Reflect.deleteProperty(globals, "copyText");
+    Reflect.deleteProperty(globals, "currentMetadataVal");
+    Reflect.deleteProperty(globals, "getImageFullSrc");
     delete globals.mainGenHandler;
     Reflect.deleteProperty(globals, "genericRequest");
     Reflect.deleteProperty(globals, "registerMediaButton");
@@ -161,6 +165,74 @@ describe("VideoStagesHostBridge compatibility facades", () => {
         document.body.innerHTML =
             '<img id="current_image_img" data-src="/Output/still.png">';
         expect(bridge.getCurrentVideoSource()).toBeNull();
+    });
+
+    it("reads metadata from the media matching the selected source", async () => {
+        const globals = globalThis as typeof globalThis & {
+            currentMetadataVal?: string;
+        };
+        globals.currentMetadataVal = "stale metadata";
+        document.body.innerHTML = `
+            <video id="current_image_img"
+                data-src="/Output/older.mp4"
+                data-metadata="older metadata"></video>
+            <div class="image-block"
+                data-src="/Output/selected.mp4"
+                data-metadata="selected metadata"></div>`;
+
+        const metadata =
+            await createDefaultVideoStagesHostBridge().getMediaMetadata(
+                "/Output/selected.mp4",
+            );
+
+        expect(metadata).toBe("selected metadata");
+    });
+
+    it("loads metadata for an unselected history source", async () => {
+        const getImageFullSrc = jest.fn(() => "raw/2026-08-16/selected.mp4");
+        const genericRequest = jest.fn(
+            (
+                url: string,
+                data: Record<string, unknown>,
+                callback: (response: unknown) => void,
+            ) => {
+                expect(url).toBe("ListImages");
+                expect(data).toEqual({
+                    path: "raw/2026-08-16",
+                    depth: 0,
+                    sortBy: "Name",
+                    sortReverse: false,
+                });
+                callback({
+                    files: [
+                        {
+                            src: "selected.mp4",
+                            metadata: "selected metadata",
+                        },
+                    ],
+                });
+            },
+        );
+        const globals = globalThis as typeof globalThis & {
+            currentMetadataVal?: string;
+            genericRequest?: typeof genericRequest;
+            getImageFullSrc?: typeof getImageFullSrc;
+        };
+        globals.currentMetadataVal = "stale metadata";
+        globals.genericRequest = genericRequest;
+        globals.getImageFullSrc = getImageFullSrc;
+        document.body.innerHTML = `
+            <video id="current_image_img"
+                data-src="/View/output/raw/2026-08-16/selected.mp4"
+                data-metadata="stale metadata"></video>`;
+
+        const metadata =
+            await createDefaultVideoStagesHostBridge().getMediaMetadata(
+                "/View/output/raw/2026-08-16/selected.mp4",
+            );
+
+        expect(metadata).toBe("selected metadata");
+        expect(genericRequest).toHaveBeenCalledTimes(1);
     });
 
     it("loads and saves collected overrides without generating", async () => {

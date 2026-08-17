@@ -6,6 +6,8 @@ import { roundToTenth } from "./utils";
 export interface InitVideoProbe {
     durationSeconds: number;
     fps: number | null;
+    width: number | null;
+    height: number | null;
 }
 
 export const initVideoFromProbe = (
@@ -111,9 +113,13 @@ export const probeInitVideo = (
         timeoutMs,
         null,
         (video, durationSeconds, finish) => {
+            const dimensions = {
+                width: video.videoWidth > 0 ? video.videoWidth : null,
+                height: video.videoHeight > 0 ? video.videoHeight : null,
+            };
             const requestFrame = video.requestVideoFrameCallback?.bind(video);
             if (!requestFrame) {
-                finish({ durationSeconds, fps: null });
+                finish({ durationSeconds, fps: null, ...dimensions });
                 return;
             }
             const mediaTimes: number[] = [];
@@ -129,13 +135,18 @@ export const probeInitVideo = (
                     finish({
                         durationSeconds,
                         fps: estimateFpsFromMediaTimes(mediaTimes),
+                        ...dimensions,
                     });
                     return;
                 }
                 requestFrame(step);
             };
             requestFrame(step);
-            video.play()?.catch(() => finish({ durationSeconds, fps: null }));
+            video
+                .play()
+                ?.catch(() =>
+                    finish({ durationSeconds, fps: null, ...dimensions }),
+                );
         },
     );
 

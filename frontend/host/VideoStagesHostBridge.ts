@@ -47,7 +47,7 @@ export interface VideoStagesHostBridge {
         description: string,
     ): void;
     getCurrentVideoSource(): string | null;
-    getCurrentMediaMetadata(): string | null;
+    getMediaMetadata(src: string): Promise<string | null>;
     interpretMediaMetadata(metadata: string): string | null;
     showError(message: string): void;
     toDataUrl(src: string): Promise<string>;

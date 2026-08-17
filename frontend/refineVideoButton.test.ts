@@ -14,7 +14,7 @@ import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import { __resetPersistenceForTests } from "./persistence/repository";
 import {
-    applyRefineToClipZero,
+    applyRefineToClip,
     hasRefinementWorkToDo,
     refineNeedsExtraStageMessage,
     refineVideoButton,
@@ -29,6 +29,59 @@ const makeConfig = (clips: Clip[]): AuthoringDocument => ({
     clips,
 });
 
+const captureRefinePayload = (
+    sourceVideostages: string,
+    sourceDimensions?: { width: number; height: number },
+): {
+    select: (src: string) => void;
+    generated: Promise<Record<string, unknown>>;
+} => {
+    const callbacks: ((src: string) => void)[] = [];
+    let resolveGenerated: ((value: Record<string, unknown>) => void) | null =
+        null;
+    const generated = new Promise<Record<string, unknown>>((resolve) => {
+        resolveGenerated = resolve;
+    });
+    const base = createDefaultVideoStagesHostBridge();
+    setVideoStagesHostBridgeForTests({
+        ...base,
+        registerRefineVideoButton: (callback) => {
+            callbacks.push(callback);
+        },
+        getMediaMetadata: async () =>
+            JSON.stringify({
+                sui_image_params: { videostages: sourceVideostages },
+            }),
+        interpretMediaMetadata: (metadata) => metadata,
+        toDataUrl: async () => "data:video/mp4;base64,AA==",
+        createInitVideoElement: () => {
+            const video = document.createElement("video");
+            video.pause = jest.fn();
+            video.load = jest.fn();
+            if (sourceDimensions) {
+                Object.defineProperties(video, {
+                    duration: { value: 5.4 },
+                    videoWidth: { value: sourceDimensions.width },
+                    videoHeight: { value: sourceDimensions.height },
+                });
+                queueMicrotask(() =>
+                    video.dispatchEvent(new Event("loadedmetadata")),
+                );
+            } else {
+                queueMicrotask(() => video.dispatchEvent(new Event("error")));
+            }
+            return video;
+        },
+        showError: (message) => resolveGenerated?.({ error: message }),
+        generate: (overrides) => resolveGenerated?.(overrides),
+    });
+    refineVideoButton();
+    return {
+        select: (src) => callbacks[0](src),
+        generated,
+    };
+};
+
 afterEach(() => {
     __resetPersistenceForTests();
     setVideoStagesHostBridgeForTests(null);
@@ -36,10 +89,13 @@ afterEach(() => {
 });
 
 describe("hasRefinementWorkToDo", () => {
-    it("only ever asks for stage 1", () => {
-        expect(refineNeedsExtraStageMessage()).toContain("Stage 1 defined");
-        expect(refineNeedsExtraStageMessage()).toContain("another clip");
-        expect(refineNeedsExtraStageMessage()).not.toContain("Stage 2");
+    it("explains where more refinement work is needed", () => {
+        expect(refineNeedsExtraStageMessage()).toContain(
+            "another stage or clip",
+        );
+        expect(refineNeedsExtraStageMessage()).toContain(
+            "last completed stage",
+        );
     });
 
     it("returns false when VideoStages group is disabled", () => {
@@ -126,13 +182,20 @@ describe("hasRefinementWorkToDo", () => {
     });
 });
 
-describe("applyRefineToClipZero", () => {
+describe("applyRefineToClip", () => {
     it("installs the probed video as the clip source", () => {
         const clip = minimalClip({ stages: [minimalStage(), minimalStage()] });
-        applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", {
-            durationSeconds: 3.5,
-            fps: 24,
-        });
+        applyRefineToClip(
+            clip,
+            "data:video/mp4;base64,AA==",
+            {
+                durationSeconds: 3.5,
+                fps: 24,
+                width: 640,
+                height: 960,
+            },
+            1,
+        );
         expect(clip.initVideo).toEqual({
             source: "Upload",
             data: "data:video/mp4;base64,AA==",
@@ -160,7 +223,7 @@ describe("applyRefineToClipZero", () => {
             stages: [minimalStage(), minimalStage()],
         });
 
-        applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", null);
+        applyRefineToClip(clip, "data:video/mp4;base64,AA==", null, 1);
 
         expect(clip).toMatchObject({
             audioSource: "Upload",
@@ -175,18 +238,25 @@ describe("applyRefineToClipZero", () => {
 
     it("falls back to the authored clip duration when the probe reports none", () => {
         const clip = minimalClip({ duration: 7, stages: [minimalStage()] });
-        applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", null);
+        applyRefineToClip(clip, "data:video/mp4;base64,AA==", null, 1);
         expect(clip.initVideo?.lengthSeconds).toBe(7);
     });
 
-    it("passes through stage 0 and leaves later stages runnable", () => {
+    it("passes through stage 0 without changing later controls", () => {
         const clip = minimalClip({
             stages: [minimalStage(), minimalStage(), minimalStage()],
         });
-        applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", {
-            durationSeconds: 2,
-            fps: 24,
-        });
+        applyRefineToClip(
+            clip,
+            "data:video/mp4;base64,AA==",
+            {
+                durationSeconds: 2,
+                fps: 24,
+                width: 640,
+                height: 960,
+            },
+            1,
+        );
         expect(clip.stages.map((stage) => stage.control)).toEqual([0, 1, 1]);
     });
 
@@ -194,10 +264,17 @@ describe("applyRefineToClipZero", () => {
         const clip = minimalClip({
             stages: [minimalStage(), minimalStage({ skipped: true })],
         });
-        applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", {
-            durationSeconds: 2,
-            fps: 24,
-        });
+        applyRefineToClip(
+            clip,
+            "data:video/mp4;base64,AA==",
+            {
+                durationSeconds: 2,
+                fps: 24,
+                width: 640,
+                height: 960,
+            },
+            1,
+        );
         expect(clip.stages.map((stage) => stage.skipped)).toEqual([
             false,
             false,
@@ -205,7 +282,7 @@ describe("applyRefineToClipZero", () => {
         expect(clip.stages.map((stage) => stage.control)).toEqual([0, 1]);
     });
 
-    it("repairs the inactive suffix when stage 1 is selected", () => {
+    it("activates the remaining stage suffix from stage 1", () => {
         const clip = minimalClip({
             stages: [
                 minimalStage(),
@@ -213,7 +290,7 @@ describe("applyRefineToClipZero", () => {
                 minimalStage({ skipped: true }),
             ],
         });
-        applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", null);
+        applyRefineToClip(clip, "data:video/mp4;base64,AA==", null, 1);
         expect(clip.stages.map((stage) => stage.skipped)).toEqual([
             false,
             false,
@@ -225,7 +302,7 @@ describe("applyRefineToClipZero", () => {
         const clip = minimalClip({
             stages: [minimalStage(), minimalStage({ control: 0.4 })],
         });
-        applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", null);
+        applyRefineToClip(clip, "data:video/mp4;base64,AA==", null, 1);
         expect(clip.stages.map((stage) => stage.control)).toEqual([0, 0.4]);
     });
 
@@ -237,7 +314,7 @@ describe("applyRefineToClipZero", () => {
                 minimalStage({ control: 0.7 }),
             ],
         });
-        applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", null);
+        applyRefineToClip(clip, "data:video/mp4;base64,AA==", null, 1);
         expect(clip.stages.map((stage) => stage.control)).toEqual([
             0, 0.4, 0.7,
         ]);
@@ -245,7 +322,7 @@ describe("applyRefineToClipZero", () => {
 
     it("handles a document that only defines stage 0", () => {
         const clip = minimalClip({ stages: [minimalStage()] });
-        applyRefineToClipZero(clip, "data:video/mp4;base64,AA==", null);
+        applyRefineToClip(clip, "data:video/mp4;base64,AA==", null, 1);
         expect(clip.stages).toMatchObject([{ skipped: false, control: 0 }]);
     });
 });
@@ -326,7 +403,7 @@ describe("refineVideoButton", () => {
         setVideoStagesHostBridgeForTests({
             ...base,
             registerRefineVideoButton: jest.fn(),
-            getCurrentMediaMetadata: () =>
+            getMediaMetadata: async () =>
                 JSON.stringify({
                     sui_image_params: {
                         prompt: "selected result prompt",
@@ -391,6 +468,11 @@ describe("refineVideoButton", () => {
                     }),
                     stages: [minimalStage({ control: 0.5, upscale: 2 })],
                 }),
+                minimalClip({
+                    id: "later-clip",
+                    skipped: true,
+                    stages: [minimalStage()],
+                }),
             ]),
         );
         mountPromptBox("current panel prompt");
@@ -411,7 +493,7 @@ describe("refineVideoButton", () => {
             registerRefineVideoButton: (callback) => {
                 callbacks.push(callback);
             },
-            getCurrentMediaMetadata: () =>
+            getMediaMetadata: async () =>
                 JSON.stringify({ sui_image_params: {} }),
             interpretMediaMetadata: (metadata) => metadata,
             toDataUrl: async () => "data:video/mp4;base64,AA==",
@@ -433,7 +515,7 @@ describe("refineVideoButton", () => {
         const refinedDocument = JSON.parse(
             String(overrides.videostages),
         ) as AuthoringDocument;
-        expect(refinedDocument.clips).toHaveLength(1);
+        expect(refinedDocument.clips).toHaveLength(2);
         expect(refinedDocument.clips[0]).toMatchObject({
             id: "refinement-clip",
             initVideo: {
@@ -443,19 +525,229 @@ describe("refineVideoButton", () => {
             },
             stages: [{ skipped: false, control: 0.5, upscale: 2 }],
         });
+        expect(refinedDocument.clips[1]).toMatchObject({
+            id: "later-clip",
+            skipped: true,
+        });
+    });
+
+    it("continues after the source video's last completed clip and stage", async () => {
+        mountVideoStagesData(
+            makeConfig([
+                minimalClip({
+                    id: "clip-0",
+                    stages: [minimalStage({ id: "stage-0-0" })],
+                }),
+                minimalClip({
+                    id: "clip-1",
+                    stages: [
+                        minimalStage({ id: "stage-1-0", upscale: 2 }),
+                        minimalStage({ id: "stage-1-1", upscale: 1.5 }),
+                        minimalStage({ id: "stage-1-2", control: 0.6 }),
+                    ],
+                }),
+                minimalClip({
+                    id: "clip-2",
+                    skipped: false,
+                    stages: [minimalStage({ id: "stage-2-0" })],
+                }),
+            ]),
+        );
+        mountPromptBox("current panel prompt");
+        mountCheckbox("input_group_content_videostages_toggle", {
+            checked: true,
+        });
+
+        const sourceVideostages = JSON.stringify({
+            schemaVersion: 7,
+            clips: [
+                {
+                    id: "clip-0",
+                    skipped: false,
+                    stages: [{ id: "stage-0-0", skipped: false }],
+                },
+                {
+                    id: "clip-1",
+                    skipped: false,
+                    stages: [
+                        { id: "stage-1-0", skipped: false },
+                        { id: "stage-1-1", skipped: false },
+                        { id: "stage-1-2", skipped: true },
+                    ],
+                },
+                {
+                    id: "clip-2",
+                    skipped: true,
+                    stages: [{ id: "stage-2-0", skipped: false }],
+                },
+            ],
+        });
+        const { select, generated } = captureRefinePayload(sourceVideostages);
+        select("source.mp4");
+
+        const overrides = await generated;
+        const refinedDocument = JSON.parse(
+            String(overrides.videostages),
+        ) as AuthoringDocument;
+        expect(refinedDocument.clips).toHaveLength(2);
+        expect(refinedDocument.clips[0]).toMatchObject({
+            id: "clip-1",
+            initVideo: {
+                source: "Upload",
+                data: "data:video/mp4;base64,AA==",
+                fileName: "refine-source",
+            },
+            stages: [
+                {
+                    id: "stage-1-0",
+                    skipped: false,
+                    control: 0,
+                    upscale: 1,
+                },
+                {
+                    id: "stage-1-1",
+                    skipped: false,
+                    control: 0,
+                    upscale: 1,
+                },
+                { id: "stage-1-2", skipped: false, control: 0.6 },
+            ],
+        });
+        expect(refinedDocument.clips[1]).toMatchObject({
+            id: "clip-2",
+            skipped: false,
+        });
+    });
+
+    it("promotes the clip after the source video's last completed clip", async () => {
+        mountVideoStagesData(
+            makeConfig([
+                minimalClip({
+                    id: "clip-0",
+                    stages: [minimalStage({ id: "stage-0-0" })],
+                }),
+                minimalClip({
+                    id: "clip-1",
+                    stages: [minimalStage({ id: "stage-1-0" })],
+                }),
+                minimalClip({
+                    id: "clip-2",
+                    skipped: true,
+                    stages: [minimalStage({ id: "stage-2-0", control: 0.7 })],
+                }),
+            ]),
+        );
+        mountPromptBox("current panel prompt");
+        mountCheckbox("input_group_content_videostages_toggle", {
+            checked: true,
+        });
+
+        const sourceVideostages = JSON.stringify({
+            schemaVersion: 7,
+            clips: [
+                {
+                    id: "clip-1",
+                    skipped: false,
+                    stages: [{ id: "stage-1-0", skipped: false }],
+                },
+                {
+                    id: "clip-2",
+                    skipped: true,
+                    stages: [{ id: "stage-2-0", skipped: false }],
+                },
+            ],
+        });
+        const { select, generated } = captureRefinePayload(sourceVideostages, {
+            width: 1024,
+            height: 1664,
+        });
+        select("source.mp4");
+
+        const overrides = await generated;
+        const refinedDocument = JSON.parse(
+            String(overrides.videostages),
+        ) as AuthoringDocument;
+        expect(overrides).not.toHaveProperty("width");
+        expect(overrides).not.toHaveProperty("height");
+        expect(refinedDocument).toMatchObject({ width: 1024, height: 1664 });
+        expect(refinedDocument.clips).toHaveLength(1);
+        expect(refinedDocument.clips[0]).toMatchObject({
+            id: "clip-2",
+            skipped: false,
+            initVideo: {
+                source: "Upload",
+                data: "data:video/mp4;base64,AA==",
+                fileName: "refine-source",
+            },
+            stages: [{ id: "stage-2-0", skipped: false, control: 0.5 }],
+        });
+    });
+
+    it("reports when the source video completed the last defined stage", async () => {
+        mountVideoStagesData(
+            makeConfig([
+                minimalClip({
+                    stages: [minimalStage(), minimalStage()],
+                }),
+            ]),
+        );
+        mountPromptBox("current panel prompt");
+        mountCheckbox("input_group_content_videostages_toggle", {
+            checked: true,
+        });
+
+        const sourceVideostages = JSON.stringify({
+            clips: [
+                {
+                    stages: [{ skipped: false }, { skipped: false }],
+                },
+            ],
+        });
+        const { select, generated } = captureRefinePayload(sourceVideostages);
+        select("source.mp4");
+
+        await expect(generated).resolves.toEqual({
+            error: refineNeedsExtraStageMessage(),
+        });
+    });
+
+    it("rejects source metadata that does not match the current timeline", async () => {
+        jest.spyOn(console, "error").mockImplementation(() => undefined);
+        mountVideoStagesData(
+            makeConfig([
+                minimalClip({
+                    id: "current-clip",
+                    stages: [
+                        minimalStage({ id: "current-stage-0" }),
+                        minimalStage({ id: "current-stage-1" }),
+                    ],
+                }),
+            ]),
+        );
+        mountPromptBox("current panel prompt");
+        mountCheckbox("input_group_content_videostages_toggle", {
+            checked: true,
+        });
+
+        const sourceVideostages = JSON.stringify({
+            clips: [
+                {
+                    id: "source-clip",
+                    stages: [{ id: "source-stage", skipped: false }],
+                },
+            ],
+        });
+        const { select, generated } = captureRefinePayload(sourceVideostages);
+        select("source.mp4");
+
+        await expect(generated).resolves.toEqual({
+            error: expect.stringContaining(
+                "does not match the current timeline",
+            ),
+        });
     });
 
     it.each([
-        [
-            "two active source stages",
-            JSON.stringify({
-                clips: [
-                    {
-                        stages: [{ skipped: false }, { skipped: false }],
-                    },
-                ],
-            }),
-        ],
         [
             "one active source stage",
             JSON.stringify({
@@ -518,7 +810,7 @@ describe("refineVideoButton", () => {
             registerRefineVideoButton: (callback) => {
                 callbacks.push(callback);
             },
-            getCurrentMediaMetadata: () => JSON.stringify(sourceMetadata),
+            getMediaMetadata: async () => JSON.stringify(sourceMetadata),
             interpretMediaMetadata: (metadata) => metadata,
             toDataUrl: async () => "data:video/mp4;base64,AA==",
             createInitVideoElement: () => {

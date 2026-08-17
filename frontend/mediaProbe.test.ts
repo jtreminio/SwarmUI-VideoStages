@@ -1,5 +1,7 @@
-import { describe, expect, it } from "@jest/globals";
-import { estimateFpsFromMediaTimes } from "./mediaProbe";
+import { afterEach, describe, expect, it, jest } from "@jest/globals";
+import { setVideoStagesHostBridgeForTests } from "./host";
+import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
+import { estimateFpsFromMediaTimes, probeInitVideo } from "./mediaProbe";
 
 const uniformTimes = (fps: number, count: number): number[] =>
     Array.from({ length: count }, (_, i) => i / fps);
@@ -30,5 +32,39 @@ describe("estimateFpsFromMediaTimes", () => {
         expect(estimateFpsFromMediaTimes([])).toBeNull();
         expect(estimateFpsFromMediaTimes(uniformTimes(24, 4))).toBeNull();
         expect(estimateFpsFromMediaTimes(uniformTimes(1500, 12))).toBeNull();
+    });
+});
+
+describe("probeInitVideo", () => {
+    afterEach(() => setVideoStagesHostBridgeForTests(null));
+
+    it("reports the source video's pixel dimensions", async () => {
+        const video = document.createElement("video");
+        Object.defineProperties(video, {
+            duration: { value: 5.4 },
+            videoWidth: { value: 1024 },
+            videoHeight: { value: 1664 },
+        });
+        video.pause = jest.fn();
+        video.load = jest.fn();
+        const base = createDefaultVideoStagesHostBridge();
+        setVideoStagesHostBridgeForTests({
+            ...base,
+            createInitVideoElement: () => {
+                queueMicrotask(() =>
+                    video.dispatchEvent(new Event("loadedmetadata")),
+                );
+                return video;
+            },
+        });
+
+        await expect(
+            probeInitVideo("data:video/mp4;base64,AA=="),
+        ).resolves.toEqual({
+            durationSeconds: 5.4,
+            fps: null,
+            width: 1024,
+            height: 1664,
+        });
     });
 });

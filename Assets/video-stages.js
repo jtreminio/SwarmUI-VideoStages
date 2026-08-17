@@ -210,6 +210,56 @@
       (error) => reject(error)
     );
   });
+  var pageMetadataForSource = (src) => {
+    for (const element of document.querySelectorAll(
+      "[data-src][data-metadata]"
+    )) {
+      const metadata = element.dataset.metadata;
+      if (element.dataset.src === src && metadata && metadata !== "{}") {
+        return metadata;
+      }
+    }
+    return null;
+  };
+  var currentMetadataForSource = (src) => {
+    const media = document.getElementById("current_image_img");
+    return media instanceof HTMLElement && media.dataset.src === src && typeof currentMetadataVal === "string" ? currentMetadataVal : null;
+  };
+  var historyMetadataForSource = async (src) => {
+    if (/^(?:blob|data):/i.test(src) || typeof getImageFullSrc !== "function") {
+      return null;
+    }
+    const path = getImageFullSrc(src);
+    const separator = path.lastIndexOf("/");
+    const folder = separator < 0 ? "" : path.slice(0, separator);
+    const fileName = separator < 0 ? path : path.slice(separator + 1);
+    if (!fileName) {
+      return null;
+    }
+    const response = await requestJson("ListImages", {
+      path: folder,
+      depth: 0,
+      sortBy: "Name",
+      sortReverse: false
+    });
+    if (!isRecord(response) || !Array.isArray(response.files)) {
+      return null;
+    }
+    const file = response.files.find(
+      (entry) => isRecord(entry) && (entry.src === fileName || entry.name === fileName)
+    );
+    return isRecord(file) && typeof file.metadata === "string" ? file.metadata : null;
+  };
+  var metadataForSource = async (src) => {
+    try {
+      const historyMetadata = await historyMetadataForSource(src);
+      if (historyMetadata) {
+        return historyMetadata;
+      }
+    } catch {
+    }
+    return pageMetadataForSource(src) ?? currentMetadataForSource(src);
+  };
   var collectGenerationInput = (inputOverrides) => {
     if (typeof mainGenHandler === "undefined" || typeof mainGenHandler?.getGenInput !== "function") {
       throw new Error("Swarm generation input collection is unavailable.");
@@ -348,7 +398,7 @@
       const media = document.getElementById("current_image_img");
       return media instanceof HTMLVideoElement && media.dataset.src ? media.dataset.src : null;
     },
-    getCurrentMediaMetadata: () => typeof currentMetadataVal === "string" ? currentMetadataVal : null,
+    getMediaMetadata: metadataForSource,
     interpretMediaMetadata: (metadata) => typeof interpretMetadata === "function" ? interpretMetadata(metadata) : metadata,
     showError: (message) => {
       if (typeof showError === "function") {
@@ -2412,9 +2462,13 @@
     timeoutMs,
     null,
     (video, durationSeconds, finish2) => {
+      const dimensions = {
+        width: video.videoWidth > 0 ? video.videoWidth : null,
+        height: video.videoHeight > 0 ? video.videoHeight : null
+      };
       const requestFrame = video.requestVideoFrameCallback?.bind(video);
       if (!requestFrame) {
-        finish2({ durationSeconds, fps: null });
+        finish2({ durationSeconds, fps: null, ...dimensions });
         return;
       }
       const mediaTimes = [];
@@ -2423,14 +2477,17 @@
         if (mediaTimes.length >= FPS_SAMPLE_FRAMES || metadata.mediaTime >= durationSeconds) {
           finish2({
             durationSeconds,
-            fps: estimateFpsFromMediaTimes(mediaTimes)
+            fps: estimateFpsFromMediaTimes(mediaTimes),
+            ...dimensions
           });
           return;
         }
         requestFrame(step);
       };
       requestFrame(step);
-      video.play()?.catch(() => finish2({ durationSeconds, fps: null }));
+      video.play()?.catch(
+        () => finish2({ durationSeconds, fps: null, ...dimensions })
+      );
     }
   );
   var probeMediaDurationSeconds = (src, timeoutMs = 8e3) => withProbedMedia(
@@ -6381,16 +6438,100 @@
     }
     return overrides;
   };
-  var refineNeedsExtraStageMessage = () => `Refine Video needs either Clip 0 to have Stage ${REFINE_STAGE_INDEX} defined (active or inactive), or another clip in the timeline. Add a stage or clip in the VideoStages panel, then click Refine Video again.`;
-  var hasRefinementWorkToDo = (state, enabled) => {
-    if (!enabled) {
-      return false;
+  var refineNeedsExtraStageMessage = () => `Refine Video needs another stage or clip in the current timeline. Add one after the source video's last completed stage, then click Refine Video again.`;
+  var refineSourceMismatchMessage = () => `Refine Video source metadata does not match the current timeline. Restore the timeline that generated this video, then click Refine Video again.`;
+  var entityId = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
+  var lastCompletedSourceStage = (serialized) => {
+    let parsed = serialized;
+    if (typeof serialized === "string") {
+      try {
+        parsed = JSON.parse(serialized);
+      } catch {
+        return null;
+      }
     }
+    if (!isRecord(parsed) || !Array.isArray(parsed.clips)) {
+      return null;
+    }
+    let completed = null;
+    for (let clipIndex = 0; clipIndex < parsed.clips.length; clipIndex++) {
+      const clip = parsed.clips[clipIndex];
+      if (!isRecord(clip)) {
+        return null;
+      }
+      if (clip.skipped === true) {
+        break;
+      }
+      if (!Array.isArray(clip.stages)) {
+        return null;
+      }
+      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
+        const stage = clip.stages[stageIndex];
+        if (!isRecord(stage)) {
+          return null;
+        }
+        if (stage.skipped === true) {
+          break;
+        }
+        completed = {
+          clipIndex,
+          clipId: entityId(clip.id),
+          stageIndex,
+          stageId: entityId(stage.id)
+        };
+      }
+    }
+    return completed;
+  };
+  var currentCompletedStage = (state, source) => {
+    const clipIndex = source.clipId ? state.clips.findIndex((clip2) => clip2.id === source.clipId) : source.clipIndex;
+    const clip = state.clips[clipIndex];
+    if (!clip) {
+      return null;
+    }
+    const stageIndex = source.stageId ? clip.stages.findIndex((stage) => stage.id === source.stageId) : source.stageIndex;
+    return stageIndex >= 0 ? { clipIndex, stageIndex } : null;
+  };
+  var defaultRefinementTarget = (state) => {
     const clip0 = state.clips[0];
     if (!clip0 || clip0.skipped) {
-      return false;
+      return null;
     }
-    return clip0.stages.length > REFINE_STAGE_INDEX || state.clips.length > 1;
+    if (clip0.stages.length > REFINE_STAGE_INDEX) {
+      return {
+        clipIndex: 0,
+        stageIndex: REFINE_STAGE_INDEX
+      };
+    }
+    return state.clips.length > 1 ? {
+      clipIndex: 1,
+      stageIndex: 0
+    } : null;
+  };
+  var refinementTarget = (state, serializedSource) => {
+    const source = lastCompletedSourceStage(serializedSource);
+    if (!source) {
+      return defaultRefinementTarget(state);
+    }
+    const completed = currentCompletedStage(state, source);
+    if (!completed) {
+      throw new Error(refineSourceMismatchMessage());
+    }
+    const nextStageIndex = completed.stageIndex + 1;
+    if (state.clips[completed.clipIndex].stages.length > nextStageIndex) {
+      return {
+        clipIndex: completed.clipIndex,
+        stageIndex: nextStageIndex
+      };
+    }
+    const nextClipIndex = completed.clipIndex + 1;
+    return state.clips.length > nextClipIndex ? {
+      clipIndex: nextClipIndex,
+      stageIndex: 0
+    } : null;
+  };
+  var hasRefinementWorkToDo = (state, enabled, serializedSource) => {
+    return enabled && refinementTarget(state, serializedSource) !== null;
   };
   var installRefineSource = (clip, data, probe) => {
     clip.initVideo = initVideoFromProbe(
@@ -6408,19 +6549,23 @@
     clip.uploadedAudioStartSeconds = 0;
     clip.uploadedAudioLengthSeconds = 0;
   };
-  var applyRefineToClipZero = (clip, data, probe) => {
+  var applyRefineToClip = (clip, data, probe, targetStageIndex) => {
     installRefineSource(clip, data, probe);
-    if (clip.stages.length > REFINE_STAGE_INDEX) {
-      applySkipSuffix(clip.stages, REFINE_STAGE_INDEX, false);
+    if (clip.stages.length > targetStageIndex) {
+      applySkipSuffix(clip.stages, targetStageIndex, false);
     }
-    if (clip.stages[0]) {
-      clip.stages[0].control = 0;
+    for (let index = 0; index < targetStageIndex; index++) {
+      clip.stages[index].control = 0;
+      clip.stages[index].upscale = 1;
+    }
+    if (targetStageIndex > 0) {
+      clip.retake = null;
     }
   };
   var buildRefineVideoPayload = async (src) => {
     const host = getVideoStagesHostBridge();
     let parsedMetadata = null;
-    const currentMetadata = host.getCurrentMediaMetadata();
+    const currentMetadata = await host.getMediaMetadata(src);
     if (currentMetadata) {
       try {
         const readable = host.interpretMediaMetadata(currentMetadata);
@@ -6433,34 +6578,47 @@
       }
     }
     const params = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
+    const sourceVideostages = isRecord(params) ? readProp(params, "videostages") : void 0;
     const initialState = getState();
-    if (!hasRefinementWorkToDo(initialState, isVideoStagesEnabled())) {
+    if (!hasRefinementWorkToDo(
+      initialState,
+      isVideoStagesEnabled(),
+      sourceVideostages
+    )) {
       host.showError(refineNeedsExtraStageMessage());
       return null;
     }
     const videoDataUrl = await host.toDataUrl(src);
     const probe = await probeInitVideo(videoDataUrl);
     const state = getState();
-    const clipZero = state.clips[0];
-    if (!clipZero || !hasRefinementWorkToDo(state, isVideoStagesEnabled())) {
+    const target = refinementTarget(state, sourceVideostages);
+    if (!isVideoStagesEnabled() || !target) {
       host.showError(refineNeedsExtraStageMessage());
       return null;
     }
-    const bakesAceStepFunAudio = isAceStepFunAudioSource(clipZero.audioSource);
-    const refinesWithinClipZero = clipZero.stages.length > REFINE_STAGE_INDEX;
-    const clips = state.clips.slice(refinesWithinClipZero ? 0 : 1);
-    clips[0] = structuredClone(clips[0]);
-    if (refinesWithinClipZero) {
-      applyRefineToClipZero(clips[0], videoDataUrl, probe);
-    } else {
-      installRefineSource(clips[0], videoDataUrl, probe);
-    }
+    const sourceClipIndex = target.stageIndex > 0 ? target.clipIndex : target.clipIndex - 1;
+    const sourceClip = state.clips[sourceClipIndex];
+    const bakesAceStepFunAudio = isAceStepFunAudioSource(
+      sourceClip.audioSource
+    );
+    const clips = structuredClone(state.clips.slice(target.clipIndex));
+    clips[0].skipped = false;
+    applyRefineToClip(clips[0], videoDataUrl, probe, target.stageIndex);
     reconcileClipArchitectureIdentity(
       clips[0],
       captureAuthoringTransactionSnapshot().capabilities.catalog
     );
+    const sourceDimensions = probe?.width && probe.height ? {
+      width: probe.width,
+      height: probe.height,
+      dimsExplicit: true
+    } : {};
     const inputOverrides = {
-      videostages: serializeStateForStorage({ ...state, clips }),
+      videostages: serializeStateForStorage({
+        ...state,
+        ...sourceDimensions,
+        clips
+      }),
       images: 1
     };
     const sourceExtraMetadata = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_extra_data") : void 0;

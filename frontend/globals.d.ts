@@ -33,9 +33,7 @@ declare function makeSliderInput(
 ): string;
 declare function enableSlidersIn(elem: HTMLElement): void;
 declare let postParamBuildSteps: (() => void)[] | undefined;
-// Callbacks run after the host refreshes model/lora/dropdown values (the
-// refresh button in the model browsers). Unlike postParamBuildSteps, this does
-// NOT re-run our init, so we hook it to re-read the fresh dropdown options.
+// Runs after core refreshes model and LoRA options.
 declare let refreshParamsExtra: (() => unknown)[] | undefined;
 declare let currentBackendFeatureSet: string[] | undefined;
 
@@ -55,6 +53,8 @@ declare const inputBrowserHelper:
 declare function doPopover(id: string, e?: Event): void;
 
 declare let currentMetadataVal: string | null;
+
+declare function getImageFullSrc(src: string): string;
 
 declare function interpretMetadata(metadata: string | null): string | null;
 
@@ -79,12 +79,7 @@ declare const promptTabComplete:
               dataProvider: () => string[],
               insertable?: boolean,
           ) => void;
-          /**
-           * Host guard flag (prompttools.js): when true, `onInput` bails before
-           * opening the tab-complete popover. We raise it around our own
-           * programmatic prompt-box writes so a synthetic `input` event can
-           * never pop the keyboard-driven suggestion UI.
-           */
+          /** Core prompt-completion guard for programmatic prompt writes. */
           blockInput?: boolean;
       }
     | undefined;
@@ -140,7 +135,7 @@ declare const loraHelper:
     | undefined;
 
 interface Window {
-    /** When true, VideoStages frontend logs reaction points to the console (see debugLog.ts). */
+    /** Enables VideoStages reaction logging. */
     __VIDEO_STAGES_DEBUG__?: boolean;
     parameter_remaps?: Record<string, string>;
     base2editStageRegistry?: Base2EditStageRegistry;
@@ -180,7 +175,6 @@ declare class MovableGenTab {
     update(): void;
 }
 
-/** Core websocket API caller (site.js); used for DoModelDownloadWS streaming downloads. */
 declare function makeWSRequest(
     url: string,
     in_data: Record<string, unknown>,
@@ -190,5 +184,4 @@ declare function makeWSRequest(
     onOpenHandle?: ((socket: WebSocket) => void) | null,
 ): void;
 
-/** Core param refresh (genpage); re-lists models server-side and rebuilds param dropdowns. */
 declare function refreshParameterValues(callAlways?: boolean): void;

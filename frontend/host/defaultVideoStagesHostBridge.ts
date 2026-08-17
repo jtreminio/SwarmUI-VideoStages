@@ -73,6 +73,69 @@ const requestJson = (
         );
     });
 
+const pageMetadataForSource = (src: string): string | null => {
+    for (const element of document.querySelectorAll<HTMLElement>(
+        "[data-src][data-metadata]",
+    )) {
+        const metadata = element.dataset.metadata;
+        if (element.dataset.src === src && metadata && metadata !== "{}") {
+            return metadata;
+        }
+    }
+    return null;
+};
+
+const currentMetadataForSource = (src: string): string | null => {
+    const media = document.getElementById("current_image_img");
+    return media instanceof HTMLElement &&
+        media.dataset.src === src &&
+        typeof currentMetadataVal === "string"
+        ? currentMetadataVal
+        : null;
+};
+
+const historyMetadataForSource = async (
+    src: string,
+): Promise<string | null> => {
+    if (/^(?:blob|data):/i.test(src) || typeof getImageFullSrc !== "function") {
+        return null;
+    }
+    const path = getImageFullSrc(src);
+    const separator = path.lastIndexOf("/");
+    const folder = separator < 0 ? "" : path.slice(0, separator);
+    const fileName = separator < 0 ? path : path.slice(separator + 1);
+    if (!fileName) {
+        return null;
+    }
+    const response = await requestJson("ListImages", {
+        path: folder,
+        depth: 0,
+        sortBy: "Name",
+        sortReverse: false,
+    });
+    if (!isRecord(response) || !Array.isArray(response.files)) {
+        return null;
+    }
+    const file = response.files.find(
+        (entry) =>
+            isRecord(entry) &&
+            (entry.src === fileName || entry.name === fileName),
+    );
+    return isRecord(file) && typeof file.metadata === "string"
+        ? file.metadata
+        : null;
+};
+
+const metadataForSource = async (src: string): Promise<string | null> => {
+    try {
+        const historyMetadata = await historyMetadataForSource(src);
+        if (historyMetadata) {
+            return historyMetadata;
+        }
+    } catch {}
+    return pageMetadataForSource(src) ?? currentMetadataForSource(src);
+};
+
 const collectGenerationInput = (
     inputOverrides: Record<string, unknown>,
 ): Record<string, unknown> => {
@@ -297,8 +360,7 @@ export const createDefaultVideoStagesHostBridge =
                 ? media.dataset.src
                 : null;
         },
-        getCurrentMediaMetadata: () =>
-            typeof currentMetadataVal === "string" ? currentMetadataVal : null,
+        getMediaMetadata: metadataForSource,
         interpretMediaMetadata: (metadata) =>
             typeof interpretMetadata === "function"
                 ? interpretMetadata(metadata)

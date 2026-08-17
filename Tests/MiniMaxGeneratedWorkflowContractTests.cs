@@ -765,6 +765,35 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
+    [Fact]
+    public async Task Image_root_uses_explicit_timeline_dimensions_instead_of_host_media_dimensions()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+
+        JObject post = fixture.ImageToVideoPost(
+            MakeRootConfig(512, 832, clip),
+            request =>
+            {
+                request["width"] = 832;
+                request["height"] = 1216;
+            });
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(post);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        Assert.Equal(512, latent.Width.LiteralAsInt());
+        Assert.Equal(832, latent.Height.LiteralAsInt());
+        Assert.Equal(512, generator.CurrentMedia.Width);
+        Assert.Equal(832, generator.CurrentMedia.Height);
+        live.AssertLive(latent);
+        AssertShippable(bridge, workflow, live);
+    }
+
     /// <summary>
     /// The base capture (-4.2) precedes core's decode (1), so it is a latent; it must reach the
     /// keyframe chain through a VAE decode, not raw.

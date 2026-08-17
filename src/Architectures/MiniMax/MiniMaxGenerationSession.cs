@@ -1011,8 +1011,12 @@ internal sealed class MiniMaxGenerationSession(
             Frames = ResolveFrames(clip),
             VideoCFG = stage.Core.CfgScale,
             VideoFPS = plan.FramesPerSecond,
-            Width = g.CurrentMedia?.Width ?? _dimensions.Width,
-            Height = g.CurrentMedia?.Height ?? _dimensions.Height,
+            Width = UsesPlannedRootDimensions(stage)
+                ? _dimensions.Width
+                : g.CurrentMedia?.Width ?? _dimensions.Width,
+            Height = UsesPlannedRootDimensions(stage)
+                ? _dimensions.Height
+                : g.CurrentMedia?.Height ?? _dimensions.Height,
             Prompt = positive,
             NegativePrompt = negative,
             Steps = stage.Core.Steps,
@@ -1020,4 +1024,7 @@ internal sealed class MiniMaxGenerationSession(
             ContextID = sectionId,
         };
     }
+
+    private static bool UsesPlannedRootDimensions(StagePlan stage) =>
+        stage.Input is StageInputKind.RootMedia or StageInputKind.EmptyLatent;
 }

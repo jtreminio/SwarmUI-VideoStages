@@ -21,6 +21,18 @@ const COMFY_ROW_ID = "video_stages_refine_to_comfy_row";
 const COMFY_MARK_CLASS = "video-stages-refine-comfy-mark";
 const DONE_TIMEOUT_MS = 2500;
 
+interface CompletedSourceStage {
+    clipIndex: number;
+    clipId: string | null;
+    stageIndex: number;
+    stageId: string | null;
+}
+
+interface RefinementTarget {
+    clipIndex: number;
+    stageIndex: number;
+}
+
 let comfyButtonObserver: MutationObserver | null = null;
 let markTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -48,22 +60,138 @@ const resolvedPromptParameterOverrides = (
 };
 
 export const refineNeedsExtraStageMessage = (): string =>
-    `Refine Video needs either Clip 0 to have Stage ${REFINE_STAGE_INDEX} defined ` +
-    `(active or inactive), or another clip in the timeline. Add a stage or clip in the ` +
-    `VideoStages panel, then click Refine Video again.`;
+    `Refine Video needs another stage or clip in the current timeline. Add one after ` +
+    `the source video's last completed stage, then click Refine Video again.`;
+
+const refineSourceMismatchMessage = (): string =>
+    `Refine Video source metadata does not match the current timeline. Restore the ` +
+    `timeline that generated this video, then click Refine Video again.`;
+
+const entityId = (value: unknown): string | null =>
+    typeof value === "string" && value.trim() ? value.trim() : null;
+
+const lastCompletedSourceStage = (
+    serialized: unknown,
+): CompletedSourceStage | null => {
+    let parsed: unknown = serialized;
+    if (typeof serialized === "string") {
+        try {
+            parsed = JSON.parse(serialized);
+        } catch {
+            return null;
+        }
+    }
+    if (!isRecord(parsed) || !Array.isArray(parsed.clips)) {
+        return null;
+    }
+
+    let completed: CompletedSourceStage | null = null;
+    for (let clipIndex = 0; clipIndex < parsed.clips.length; clipIndex++) {
+        const clip = parsed.clips[clipIndex];
+        if (!isRecord(clip)) {
+            return null;
+        }
+        if (clip.skipped === true) {
+            break;
+        }
+        if (!Array.isArray(clip.stages)) {
+            return null;
+        }
+        for (
+            let stageIndex = 0;
+            stageIndex < clip.stages.length;
+            stageIndex++
+        ) {
+            const stage = clip.stages[stageIndex];
+            if (!isRecord(stage)) {
+                return null;
+            }
+            if (stage.skipped === true) {
+                break;
+            }
+            completed = {
+                clipIndex,
+                clipId: entityId(clip.id),
+                stageIndex,
+                stageId: entityId(stage.id),
+            };
+        }
+    }
+    return completed;
+};
+
+const currentCompletedStage = (
+    state: AuthoringDocument,
+    source: CompletedSourceStage,
+): { clipIndex: number; stageIndex: number } | null => {
+    const clipIndex = source.clipId
+        ? state.clips.findIndex((clip) => clip.id === source.clipId)
+        : source.clipIndex;
+    const clip = state.clips[clipIndex];
+    if (!clip) {
+        return null;
+    }
+    const stageIndex = source.stageId
+        ? clip.stages.findIndex((stage) => stage.id === source.stageId)
+        : source.stageIndex;
+    return stageIndex >= 0 ? { clipIndex, stageIndex } : null;
+};
+
+const defaultRefinementTarget = (
+    state: AuthoringDocument,
+): RefinementTarget | null => {
+    const clip0 = state.clips[0];
+    if (!clip0 || clip0.skipped) {
+        return null;
+    }
+    if (clip0.stages.length > REFINE_STAGE_INDEX) {
+        return {
+            clipIndex: 0,
+            stageIndex: REFINE_STAGE_INDEX,
+        };
+    }
+    return state.clips.length > 1
+        ? {
+              clipIndex: 1,
+              stageIndex: 0,
+          }
+        : null;
+};
+
+const refinementTarget = (
+    state: AuthoringDocument,
+    serializedSource: unknown,
+): RefinementTarget | null => {
+    const source = lastCompletedSourceStage(serializedSource);
+    if (!source) {
+        return defaultRefinementTarget(state);
+    }
+    const completed = currentCompletedStage(state, source);
+    if (!completed) {
+        throw new Error(refineSourceMismatchMessage());
+    }
+    const nextStageIndex = completed.stageIndex + 1;
+    if (state.clips[completed.clipIndex].stages.length > nextStageIndex) {
+        return {
+            clipIndex: completed.clipIndex,
+            stageIndex: nextStageIndex,
+        };
+    }
+    const nextClipIndex = completed.clipIndex + 1;
+    return state.clips.length > nextClipIndex
+        ? {
+              clipIndex: nextClipIndex,
+              stageIndex: 0,
+          }
+        : null;
+};
 
 export const hasRefinementWorkToDo = (
     state: AuthoringDocument,
     enabled: boolean,
+    serializedSource?: unknown,
 ): boolean => {
-    if (!enabled) {
-        return false;
-    }
-    const clip0 = state.clips[0];
-    if (!clip0 || clip0.skipped) {
-        return false;
-    }
-    return clip0.stages.length > REFINE_STAGE_INDEX || state.clips.length > 1;
+    return enabled && refinementTarget(state, serializedSource) !== null;
 };
 
 const installRefineSource = (
@@ -87,18 +215,22 @@ const installRefineSource = (
     clip.uploadedAudioLengthSeconds = 0;
 };
 
-/** Stage 0 becomes a passthrough; skipping it would truncate the refinement stages. */
-export const applyRefineToClipZero = (
+export const applyRefineToClip = (
     clip: Clip,
     data: string,
     probe: InitVideoProbe | null,
+    targetStageIndex: number,
 ): void => {
     installRefineSource(clip, data, probe);
-    if (clip.stages.length > REFINE_STAGE_INDEX) {
-        applySkipSuffix(clip.stages, REFINE_STAGE_INDEX, false);
+    if (clip.stages.length > targetStageIndex) {
+        applySkipSuffix(clip.stages, targetStageIndex, false);
     }
-    if (clip.stages[0]) {
-        clip.stages[0].control = 0;
+    for (let index = 0; index < targetStageIndex; index++) {
+        clip.stages[index].control = 0;
+        clip.stages[index].upscale = 1;
+    }
+    if (targetStageIndex > 0) {
+        clip.retake = null;
     }
 };
 
@@ -107,7 +239,7 @@ const buildRefineVideoPayload = async (
 ): Promise<Record<string, unknown> | null> => {
     const host = getVideoStagesHostBridge();
     let parsedMetadata: unknown = null;
-    const currentMetadata = host.getCurrentMediaMetadata();
+    const currentMetadata = await host.getMediaMetadata(src);
     if (currentMetadata) {
         try {
             const readable = host.interpretMediaMetadata(currentMetadata);
@@ -123,9 +255,17 @@ const buildRefineVideoPayload = async (
     const params = isRecord(parsedMetadata)
         ? readProp(parsedMetadata, "sui_image_params")
         : null;
+    const sourceVideostages = isRecord(params)
+        ? readProp(params, "videostages")
+        : undefined;
     const initialState = getState();
-
-    if (!hasRefinementWorkToDo(initialState, isVideoStagesEnabled())) {
+    if (
+        !hasRefinementWorkToDo(
+            initialState,
+            isVideoStagesEnabled(),
+            sourceVideostages,
+        )
+    ) {
         host.showError(refineNeedsExtraStageMessage());
         return null;
     }
@@ -133,29 +273,40 @@ const buildRefineVideoPayload = async (
     const videoDataUrl = await host.toDataUrl(src);
     const probe = await probeInitVideo(videoDataUrl);
     const state = getState();
-    const clipZero = state.clips[0];
-    if (!clipZero || !hasRefinementWorkToDo(state, isVideoStagesEnabled())) {
+    const target = refinementTarget(state, sourceVideostages);
+    if (!isVideoStagesEnabled() || !target) {
         host.showError(refineNeedsExtraStageMessage());
         return null;
     }
-    const bakesAceStepFunAudio = isAceStepFunAudioSource(clipZero.audioSource);
-    const refinesWithinClipZero = clipZero.stages.length > REFINE_STAGE_INDEX;
-    const clips = state.clips.slice(refinesWithinClipZero ? 0 : 1);
-    clips[0] = structuredClone(clips[0]);
-    if (refinesWithinClipZero) {
-        applyRefineToClipZero(clips[0], videoDataUrl, probe);
-    } else {
-        installRefineSource(clips[0], videoDataUrl, probe);
-    }
+    const sourceClipIndex =
+        target.stageIndex > 0 ? target.clipIndex : target.clipIndex - 1;
+    const sourceClip = state.clips[sourceClipIndex];
+    const bakesAceStepFunAudio = isAceStepFunAudioSource(
+        sourceClip.audioSource,
+    );
+    const clips = structuredClone(state.clips.slice(target.clipIndex));
+    clips[0].skipped = false;
+    applyRefineToClip(clips[0], videoDataUrl, probe, target.stageIndex);
     reconcileClipArchitectureIdentity(
         clips[0],
         captureAuthoringTransactionSnapshot().capabilities.catalog,
     );
+    const sourceDimensions =
+        probe?.width && probe.height
+            ? {
+                  width: probe.width,
+                  height: probe.height,
+                  dimsExplicit: true,
+              }
+            : {};
     const inputOverrides: Record<string, unknown> = {
-        videostages: serializeStateForStorage({ ...state, clips }),
+        videostages: serializeStateForStorage({
+            ...state,
+            ...sourceDimensions,
+            clips,
+        }),
         images: 1,
     };
-
     const sourceExtraMetadata = isRecord(parsedMetadata)
         ? readProp(parsedMetadata, "sui_extra_data")
         : undefined;
