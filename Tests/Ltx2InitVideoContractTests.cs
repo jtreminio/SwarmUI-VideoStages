@@ -182,6 +182,53 @@ public class Ltx2InitVideoContractTests
     }
 
     [Fact]
+    public async Task Previous_clip_scaling_compounds_across_refine_clips()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        JObject first = SourcedClip(fixture.Stage(
+            control: 0.5,
+            upscale: 2.0,
+            steps: 10));
+        JObject second = MakeClip(
+            ClipDuration,
+            fixture.Stage(control: 0.5, upscale: 0.75, steps: 10));
+        second["initVideo"] = new JObject
+        {
+            ["source"] = MediaSource.PreviousClip,
+            ["startSeconds"] = 0,
+        };
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            MakeDocument(first, second));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmFrameWindowNode sourceWindow = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>(),
+            window => window.StartFrame.LiteralAsInt() == StartFrame);
+        ImageScaleNode upscale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            scale => scale.Width.LiteralAsInt() == 1024
+                && scale.Height.LiteralAsInt() == 1024
+                && ReferenceEquals(scale.Image.Connection?.Node, sourceWindow));
+        ImageScaleNode downscale = Assert.Single(
+            bridge.Graph.NodesOfType<ImageScaleNode>(),
+            scale => scale.Width.LiteralAsInt() == 768
+                && scale.Height.LiteralAsInt() == 768
+                && scale.Crop.LiteralAsString() == "center"
+                && scale.Image.Connection?.Node is SwarmFrameWindowNode window
+                && window.StartFrame.LiteralAsInt() == 0);
+        Assert.True(ReachesUpstream(bridge, downscale, upscale.Id));
+        Assert.True(ReachesUpstream(
+            bridge,
+            live.FinalVideoSave().Images.Connection?.Node,
+            downscale.Id));
+
+        live.AssertAllLive(upscale, downscale);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    [Fact]
     public async Task A_sourced_clip_conforms_to_a_non_default_timeline_rate()
     {
         const int Rate = 30;

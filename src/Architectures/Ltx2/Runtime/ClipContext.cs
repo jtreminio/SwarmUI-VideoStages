@@ -19,8 +19,8 @@ internal sealed class ClipContext
         SourceVae = sourceVae;
         Dimensions = new ClipDimensionState
         {
-            Width = plan.Width,
-            Height = plan.Height
+            Width = plannedClip.InitVideo?.TargetWidth ?? plan.Width,
+            Height = plannedClip.InitVideo?.TargetHeight ?? plan.Height
         };
     }
 

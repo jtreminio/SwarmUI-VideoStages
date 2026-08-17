@@ -56,18 +56,28 @@ internal static class VideoExecutionPlanCompiler
         List<ClipPlan> clips = [];
         int totalStageCount = activeClips.Sum(clip => clip.Stages?.Count ?? 0);
         int firstStageOrdinal = 0;
+        (int Width, int Height) previousOutputDimensions =
+            (effective.Width, effective.Height);
         for (int i = 0; i < activeClips.Count; i++)
         {
+            ClipSpec activeClip = activeClips[i];
+            (int Width, int Height) inputDimensions =
+                i > 0
+                && StringUtils.Equals(
+                    activeClip.InitVideo?.Source,
+                    MediaSource.PreviousClip)
+                    ? previousOutputDimensions
+                    : (effective.Width, effective.Height);
             ClipArchitectureAssignment assignment =
-                architecturePlanning.Clips.GetValueOrDefault(activeClips[i].Id);
-            ArchitectureEntryMode entryMode = ResolveEntryMode(effective, activeClips[i]);
+                architecturePlanning.Clips.GetValueOrDefault(activeClip.Id);
+            ArchitectureEntryMode entryMode = ResolveEntryMode(effective, activeClip);
             ArchitectureClipCompilation acceptedArchitectureCompilation = null;
             if (assignment is not null
-                && !architecturePlanning.IsBlocked(activeClips[i].Id))
+                && !architecturePlanning.IsBlocked(activeClip.Id))
             {
                 IReadOnlyList<PlanDiagnostic> capabilityDiagnostics =
                     ArchitectureCapabilityValidator.Validate(
-                        activeClips[i],
+                        activeClip,
                         assignment.Architecture,
                         entryMode,
                         hasOutgoingBoundary: i < activeClips.Count - 1);
@@ -77,11 +87,11 @@ internal static class VideoExecutionPlanCompiler
                 {
                     ArchitectureClipCompilation architectureCompilation =
                         CompileArchitecture(
-                            activeClips[i],
+                            activeClip,
                             assignment,
                             new(
-                                effective.Width,
-                                effective.Height,
+                                inputDimensions.Width,
+                                inputDimensions.Height,
                                 effective.FPS,
                                 entryMode,
                                 HasPreviousClipOutput: i > 0));
@@ -93,18 +103,25 @@ internal static class VideoExecutionPlanCompiler
                     }
                 }
             }
-            clips.Add(ClipPlanCompiler.Compile(
-                activeClips[i],
+            ClipPlan clipPlan = ClipPlanCompiler.Compile(
+                activeClip,
                 new ClipPlanCompilationContext(
-                    effective.Width,
-                    effective.Height,
+                    inputDimensions.Width,
+                    inputDimensions.Height,
                     effective.FPS,
                     totalStageCount,
                     firstStageOrdinal,
                     entryMode,
                     assignment,
-                    acceptedArchitectureCompilation)));
-            firstStageOrdinal += activeClips[i].Stages?.Count ?? 0;
+                    acceptedArchitectureCompilation));
+            clips.Add(clipPlan);
+            previousOutputDimensions = acceptedArchitectureCompilation?.Payload
+                .ProjectFinalDimensions(
+                    clipPlan.Stages,
+                    inputDimensions.Width,
+                    inputDimensions.Height)
+                ?? inputDimensions;
+            firstStageOrdinal += activeClip.Stages?.Count ?? 0;
         }
         diagnostics.AddRange(ClipGeometryValidator.Validate(clips, effective.Width, effective.Height));
         BoundaryPlanningResult boundaryResult = BoundaryPlanCompiler.Compile(

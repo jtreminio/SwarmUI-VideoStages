@@ -73,7 +73,6 @@ internal sealed class StockHostVideoGenerationSession(
         {
             g.CurrentMedia = _entryMedia.InstallInitVideo(
                 context,
-                _dimensions,
                 includeSourceAudio: false);
             g.CurrentVae = null;
         }

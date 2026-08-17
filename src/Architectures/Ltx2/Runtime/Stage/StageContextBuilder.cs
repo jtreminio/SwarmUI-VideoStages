@@ -62,6 +62,7 @@ internal sealed class StageContextBuilder(
     {
         LtxAudioReuseState.PrepareReusableAudio(g, clipContext, stage);
         LtxPostVideoChain postVideoChain = claimsTextToVideoRoot
+            || stage.Input == StageInputKind.InitVideo
             ? null
             : LtxPostVideoChain.TryCapture(g, clipContext, stage);
         WGNodeData sourceMedia = claimsTextToVideoRoot
