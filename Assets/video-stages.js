@@ -4101,7 +4101,7 @@
       ),
       refFraming: "crop",
       h3AttentionWindowSeconds: 0,
-      h3TextEncoder: "default",
+      h3TextEncoder: previousClip?.h3TextEncoder ?? "default",
       audioSource: AUDIO_SOURCE_NATIVE,
       loras,
       icLoras: [],

@@ -311,6 +311,7 @@ describe("normalization", () => {
         prev.stages[0].model = "ltx-big";
         prev.stages[0].steps = 20;
         prev.stages[0].cfgScale = 4;
+        prev.h3TextEncoder = "4b";
         prev.loras = [{ name: "look" }];
         prev.stages[0].loraWeights = [0.6];
 
@@ -328,6 +329,7 @@ describe("normalization", () => {
         expect(stage.model).toBe("ltx-big");
         expect(stage.steps).toBe(20);
         expect(stage.cfgScale).toBe(4);
+        expect(clip.h3TextEncoder).toBe("4b");
         expect(clip.loras).toEqual([{ name: "look" }]);
         expect(clip.loras).not.toBe(prev.loras);
         expect(stage.loraWeights).toEqual([0.6]);
