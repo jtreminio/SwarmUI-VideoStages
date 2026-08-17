@@ -7,6 +7,18 @@ namespace VideoStages.Tests;
 public class MetadataSanitizerTests
 {
     [Fact]
+    public void StripUploadData_AddsBreakableWhitespaceBetweenJsonFields()
+    {
+        const string raw = "{\"version\":1,\"clips\":[{\"id\":\"clip-0\",\"duration\":3}]}";
+
+        string sanitized = MetadataSanitizer.StripUploadDataFromJsonParameter(raw);
+
+        Assert.Equal(
+            "{ \"version\": 1, \"clips\": [ { \"id\": \"clip-0\", \"duration\": 3 } ] }",
+            sanitized);
+    }
+
+    [Fact]
     public void StripUploadData_RemovesEmbeddedPayloads_KeepsFileNames()
     {
         string raw = new JObject
@@ -109,8 +121,6 @@ public class MetadataSanitizerTests
     [Fact]
     public void StripUploadData_TimelineAudioTrackUpload_IsStripped()
     {
-        // The sanitizer used to walk `clips` only, so every generation using a timeline-wide audio
-        // upload embedded the whole base64 payload in its output metadata.
         string raw = new JObject
         {
             ["clips"] = new JArray(),
@@ -179,9 +189,6 @@ public class MetadataSanitizerTests
     [Fact]
     public void StripUploadData_BareClipArrayRoot_IsRefusedRatherThanPublished()
     {
-        // The document envelope is always a versioned root object. The sanitizer cannot walk any
-        // other shape, so it refuses to publish it rather than emitting the base64 it exists to
-        // strip.
         string raw = new JArray
         {
             new JObject

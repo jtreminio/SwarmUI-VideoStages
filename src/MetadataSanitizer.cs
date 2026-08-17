@@ -5,8 +5,6 @@ using VideoStages.Authoring;
 
 namespace VideoStages;
 
-/// <summary>One step on the way to an upload container: a named property that is either an object
-/// hop or an array whose every element is walked.</summary>
 internal readonly record struct UploadPathStep(string Name, bool IsArray)
 {
     internal static UploadPathStep Each(string name) => new(name, IsArray: true);
@@ -14,15 +12,13 @@ internal readonly record struct UploadPathStep(string Name, bool IsArray)
     internal static UploadPathStep Into(string name) => new(name, IsArray: false);
 }
 
-/// <summary>A full document path to an upload container, rooted at the authoring document.</summary>
 internal sealed record UploadContainerPath(
     IReadOnlyList<UploadPathStep> Steps,
     string Container);
 
 internal static class MetadataSanitizer
 {
-    /// <summary>Every place an upload can hide. A container missing here is published verbatim,
-    /// so this must cover every <see cref="DocumentJson.GetEmbeddedUpload"/> call site.</summary>
+    /// Must cover every <see cref="DocumentJson.GetEmbeddedUpload"/> call site.
     private static readonly IReadOnlyList<UploadContainerPath> AllPaths =
     [
         new([UploadPathStep.Each(UploadContainers.ClipsCollection)], UploadContainers.ClipAudio),
@@ -53,10 +49,7 @@ internal static class MetadataSanitizer
             UploadContainers.ClipAudio),
     ];
 
-    /// <summary>
-    /// Published instead of a document the sanitizer could not walk. Returning the original would
-    /// publish exactly the base64 uploads this class exists to remove.
-    /// </summary>
+    /// Never fall back to the original document because it may contain base64 uploads.
     internal const string Unsanitizable =
         "{\"error\":\"VideoStages document could not be sanitized; omitted from metadata\"}";
 
@@ -85,7 +78,11 @@ internal static class MetadataSanitizer
             {
                 Walk(root, path, stepIndex: 0);
             }
-            return root.ToString(Formatting.None);
+            return string.Join(
+                " ",
+                root.ToString(Formatting.Indented)
+                    .Split('\n')
+                    .Select(line => line.Trim()));
         }
         catch (Exception ex)
         {
