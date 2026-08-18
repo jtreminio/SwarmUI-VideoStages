@@ -53,6 +53,7 @@ internal static class ClipPlanCompiler
         {
             Architecture = context.Assignment?.Architecture,
             ArchitecturePayload = architectureCompilation?.Payload,
+            UseSeedVr = clip.UseSeedVr,
         };
     }
 

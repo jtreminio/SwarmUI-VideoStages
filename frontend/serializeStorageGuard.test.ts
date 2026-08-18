@@ -71,6 +71,7 @@ const maximalClip = (): Clip =>
         boundaryOutCarryAudio: true,
         boundaryOutOverlap: 16,
         duration: 4,
+        useSeedVr: true,
         audioSource: "Native",
         loras: [{ name: "detail.safetensors" }],
         icLoras: [

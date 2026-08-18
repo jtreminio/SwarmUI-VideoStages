@@ -920,6 +920,28 @@ describe("createTimelineDetailStrip", () => {
         expect(lastSavedClips<Clip[]>(h.saveSpy)[0].duration).toBe(6);
     });
 
+    it("renders Use SeedVR below Duration and commits the clip toggle", () => {
+        h.setup([{ duration: 4, stages: [{}] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+        const duration = fieldByLabel("Duration (s)");
+        const seedVr = fieldByLabel("Use SeedVR");
+        expect(duration.nextElementSibling).toBe(seedVr);
+        const toggle = seedVr.querySelector<HTMLInputElement>(
+            'input[type="checkbox"]',
+        );
+        expect(toggle?.checked).toBe(false);
+        if (!toggle) {
+            throw new Error("SeedVR toggle missing");
+        }
+
+        toggle.checked = true;
+        toggle.dispatchEvent(new Event("change", { bubbles: true }));
+
+        expect(h.saveSpy).toHaveBeenCalledTimes(1);
+        expect(lastSavedClips<Clip[]>(h.saveSpy)[0].useSeedVr).toBe(true);
+    });
+
     it("disables the Duration field when clip length is derived from audio", () => {
         h.setup([
             {

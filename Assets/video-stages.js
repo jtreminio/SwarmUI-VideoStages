@@ -4129,6 +4129,7 @@
         Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
         defaults.fps
       ),
+      useSeedVr: false,
       refFraming: "crop",
       h3AttentionWindowSeconds: 0,
       h3TextEncoder: previousClip?.h3TextEncoder ?? "default",
@@ -4301,6 +4302,7 @@
         boundaryWindowConstraints(boundaryRule)
       ),
       duration,
+      useSeedVr: !!rawClip.useSeedVr,
       refFraming: normalizeReferenceFraming(rawClip.refFraming),
       h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
         rawClip.h3AttentionWindowSeconds
@@ -4368,6 +4370,7 @@
         boundaryOutReferenceIncludeSoundtrack: clip.boundaryOutReferenceIncludeSoundtrack,
         boundaryOutOverlap: clip.boundaryOutOverlap,
         duration: clip.duration,
+        useSeedVr: clip.useSeedVr,
         refFraming: clip.refFraming,
         h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
         h3TextEncoder: clip.h3TextEncoder,
@@ -4853,6 +4856,7 @@
       "boundaryOutReferenceIncludeSoundtrack",
       "boundaryOutOverlap",
       "duration",
+      "useSeedVr",
       "refFraming",
       "h3AttentionWindowSeconds",
       "h3TextEncoder",
@@ -12948,6 +12952,16 @@ ${slot}`;
       durationField.classList.add("vst-field-disabled");
     }
     column.appendChild(durationField);
+    column.appendChild(
+      buildCheckbox("Use SeedVR", clip.useSeedVr, (value) => {
+        context.commit((clips) => {
+          const target = clips[clipIdx];
+          if (target) {
+            target.useSeedVr = value;
+          }
+        });
+      })
+    );
     if (referenceFramingState?.visible) {
       const framing = buildOptionSelect(
         [

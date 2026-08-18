@@ -149,6 +149,7 @@ export const buildDefaultClip = (
                   Math.max(CLIP_DURATION_MIN, DEFAULT_CLIP_DURATION_SECONDS),
                   defaults.fps,
               ),
+        useSeedVr: false,
         refFraming: "crop",
         h3AttentionWindowSeconds: 0,
         h3TextEncoder: previousClip?.h3TextEncoder ?? "default",
@@ -365,6 +366,7 @@ export const normalizeClip = (
             boundaryWindowConstraints(boundaryRule),
         ),
         duration,
+        useSeedVr: !!rawClip.useSeedVr,
         refFraming: normalizeReferenceFraming(rawClip.refFraming),
         h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
             rawClip.h3AttentionWindowSeconds,

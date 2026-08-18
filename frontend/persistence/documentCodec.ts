@@ -90,6 +90,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 clip.boundaryOutReferenceIncludeSoundtrack,
             boundaryOutOverlap: clip.boundaryOutOverlap,
             duration: clip.duration,
+            useSeedVr: clip.useSeedVr,
             refFraming: clip.refFraming,
             h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
             h3TextEncoder: clip.h3TextEncoder,

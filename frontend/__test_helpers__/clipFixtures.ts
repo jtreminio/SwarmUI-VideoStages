@@ -101,6 +101,7 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     boundaryOutReferenceIncludeSoundtrack: true,
     boundaryOutOverlap: 8,
     duration: 2,
+    useSeedVr: false,
     refFraming: "crop",
     h3AttentionWindowSeconds: 0,
     h3TextEncoder: "default",

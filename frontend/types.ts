@@ -178,6 +178,7 @@ export interface Clip {
     boundaryOutReferenceIncludeSoundtrack: boolean;
     boundaryOutOverlap: number;
     duration: number;
+    useSeedVr: boolean;
     refFraming: ReferenceFraming;
     h3AttentionWindowSeconds: number;
     h3TextEncoder: H3TextEncoder;

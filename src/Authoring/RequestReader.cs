@@ -246,6 +246,10 @@ internal static class RequestReader
                 clipObject,
                 "modelProfileId")?.Trim().ToLowerInvariant(),
             AuthoredStages = ProjectAuthoredStages(rawStages),
+            UseSeedVr = DocumentJson.GetOptionalBool(
+                clipObject,
+                "useSeedVr",
+                false),
         };
     }
 

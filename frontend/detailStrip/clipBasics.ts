@@ -2,6 +2,7 @@ import type { AuthoringState } from "../architectures/policy";
 import { clipLengthReferenceIndex } from "../clipReferenceAuthoring";
 import { CLIP_DURATION_MAX, CLIP_DURATION_MIN } from "../constants";
 import {
+    buildCheckbox,
     buildField,
     buildNumber,
     buildOptionSelect,
@@ -98,6 +99,16 @@ export const buildClipColumn = (
         durationField.classList.add("vst-field-disabled");
     }
     column.appendChild(durationField);
+    column.appendChild(
+        buildCheckbox("Use SeedVR", clip.useSeedVr, (value) => {
+            context.commit((clips) => {
+                const target = clips[clipIdx];
+                if (target) {
+                    target.useSeedVr = value;
+                }
+            });
+        }),
+    );
     if (referenceFramingState?.visible) {
         const framing = buildOptionSelect(
             [

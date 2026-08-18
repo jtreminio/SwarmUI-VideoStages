@@ -323,6 +323,7 @@ describe("persistence", () => {
                     boundaryOutReferenceIncludeSoundtrack: true,
                     boundaryOutOverlap: 8,
                     duration: 3,
+                    useSeedVr: false,
                     refFraming: "crop",
                     h3AttentionWindowSeconds: 2.5,
                     h3TextEncoder: "8b",

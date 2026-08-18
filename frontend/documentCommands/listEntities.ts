@@ -119,6 +119,7 @@ const CLIP_ENTITY = defineList<CanonicalAuthoringDocument, CanonicalClip>()({
         "boundaryOutReferenceIncludeSoundtrack",
         "boundaryOutOverlap",
         "duration",
+        "useSeedVr",
         "refFraming",
         "h3AttentionWindowSeconds",
         "h3TextEncoder",

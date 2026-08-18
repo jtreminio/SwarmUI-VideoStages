@@ -62,6 +62,7 @@ export const STORED_CLIP_KEYS = [
     "boundaryOutReferenceIncludeSoundtrack",
     "boundaryOutOverlap",
     "duration",
+    "useSeedVr",
     "refFraming",
     "h3AttentionWindowSeconds",
     "h3TextEncoder",

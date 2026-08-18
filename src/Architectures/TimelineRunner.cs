@@ -196,6 +196,7 @@ internal sealed class TimelineRunner
                         $"Architecture '{session.ArchitectureId}' returned no decoded clip "
                             + "artifact.");
                 ValidateOutput(output, session, runtimeContext);
+                output = RestoreWithSeedVr(output, plannedClip);
                 output = DecodedTimelineAudioOverlay.Apply(
                     _generator,
                     output,
@@ -243,6 +244,22 @@ internal sealed class TimelineRunner
             Constants.SweptHostRootNodesKey,
             rootSession.DisplacedRootRemovals);
         CollapseDuplicateNodes();
+    }
+
+    private DecodedClipArtifact RestoreWithSeedVr(
+        DecodedClipArtifact output,
+        ClipPlan clip)
+    {
+        if (!clip.UseSeedVr)
+        {
+            return output;
+        }
+        _generator.CurrentMedia = output.ToHostMedia(_generator);
+        _generator.RunSeedVR2Stage(_generator.CurrentVae);
+        using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+        return DecodedClipArtifact.FromRuntime(
+            RuntimeArtifact.Capture(_generator, bridge),
+            clip);
     }
 
     /// <summary>
