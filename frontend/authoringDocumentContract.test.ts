@@ -222,7 +222,7 @@ const contractState = (): AuthoringDocument => ({
                     loraWeights: [],
                     frameRefStrengths: [],
                     upscale: 1,
-                    upscaleMethod: "latentmodel-upscaler.safetensors",
+                    upscaleMethod: "pixel-lanczos",
                     model: "ltx-2.3.safetensors",
                     modelProfileId: "ltx-2.3",
                     steps: 8,

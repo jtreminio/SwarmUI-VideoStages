@@ -1,5 +1,4 @@
 import { modelProfileForModel } from "./architectures/catalog";
-import { upscaleModeForMethod } from "./architectures/policy/featureValues";
 import {
     resolveClipFrameGrid,
     resolvedClipFrameGrid,
@@ -40,13 +39,10 @@ import type {
 } from "./types";
 import { isRecord } from "./utils";
 
-/** Latent-model upscaling is the root default when the host offers it. */
 const resolveRootPreferredUpscaleMethod = (
     upscaleMethodValues: string[],
 ): string =>
-    upscaleMethodValues.find(
-        (value) => upscaleModeForMethod(value) === "latent-model",
-    ) ??
+    upscaleMethodValues.find((value) => value === "pixel-lanczos") ??
     upscaleMethodValues[0] ??
     "";
 
@@ -327,8 +323,8 @@ export const normalizeStage = (
         refCount,
         clipLoraDefaultWeights,
     );
-    // A generation first stage forces control/upscale; a initVideoClip clip's stage 0
-    // refines its footage (initVideoClip img2img), so it keeps authored values.
+    // Generated stage 0 forces control/upscale. Init-video stage 0 refines footage, so authored
+    // values remain active.
     const forcedFirstStage = stageIndexInClip === 0 && !initVideoClip;
     let firstStageUpscale: { upscale: number; upscaleMethod: string };
     let control: number;
@@ -435,8 +431,7 @@ export const normalizeStage = (
         sampler: textOr(rawStage.sampler, fallback.sampler),
         scheduler: textOr(rawStage.scheduler, fallback.scheduler),
     };
-    // Catalog first: a persisted hint is repair information for an unresolvable model, not a
-    // pin that outlives the model changing hands between architectures.
+    // The catalog owns resolved models; a persisted hint only repairs an unresolved model.
     stage.modelProfileId =
         modelProfileForModel(defaults.modelCatalog, stage.model) ||
         trimmedText(readRawStageProp(rawStage, "modelProfileId")) ||

@@ -1176,6 +1176,18 @@ describe("clip LoRAs with per-stage weights", () => {
         expect(first.loraWeights[0]).toBe(0.7);
     });
 
+    it("buildDefaultStage prefers pixel Lanczos over latent-model upscalers", () => {
+        const defaults = moduleRootDefaults();
+        defaults.upscaleMethodValues = [
+            "latentmodel-a.safetensors",
+            "pixel-lanczos",
+        ];
+
+        const stage = buildDefaultStage(defaults, testStageModel, null, 0);
+
+        expect(stage.upscaleMethod).toBe("pixel-lanczos");
+    });
+
     it("normalizeClip round-trips loras across a multi-stage clip", () => {
         const clip = normalizeClip(
             {

@@ -3802,9 +3802,7 @@
   };
 
   // frontend/normalizationStage.ts
-  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find(
-    (value) => upscaleModeForMethod(value) === "latent-model"
-  ) ?? upscaleMethodValues[0] ?? "";
+  var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find((value) => value === "pixel-lanczos") ?? upscaleMethodValues[0] ?? "";
   var normalizeStageRefStrengthValue = (value) => snapValueToStep(
     value,
     STAGE_REF_STRENGTH_DEFAULT,
