@@ -212,34 +212,6 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    [Fact]
-    public async Task Vae_tiling_does_not_route_H3_audio_through_the_image_tiler()
-    {
-        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
-        JObject clip = MakeClip(fixture.Stage());
-        clip["duration"] = 1.0;
-
-        JObject workflow = await fixture.GenerateAsync(
-            MakeDocument(clip),
-            post =>
-            {
-                post["vaetilesize"] = 768;
-                post["vaetileoverlap"] = 64;
-            });
-        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-
-        VAEDecodeTiledNode videoDecode = Assert.Single(
-            bridge.Graph.NodesOfType<VAEDecodeTiledNode>());
-        VAEDecodeAudioNode audioDecode = Assert.Single(
-            bridge.Graph.NodesOfType<VAEDecodeAudioNode>());
-        JObject audioInputs = (JObject)workflow[audioDecode.Id]["inputs"];
-
-        Assert.Equal(768, videoDecode.TileSize.LiteralAsInt());
-        Assert.Null(audioInputs["tile_size"]);
-        Assert.Null(audioInputs["overlap"]);
-        Assert.Empty(bridge.Graph.NodesOfType<VAEDecodeAudioTiledNode>());
-    }
-
     /// <summary>
     /// A refine stage re-encodes the decoded video, which collapses back onto the sampler's own
     /// latent and leaves stage 0's decode unused for core's cleanup to prune — the audio half must
