@@ -651,14 +651,14 @@ describe("reduceDocumentCommand", () => {
 
     it("preserves IDs and command payload isolation through patch and reorder", () => {
         const source = document();
-        const patch = { loraWeights: [0.5] };
+        const patch = { frameRefStrengths: [0.5] };
         let state = apply(source, {
             type: "stage.patch",
             clipId: "clip-a",
             stageId: "stage-a",
             patch,
         });
-        patch.loraWeights[0] = 9;
+        patch.frameRefStrengths[0] = 9;
         state = apply(state, {
             type: "stage.move",
             clipId: "clip-a",
@@ -670,8 +670,8 @@ describe("reduceDocumentCommand", () => {
             "stage-b",
             "stage-a",
         ]);
-        expect(state.clips[0].stages[1].loraWeights[0]).toBe(0.5);
-        expect(source.clips[0].stages[0].loraWeights).toEqual([]);
+        expect(state.clips[0].stages[1].frameRefStrengths[0]).toBe(0.5);
+        expect(source.clips[0].stages[0].frameRefStrengths).toEqual([]);
     });
 
     it("applies a batch atomically and de-duplicates combined impacts", () => {
@@ -789,13 +789,12 @@ describe("reduceDocumentCommand", () => {
                 driveMedia: null,
             },
         ];
-        targetClip.loras = [{ name: "detail" }];
+        targetClip.loras = [{ name: "detail", weight: 1 }];
         targetClip.stages = [
             {
                 ...canonicalStage("stage-convert-a"),
                 frameRefStrengths: [0.8],
                 upscale: 2,
-                loraWeights: [1],
             },
             { ...canonicalStage("stage-convert-b"), skipped: true },
         ];
@@ -844,7 +843,6 @@ describe("reduceDocumentCommand", () => {
                 modelProfileId: item.modelProfileId,
                 frameRefStrengths: item.frameRefStrengths,
                 upscale: item.upscale,
-                loraWeights: item.loraWeights,
             })),
         ).toEqual([
             {
@@ -854,7 +852,6 @@ describe("reduceDocumentCommand", () => {
                 modelProfileId: "test-profile",
                 frameRefStrengths: [0.8],
                 upscale: 2,
-                loraWeights: [1],
             },
             {
                 id: "stage-convert-b",
@@ -863,7 +860,6 @@ describe("reduceDocumentCommand", () => {
                 modelProfileId: "test-profile",
                 frameRefStrengths: [],
                 upscale: 1,
-                loraWeights: [],
             },
         ]);
         expect(source).toEqual(before);
@@ -1527,19 +1523,17 @@ describe("reduceDocumentCommand", () => {
     it("preserves unsupported LoRA and upscale settings as dormant data", () => {
         const source = document();
         const fake = fakeArchitectureCatalog();
-        source.clips[1].loras = [{ name: "detail" }];
+        source.clips[1].loras = [{ name: "detail", weight: 1 }];
         source.clips[1].stages = [
             {
                 ...canonicalStage("model-upscale"),
                 upscale: 2,
                 upscaleMethod: "upscaler.safetensors",
-                loraWeights: [1],
             },
             {
                 ...canonicalStage("pixel-upscale"),
                 upscale: 2,
                 upscaleMethod: "pixel-lanczos",
-                loraWeights: [1],
             },
         ];
 
@@ -1559,13 +1553,10 @@ describe("reduceDocumentCommand", () => {
 
         expect(result.applied).toBe(true);
         expect(
-            result.document.clips[1].stages.map((entry) => ({
-                upscale: entry.upscale,
-                loraWeights: entry.loraWeights,
-            })),
-        ).toEqual([
-            { upscale: 2, loraWeights: [1] },
-            { upscale: 2, loraWeights: [1] },
+            result.document.clips[1].stages.map((entry) => entry.upscale),
+        ).toEqual([2, 2]);
+        expect(result.document.clips[1].loras).toEqual([
+            { name: "detail", weight: 1 },
         ]);
     });
 

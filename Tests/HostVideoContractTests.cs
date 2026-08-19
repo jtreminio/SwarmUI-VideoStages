@@ -288,19 +288,20 @@ public class HostVideoContractTests
     }
 
     /// <summary>
-    /// A stage LoRA on the generic runtime loads through core's own model-gen confinement step.
+    /// A clip LoRA on the generic runtime loads through core's own model-gen confinement step.
     /// Hunyuan 1.5's compat class does not target the text encoder, so the authored
-    /// <c>textEncoderWeight</c> is dropped and the loader is model-only. The stage's LoRAs are
+    /// <c>textEncoderWeight</c> is dropped and the loader is model-only. The clip's LoRAs are
     /// borrowed and handed back, so the request's LoRA list is untouched, and the borrowed host
     /// model-loader cache is dropped rather than handed on.
     /// </summary>
     [Fact]
-    public async Task Generic_stage_applies_an_ordinary_LoRA_through_the_host_loader()
+    public async Task Generic_clip_applies_an_ordinary_LoRA_through_the_host_loader()
     {
         using Hunyuan15WorkflowFixture fixture = Hunyuan15WorkflowFixture.CreateWithBaseModel();
         fixture.InstallModel("LoRA", "UnitTest_HostVideo_Lora.safetensors");
         JObject stage = fixture.Stage(steps: 8);
-        stage["loras"] = new JArray(new JObject
+        JObject clip = MakeClip(1.0, stage);
+        clip["loras"] = new JArray(new JObject
         {
             ["name"] = "UnitTest_HostVideo_Lora",
             ["weight"] = 0.45,
@@ -309,7 +310,7 @@ public class HostVideoContractTests
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
-                fixture.ImageToVideoPost(MakeDocument(MakeClip(1.0, stage))));
+                fixture.ImageToVideoPost(MakeDocument(clip)));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 

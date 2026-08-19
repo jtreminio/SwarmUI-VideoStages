@@ -22,11 +22,11 @@ describe("architecture conversion policy", () => {
             entryModes: fake.architectures[0].capabilities.entryModes,
         };
         const clip = minimalClip({
-            loras: [{ name: "detail" }],
+            loras: [{ name: "detail", weight: 1 }],
             frameRefs: [minimalRef()],
             refFraming: "fit-green",
             promptWindows: [{ prompt: "relay", start: 0, duration: 1 }],
-            stages: [minimalStage({ loraWeights: [1] }), minimalStage()],
+            stages: [minimalStage(), minimalStage()],
         });
 
         const conversion = planArchitectureConversion(clip, target, fake);
@@ -68,13 +68,16 @@ describe("architecture conversion policy", () => {
         expect(source).toEqual(before);
     });
 
-    it("retains clip LoRAs and dormant samplerless weights", () => {
+    it("retains weighted clip LoRAs", () => {
         const catalog = testArchitectureCatalog();
         const source = minimalClip({
-            loras: [{ name: "detail" }, { name: "motion" }],
+            loras: [
+                { name: "detail", weight: 1 },
+                { name: "motion", weight: 0.4 },
+            ],
             stages: [
-                minimalStage({ control: 0, loraWeights: [1, 0.4] }),
-                minimalStage({ control: 0.5, loraWeights: [0.7, 0] }),
+                minimalStage({ control: 0 }),
+                minimalStage({ control: 0.5 }),
             ],
         });
         const conversion = planArchitectureConversion(
@@ -88,9 +91,10 @@ describe("architecture conversion policy", () => {
         );
 
         expect(conversion?.loras).toEqual(source.loras);
-        expect(conversion?.stages[0].loraWeights).toEqual([1, 0.4]);
-        expect(conversion?.stages[1].loraWeights).toEqual([0.7, 0]);
-        expect(source.stages[0].loraWeights).toEqual([1, 0.4]);
+        expect(source.loras).toEqual([
+            { name: "detail", weight: 1 },
+            { name: "motion", weight: 0.4 },
+        ]);
     });
 
     it("round-trips one destructive conversion through one exact undo/redo point", () => {
@@ -104,15 +108,9 @@ describe("architecture conversion policy", () => {
             entryModes: catalog.architectures[0].capabilities.entryModes,
         };
         const source = minimalClip({
-            loras: [{ name: "detail" }],
+            loras: [{ name: "detail", weight: 1 }],
             frameRefs: [minimalRef()],
-            stages: [
-                minimalStage(),
-                minimalStage({
-                    skipped: true,
-                    loraWeights: [1],
-                }),
-            ],
+            stages: [minimalStage(), minimalStage({ skipped: true })],
         });
         const conversion = planArchitectureConversion(source, target, catalog);
         expect(conversion).not.toBeNull();

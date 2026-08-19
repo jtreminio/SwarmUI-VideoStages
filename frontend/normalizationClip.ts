@@ -94,21 +94,12 @@ export const buildDefaultClip = (
 ): Clip => {
     const frameRefs = includeDefaultRef ? [buildDefaultRef()] : [];
     const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
-    const initialLoraWeights = loras.map(
-        (entry, index) =>
-            previousClip?.stages[0]?.loraWeights[index] ??
-            defaults.loraDefaultWeights[
-                defaults.loraValues.indexOf(entry.name)
-            ] ??
-            1,
-    );
     const firstStage = {
         ...buildDefaultStage(
             defaults,
             defaultStageModel,
             previousClip?.stages[0] ?? null,
             frameRefs.length,
-            initialLoraWeights,
         ),
         frameRefStrengths: buildDefaultStageRefStrengths(
             frameRefs.length,
@@ -212,32 +203,26 @@ export const normalizeClip = (
     );
     const refsRaw = Array.isArray(rawClip.keyframes) ? rawClip.keyframes : [];
     const clipScopedLoras = normalizeStageLoras(rawClip.loras);
-    const loraNames: string[] = [];
-    const loraDefaultWeightByName = new Map<string, number>();
-    const appendLoraName = (name: string, defaultWeight: number): void => {
-        if (loraDefaultWeightByName.has(name)) {
+    const loras: { name: string; weight: number }[] = [];
+    const loraNames = new Set<string>();
+    const appendLora = (name: string, weight: number): void => {
+        if (loraNames.has(name)) {
             return;
         }
-        loraNames.push(name);
-        loraDefaultWeightByName.set(name, defaultWeight);
+        loraNames.add(name);
+        loras.push({ name, weight });
     };
     for (const entry of clipScopedLoras) {
-        appendLoraName(entry.name, entry.weight);
+        appendLora(entry.name, entry.weight);
     }
     for (const rawStage of stagesRaw) {
         if (!isRecord(rawStage)) {
             continue;
         }
         for (const entry of normalizeStageLoras(rawStage.loras)) {
-            // A legacy stage-local LoRA is absent from other stages unless
-            // those stages name it too.
-            appendLoraName(entry.name, 0);
+            appendLora(entry.name, entry.weight);
         }
     }
-    const loras = loraNames.map((name) => ({ name }));
-    const loraDefaultWeights = loraNames.map(
-        (name) => loraDefaultWeightByName.get(name) ?? 1,
-    );
 
     const stages: Stage[] = [];
     for (let i = 0; i < stagesRaw.length; i++) {
@@ -251,8 +236,6 @@ export const normalizeClip = (
                 refsRaw.length,
                 i,
                 initVideo !== null,
-                loras,
-                loraDefaultWeights,
             ),
         );
     }

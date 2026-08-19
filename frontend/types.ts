@@ -59,7 +59,7 @@ export interface AuthoringDocument {
     audioTracks?: AudioTrack[];
 }
 
-export const CURRENT_AUTHORING_SCHEMA_VERSION = 8;
+export const CURRENT_AUTHORING_SCHEMA_VERSION = 9;
 
 export interface UploadedMedia {
     data: string;
@@ -68,6 +68,7 @@ export interface UploadedMedia {
 
 export interface ClipLora {
     name: string;
+    weight: number;
 }
 
 export interface Stage {
@@ -78,8 +79,6 @@ export interface Stage {
     controlNetStrength: number;
     /** Per-stage strength for each clip IC-LoRA, aligned by IC-LoRA index. */
     icLoraStrengths: number[];
-    /** Per-stage weight for each clip LoRA, aligned by clip LoRA index. */
-    loraWeights: number[];
     frameRefStrengths: number[];
     upscale: number;
     upscaleMethod: string;

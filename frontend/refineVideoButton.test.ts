@@ -559,7 +559,7 @@ describe("refineVideoButton", () => {
         });
 
         const sourceVideostages = JSON.stringify({
-            schemaVersion: 8,
+            schemaVersion: 9,
             clips: [
                 {
                     id: "clip-0",
@@ -643,7 +643,7 @@ describe("refineVideoButton", () => {
         });
 
         const sourceVideostages = JSON.stringify({
-            schemaVersion: 8,
+            schemaVersion: 9,
             clips: [
                 {
                     id: "clip-1",

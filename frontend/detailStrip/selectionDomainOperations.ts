@@ -589,9 +589,6 @@ export const createDetailSelectionDomainOperations = (
                     getDefaultStageModel(defaults, lockedArchitecture),
                     last,
                     clip.frameRefs.length,
-                    clip.loras.map((entry) =>
-                        defaultLoraWeight(defaults, entry.name),
-                    ),
                     clip.icLoras.map((entry) =>
                         defaultLoraWeight(defaults, entry.lora),
                     ),

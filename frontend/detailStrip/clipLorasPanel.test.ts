@@ -1,6 +1,5 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
-    detailBody,
     detailStripHarness,
     modelGlobals,
 } from "../__test_helpers__/detailStrip";
@@ -15,11 +14,6 @@ describe("detail strip clip LoRA panel", () => {
         h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
-            .querySelector<HTMLElement>(
-                ".vst-detail .vst-detail-loras-section > .input-group-header",
-            )
-            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        document
             .querySelector<HTMLElement>(".vst-detail .vst-detail-add-lora")
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(
@@ -27,11 +21,8 @@ describe("detail strip clip LoRA panel", () => {
         ).toHaveLength(1);
         expect(h.saveSpy).toHaveBeenCalled();
         expect(lastSavedClips<Clip[]>(h.saveSpy)[0].loras).toEqual([
-            { name: "lora-x.safetensors" },
+            { name: "lora-x.safetensors", weight: 1 },
         ]);
-        expect(
-            lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].loraWeights,
-        ).toEqual([1]);
         expect(
             document
                 .querySelector(".vst-detail .vst-detail-loras-section")
@@ -54,8 +45,11 @@ describe("detail strip clip LoRA panel", () => {
             ?.click();
 
         expect(
-            lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].loraWeights,
-        ).toEqual([0.65]);
+            Reflect.get(
+                lastSavedClips<Clip[]>(h.saveSpy)[0].loras[0],
+                "weight",
+            ),
+        ).toBe(0.65);
     });
 
     it("falls back to SwarmUI's remembered per-LoRA weight", () => {
@@ -76,11 +70,14 @@ describe("detail strip clip LoRA panel", () => {
             ?.click();
 
         expect(
-            lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].loraWeights,
-        ).toEqual([0.55]);
+            Reflect.get(
+                lastSavedClips<Clip[]>(h.saveSpy)[0].loras[0],
+                "weight",
+            ),
+        ).toBe(0.55);
     });
 
-    it("uses zero-based LoRA labels and opens the newly added LoRA", () => {
+    it("renders LoRAs as flat rows without per-row minify controls", () => {
         h.setup(
             [
                 {
@@ -107,17 +104,12 @@ describe("detail strip clip LoRA panel", () => {
             ".vst-clip-lora-entry",
         );
         expect(groups).toHaveLength(2);
-        expect(groups[0].querySelector(".header-label")?.textContent).toBe(
-            "L0",
-        );
-        expect(groups[1].querySelector(".header-label")?.textContent).toBe(
-            "L1",
-        );
-        expect(groups[0].classList.contains("input-group-closed")).toBe(true);
-        expect(groups[1].classList.contains("input-group-open")).toBe(true);
+        expect(groups[0].querySelector(".auto-symbol")).toBeNull();
+        expect(groups[1].querySelector(".auto-symbol")).toBeNull();
+        expect(groups[0].classList.contains("input-group")).toBe(false);
     });
 
-    it("renders clip LoRA model rows and flat numeric stage weights", () => {
+    it("renders delete, model, and clip weight in one row", () => {
         h.setup([
             {
                 duration: 4,
@@ -136,9 +128,8 @@ describe("detail strip clip LoRA panel", () => {
         // Name renders at input font size (via .vst-audio-select), not the
         // small 3xs label size.
         expect(nameSelect?.classList.contains("vst-audio-select")).toBe(true);
-        expect(row?.querySelector("input.auto-number")).toBeNull();
-        const weight = document.querySelector<HTMLInputElement>(
-            '.vst-detail input[data-vst-focus-key="lora-weight-0"]',
+        const weight = row?.querySelector<HTMLInputElement>(
+            'input[data-vst-focus-key="clip-0-lora-0-weight"]',
         );
         expect(weight?.value).toBe("0.7");
         expect(weight?.step).toBe("0.05");
@@ -146,17 +137,13 @@ describe("detail strip clip LoRA panel", () => {
         expect(weight?.hasAttribute("max")).toBe(false);
         expect(row?.querySelector("input.auto-slider-range")).toBeNull();
         expect(weight?.classList.contains("lora-weight-input")).toBe(true);
-        const weightRow = weight?.closest<HTMLElement>(
-            ".vst-stage-lora-weight-row",
+        expect(row?.querySelector("label")).toBeNull();
+        const controls = Array.from(row?.children ?? []);
+        expect(controls[0]?.classList.contains("vst-detail-delete-lora")).toBe(
+            true,
         );
-        const weightLabel = weightRow?.querySelector<HTMLLabelElement>("label");
-        expect(weightRow).not.toBeNull();
-        expect(weightLabel?.textContent).toBe("lora-x.safetensors");
-        expect(weight?.id).not.toBe("");
-        expect(weightLabel?.htmlFor).toBe(weight?.id);
-        expect(
-            detailBody()?.querySelector(".vst-detail-delete-lora"),
-        ).not.toBeNull();
+        expect(controls[1]).toBe(nameSelect);
+        expect(controls[2]).toBe(weight);
     });
 
     it("debounces a LoRA weight edit through the keyed pending map", () => {
@@ -171,19 +158,24 @@ describe("detail strip clip LoRA panel", () => {
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
         const weight = document.querySelector<HTMLInputElement>(
-            '.vst-detail input[data-vst-focus-key="lora-weight-0"]',
+            '.vst-detail input[data-vst-focus-key="clip-0-lora-0-weight"]',
         );
         if (!weight) {
             throw new Error("lora weight input missing");
         }
-        expect(weight.getAttribute("data-vst-focus-key")).toBe("lora-weight-0");
+        expect(weight.getAttribute("data-vst-focus-key")).toBe(
+            "clip-0-lora-0-weight",
+        );
         weight.value = "0.4";
         weight.dispatchEvent(new Event("input", { bubbles: true }));
         expect(h.saveSpy).not.toHaveBeenCalled();
         jest.advanceTimersByTime(200);
         expect(h.saveSpy).toHaveBeenCalledTimes(1);
         expect(
-            lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].loraWeights[0],
+            Reflect.get(
+                lastSavedClips<Clip[]>(h.saveSpy)[0].loras[0],
+                "weight",
+            ),
         ).toBe(0.4);
     });
 
@@ -199,14 +191,17 @@ describe("detail strip clip LoRA panel", () => {
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
         const weight = document.querySelector<HTMLInputElement>(
-            '.vst-detail input[data-vst-focus-key="lora-weight-0"]',
+            '.vst-detail input[data-vst-focus-key="clip-0-lora-0-weight"]',
         );
         if (!weight) throw new Error("lora weight input missing");
         weight.value = "-2.5";
         weight.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
         expect(
-            lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].loraWeights[0],
+            Reflect.get(
+                lastSavedClips<Clip[]>(h.saveSpy)[0].loras[0],
+                "weight",
+            ),
         ).toBe(-2.5);
     });
 
@@ -234,11 +229,8 @@ describe("detail strip clip LoRA panel", () => {
             )[0]
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(lastSavedClips<Clip[]>(h.saveSpy)[0].loras).toEqual([
-            { name: "lora-y.safetensors" },
+            { name: "lora-y.safetensors", weight: 0.5 },
         ]);
-        expect(
-            lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].loraWeights,
-        ).toEqual([0.5]);
         expect(
             document.querySelectorAll(".vst-detail .vst-clip-lora-entry"),
         ).toHaveLength(1);
@@ -249,7 +241,7 @@ describe("detail strip clip LoRA panel", () => {
         ).toBe(true);
     });
 
-    it("copies every LoRA and weight into a newly added stage", () => {
+    it("keeps the clip LoRA unchanged when adding a stage", () => {
         h.setup([
             {
                 duration: 4,
@@ -266,6 +258,9 @@ describe("detail strip clip LoRA panel", () => {
             ?.click();
         const stages = lastSavedClips<Clip[]>(h.saveSpy)[0].stages;
         expect(stages).toHaveLength(2);
-        expect(stages[1].loraWeights).toEqual([0.65]);
+        expect(lastSavedClips<Clip[]>(h.saveSpy)[0].loras).toEqual([
+            { name: "lora-x.safetensors", weight: 0.65 },
+        ]);
+        expect(stages[1]).not.toHaveProperty("loraWeights");
     });
 });

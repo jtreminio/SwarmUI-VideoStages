@@ -20,10 +20,7 @@ export const appendLoraToClip = (
     name: string,
     initialWeight: number,
 ): void => {
-    clip.loras.push({ name });
-    for (const stage of clip.stages) {
-        stage.loraWeights.push(initialWeight);
-    }
+    clip.loras.push({ name, weight: initialWeight });
 };
 
 export const replaceLoraModelAt = (
@@ -37,9 +34,7 @@ export const replaceLoraModelAt = (
         return false;
     }
     entry.name = name;
-    for (const stage of clip.stages) {
-        stage.loraWeights[index] = initialWeight;
-    }
+    entry.weight = initialWeight;
     return true;
 };
 
@@ -48,10 +43,5 @@ export const removeLoraAt = (clip: Clip, index: number): boolean => {
         return false;
     }
     clip.loras.splice(index, 1);
-    for (const stage of clip.stages) {
-        if (index < stage.loraWeights.length) {
-            stage.loraWeights.splice(index, 1);
-        }
-    }
     return true;
 };

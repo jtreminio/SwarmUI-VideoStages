@@ -222,32 +222,24 @@ describe("detail widgets in the dock", () => {
                     ".vst-detail-section > .vst-detail-section-content > .vst-detail-repeating-group",
                 ),
             );
-            expect(outlinedItems.length).toBeGreaterThanOrEqual(4);
+            expect(outlinedItems.length).toBeGreaterThanOrEqual(3);
             for (const nestedItem of outlinedItems) {
                 expect(computed(nestedItem).borderLeftWidth).toBe("2px");
             }
-            const loraWeightRow = document.querySelector<HTMLElement>(
-                ".vst-stage-lora-weight-row",
+            const loraRow = document.querySelector<HTMLElement>(
+                ".vst-clip-lora-entry",
             );
-            const loraWeightLabel =
-                loraWeightRow?.querySelector<HTMLElement>(
-                    ".vst-detail-field-label",
-                ) ?? null;
-            const loraWeightLabelElement =
-                loraWeightRow?.querySelector<HTMLLabelElement>("label") ?? null;
-            expect(loraWeightRow).not.toBeNull();
-            expect(loraWeightLabel).not.toBeNull();
-            expect(loraWeightLabelElement).not.toBeNull();
-            if (loraWeightRow && loraWeightLabel && loraWeightLabelElement) {
-                expect(computed(loraWeightRow).flexWrap).toBe("nowrap");
-                expect(computed(loraWeightLabelElement).flexGrow).toBe("1");
-                expect(
-                    Number.parseFloat(
-                        computed(loraWeightLabelElement).minWidth,
-                    ),
-                ).toBe(0);
-                expect(computed(loraWeightLabel).width).not.toBe("0px");
-                expect(computed(loraWeightLabel).textOverflow).toBe("ellipsis");
+            expect(loraRow).not.toBeNull();
+            if (loraRow) {
+                expect(computed(loraRow).display).toBe("flex");
+                expect(computed(loraRow).borderLeftWidth).toBe("2px");
+                expect(loraRow.children[0]?.classList).toContain(
+                    "vst-detail-delete-lora",
+                );
+                expect(loraRow.children[1]?.tagName).toBe("SELECT");
+                expect(loraRow.children[2]?.classList).toContain(
+                    "vst-clip-lora-weight",
+                );
             }
             const subsectionHeader = document.querySelector<HTMLElement>(
                 ".vst-detail-subsection-crumb",

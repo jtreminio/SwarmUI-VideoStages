@@ -158,8 +158,8 @@ public class VideoExecutionPlanCompilerTests
             false, true, false, true,
             new UploadedMediaSpec("data:audio/wav;base64,AA==", "track.wav"),
             [new FrameRefSpec("Upload", 1, false, "ref.png")],
-            [Stage(10, loras: [new LoraRef("stage")]), Stage(11)],
-            Loras: [new LoraRef("clip")],
+            [Stage(10), Stage(11)],
+            Loras: [new LoraRef("clip"), new LoraRef("stage")],
             PromptWindows: [new PromptWindowSpec("first", 0, 1)],
             ReferenceFraming: ReferenceFramingMode.FitGreen);
 
@@ -188,24 +188,26 @@ public class VideoExecutionPlanCompilerTests
     }
 
     [Fact]
-    public void Compile_Ltx_OmitsNoOpStageLoraAndRetainsTextEncoderOnlyLora()
+    public void Compile_Ltx_OmitsNoOpClipLoraAndRetainsTextEncoderOnlyLora()
     {
-        StageSpec stage = Stage(
-            10,
-            loras:
+        StageSpec stage = Stage(10);
+        ClipSpec clip = GeneratedClip(0, stage) with
+        {
+            Loras =
             [
-                new("stage-no-op", 0, 0),
-                new("stage-text-only", 0, 0.8),
-            ]);
+                new("clip-no-op", 0, 0),
+                new("clip-text-only", 0, 0.8),
+            ],
+        };
 
         Ltx2StagePayload payload = Assert.Single(
             Assert.Single(
                 TestPlanCompiler.Compile(
-                    Spec(false, GeneratedClip(0, stage))).Clips).Stages)
+                    Spec(false, clip)).Clips).Stages)
             .RequireLtx2Payload();
         LoraPlan lora = Assert.Single(payload.Core.Loras);
 
-        Assert.Equal("stage-text-only", lora.Name);
+        Assert.Equal("clip-text-only", lora.Name);
         Assert.Equal(0, lora.ModelWeight);
         Assert.Equal(0.8, lora.TextEncoderWeight);
     }
@@ -279,8 +281,7 @@ public class VideoExecutionPlanCompilerTests
             control: 0.5,
             upscale: 1.5,
             upscaleMethod: "latent-bilinear",
-            retake: new RetakeWindowSpec(8, 16, 0.75),
-            loras: stageLoras) with
+            retake: new RetakeWindowSpec(8, 16, 0.75)) with
         {
             ImageReference = "edit4",
             ControlNetStrength = 0.55,
@@ -300,7 +301,7 @@ public class VideoExecutionPlanCompilerTests
             UploadedAudio: null,
             FrameRefs: references,
             Stages: [first, target, last],
-            Loras: clipLoras,
+            Loras: [.. clipLoras, .. stageLoras],
             PromptWindows:
             [
                 new("opening prompt", 0, 1),
@@ -823,14 +824,12 @@ public class VideoExecutionPlanCompilerTests
         double control = 1,
         double upscale = 1,
         string upscaleMethod = "pixel-lanczos",
-        RetakeWindowSpec retake = null,
-        IReadOnlyList<LoraRef> loras = null) =>
+        RetakeWindowSpec retake = null) =>
         SpecFixtures.Stage(
             id,
             control: control,
             upscale: upscale,
             upscaleMethod: upscaleMethod,
             clipStageIndex: id - 10,
-            loras: loras,
             retakeWindow: retake);
 }

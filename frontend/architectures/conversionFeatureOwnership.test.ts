@@ -15,7 +15,7 @@ describe("nondestructive architecture conversion", () => {
             promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
             reuseAudio: true,
             clipLengthFromAudio: true,
-            loras: [{ name: "detail.safetensors" }],
+            loras: [{ name: "detail.safetensors", weight: 0.7 }],
             icLoras: [
                 {
                     lora: "guide.safetensors",
@@ -32,7 +32,6 @@ describe("nondestructive architecture conversion", () => {
             ],
             stages: [
                 minimalStage({
-                    loraWeights: [0.7],
                     icLoraStrengths: [0.4],
                     upscale: 2,
                 }),
@@ -61,7 +60,6 @@ describe("nondestructive architecture conversion", () => {
         expect(conversion?.stages[0]).toMatchObject({
             model: "test-video.safetensors",
             modelProfileId: "test-profile",
-            loraWeights: [0.7],
             icLoraStrengths: [0.4],
             upscale: 2,
         });

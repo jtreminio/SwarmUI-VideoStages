@@ -383,10 +383,9 @@ describe("stage architecture model filtering", () => {
         const stage = minimalStage({
             sampler: "removed-sampler",
             scheduler: "removed-scheduler",
-            loraWeights: [1],
         });
         const clip = minimalClip({
-            loras: [{ name: "removed-lora.safetensors" }],
+            loras: [{ name: "removed-lora.safetensors", weight: 1 }],
             stages: [stage],
         });
         const column = buildStageParamsColumn(

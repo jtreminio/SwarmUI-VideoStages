@@ -30,13 +30,7 @@ import {
     trimmedText,
 } from "./normalizationShared";
 import { framesForClip, NEUTRAL_FRAME_GRID } from "./renderUtils";
-import type {
-    Clip,
-    ClipLora,
-    FrameRefImage,
-    RootDefaults,
-    Stage,
-} from "./types";
+import type { Clip, FrameRefImage, RootDefaults, Stage } from "./types";
 import { isRecord } from "./utils";
 
 const resolveRootPreferredUpscaleMethod = (
@@ -144,7 +138,6 @@ export const buildDefaultStage = (
     defaultStageModel: string,
     previousStage: Stage | null,
     refCount: number,
-    initialLoraWeights: readonly number[] = [],
     initialIcLoraStrengths: readonly number[] = [],
 ): Stage => {
     const model = previousStage ? previousStage.model : defaultStageModel;
@@ -157,9 +150,6 @@ export const buildDefaultStage = (
         icLoraStrengths: previousStage
             ? [...previousStage.icLoraStrengths]
             : initialIcLoraStrengths.map(normalizeStageControlNetStrengthValue),
-        loraWeights: previousStage
-            ? [...previousStage.loraWeights]
-            : [...initialLoraWeights],
         frameRefStrengths: buildDefaultStageRefStrengths(refCount),
         upscale: previousStage ? previousStage.upscale : defaults.upscale,
         upscaleMethod: previousStage
@@ -313,15 +303,12 @@ export const normalizeStage = (
     refCount: number,
     stageIndexInClip: number,
     initVideoClip = false,
-    clipLoras: readonly ClipLora[] = [],
-    clipLoraDefaultWeights: readonly number[] = [],
 ): Stage => {
     const fallback = buildDefaultStage(
         defaults,
         defaultStageModel,
         previousStage,
         refCount,
-        clipLoraDefaultWeights,
     );
     // Generated stage 0 forces control/upscale. Init-video stage 0 refines footage, so authored
     // values remain active.
@@ -363,32 +350,6 @@ export const normalizeStage = (
             defaults.controlMax,
         );
     }
-    const rawLoraWeights = readRawStageProp(rawStage, "loraWeights");
-    const legacyLoras = normalizeStageLoras(
-        readRawStageProp(rawStage, "loras"),
-    );
-    const legacyWeights = new Map(
-        legacyLoras.map((entry) => [entry.name, entry.weight]),
-    );
-    const hasLegacyLoras = Array.isArray(readRawStageProp(rawStage, "loras"));
-    const loraWeights = clipLoras.map((entry, index) => {
-        if (Array.isArray(rawLoraWeights)) {
-            return numberOr(
-                rawLoraWeights[index],
-                clipLoraDefaultWeights[index] ?? 1,
-            );
-        }
-        const legacyWeight = legacyWeights.get(entry.name);
-        if (legacyWeight !== undefined) {
-            return legacyWeight;
-        }
-        if (hasLegacyLoras) {
-            return clipLoraDefaultWeights[index] ?? 0;
-        }
-        return (
-            fallback.loraWeights[index] ?? clipLoraDefaultWeights[index] ?? 1
-        );
-    });
     const stage: Stage = {
         id: normalizeOptionalEntityId(rawStage.id),
         skipped: !!rawStage.skipped,
@@ -402,7 +363,6 @@ export const normalizeStage = (
                   normalizeStageControlNetStrengthValue,
               )
             : [...fallback.icLoraStrengths],
-        loraWeights,
         frameRefStrengths: normalizeStageRefStrengths(
             rawStage.keyframeStrengths,
             refCount,

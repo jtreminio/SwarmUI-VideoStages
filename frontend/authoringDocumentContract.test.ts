@@ -52,7 +52,7 @@ const contractState = (): AuthoringDocument => ({
             h3AttentionWindowSeconds: 2.5,
             h3TextEncoder: "8b",
             audioSource: "Native",
-            loras: [{ name: "style.safetensors" }],
+            loras: [{ name: "style.safetensors", weight: 0.5 }],
             icLoras: [
                 {
                     id: "ic-lora-0",
@@ -151,7 +151,6 @@ const contractState = (): AuthoringDocument => ({
                     control: 1,
                     controlNetStrength: 0.8,
                     icLoraStrengths: [0.8],
-                    loraWeights: [0.5],
                     frameRefStrengths: [0.6],
                     upscale: 1,
                     upscaleMethod: "pixel-lanczos",
@@ -168,7 +167,6 @@ const contractState = (): AuthoringDocument => ({
                     control: 0.5,
                     controlNetStrength: 0.8,
                     icLoraStrengths: [0.5],
-                    loraWeights: [0],
                     frameRefStrengths: [0.4],
                     upscale: 1.5,
                     upscaleMethod: "latentmodel-upscaler.safetensors",
@@ -221,7 +219,6 @@ const contractState = (): AuthoringDocument => ({
                     control: 0.5,
                     controlNetStrength: 0.8,
                     icLoraStrengths: [],
-                    loraWeights: [],
                     frameRefStrengths: [],
                     upscale: 1,
                     upscaleMethod: "pixel-lanczos",

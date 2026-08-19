@@ -86,7 +86,7 @@ const maximalClip = (): Clip =>
         duration: 4,
         useSeedVr: true,
         audioSource: "Native",
-        loras: [{ name: "detail.safetensors" }],
+        loras: [{ name: "detail.safetensors", weight: 0.6 }],
         icLoras: [
             {
                 lora: "detail.safetensors",
@@ -160,7 +160,6 @@ const maximalClip = (): Clip =>
                 control: 0.5,
                 controlNetStrength: 0.7,
                 icLoraStrengths: [],
-                loraWeights: [0.6],
                 frameRefStrengths: [0.8],
                 upscale: 1,
                 upscaleMethod: "latentmodel-a.safetensors",
@@ -212,7 +211,7 @@ describe("serialize storage completeness guard", () => {
         expect(stored.keyframes.length).toBeGreaterThan(0);
         expect(stored.stages.length).toBeGreaterThan(0);
         expect(stored.loras.length).toBeGreaterThan(0);
-        expect(stored.stages[0].loraWeights.length).toBeGreaterThan(0);
+        expect(stored.loras[0].weight).toBe(0.6);
         expect(stored.stages[0].keyframeStrengths.length).toBeGreaterThan(0);
         expect(stored.retake).not.toBeNull();
         expect(stored.uploadedAudio).not.toBeNull();

@@ -127,12 +127,6 @@ internal sealed class WanWorkflowFixture : VideoStagesWorkflowFixture
         return Assert.IsType<ImageScaleNode>(donor.Image.Connection?.Node);
     }
 
-    public static JObject StageWithLoras(JObject stage, params JObject[] loras)
-    {
-        stage["loras"] = new JArray(loras);
-        return stage;
-    }
-
     public static JObject Lora(string name, double weight, double? textEncoderWeight = null)
     {
         JObject lora = new()

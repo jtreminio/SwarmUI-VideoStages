@@ -11,7 +11,7 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>Which Wan passes each authored, prompt-tagged, or stage-scoped LoRA loads on.</summary>
+/// <summary>Which Wan passes each authored or prompt-tagged LoRA loads on.</summary>
 [Collection("VideoStagesTests")]
 public class WanLoraWorkflowTests
 {
@@ -47,7 +47,7 @@ public class WanLoraWorkflowTests
     }
 
     /// <summary>
-    /// WAN's compat class does not target the text encoder, so both prompt-tagged and stage
+    /// WAN's compat class does not target the text encoder, so both prompt-tagged and clip
     /// LoRAs load through <c>LoraLoaderModelOnly</c> with the authored text-encoder weight dropped,
     /// and a zero model weight removes the loader entirely. Prompt LoRAs load first and the stage's
     /// own chain on top, so the sampler reads the end of one chain.
@@ -60,7 +60,7 @@ public class WanLoraWorkflowTests
     [InlineData(WanWorkflowFixture.Wan22I2v14bFixturePath, false)]
     [InlineData(WanWorkflowFixture.Wan22Ti2v5bFixturePath, false)]
     [InlineData(WanWorkflowFixture.Wan22Ti2v5bFixturePath, true)]
-    public async Task Prompt_and_stage_loras_load_model_only_and_compose_in_order(
+    public async Task Prompt_and_clip_loras_load_model_only_and_compose_in_order(
         string modelFixturePath,
         bool textEntryWithConfinedHostLora)
     {
@@ -76,8 +76,9 @@ public class WanLoraWorkflowTests
         {
             fixture.InstallModel("LoRA", $"{name}.safetensors");
         }
-        JObject stage = WanWorkflowFixture.StageWithLoras(
-            fixture.Stage(steps: 10),
+        JObject stage = fixture.Stage(steps: 10);
+        JObject clip = MakeClip(stage);
+        clip["loras"] = new JArray(
             WanWorkflowFixture.Lora("UnitTest_Wan_Persisted", 0.6, textEncoderWeight: 0.7),
             WanWorkflowFixture.Lora("UnitTest_Wan_PersistedZero", 0, textEncoderWeight: 0.9));
         void Customize(JObject post)
@@ -94,7 +95,7 @@ public class WanLoraWorkflowTests
             post["loratencweights"] = "0.85";
             post["lorasectionconfinement"] = $"{T2IParamInput.SectionID_BaseOnly}";
         }
-        JObject document = MakeDocument(MakeClip(stage));
+        JObject document = MakeDocument(clip);
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
@@ -131,7 +132,7 @@ public class WanLoraWorkflowTests
 
         // The request's own LoRA list is exactly what it was before the stages ran: the two the
         // prompt parser put there (a zero weight still counts) plus whatever the POST set. The
-        // stage's LoRAs are borrowed and handed back, so they must not appear.
+        // clip's LoRAs are borrowed and handed back, so they must not appear.
         Assert.Equal(
             textEntryWithConfinedHostLora
                 ? ["UnitTest_Wan_Base_Confined", "UnitTest_Wan_Prompt", "UnitTest_Wan_PromptZero"]
@@ -160,23 +161,20 @@ public class WanLoraWorkflowTests
     }
 
     /// <summary>
-    /// Each stage's LoRAs are its own: two stages naming the same file at different weights get one
-    /// loader each, and a third stage naming none samples straight off the shared UNET loader that
-    /// both loaders also branch from — the loader is cached, the LoRA scope is not.
+    /// A clip LoRA reaches every stage while the underlying model loader remains shared.
     /// </summary>
     [Fact]
-    public async Task Stage_loras_do_not_leak_forward_and_share_one_cached_model_loader()
+    public async Task Clip_lora_reaches_every_stage_and_shares_one_cached_model_loader()
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
         fixture.InstallModel("LoRA", "UnitTest_Wan_Scoped_Lora.safetensors");
-        JObject document = MakeDocument(MakeClip(
-            WanWorkflowFixture.StageWithLoras(
-                fixture.Stage(control: 1, steps: 10),
-                WanWorkflowFixture.Lora("UnitTest_Wan_Scoped_Lora", 0.25)),
-            WanWorkflowFixture.StageWithLoras(
-                fixture.Stage("PreviousStage", control: 0.5, steps: 11),
-                WanWorkflowFixture.Lora("UnitTest_Wan_Scoped_Lora", 0.75)),
-            fixture.Stage("PreviousStage", control: 0.5, steps: 12)));
+        JObject clip = MakeClip(
+            fixture.Stage(control: 1, steps: 10),
+            fixture.Stage("PreviousStage", control: 0.5, steps: 11),
+            fixture.Stage("PreviousStage", control: 0.5, steps: 12));
+        clip["loras"] = new JArray(
+            WanWorkflowFixture.Lora("UnitTest_Wan_Scoped_Lora", 0.25));
+        JObject document = MakeDocument(clip);
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
@@ -185,30 +183,21 @@ public class WanLoraWorkflowTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         UNETLoaderNode loader = Assert.Single(bridge.Graph.NodesOfType<UNETLoaderNode>());
-        LoraLoaderModelOnlyNode first = Assert.Single(
+        foreach (int stageIndex in Enumerable.Range(0, 3))
+        {
+            (UNETLoaderNode branchLoader, string[] loras) = ModelBranchOf(
+                StageSampler(bridge, stageIndex));
+            Assert.Same(loader, branchLoader);
+            Assert.Equal(["UnitTest_Wan_Scoped_Lora.safetensors"], loras);
+        }
+        Assert.All(
             bridge.Graph.NodesOfType<LoraLoaderModelOnlyNode>(),
-            node => node.StrengthModel.LiteralAsDouble() == 0.25);
-        LoraLoaderModelOnlyNode second = Assert.Single(
-            bridge.Graph.NodesOfType<LoraLoaderModelOnlyNode>(),
-            node => node.StrengthModel.LiteralAsDouble() == 0.75);
-        Assert.Same(loader, first.Model.Connection?.Node);
-        Assert.Same(loader, second.Model.Connection?.Node);
-
-        Assert.Same(first, StageSampler(bridge, 0).Model.Connection?.Node);
-        Assert.Same(second, StageSampler(bridge, 1).Model.Connection?.Node);
-        Assert.Same(loader, StageSampler(bridge, 2).Model.Connection?.Node);
+            node => Assert.Equal(0.25, node.StrengthModel.LiteralAsDouble()));
         Assert.Null(generator.UserInput.Get(T2IParamTypes.Loras));
 
-        // The unscoped third stage leaves the loader cached, so a later consumer would reuse the
-        // tuple as-is — every id in it must survive the cleanup the earlier stages triggered.
-        AssertLoaderTupleIsLive(
-            workflow,
-            generator.NodeHelpers[$"modelloader_{fixture.Model.Name}_image2video"],
-            loader);
-
         live.AssertAllLive(
-            first, second, StageSampler(bridge, 0), StageSampler(bridge, 1),
-            StageSampler(bridge, 2));
+            [.. bridge.Graph.NodesOfType<LoraLoaderModelOnlyNode>(),
+             StageSampler(bridge, 0), StageSampler(bridge, 1), StageSampler(bridge, 2)]);
         AssertShippable(bridge, workflow, live);
     }
 
@@ -298,21 +287,21 @@ public class WanLoraWorkflowTests
     }
 
     /// <summary>
-    /// A stage naming a LoRA that does not exist refuses the whole request, and everything the
-    /// stage borrowed from the host is handed back on the way out: the request's LoRA lists, the
-    /// stage's parameter section, and the cached model loader. The prompt-LoRA arm makes the
+    /// A clip naming a LoRA that does not exist refuses the whole request, and everything borrowed
+    /// from the host is handed back on the way out. The prompt-LoRA arm makes the
     /// rollback nested — one scope already applied when the next one throws.
     /// </summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task A_missing_stage_lora_refuses_the_request_and_hands_back_host_state(
+    public async Task A_missing_clip_lora_refuses_the_request_and_hands_back_host_state(
         bool withPromptLora)
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
         fixture.InstallModel("LoRA", "UnitTest_Wan_Present.safetensors");
-        JObject stage = WanWorkflowFixture.StageWithLoras(
-            fixture.Stage(steps: 10),
+        JObject stage = fixture.Stage(steps: 10);
+        JObject clip = MakeClip(stage);
+        clip["loras"] = new JArray(
             WanWorkflowFixture.Lora("UnitTest_Wan_Missing", 0.45));
         WorkflowGenerator captured = null;
         List<string> lorasBeforeStages = null;
@@ -320,7 +309,7 @@ public class WanLoraWorkflowTests
         SwarmReadableErrorException error = await Assert.ThrowsAsync<SwarmReadableErrorException>(
             () => ComfyWorkflowApiTestHarness.GenerateAsync(
                 fixture.ImageToVideoPost(
-                    MakeDocument(MakeClip(stage)),
+                    MakeDocument(clip),
                     post => post["prompt"] = withPromptLora
                         ? "global <videoclip[0,0]><lora:UnitTest_Wan_Present:0.4>"
                         : "global"),

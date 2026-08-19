@@ -73,14 +73,14 @@ export const mountVideoStagesData = (state: unknown): HTMLTextAreaElement => {
         state !== null &&
         !Array.isArray(state) &&
         !Object.hasOwn(state, "schemaVersion")
-            ? { ...state, schemaVersion: 8 }
+            ? { ...state, schemaVersion: 9 }
             : structuredClone(state);
     if (
         typeof persisted === "object" &&
         persisted !== null &&
         !Array.isArray(persisted) &&
         "schemaVersion" in persisted &&
-        persisted.schemaVersion === 8 &&
+        persisted.schemaVersion === 9 &&
         "clips" in persisted &&
         Array.isArray(persisted.clips)
     ) {

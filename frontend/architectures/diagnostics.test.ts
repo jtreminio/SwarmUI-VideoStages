@@ -504,7 +504,7 @@ describe("architecture diagnostics", () => {
         const clip = minimalClip({
             architectureHint: "test-video",
             modelProfileId: "test-profile",
-            loras: [{ name: "detail" }],
+            loras: [{ name: "detail", weight: 1 }],
             prompt: "persisted major prompt",
             refFraming: "fit",
             frameRefs: [
@@ -522,7 +522,6 @@ describe("architecture diagnostics", () => {
                 minimalStage({
                     model: "test-video.safetensors",
                     modelProfileId: "test-profile",
-                    loraWeights: [1],
                     upscale: 2,
                 }),
             ],
@@ -731,8 +730,8 @@ describe("architecture diagnostics", () => {
     it("does not diagnose a disabled clip LoRA from legacy profile metadata", () => {
         const models = testCombinedCatalog();
         const clip = minimalClip({
-            loras: [{ name: "normal-lora.safetensors" }],
-            stages: [minimalStage({ model: "ltx", loraWeights: [0] })],
+            loras: [{ name: "normal-lora.safetensors", weight: 0 }],
+            stages: [minimalStage({ model: "ltx" })],
         });
 
         const codes = architectureDiagnosticsFor([clip], models).map(
@@ -747,8 +746,8 @@ describe("architecture diagnostics", () => {
     it("leaves normal LoRAs on a samplerless stage undiagnosed", () => {
         const models = testCombinedCatalog();
         const clip = minimalClip({
-            loras: [{ name: "normal-lora.safetensors" }],
-            stages: [minimalStage({ control: 0, loraWeights: [1] })],
+            loras: [{ name: "normal-lora.safetensors", weight: 1 }],
+            stages: [minimalStage({ control: 0 })],
         });
 
         expect(

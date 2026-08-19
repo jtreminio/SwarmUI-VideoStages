@@ -453,12 +453,10 @@ public class ArchitectureFoundationTests
     public void Common_projection_passes_the_module_stage_payload_through_to_Core()
     {
         FakeRegistry registry = new();
-        StageSpec stage = Stage(10, "fake-model") with
-        {
-            Loras = [new LoraRef("ltx-owned-option.safetensors")],
-        };
+        StageSpec stage = Stage(10, "fake-model");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
+            Loras = [new LoraRef("ltx-owned-option.safetensors")],
             AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
         };
         TimelineSpec spec = Spec(clip);
@@ -1646,7 +1644,7 @@ public class ArchitectureFoundationTests
                             TestPlanCompiler.DefaultStageCore with
                             {
                                 Loras = LoraPlanCompiler.Compile(
-                                    clip, stage, LoraTarget.ModelAndTextEncoder),
+                                    clip, LoraTarget.ModelAndTextEncoder),
                             })),
                     []);
             }

@@ -69,7 +69,7 @@ const mountRootDefaults = (): void => {
 
 const makeClipsJson = (count: number, duration = 2): string =>
     JSON.stringify({
-        schemaVersion: 8,
+        schemaVersion: 9,
         clips: Array.from({ length: count }, () => ({
             architectureHint: "ltx2",
             modelProfileId: "ltx-2.3",
@@ -244,7 +244,7 @@ describe("videoStagesTimeline", () => {
         mountEnabledToggle();
         mountState(
             JSON.stringify({
-                schemaVersion: 8,
+                schemaVersion: 9,
                 clips: [
                     { duration: 2, stages: [{}], frameRefs: [] },
                     { duration: 4, stages: [{}], frameRefs: [] },
@@ -378,7 +378,7 @@ describe("videoStagesTimeline", () => {
     it("+ Clip copies the previous clip's base settings and mirrors the prior join", async () => {
         mountState(
             JSON.stringify({
-                schemaVersion: 8,
+                schemaVersion: 9,
                 clips: [
                     {
                         duration: 2,
@@ -392,6 +392,7 @@ describe("videoStagesTimeline", () => {
                     },
                     {
                         duration: 3,
+                        loras: [{ name: "look", weight: 0.6 }],
                         stages: [
                             {
                                 sampler: "res_multistep",
@@ -400,7 +401,6 @@ describe("videoStagesTimeline", () => {
                                 modelProfileId: "ltx-2.3",
                                 steps: 20,
                                 cfgScale: 4,
-                                loras: [{ name: "look", weight: 0.6 }],
                             },
                         ],
                         frameRefs: [] as unknown[],
@@ -434,8 +434,7 @@ describe("videoStagesTimeline", () => {
         expect(stage.model).toBe("ltx-2.3.safetensors");
         expect(stage.steps).toBe(20);
         expect(stage.cfgScale).toBe(4);
-        expect(clips[2].loras).toEqual([{ name: "look" }]);
-        expect(stage.loraWeights).toEqual([0.6]);
+        expect(clips[2].loras).toEqual([{ name: "look", weight: 0.6 }]);
         expect(getSelection()).toEqual({
             kind: "clip",
             clipIdx: 2,
@@ -449,7 +448,7 @@ describe("videoStagesTimeline", () => {
 
     it("paints loading once without authoring controls, then renders after authoritative success", async () => {
         document.getElementById("input_videomodel")?.remove();
-        mountState(JSON.stringify({ schemaVersion: 8, clips: [] }));
+        mountState(JSON.stringify({ schemaVersion: 9, clips: [] }));
         resetArchitectureCatalogForTests();
 
         const dto = {
@@ -869,7 +868,7 @@ describe("videoStagesTimeline", () => {
         await loadAuthoritativeArchitectureCatalog();
         mountState(
             JSON.stringify({
-                schemaVersion: 8,
+                schemaVersion: 9,
                 clips: [
                     {
                         duration: 2,
@@ -920,7 +919,7 @@ describe("videoStagesTimeline", () => {
 
     it("undoes and redoes hues and prompt-window IDs through the repository", () => {
         mountEnabledToggle();
-        mountState(JSON.stringify({ schemaVersion: 8, clips: [] }));
+        mountState(JSON.stringify({ schemaVersion: 9, clips: [] }));
         saveClips(
             [
                 minimalClip({
@@ -1084,7 +1083,7 @@ describe("videoStagesTimeline", () => {
         mountEnabledToggle();
         mountVideoStagesData(
             JSON.stringify({
-                schemaVersion: 8,
+                schemaVersion: 9,
                 clips: [{ duration: 10, stages: [{}], frameRefs: [] }],
             }),
         );

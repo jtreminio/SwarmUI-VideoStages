@@ -140,19 +140,18 @@ public class Ltx2GeneratedWorkflowContractTests
     }
 
     [Fact]
-    public async Task A_stage_scoped_lora_patches_both_halves_of_its_stage()
+    public async Task A_clip_lora_patches_both_halves_of_its_stage()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         fixture.InstallModel("LoRA", "UnitTest_VideoClipStageLora.safetensors");
 
         JObject stage = fixture.Stage();
-        stage["loras"] = new JArray(new JObject
+        JObject clip = MakeClip(1.0, stage);
+        clip["loras"] = new JArray(new JObject
         {
             ["name"] = "UnitTest_VideoClipStageLora",
             ["weight"] = 0.5,
         });
-        JObject clip = MakeClip(1.0, stage);
-
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);

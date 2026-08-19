@@ -97,6 +97,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
             audioSource: clip.audioSource,
             loras: clip.loras.map((entry) => ({
                 name: entry.name,
+                weight: entry.weight,
             })),
             icLoras: clip.icLoras.map((entry) => ({
                 id: entry.id,
@@ -164,7 +165,6 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 control: stage.control,
                 controlNetStrength: stage.controlNetStrength,
                 icLoraStrengths: stage.icLoraStrengths,
-                loraWeights: stage.loraWeights,
                 keyframeStrengths: stage.frameRefStrengths,
                 upscale: stage.upscale,
                 upscaleMethod: stage.upscaleMethod,
@@ -376,17 +376,21 @@ const hasValidStoredCollections = (
             return false;
         }
         const stages = Array.isArray(clip.stages) ? clip.stages : [];
+        const loras = Array.isArray(clip.loras) ? clip.loras : [];
+        if (
+            loras.some(
+                (lora) =>
+                    !isRecord(lora) ||
+                    typeof lora.weight !== "number" ||
+                    !Number.isFinite(lora.weight),
+            )
+        ) {
+            return false;
+        }
         for (const stage of stages) {
             if (
-                (Object.hasOwn(stage, "loras") &&
-                    !hasArrayOfRecords(stage, "loras")) ||
-                (Object.hasOwn(stage, "loraWeights") &&
-                    (!Array.isArray(stage.loraWeights) ||
-                        !stage.loraWeights.every(
-                            (weight: unknown) =>
-                                typeof weight === "number" &&
-                                Number.isFinite(weight),
-                        ))) ||
+                Object.hasOwn(stage, "loras") ||
+                Object.hasOwn(stage, "loraWeights") ||
                 (Object.hasOwn(stage, "icLoraStrengths") &&
                     (!Array.isArray(stage.icLoraStrengths) ||
                         !stage.icLoraStrengths.every(
@@ -522,6 +526,7 @@ const noticeDivergentProjection = (serialized: string): void => {
 };
 
 const FRAME_REFS_SCHEMA_VERSION = 7;
+const STAGE_LORA_SCHEMA_VERSION = 8;
 
 const renameKey = (
     target: Record<string, unknown>,
@@ -537,7 +542,95 @@ const renameKey = (
     delete target[oldKey];
 };
 
-/** Renames the v7 frame-reference fields to the product vocabulary. */
+const finiteNumberArray = (value: unknown): value is number[] =>
+    Array.isArray(value) &&
+    value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
+
+const migrateStageLorasToClip = (
+    document: Record<string, unknown>,
+): Record<string, unknown> | null => {
+    if (!Array.isArray(document.clips)) {
+        return null;
+    }
+    for (const rawClip of document.clips) {
+        if (!isRecord(rawClip)) {
+            continue;
+        }
+        if (!hasArrayOfRecords(rawClip, "loras")) {
+            return null;
+        }
+        const clipLoras = Array.isArray(rawClip.loras) ? rawClip.loras : [];
+        const stages = Array.isArray(rawClip.stages) ? rawClip.stages : [];
+        const firstStage = isRecord(stages[0]) ? stages[0] : null;
+        const firstStageWeights = firstStage?.loraWeights;
+        if (
+            firstStage &&
+            Object.hasOwn(firstStage, "loraWeights") &&
+            !finiteNumberArray(firstStageWeights)
+        ) {
+            return null;
+        }
+        const names = new Set<string>();
+        clipLoras.forEach((entry, index) => {
+            if (!isRecord(entry)) {
+                return;
+            }
+            const name =
+                typeof entry.name === "string" ? entry.name.trim() : "";
+            if (name) {
+                names.add(name);
+            }
+            const weight = entry.weight;
+            entry.weight =
+                typeof weight === "number" && Number.isFinite(weight)
+                    ? weight
+                    : ((finiteNumberArray(firstStageWeights)
+                          ? firstStageWeights[index]
+                          : undefined) ?? 1);
+        });
+        for (const rawStage of stages) {
+            if (!isRecord(rawStage)) {
+                continue;
+            }
+            if (
+                (Object.hasOwn(rawStage, "loras") &&
+                    !hasArrayOfRecords(rawStage, "loras")) ||
+                (Object.hasOwn(rawStage, "loraWeights") &&
+                    !finiteNumberArray(rawStage.loraWeights))
+            ) {
+                return null;
+            }
+            const stageLoras = Array.isArray(rawStage.loras)
+                ? rawStage.loras
+                : [];
+            for (const entry of stageLoras) {
+                if (!isRecord(entry)) {
+                    continue;
+                }
+                const name =
+                    typeof entry.name === "string" ? entry.name.trim() : "";
+                if (!name || names.has(name)) {
+                    continue;
+                }
+                const weight = entry.weight;
+                clipLoras.push({
+                    name,
+                    weight:
+                        typeof weight === "number" && Number.isFinite(weight)
+                            ? weight
+                            : 1,
+                });
+                names.add(name);
+            }
+            delete rawStage.loras;
+            delete rawStage.loraWeights;
+        }
+        rawClip.loras = clipLoras;
+    }
+    document.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    return document;
+};
+
 const migrateStoredDocument = (
     parsed: Record<string, unknown>,
 ): Record<string, unknown> | null => {
@@ -545,28 +638,37 @@ const migrateStoredDocument = (
         return parsed;
     }
     if (
-        parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION ||
-        !Array.isArray(parsed.clips)
+        parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION &&
+        parsed.schemaVersion !== STAGE_LORA_SCHEMA_VERSION
     ) {
         return null;
     }
     const migrated = structuredClone(parsed);
-    migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
-    for (const rawClip of migrated.clips as unknown[]) {
-        if (!isRecord(rawClip)) {
-            continue;
+    if (migrated.schemaVersion === FRAME_REFS_SCHEMA_VERSION) {
+        if (!Array.isArray(migrated.clips)) {
+            return null;
         }
-        renameKey(rawClip, "frameRefs", "keyframes");
-        if (!Array.isArray(rawClip.stages)) {
-            continue;
-        }
-        for (const rawStage of rawClip.stages) {
-            if (isRecord(rawStage)) {
-                renameKey(rawStage, "frameRefStrengths", "keyframeStrengths");
+        for (const rawClip of migrated.clips as unknown[]) {
+            if (!isRecord(rawClip)) {
+                continue;
+            }
+            renameKey(rawClip, "frameRefs", "keyframes");
+            if (!Array.isArray(rawClip.stages)) {
+                continue;
+            }
+            for (const rawStage of rawClip.stages) {
+                if (isRecord(rawStage)) {
+                    renameKey(
+                        rawStage,
+                        "frameRefStrengths",
+                        "keyframeStrengths",
+                    );
+                }
             }
         }
+        migrated.schemaVersion = STAGE_LORA_SCHEMA_VERSION;
     }
-    return migrated;
+    return migrateStageLorasToClip(migrated);
 };
 
 export const decodeStoredDocument = (

@@ -17,7 +17,7 @@ namespace VideoStages.Tests;
 /// <para>
 /// The model loader is adopted at <c>WorkflowGenerator.CreateNode</c>'s dedup cache, not at
 /// <c>CreateModelLoader</c>'s <c>modelloader_*</c> cache — the extension clears that key per stage
-/// so a stage's LoRAs and model patches still apply. Because dedup happens after the model-gen
+/// so clip LoRAs and model patches still apply. Because dedup happens after the model-gen
 /// steps run, the reused node is the tail they had nothing to add to, which is why adoption cannot
 /// silently drop a stage-scoped patch.
 /// </para>
@@ -92,34 +92,39 @@ public sealed class HostRootAdoptionContractTests
     }
 
     /// <summary>
-    /// The case the <c>modelloader_*</c> cache alone would get wrong: a stage LoRA must still be
+    /// The case the <c>modelloader_*</c> cache alone would get wrong: a clip LoRA must still be
     /// applied, and it is — as a loader chained onto core's node, not as a reload of the model.
     /// The unmodified second stage keeps sampling straight off core's node.
     /// </summary>
     [Fact]
-    public async Task A_stage_lora_chains_onto_cores_base_loader_rather_than_reloading_the_model()
+    public async Task A_clip_lora_chains_onto_cores_base_loader_rather_than_reloading_the_model()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         fixture.InstallModel("LoRA", $"{StageLoraName}.safetensors");
         JObject loraStage = fixture.Stage();
-        loraStage["loras"] = new JArray(new JObject
+        JObject clip = MakeClip(
+            1.0,
+            loraStage,
+            fixture.Stage(control: 0.5));
+        clip["loras"] = new JArray(new JObject
         {
             ["name"] = StageLoraName,
             ["weight"] = 1.0,
         });
 
-        JObject workflow = await fixture.GenerateAsync(MakeDocument(MakeClip(
-            1.0,
-            loraStage,
-            fixture.Stage(control: 0.5))));
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         UNETLoaderNode loader = AssertSingleCoreBaseLoader(bridge);
         LoraLoaderNode lora = Assert.Single(bridge.Graph.NodesOfType<LoraLoaderNode>());
-        Assert.Same(loader, lora.Model.Connection?.Node);
-        Assert.Same(lora, StageSampler(bridge, 0).Model.Connection?.Node);
-        Assert.Same(loader, StageSampler(bridge, 1).Model.Connection?.Node);
+        Assert.All(
+            [StageSampler(bridge, 0), StageSampler(bridge, 1)],
+            sampler =>
+            {
+                Assert.True(ReachesUpstream(bridge, sampler, loader.Id));
+                Assert.True(ReachesUpstream(bridge, sampler, lora.Id));
+            });
 
         live.AssertAllLive(loader, lora);
         AssertShippable(bridge, workflow, live);

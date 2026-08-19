@@ -506,7 +506,6 @@ public sealed class EffectiveVideoRequestProjectionTests
         {
             IcLoraStrengths = [0.8],
             FrameRefStrengths = [0.7],
-            Loras = [new("stage-lora.safetensors", 0.5)],
             RetakeWindow = new(0, 8, 0.6),
         };
         StageSpec second = Stage(
@@ -599,7 +598,6 @@ public sealed class EffectiveVideoRequestProjectionTests
         Assert.Equal(2, effective.Stages.Count);
         Assert.Equal(clip.InitVideo, effective.InitVideo);
         Assert.Equal(clip.Loras, effective.Loras);
-        Assert.Equal(first.Loras, effective.Stages[0].Loras);
     }
 
     [Fact]

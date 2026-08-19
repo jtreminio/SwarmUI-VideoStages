@@ -119,7 +119,7 @@ describe("catalog-backed authoring policy", () => {
         const resolver = createCapabilityViewResolver(models);
 
         expect(
-            resolver.forStage(clip, clip.stages[0]).decision("stageLoras"),
+            resolver.forStage(clip, clip.stages[0]).decision("sampler"),
         ).toMatchObject({ supported: true });
         expect(resolver.forClip(clip).decision("icLora").supported).toBe(false);
         expect(resolver.forClip(clip).decision("promptRelay").supported).toBe(
@@ -432,16 +432,6 @@ describe("catalog-backed authoring policy", () => {
         );
     });
 
-    it("uses typed architecture LoRA support when no model narrowing exists", () => {
-        const models = testCombinedCatalog();
-        const clip = minimalClip();
-        const decision = createCapabilityViewResolver(models)
-            .forStage(clip, clip.stages[0])
-            .decision("stageLoras");
-
-        expect(decision.supported).toBe(true);
-    });
-
     it("uses the actual WAN stage model instead of stale LTX identity and profile hints", () => {
         const models = testCombinedCatalogWithWan();
         const clip = minimalClip({
@@ -470,21 +460,21 @@ describe("catalog-backed authoring policy", () => {
         expect(clip).toEqual(before);
     });
 
-    it("keeps stage LoRA authoring enabled on a samplerless stage", () => {
+    it("keeps sampler and scheduler authoring enabled on a samplerless stage", () => {
         const models = testCombinedCatalog();
         const clip = minimalClip({
-            loras: [{ name: "persisted.safetensors" }],
-            stages: [minimalStage({ control: 0, loraWeights: [1] })],
+            loras: [{ name: "persisted.safetensors", weight: 1 }],
+            stages: [minimalStage({ control: 0 })],
         });
         const resolver = createCapabilityViewResolver(models);
 
         expect(
-            resolver.forStage(clip, clip.stages[0]).decision("stageLoras"),
+            resolver.forStage(clip, clip.stages[0]).decision("sampler"),
         ).toMatchObject({ supported: true, code: "" });
         expect(
             resolver
                 .forStage(clip, clip.stages[0])
-                .authoringState("stageLoras", true),
+                .authoringState("scheduler", true),
         ).toMatchObject({ visible: true, enabled: true });
     });
 

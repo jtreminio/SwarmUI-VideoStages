@@ -312,8 +312,7 @@ describe("normalization", () => {
         prev.stages[0].steps = 20;
         prev.stages[0].cfgScale = 4;
         prev.h3TextEncoder = "4b";
-        prev.loras = [{ name: "look" }];
-        prev.stages[0].loraWeights = [0.6];
+        prev.loras = [{ name: "look", weight: 0.6 }];
 
         const clip = buildDefaultClip(
             moduleRootDefaults(),
@@ -330,10 +329,8 @@ describe("normalization", () => {
         expect(stage.steps).toBe(20);
         expect(stage.cfgScale).toBe(4);
         expect(clip.h3TextEncoder).toBe("4b");
-        expect(clip.loras).toEqual([{ name: "look" }]);
+        expect(clip.loras).toEqual([{ name: "look", weight: 0.6 }]);
         expect(clip.loras).not.toBe(prev.loras);
-        expect(stage.loraWeights).toEqual([0.6]);
-        expect(stage.loraWeights).not.toBe(prev.stages[0].loraWeights);
         expect(clip.boundaryOut).toBe("cut");
         expect(clip.prompt).toBe("");
         expect(clip.frameRefs).toEqual([]);
@@ -1135,47 +1132,6 @@ describe("clip LoRAs with per-stage weights", () => {
         expect(normalizeStageLoras("x")).toEqual([]);
     });
 
-    it("normalizeStage aligns legacy LoRAs to clip definitions", () => {
-        const stage = normalizeStage(
-            moduleRootDefaults(),
-            testStageModel,
-            { ...minimalStageRaw, loras: [{ name: "l.safetensors" }] },
-            null,
-            0,
-            0,
-            false,
-            [{ name: "l.safetensors" }],
-            [0],
-        );
-        expect(stage.loraWeights).toEqual([1]);
-    });
-
-    it("buildDefaultStage inherits a copy of the previous stage's weights", () => {
-        const first = normalizeStage(
-            moduleRootDefaults(),
-            testStageModel,
-            {
-                ...minimalStageRaw,
-                loras: [{ name: "x.safetensors", weight: 0.7 }],
-            },
-            null,
-            0,
-            0,
-            false,
-            [{ name: "x.safetensors" }],
-            [0],
-        );
-        const next = buildDefaultStage(
-            moduleRootDefaults(),
-            testStageModel,
-            first,
-            0,
-        );
-        expect(next.loraWeights).toEqual([0.7]);
-        next.loraWeights[0] = 0.1;
-        expect(first.loraWeights[0]).toBe(0.7);
-    });
-
     it("buildDefaultStage prefers pixel Lanczos over latent-model upscalers", () => {
         const defaults = moduleRootDefaults();
         defaults.upscaleMethodValues = [
@@ -1208,11 +1164,11 @@ describe("clip LoRAs with per-stage weights", () => {
             testStageModel,
         );
         expect(clip.loras).toEqual([
-            { name: "base.safetensors" },
-            { name: "refine.safetensors" },
+            { name: "base.safetensors", weight: 1 },
+            { name: "refine.safetensors", weight: 0.4 },
         ]);
-        expect(clip.stages[0].loraWeights).toEqual([1, 0]);
-        expect(clip.stages[1].loraWeights).toEqual([0, 0.4]);
+        expect(clip.stages[0]).not.toHaveProperty("loraWeights");
+        expect(clip.stages[1]).not.toHaveProperty("loraWeights");
     });
 
     describe("normalizeRetake", () => {

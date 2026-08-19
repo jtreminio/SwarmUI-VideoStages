@@ -38,13 +38,8 @@ public class AuthoringDocumentContractTests
     [
         // API documents may set fps; the UI follows core's Video FPS param.
         "fps",
-        // Legacy/API stage-local LoRAs remain readable.
-        "clips[].stages[].loras",
-        // Clip definitions are names only; stages own their aligned weights.
-        "clips[].loras[].weight",
-        "clips[].loras[].textEncoderWeight",
         // API-only split model/text-encoder weight.
-        "clips[].stages[].loras[].textEncoderWeight",
+        "clips[].loras[].textEncoderWeight",
         // Legacy/API frame reference payload.
         "clips[].keyframes[].data",
         // Prompt-tag-only image reference override.
@@ -216,9 +211,7 @@ public class AuthoringDocumentContractTests
         Assert.Equal([0.6], stage.FrameRefStrengths);
         LoraRef lora = Assert.Single(clip.Loras);
         Assert.Equal("style.safetensors", lora.Name);
-        Assert.Equal(1, lora.Weight);
-        Assert.Equal([0.5], stage.LoraWeights);
-        Assert.Empty(stage.Loras);
+        Assert.Equal(0.5, lora.Weight);
         Assert.NotNull(stage.RetakeWindow);
         Assert.Equal(12, stage.RetakeWindow.StartFrame);
         Assert.Equal(0.7, stage.RetakeWindow.Strength);
@@ -240,7 +233,7 @@ public class AuthoringDocumentContractTests
     public void RejectsAnUnsupportedSchemaVersion()
     {
         JObject document = JObject.Parse(FixtureJson());
-        document["schemaVersion"] = DocumentJson.SupportedSchemaVersion - 2;
+        document["schemaVersion"] = DocumentJson.SupportedSchemaVersion - 3;
         T2IParamInput input = new(null);
         Fixtures.SetVideoStagesConfig(input, document.ToString());
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
@@ -271,6 +264,42 @@ public class AuthoringDocumentContractTests
 
         Assert.NotEmpty(spec.Clips[0].FrameRefs);
         Assert.NotEmpty(spec.Clips[0].Stages[0].FrameRefStrengths);
+    }
+
+    [Fact]
+    public void MigratesVersionEightStageLorasAndWeightsToTheClip()
+    {
+        JObject document = JObject.Parse(FixtureJson());
+        document["schemaVersion"] = 8;
+        JObject clip = (JObject)document["clips"][0];
+        ((JObject)clip["loras"][0]).Remove("weight");
+        JObject first = (JObject)clip["stages"][0];
+        first["loraWeights"] = new JArray(0.25);
+        JObject second = (JObject)clip["stages"][1];
+        second["loras"] = new JArray(new JObject
+        {
+            ["name"] = "legacy-stage.safetensors",
+            ["weight"] = -0.4,
+        });
+
+        T2IParamInput input = new(null);
+        Fixtures.SetVideoStagesConfig(input, document.ToString());
+        ClipSpec parsed = Assert.Single(
+            RequestReader.Read(input).Clips,
+            candidate => candidate.Id == 0);
+
+        Assert.Collection(
+            parsed.Loras,
+            lora =>
+            {
+                Assert.Equal("style.safetensors", lora.Name);
+                Assert.Equal(0.25, lora.Weight);
+            },
+            lora =>
+            {
+                Assert.Equal("legacy-stage.safetensors", lora.Name);
+                Assert.Equal(-0.4, lora.Weight);
+            });
     }
 
     [Fact]

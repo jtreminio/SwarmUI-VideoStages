@@ -4,7 +4,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Execution.Parameters;
 
-/// <summary>Shared append logic for the four LoRA list params. Persisted clip/stage LoRAs and
+/// <summary>Shared append logic for the four LoRA list params. Persisted clip LoRAs and
 /// prompt-scoped LoRAs pad the parallel lists, append video-section-confined rows, and swap the
 /// params behind one <see cref="ParamSnapshot"/> here.</summary>
 internal static class LoraParams

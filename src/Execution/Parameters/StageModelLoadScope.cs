@@ -4,7 +4,7 @@ using VideoStages.Planning;
 
 namespace VideoStages.Execution.Parameters;
 
-/// <summary>Applies one stage's LoRAs and keeps its host model-loader cache in that scope.</summary>
+/// <summary>Applies a stage's planned LoRAs and keeps its host model-loader cache in that scope.</summary>
 internal sealed class StageModelLoadScope : IDisposable
 {
     private readonly WorkflowGenerator _generator;

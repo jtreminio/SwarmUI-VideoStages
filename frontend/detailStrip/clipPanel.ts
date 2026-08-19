@@ -148,6 +148,9 @@ export const buildClipBody = (
         }
         body.appendChild(section);
     };
+    body.appendChild(
+        buildClipLorasSection(context, clip, clipIdx, stageIdx, defaults),
+    );
     appendCapabilitySection("clipReferences", clip.references.length > 0, () =>
         buildClipReferenceSection(
             context,
@@ -168,9 +171,6 @@ export const buildClipBody = (
             state.fps,
             selection.kind === "ref",
         ),
-    );
-    body.appendChild(
-        buildClipLorasSection(context, clip, clipIdx, stageIdx, defaults),
     );
     appendCapabilitySection("icLora", clip.icLoras.length > 0, () =>
         buildArchitectureIcLorasSection(

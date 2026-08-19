@@ -76,14 +76,15 @@ public class HostVideoArchitectureTests
         Assert.True(HostVideoArchitectureModule.Instance.TryResolveModel(
             model,
             out ResolvedVideoModel resolved));
-        StageSpec stage = SpecFixtures.Stage(
-            10,
-            model.Name,
-            loras: [new("text-only.safetensors", 0, 0.8)]);
+        StageSpec stage = SpecFixtures.Stage(10, model.Name);
+        ClipSpec clip = SpecFixtures.Clip(0, [stage], frames: 25) with
+        {
+            Loras = [new("text-only.safetensors", 0, 0.8)],
+        };
 
         ArchitectureClipCompilation compilation =
             HostVideoArchitectureModule.Instance.ValidateAndCompileClip(
-                SpecFixtures.Clip(0, [stage], frames: 25),
+                clip,
                 new Dictionary<int, ResolvedVideoModel> { [0] = resolved },
                 new(512, 512, 24, ArchitectureEntryMode.ImageToVideo));
 

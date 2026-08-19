@@ -1102,9 +1102,8 @@ public class Ltx2InitVideoContractTests
         clip["boundaryOut"] = "continue";
         clip["boundaryOutOverlap"] = 40;
         JArray stageLoras = new(new JObject { ["name"] = "UnitTest_StageLora", ["weight"] = 1.0 });
-        ((JArray)clip["stages"])[0]["loras"] = stageLoras;
+        clip["loras"] = stageLoras;
         JObject refine = fixture.Stage("PreviousStage", control: 0.5, upscale: 2.0, steps: 12);
-        refine["loras"] = stageLoras.DeepClone();
         ((JArray)clip["stages"]).Add(refine);
         clip["icLoras"] = new JArray(IcLora(
             fixture, IcLoraDriveData.Visual, MediaSource.Incoming, lora: "UnitTest_StageLora"));

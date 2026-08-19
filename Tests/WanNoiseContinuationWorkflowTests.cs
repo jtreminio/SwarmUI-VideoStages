@@ -47,19 +47,18 @@ public class WanNoiseContinuationWorkflowTests
         {
             fixture.InstallModel("LoRA", $"{name}.safetensors");
         }
-        JObject document = MakeDocument(MakeClip(
-            WanWorkflowFixture.StageWithLoras(
-                MakeStage(fixture.Model.Name, "Generated", control: 1, steps: 8, cfgScale: 4),
-                WanWorkflowFixture.Lora("UnitTest_Wan_High_Persisted", 0.3)),
-            WanWorkflowFixture.StageWithLoras(
-                MakeStage(
-                    fixture.LowNoiseModel.Name,
-                    "PreviousStage",
-                    control: lowControl,
-                    steps: 8,
-                    cfgScale: 6.5,
-                    sampler: "dpmpp_2m"),
-                WanWorkflowFixture.Lora("UnitTest_Wan_Low_Persisted", 0.7))));
+        JObject clip = MakeClip(
+            MakeStage(fixture.Model.Name, "Generated", control: 1, steps: 8, cfgScale: 4),
+            MakeStage(
+                fixture.LowNoiseModel.Name,
+                "PreviousStage",
+                control: lowControl,
+                steps: 8,
+                cfgScale: 6.5,
+                sampler: "dpmpp_2m"));
+        clip["loras"] = new JArray(
+            WanWorkflowFixture.Lora("UnitTest_Wan_High_Persisted", 0.3));
+        JObject document = MakeDocument(clip);
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
@@ -121,7 +120,7 @@ public class WanNoiseContinuationWorkflowTests
             ["UnitTest_Wan_High_Persisted.safetensors", "UnitTest_Wan_High_Prompt.safetensors"],
             highLoras);
         Assert.Equal(
-            ["UnitTest_Wan_Low_Persisted.safetensors", "UnitTest_Wan_Low_Prompt.safetensors"],
+            ["UnitTest_Wan_High_Persisted.safetensors", "UnitTest_Wan_Low_Prompt.safetensors"],
             lowLoras);
 
         Assert.Equal(

@@ -208,11 +208,10 @@ public class PlanningCompilerComponentTests
             ImageReference = "edit4",
             FrameRefStrengths = [0.25],
             ControlNetStrength = 0.6,
-            Loras = [new LoraRef("stage", 0.5)],
         };
         ClipSpec clip = GeneratedClip(0, Stage(10), stage) with
         {
-            Loras = [new LoraRef("clip", 0.75)],
+            Loras = [new LoraRef("clip", 0.75), new LoraRef("stage", 0.5)],
             PromptWindows = [new PromptWindowSpec("prompt", 0, 1)],
             FrameRefs = [new FrameRefSpec("Upload", 1, false, "ref.png", "data:image/png;base64,QQ==")],
             IcLoras =
@@ -235,7 +234,7 @@ public class PlanningCompilerComponentTests
             new(640, 360, 24, ArchitectureEntryMode.ImageToVideo));
         GuideReferencePlan guide = Assert.IsType<Ltx2StagePayload>(
             compilation.StagePayloads[stage.ClipStageRawIndex]).Guide;
-        var loras = LoraPlanCompiler.Compile(clip, stage, LoraTarget.ModelAndTextEncoder);
+        var loras = LoraPlanCompiler.Compile(clip, LoraTarget.ModelAndTextEncoder);
         var icLoras = IcLoraPlanCompiler
             .CompileClip(clip, new(640, 360, 24, ArchitectureEntryMode.ImageToVideo))
             .Stages[stage.ClipStageRawIndex];
@@ -255,12 +254,9 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
-    public void LoraPlanCompiler_UsesStageWeightsAlignedToClipDefinitions()
+    public void LoraPlanCompiler_UsesClipWeightsForEveryStage()
     {
-        StageSpec stage = Stage(10) with
-        {
-            LoraWeights = [0.35, -0.2],
-        };
+        StageSpec stage = Stage(10);
         ClipSpec clip = GeneratedClip(0, stage) with
         {
             Loras =
@@ -270,47 +266,40 @@ public class PlanningCompilerComponentTests
             ],
         };
 
-        var plans = LoraPlanCompiler.Compile(clip, stage, LoraTarget.ModelAndTextEncoder);
+        var plans = LoraPlanCompiler.Compile(clip, LoraTarget.ModelAndTextEncoder);
 
         Assert.Collection(
             plans,
             lora =>
             {
                 Assert.Equal("cinematic", lora.Name);
-                Assert.Equal(0.35, lora.ModelWeight);
-                Assert.Equal(0.35, lora.TextEncoderWeight);
+                Assert.Equal(1, lora.ModelWeight);
+                Assert.Equal(1, lora.TextEncoderWeight);
             },
             lora =>
             {
                 Assert.Equal("detail", lora.Name);
-                Assert.Equal(-0.2, lora.ModelWeight);
-                Assert.Equal(-0.2, lora.TextEncoderWeight);
+                Assert.Equal(0.8, lora.ModelWeight);
+                Assert.Equal(0.8, lora.TextEncoderWeight);
             });
     }
 
     [Fact]
     public void LoraPlanCompiler_SkipsZeroWeightClipDefinitions()
     {
-        StageSpec stage = Stage(10) with { LoraWeights = [0] };
+        StageSpec stage = Stage(10);
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            Loras = [new LoraRef("disabled-for-this-stage", 1)],
+            Loras = [new LoraRef("disabled-for-this-clip", 0)],
         };
 
-        Assert.Empty(LoraPlanCompiler.Compile(clip, stage, LoraTarget.ModelAndTextEncoder));
+        Assert.Empty(LoraPlanCompiler.Compile(clip, LoraTarget.ModelAndTextEncoder));
     }
 
     [Fact]
     public void LoraPlanCompiler_OmitsNoOpDirectDefinitionsAndRetainsTextOnlyDefinitions()
     {
-        StageSpec stage = Stage(10) with
-        {
-            Loras =
-            [
-                new("stage-no-op", 0, 0),
-                new("stage-text-only", 0, 0.8),
-            ],
-        };
+        StageSpec stage = Stage(10);
         ClipSpec clip = GeneratedClip(0, stage) with
         {
             Loras =
@@ -321,32 +310,19 @@ public class PlanningCompilerComponentTests
         };
 
         Assert.Collection(
-            LoraPlanCompiler.Compile(clip, stage, LoraTarget.ModelAndTextEncoder),
+            LoraPlanCompiler.Compile(clip, LoraTarget.ModelAndTextEncoder),
             plan =>
             {
                 Assert.Equal("clip-text-only", plan.Name);
                 Assert.Equal(0, plan.ModelWeight);
                 Assert.Equal(0.6, plan.TextEncoderWeight);
-            },
-            plan =>
-            {
-                Assert.Equal("stage-text-only", plan.Name);
-                Assert.Equal(0, plan.ModelWeight);
-                Assert.Equal(0.8, plan.TextEncoderWeight);
             });
     }
 
     [Fact]
     public void LoraPlanCompiler_ModelOnlyPolicy_OmitsTextOnlyDefinitions()
     {
-        StageSpec stage = Stage(10) with
-        {
-            Loras =
-            [
-                new("stage-text-only", 0, 0.8),
-                new("stage-model", 0.4, 0.9),
-            ],
-        };
+        StageSpec stage = Stage(10);
         ClipSpec clip = GeneratedClip(0, stage) with
         {
             Loras =
@@ -359,19 +335,12 @@ public class PlanningCompilerComponentTests
         Assert.Collection(
             LoraPlanCompiler.Compile(
                 clip,
-                stage,
                 LoraTarget.ModelOnly),
             plan =>
             {
                 Assert.Equal("clip-model", plan.Name);
                 Assert.Equal(-0.3, plan.ModelWeight);
                 Assert.Equal(0.7, plan.TextEncoderWeight);
-            },
-            plan =>
-            {
-                Assert.Equal("stage-model", plan.Name);
-                Assert.Equal(0.4, plan.ModelWeight);
-                Assert.Equal(0.9, plan.TextEncoderWeight);
             });
     }
 

@@ -37,11 +37,9 @@ export interface ClipCapabilityView {
 }
 
 export interface StageCapabilityView {
-    decision(
-        feature: "stageLoras" | "sampler" | "scheduler",
-    ): CapabilityDecision;
+    decision(feature: "sampler" | "scheduler"): CapabilityDecision;
     authoringState(
-        feature: "stageLoras" | "sampler" | "scheduler",
+        feature: "sampler" | "scheduler",
         persisted: boolean,
     ): AuthoringState;
 }

@@ -176,24 +176,19 @@ export const createClipStageCapabilityViews = (
             : (resolvedModel?.architectureId ?? UNRESOLVED_ARCHITECTURE_ID);
         const descriptor = architectureById.get(architectureId);
         const decision = (
-            feature: "stageLoras" | "sampler" | "scheduler",
+            feature: "sampler" | "scheduler",
         ): CapabilityDecision => {
-            // Only sampler/scheduler are gated; every architecture drives normal
-            // LoRAs unconditionally.
-            if (feature === "sampler" || feature === "scheduler") {
-                const supported =
-                    descriptor !== undefined &&
-                    resolvedModel !== undefined &&
-                    resolvedModel.entryModes.length > 0;
-                return {
-                    supported,
-                    reason: supported
-                        ? ""
-                        : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection requires a resolved generating video model.`,
-                    code: "",
-                };
-            }
-            return { supported: true, reason: "", code: "" };
+            const supported =
+                descriptor !== undefined &&
+                resolvedModel !== undefined &&
+                resolvedModel.entryModes.length > 0;
+            return {
+                supported,
+                reason: supported
+                    ? ""
+                    : `${feature === "sampler" ? "Sampler" : "Scheduler"} selection requires a resolved generating video model.`,
+                code: "",
+            };
         };
         const stageView: StageCapabilityView = {
             decision,

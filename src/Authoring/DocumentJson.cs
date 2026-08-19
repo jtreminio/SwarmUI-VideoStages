@@ -19,11 +19,11 @@ internal sealed record AuthoringDocument(
 /// </summary>
 internal static class DocumentJson
 {
-    /// <summary>The current authoring schema version. Reading also accepts the bounded version-7
-    /// migration below. Must match the frontend's <c>CURRENT_AUTHORING_SCHEMA_VERSION</c>.</summary>
-    public const int SupportedSchemaVersion = 8;
+    /// <summary>Must match the frontend's <c>CURRENT_AUTHORING_SCHEMA_VERSION</c>.</summary>
+    public const int SupportedSchemaVersion = 9;
 
     private const int FrameRefsSchemaVersion = 7;
+    private const int StageLoraSchemaVersion = 8;
 
     /// <summary>Test-only observer of every document key lookup the request reader performs, used by the
     /// contract fixture test to prove no reader names a key the frontend never emits.</summary>
@@ -57,6 +57,13 @@ internal static class DocumentJson
                     RenameFrameRefKeys(entry);
                 }
             }
+            if (schemaVersion <= StageLoraSchemaVersion)
+            {
+                foreach (JObject entry in entries)
+                {
+                    MoveStageLorasToClip(entry);
+                }
+            }
             return new AuthoringDocument(
                 GetOptionalNullableInt(obj, "width"),
                 GetOptionalNullableInt(obj, "height"),
@@ -74,7 +81,6 @@ internal static class DocumentJson
     private static string GetData(T2IParamInput input) =>
         input.Get(VideoStagesExtension.Data, "");
 
-    /// <summary>The sole v7-&gt;v8 migration adopts the product's keyframe vocabulary.</summary>
     private static void RenameFrameRefKeys(JObject clip)
     {
         RenameKey(
@@ -85,6 +91,47 @@ internal static class DocumentJson
         {
             RenameKey(stage, "frameRefStrengths", "keyframeStrengths");
         }
+    }
+
+    private static void MoveStageLorasToClip(JObject clip)
+    {
+        JArray clipLoras = clip["loras"] as JArray ?? [];
+        List<JObject> stages = GetObjectArray(clip, "stages");
+        JArray firstWeights = stages.FirstOrDefault()?["loraWeights"] as JArray;
+        HashSet<string> names = [];
+        for (int index = 0; index < clipLoras.Count; index++)
+        {
+            if (clipLoras[index] is not JObject lora)
+            {
+                continue;
+            }
+            string name = GetString(lora, "name")?.Trim();
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                names.Add(name);
+            }
+            if (!lora.ContainsKey("weight"))
+            {
+                lora["weight"] = firstWeights is not null && index < firstWeights.Count
+                    ? firstWeights[index]
+                    : 1;
+            }
+        }
+        foreach (JObject stage in stages)
+        {
+            foreach (JObject lora in GetObjectArray(stage, "loras"))
+            {
+                string name = GetString(lora, "name")?.Trim();
+                if (string.IsNullOrWhiteSpace(name) || !names.Add(name))
+                {
+                    continue;
+                }
+                clipLoras.Add(lora.DeepClone());
+            }
+            stage.Remove("loras");
+            stage.Remove("loraWeights");
+        }
+        clip["loras"] = clipLoras;
     }
 
     private static void RenameKey(JObject obj, string oldKey, string newKey)
@@ -103,7 +150,9 @@ internal static class DocumentJson
     private static int ValidateSchemaVersion(JObject obj)
     {
         int? version = GetOptionalNullableInt(obj, "schemaVersion");
-        if (version is not SupportedSchemaVersion and not FrameRefsSchemaVersion)
+        if (version is not SupportedSchemaVersion
+            and not StageLoraSchemaVersion
+            and not FrameRefsSchemaVersion)
         {
             throw new SwarmUserErrorException(
                 $"VideoStages: The Video Stages timeline uses document version "

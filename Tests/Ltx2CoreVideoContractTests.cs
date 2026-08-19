@@ -1542,54 +1542,42 @@ public class Ltx2CoreVideoContractTests
     }
 
     /// <summary>
-    /// A stage-scoped LoRA is loaded per stage at that stage's own weight, threaded through the
-    /// stage's IC-LoRA chain rather than into a shared one. Core's real confinement step does the
-    /// scoping, so this only holds under the production step list.
+    /// A clip LoRA is threaded through every stage's IC-LoRA chain at one shared weight.
     /// </summary>
     [Fact]
-    public async Task Stage_scoped_lora_weights_load_once_per_stage_alongside_the_ic_lora()
+    public async Task Clip_lora_loads_for_every_stage_alongside_the_ic_lora()
     {
         using Ltx2WorkflowFixture fixture = WithControlNetStubs(
             Ltx2WorkflowFixture.CreateWithBaseModel());
         fixture.InstallModel("LoRA", "UnitTest_ScopedStageLora.safetensors");
         JObject first = fixture.Stage(control: 0.5);
         JObject second = fixture.Stage("PreviousStage", control: 0.5);
-        first["loras"] = new JArray(new JObject
+        JObject clip = IcLoraClip(first, second);
+        clip["loras"] = new JArray(new JObject
         {
             ["name"] = "UnitTest_ScopedStageLora",
-            ["weight"] = 1.0,
-        });
-        second["loras"] = new JArray(new JObject
-        {
-            ["name"] = "UnitTest_ScopedStageLora",
-            ["weight"] = 0.4,
+            ["weight"] = 0.6,
         });
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(
-            MakeDocument(IcLoraClip(first, second)), RequestControlNet);
+            MakeDocument(clip), RequestControlNet);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         IReadOnlyList<LoraLoaderNode> loaders =
             [.. bridge.Graph.NodesOfType<LoraLoaderNode>()];
-        Assert.Equal(2, loaders.Count);
+        LoraLoaderNode loader = Assert.Single(loaders);
         Assert.All(
             loaders,
             loader => Assert.Equal(
                 "UnitTest_ScopedStageLora.safetensors", loader.LoraName.LiteralAsString()));
 
-        double[] weights = [1.0, 0.4];
-        HashSet<string> claimed = [];
-        for (int stage = 0; stage < weights.Length; stage++)
+        for (int stage = 0; stage < 2; stage++)
         {
             SwarmKSamplerNode sampler = StageSampler(bridge, stage);
-            LoraLoaderNode loader = Assert.Single(
-                loaders,
-                candidate => ReachesUpstream(bridge, sampler.Model.Connection?.Node, candidate.Id));
             Assert.True(
-                claimed.Add(loader.Id),
-                $"Stage {stage} reuses LoraLoader {loader.Id} that an earlier stage claimed.");
-            Assert.Equal(weights[stage], loader.StrengthModel.LiteralAsDouble());
+                ReachesUpstream(bridge, sampler.Model.Connection?.Node, loader.Id));
+            Assert.Equal(0.6, loader.StrengthModel.LiteralAsDouble());
             live.AssertAllLive(loader, sampler);
         }
 

@@ -762,36 +762,31 @@ public class WanArchitectureTests
             ],
             compatibility => Assert.False(compatibility.LorasTargetTextEnc));
 
-        StageSpec stage = Stage(10, "wan-model") with
+        StageSpec stage = Stage(10, "wan-model");
+        ClipSpec clip = GeneratedClip(0, stage) with
         {
-            Loras = [new("stage-text-only", 0, 0.8), new("stage-model", 0.5, 0.9)],
+            Loras = [new("clip-text-only", 0, 0.8), new("clip-model", 0.5, 0.9)],
         };
         StockHostVideoStagePayload payload = Assert.Single(
-            Assert.Single(Compile(GeneratedClip(0, stage)).Clips).Stages)
+            Assert.Single(Compile(clip).Clips).Stages)
             .RequireStockHostVideoPayload(WanArchitectureModule.ArchitectureId, "Wan");
 
         Assert.Equal(LoraTarget.ModelOnly, payload.LoraTarget);
-        Assert.Equal("stage-model", Assert.Single(payload.Core.Loras).Name);
+        Assert.Equal("clip-model", Assert.Single(payload.Core.Loras).Name);
     }
 
     [Fact]
-    public void Compilation_plans_clip_then_stage_LoRAs_with_effective_weights()
+    public void Compilation_plans_clip_LoRAs_with_effective_weights()
     {
-        StageSpec stage = Stage(10, "wan-model") with
-        {
-            LoraWeights = [0.35, 0],
-            Loras =
-            [
-                new("stage-text-only", 0, 0.8),
-                new("stage-active", -0.4, 0.9),
-            ],
-        };
+        StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
             Loras =
             [
-                new("clip-active", 1, 0.25),
-                new("clip-disabled", 0.9, 0.7),
+                new("clip-active", 0.35, 0.25),
+                new("clip-disabled", 0, 0.7),
+                new("clip-text-only", 0, 0.8),
+                new("clip-negative", -0.4, 0.9),
             ],
         };
 
@@ -809,7 +804,7 @@ public class WanArchitectureTests
             },
             lora =>
             {
-                Assert.Equal("stage-active", lora.Name);
+                Assert.Equal("clip-negative", lora.Name);
                 Assert.Equal(-0.4, lora.ModelWeight);
                 Assert.Equal(0.9, lora.TextEncoderWeight);
             });
@@ -1249,32 +1244,26 @@ public class WanArchitectureTests
         Assert.Single(Assert.Single(active.Clips).Stages[0].Core.Loras);
 
         VideoExecutionPlan textOnly = Compile(
-            InitVideoClip(
-                0,
-                passthrough with
-                {
-                    Loras = [new("stage-text-only", 0, 0.8)],
-                }));
+            InitVideoClip(0, passthrough) with
+            {
+                Loras = [new("clip-text-only", 0, 0.8)],
+            });
         Assert.Empty(
             Assert.Single(textOnly.Clips).Stages[0].Core.Loras);
 
-        ClipSpec disabled = InitVideoClip(
-            0,
-            passthrough with { LoraWeights = [0] }) with
+        ClipSpec disabled = InitVideoClip(0, passthrough) with
         {
-            Loras = [new("clip-disabled", 1)],
+            Loras = [new("clip-disabled", 0)],
         };
         ClipPlan compiled = Assert.Single(Compile(disabled).Clips);
         Assert.True(Assert.Single(compiled.Stages).IsPassthrough);
         Assert.Empty(compiled.Stages[0].Core.Loras);
 
         VideoExecutionPlan stageNoOp = Compile(
-            InitVideoClip(
-                0,
-                passthrough with
-                {
-                    Loras = [new("stage-no-op", 0, 0)],
-                }));
+            InitVideoClip(0, passthrough) with
+            {
+                Loras = [new("clip-no-op", 0, 0)],
+            });
         Assert.Empty(
             Assert.Single(stageNoOp.Clips).Stages[0].Core.Loras);
 

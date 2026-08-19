@@ -51,7 +51,10 @@ import {
 } from "./persistence/repository";
 import { getDefaultStageModel, getRootDefaults } from "./rootDefaults";
 import type { StoredClip } from "./storageTypes";
-import type { AuthoringDocument } from "./types";
+import {
+    type AuthoringDocument,
+    CURRENT_AUTHORING_SCHEMA_VERSION,
+} from "./types";
 import { clearUiStateForTests } from "./uiState";
 
 const dataInput = (): HTMLTextAreaElement =>
@@ -138,7 +141,7 @@ describe("persistence", () => {
         ])("rejects a malformed present %s collection", (_label, partial) => {
             expect(
                 decode({
-                    schemaVersion: 8,
+                    schemaVersion: 9,
                     clips: [],
                     ...partial,
                 }),
@@ -209,7 +212,7 @@ describe("persistence", () => {
             ]);
             const reencoded = JSON.parse(
                 serializeStateForStorage({
-                    schemaVersion: 8,
+                    schemaVersion: 9,
                     ...decoded?.dims,
                     clips: decoded?.clips ?? [],
                     audioTracks: decoded?.audioTracks ?? [],
@@ -237,7 +240,7 @@ describe("persistence", () => {
                     }>;
                 }>;
             };
-            expect(reencoded.schemaVersion).toBe(8);
+            expect(reencoded.schemaVersion).toBe(9);
             expect(reencoded.clips[0].keyframes).toHaveLength(1);
             expect(reencoded.clips[0].frameRefs).toBeUndefined();
             expect(reencoded.clips[0].stages[0].keyframeStrengths).toEqual([
@@ -261,8 +264,44 @@ describe("persistence", () => {
             });
         });
 
+        it("migrates version-eight stage weights onto clip LoRAs", () => {
+            const decoded = decode({
+                schemaVersion: 8,
+                clips: [
+                    {
+                        loras: [
+                            { name: "style.safetensors" },
+                            { name: "detail.safetensors" },
+                        ],
+                        stages: [
+                            {
+                                model: "model.safetensors",
+                                loraWeights: [0.5, -0.25],
+                            },
+                            {
+                                model: "model.safetensors",
+                                loraWeights: [0, 1],
+                            },
+                        ],
+                    },
+                ],
+            });
+
+            expect(decoded?.clips[0].loras).toEqual([
+                { name: "style.safetensors", weight: 0.5 },
+                { name: "detail.safetensors", weight: -0.25 },
+            ]);
+            expect(decoded?.clips[0].stages[0]).not.toHaveProperty(
+                "loraWeights",
+            );
+            expect(decoded?.clips[0].stages[1]).not.toHaveProperty(
+                "loraWeights",
+            );
+            expect(CURRENT_AUTHORING_SCHEMA_VERSION).toBe(9);
+        });
+
         it("accepts omitted optional collections without inventing stored items", () => {
-            const decoded = decode({ schemaVersion: 8, clips: [{}] });
+            const decoded = decode({ schemaVersion: 9, clips: [{}] });
 
             expect(decoded).not.toBeNull();
             expect(decoded?.clips).toHaveLength(1);
@@ -276,7 +315,7 @@ describe("persistence", () => {
 
         it("canonicalizes every clip and stage after the first skip marker", () => {
             const decoded = decode({
-                schemaVersion: 8,
+                schemaVersion: 9,
                 clips: [
                     {
                         stages: [
@@ -302,7 +341,7 @@ describe("persistence", () => {
 
         it("round-trips an explicit IC-LoRA Drive Media kind contract", () => {
             const decoded = decode({
-                schemaVersion: 8,
+                schemaVersion: 9,
                 clips: [
                     {
                         icLoras: [
@@ -335,7 +374,7 @@ describe("persistence", () => {
                     duration: 3,
                     h3AttentionWindowSeconds: 2.5,
                     h3TextEncoder: "8b",
-                    loras: [{ name: "detail.safetensors" }],
+                    loras: [{ name: "detail.safetensors", weight: 0.6 }],
                     icLoras: [
                         {
                             id: "ic-guide",
@@ -373,7 +412,6 @@ describe("persistence", () => {
                         minimalStage({
                             controlNetStrength: 0.7,
                             frameRefStrengths: [0.8],
-                            loraWeights: [0.6],
                         }),
                     ],
                 }),
@@ -396,7 +434,7 @@ describe("persistence", () => {
                     h3AttentionWindowSeconds: 2.5,
                     h3TextEncoder: "8b",
                     audioSource: "Native",
-                    loras: [{ name: "detail.safetensors" }],
+                    loras: [{ name: "detail.safetensors", weight: 0.6 }],
                     icLoras: [
                         {
                             id: "ic-guide",
@@ -456,7 +494,6 @@ describe("persistence", () => {
                             control: 1,
                             controlNetStrength: 0.7,
                             icLoraStrengths: [],
-                            loraWeights: [0.6],
                             keyframeStrengths: [0.8],
                             upscale: 1,
                             upscaleMethod: "latentmodel-test.safetensors",
@@ -655,7 +692,7 @@ describe("persistence", () => {
                 getLoraDefaultWeight,
             });
             const serialized = JSON.stringify({
-                schemaVersion: 8,
+                schemaVersion: 9,
                 clips: [{ stages: [{}, {}] }, { stages: [{}, {}, {}] }],
             });
 
@@ -912,7 +949,7 @@ describe("persistence", () => {
 
         it("preserves unknown architecture identities for diagnostics and repair", () => {
             mountVideoStagesData({
-                schemaVersion: 8,
+                schemaVersion: 9,
                 clips: [
                     {
                         architectureHint: "removed-architecture",

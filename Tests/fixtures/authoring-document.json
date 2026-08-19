@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 8,
+    "schemaVersion": 9,
     "width": 768,
     "height": 512,
     "clips": [
@@ -21,7 +21,8 @@
             "audioSource": "Native",
             "loras": [
                 {
-                    "name": "style.safetensors"
+                    "name": "style.safetensors",
+                    "weight": 0.5
                 }
             ],
             "icLoras": [
@@ -124,9 +125,6 @@
                     "icLoraStrengths": [
                         0.8
                     ],
-                    "loraWeights": [
-                        0.5
-                    ],
                     "keyframeStrengths": [
                         0.6
                     ],
@@ -146,9 +144,6 @@
                     "controlNetStrength": 0.8,
                     "icLoraStrengths": [
                         0.5
-                    ],
-                    "loraWeights": [
-                        0
                     ],
                     "keyframeStrengths": [
                         0.4
@@ -201,7 +196,6 @@
                     "control": 0.5,
                     "controlNetStrength": 0.8,
                     "icLoraStrengths": [],
-                    "loraWeights": [],
                     "keyframeStrengths": [],
                     "upscale": 1,
                     "upscaleMethod": "pixel-lanczos",

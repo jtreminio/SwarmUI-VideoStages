@@ -8,7 +8,6 @@ import {
     buildField,
     buildNumber,
     buildSlider,
-    buildUnboundedNumber,
     tagFocus,
 } from "../../detailWidgets";
 import {
@@ -16,7 +15,6 @@ import {
     STAGE_CONTROLNET_STRENGTH_MIN,
     STAGE_CONTROLNET_STRENGTH_STEP,
 } from "../../icLoraAuthoring";
-import { LORA_WEIGHT_STEP } from "../../loraAuthoring";
 import { refSourceLabel } from "../../timelineDetail";
 import { disableCapabilityControls } from "../capabilityUi";
 import type { StagePanelBindings } from "./types";
@@ -91,31 +89,6 @@ export const appendStageReferenceGuideSection = ({
             );
             fields.appendChild(refSlider);
         });
-    }
-
-    if (clip.loras.length > 0) {
-        appendSectionHeader(fields, "LoRA Weights");
-        const group = document.createDocumentFragment();
-        clip.loras.forEach((entry, entryIdx) => {
-            const weight = tagFocus(
-                buildUnboundedNumber(
-                    stage.loraWeights[entryIdx] ?? 1,
-                    LORA_WEIGHT_STEP,
-                    (value) => {
-                        debouncedCommit(`lora-weight-${entryIdx}`, (target) => {
-                            target.loraWeights[entryIdx] = value;
-                        });
-                    },
-                ),
-                `lora-weight-${entryIdx}`,
-            );
-            weight.classList.add("lora-weight-input", "vst-stage-lora-weight");
-            const row = buildField(shortModelName(entry.name), weight);
-            row.classList.add("vst-stage-lora-weight-row");
-            row.title = entry.name;
-            group.appendChild(row);
-        });
-        fields.appendChild(group);
     }
 
     const applicableIcLoras = clip.icLoras

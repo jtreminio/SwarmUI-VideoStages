@@ -1567,7 +1567,7 @@ describe("createTimelineDetailStrip", () => {
             ).not.toBeNull();
         });
 
-        it("lists references above IC-LoRAs using the shared selector rails", () => {
+        it("lists LoRAs above references and references above IC-LoRAs", () => {
             h.setup([
                 {
                     duration: 10,
@@ -1584,11 +1584,21 @@ describe("createTimelineDetailStrip", () => {
             const refsHead = body?.querySelector<HTMLElement>(
                 '[data-vst-repeater-key="references"]',
             );
+            const lorasHead = body?.querySelector<HTMLElement>(
+                ".vst-detail-loras-section",
+            );
             const icLorasHead = body?.querySelector<HTMLElement>(
                 '[data-vst-repeater-key="ic-loras"]',
             );
+            expect(lorasHead).not.toBeNull();
             expect(refsHead).not.toBeNull();
             expect(icLorasHead).not.toBeNull();
+            expect(
+                lorasHead && refsHead
+                    ? lorasHead.compareDocumentPosition(refsHead) &
+                          Node.DOCUMENT_POSITION_FOLLOWING
+                    : 0,
+            ).toBeTruthy();
             expect(
                 refsHead && icLorasHead
                     ? refsHead.compareDocumentPosition(icLorasHead) &

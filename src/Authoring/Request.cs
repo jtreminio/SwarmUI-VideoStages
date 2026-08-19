@@ -48,8 +48,6 @@ public sealed record StageSpec(
     IReadOnlyList<double> IcLoraStrengths = null,
     IReadOnlyList<double> FrameRefStrengths = null,
     bool ImageRefWasExplicit = false,
-    IReadOnlyList<LoraRef> Loras = null,
-    IReadOnlyList<double> LoraWeights = null,
     RetakeWindowSpec RetakeWindow = null
 );
 

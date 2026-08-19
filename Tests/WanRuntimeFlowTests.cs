@@ -322,7 +322,7 @@ public class WanRuntimeFlowTests
         JObject stage = (JObject)((JArray)clip["stages"])[0];
         clip["modelProfileId"] = "forged-non-5b-profile";
         stage["modelProfileId"] = "forged-non-5b-profile";
-        stage["loras"] = new JArray(new JObject
+        clip["loras"] = new JArray(new JObject
         {
             ["name"] = "UnitTest_Wan5b_Failure_Persisted",
             ["weight"] = 0.6,
@@ -587,7 +587,10 @@ public class WanRuntimeFlowTests
             "PreviousStage",
             control: 0.5,
             steps: 8);
-        lowStage["loras"] = new JArray(new JObject
+        JObject document = JObject.Parse(JsonSingleClipStages(
+            MakeStage(high.Name, "Generated", control: 1, steps: 8),
+            lowStage));
+        ((JObject)((JArray)document["clips"])[0])["loras"] = new JArray(new JObject
         {
             ["name"] = "UnitTest_Wan_Low_Failure_Persisted",
             ["weight"] = 0.7,
@@ -595,9 +598,7 @@ public class WanRuntimeFlowTests
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             high,
-            JsonSingleClipStages(
-                MakeStage(high.Name, "Generated", control: 1, steps: 8),
-                lowStage),
+            document.ToString(),
             prompt: "global <videoclip[0,0]>high-stage "
                 + "<videoclip[0,1]>low-stage "
                 + "<lora:UnitTest_Wan_Low_Failure_Prompt:0.8>");

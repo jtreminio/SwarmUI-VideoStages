@@ -39,7 +39,6 @@ export const STORED_STAGE_KEYS = [
     "control",
     "controlNetStrength",
     "icLoraStrengths",
-    "loraWeights",
     "frameRefStrengths",
     "upscale",
     "upscaleMethod",

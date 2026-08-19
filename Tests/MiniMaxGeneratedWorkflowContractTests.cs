@@ -310,29 +310,23 @@ public class MiniMaxGeneratedWorkflowContractTests
     }
 
     /// <summary>
-    /// Core's model-gen step picks the LoRA confinement by refiner/pixel-decoder/image-to-video
-    /// state; only the production list exercises that branch.
-    /// <para>
-    /// The loader cache is the mechanism: a stage that loads LoRAs must publish its own loader
-    /// chain under the shared <c>modelloader_*</c> key, so the next stage reuses the plain loader
-    /// rather than inheriting the previous stage's LoRAs.
-    /// </para>
+    /// Persisted clip LoRAs reach every stage while prompt confinement still selects one stage.
     /// </summary>
     [Fact]
-    public async Task Persisted_and_prompt_LoRAs_are_stage_scoped()
+    public async Task Persisted_clip_LoRA_reaches_every_stage_and_prompt_LoRA_stays_scoped()
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         fixture.InstallModel("LoRA", "UnitTest_MiniMax_Prompt.safetensors")
             .InstallModel("LoRA", "UnitTest_MiniMax_Persisted.safetensors");
 
         JObject first = fixture.Stage();
-        first["loras"] = new JArray(new JObject
+        JObject clip = MakeClip(first, fixture.Stage("PreviousStage", control: 0.5, steps: 9));
+        clip["loras"] = new JArray(new JObject
         {
             ["name"] = "UnitTest_MiniMax_Persisted",
             ["weight"] = 0.6,
             ["textEncoderWeight"] = 0.7,
         });
-        JObject clip = MakeClip(first, fixture.Stage("PreviousStage", control: 0.5, steps: 9));
         clip["duration"] = 1.0;
 
         (JObject workflow, WorkflowGenerator generator) =
@@ -350,22 +344,27 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.Equal(9, secondSampler.Steps.LiteralAsInt());
 
         ComfyNode[] loras = [.. LoraLoaderNodesOf(bridge)];
-        Assert.Equal(2, loras.Length);
-        Assert.All(loras, lora =>
-        {
-            Assert.True(
-                ReachesUpstream(bridge, firstSampler.Model.Connection?.Node, lora.Id),
-                "A stage-scoped LoRA is missing from the first stage's model chain.");
-            Assert.False(
-                ReachesUpstream(bridge, secondSampler.Model.Connection?.Node, lora.Id),
-                "A stage-scoped LoRA leaked onto the second stage's model chain.");
-        });
+        ComfyNode prompt = Assert.Single(
+            loras,
+            lora => lora.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_MiniMax_Prompt.safetensors");
+        ComfyNode[] persisted =
+        [
+            .. loras.Where(lora => lora.FindInput("lora_name").LiteralAsString()
+                == "UnitTest_MiniMax_Persisted.safetensors"),
+        ];
+        Assert.NotEmpty(persisted);
+        Assert.True(ReachesUpstream(bridge, firstSampler.Model.Connection?.Node, prompt.Id));
+        Assert.False(ReachesUpstream(bridge, secondSampler.Model.Connection?.Node, prompt.Id));
+        Assert.All(
+            [firstSampler, secondSampler],
+            sampler => Assert.Contains(
+                persisted,
+                lora => ReachesUpstream(bridge, sampler.Model.Connection?.Node, lora.Id)));
+        Assert.All(
+            persisted,
+            lora => Assert.Equal(0.6, lora.FindInput("strength_model").LiteralAsDouble()));
 
-        AssertModelOnlyLora(loras, "UnitTest_MiniMax_Persisted.safetensors", 0.6);
-        AssertModelOnlyLora(loras, "UnitTest_MiniMax_Prompt.safetensors", 0.4);
-
-        // The shared loader cache is what the next stage reads; leaving stage 0's LoRA chain in it
-        // is how a stage-scoped LoRA would leak forward.
         Assert.True(generator.NodeHelpers.TryGetValue(
             $"modelloader_{fixture.Model.Name}_image2video",
             out string cachedLoader));

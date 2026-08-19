@@ -1,13 +1,16 @@
 import {
     appendHelp,
-    buildField,
+    buildAccordionSection,
+    buildDetailActionButton,
     buildOptionSelect,
-    buildRepeatingEditor,
+    buildUnboundedNumber,
     type OptionSpec,
+    tagFocus,
 } from "../detailWidgets";
 import {
     appendLoraToClip,
     defaultLoraWeight,
+    LORA_WEIGHT_STEP,
     removeLoraAt,
     replaceLoraModelAt,
 } from "../loraAuthoring";
@@ -26,17 +29,28 @@ export const buildClipLorasSection = (
     const nextAvailableName = defaults.loraValues.find(
         (value) => !selectedNames.has(value),
     );
-    const applyStageWeights = (
-        target: Clip,
-        loraIdx: number,
-        weight: number,
-    ): void => {
-        for (const stage of target.stages) {
-            stage.loraWeights[loraIdx] = weight;
-        }
-    };
-    const items = clip.loras.map((lora, loraIdx) => {
-        const editor = document.createElement("div");
+    const content = document.createDocumentFragment();
+    clip.loras.forEach((lora, loraIdx) => {
+        const row = document.createElement("div");
+        row.className = "vst-clip-lora-entry";
+        const remove = buildDetailActionButton({
+            label: "×",
+            title: `Delete LoRA ${loraIdx}`,
+            className: "vst-btn-tiny vst-detail-delete vst-detail-delete-lora",
+            variant: "interrupt",
+            onClick: () => {
+                context.structuralCommit(
+                    (clips) => {
+                        const target = clips[clipIdx];
+                        if (!target || !removeLoraAt(target, loraIdx)) {
+                            return null;
+                        }
+                        return { kind: "clip", clipIdx, stageIdx };
+                    },
+                    { rebuildAfterSelect: true },
+                );
+            },
+        });
         const options: OptionSpec[] = defaults.loraValues.flatMap(
             (value, optionIdx) =>
                 value === lora.name ||
@@ -62,7 +76,6 @@ export const buildClipLorasSection = (
                 if (target) {
                     const initialWeight = defaultLoraWeight(defaults, value);
                     replaceLoraModelAt(target, loraIdx, value, initialWeight);
-                    applyStageWeights(target, loraIdx, initialWeight);
                 }
             });
             context.render();
@@ -71,71 +84,63 @@ export const buildClipLorasSection = (
             "data-vst-focus-key",
             `clip-${clipIdx}-lora-${loraIdx}-model`,
         );
-        editor.appendChild(buildField("Model", select));
-        return {
-            label: `L${loraIdx}`,
-            stateKey: clip.id ? `lora:${clip.id}:${lora.name}` : undefined,
-            groupClassName: "vst-clip-lora-entry",
-            editor,
-            onDelete: () => {
-                context.structuralCommit(
+        const weight = tagFocus(
+            buildUnboundedNumber(lora.weight, LORA_WEIGHT_STEP, (value) => {
+                context.debouncedCommit(
+                    `clip-${clipIdx}-lora-${loraIdx}-weight`,
                     (clips) => {
-                        const target = clips[clipIdx];
-                        if (!target || !removeLoraAt(target, loraIdx)) {
-                            return null;
-                        }
-                        return { kind: "clip", clipIdx, stageIdx };
+                        const target = clips[clipIdx]?.loras[loraIdx];
+                        if (target) target.weight = value;
                     },
-                    { rebuildAfterSelect: true },
                 );
-            },
-            deleteTitle: `Delete LoRA ${loraIdx}`,
-        };
+            }),
+            `clip-${clipIdx}-lora-${loraIdx}-weight`,
+        );
+        weight.classList.add("lora-weight-input", "vst-clip-lora-weight");
+        row.append(remove, select, weight);
+        content.appendChild(row);
     });
-    const built = buildRepeatingEditor({
+    const add = buildDetailActionButton({
+        title: nextAvailableName
+            ? "Add a LoRA to this clip"
+            : "All available LoRAs are already on this clip",
+        label: "+ Add LoRA",
+        className: "small-button vst-detail-repeating-add vst-detail-add-lora",
+        disabled: !nextAvailableName,
+        onClick: () => {
+            context.structuralCommit(
+                (clips) => {
+                    const target = clips[clipIdx];
+                    const name = nextAvailableName;
+                    if (!target || !name) {
+                        return null;
+                    }
+                    appendLoraToClip(
+                        target,
+                        name,
+                        defaultLoraWeight(defaults, name),
+                    );
+                    return { kind: "clip", clipIdx, stageIdx };
+                },
+                { rebuildAfterSelect: true },
+            );
+        },
+    });
+    content.appendChild(add);
+    const built = buildAccordionSection({
         key: `clip-${clipIdx}-loras`,
         label: "LoRAs",
-        sectionClass: "vst-detail-loras-section",
-        defaultActiveIndex: items.length > 0 ? 0 : null,
-        items,
-        add: {
-            title: nextAvailableName
-                ? "Add a LoRA to this clip"
-                : "All available LoRAs are already on this clip",
-            label: "+ Add LoRA",
-            className: "vst-detail-add-lora",
-            disabled: !nextAvailableName,
-            onClick: () => {
-                context.structuralCommit(
-                    (clips) => {
-                        const target = clips[clipIdx];
-                        const name = nextAvailableName;
-                        if (!target || !name) {
-                            return null;
-                        }
-                        const initialWeight = defaultLoraWeight(defaults, name);
-                        appendLoraToClip(target, name, initialWeight);
-                        applyStageWeights(
-                            target,
-                            target.loras.length - 1,
-                            initialWeight,
-                        );
-                        return { kind: "clip", clipIdx, stageIdx };
-                    },
-                    { rebuildAfterSelect: true },
-                );
-            },
-        },
-        remove: {
-            title: "Delete LoRA",
-            className: "vst-detail-delete-lora",
-        },
+        content,
+        counter: clip.loras.length,
+        open: clip.loras.length === 0,
+        defaultOpen: true,
+        className: "vst-detail-loras-section",
     });
     appendHelp(
         built.heading,
         built.section,
         "LoRAs",
-        "Choose the normal LoRA models once for this clip. Each stage sets its own weight.",
+        "Each LoRA and weight applies to every stage in this clip.",
     );
     return built.section;
 };

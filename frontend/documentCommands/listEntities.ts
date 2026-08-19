@@ -161,7 +161,6 @@ const STAGE_ENTITY = defineList<CanonicalClip, CanonicalStage>()({
         "control",
         "controlNetStrength",
         "icLoraStrengths",
-        "loraWeights",
         "frameRefStrengths",
         "upscale",
         "upscaleMethod",

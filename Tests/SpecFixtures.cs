@@ -27,8 +27,6 @@ internal static class SpecFixtures
         int? clipStageRawIndex = null,
         IReadOnlyList<double> icLoraStrengths = null,
         IReadOnlyList<double> frameRefStrengths = null,
-        IReadOnlyList<LoraRef> loras = null,
-        IReadOnlyList<double> loraWeights = null,
         RetakeWindowSpec retakeWindow = null) =>
         new(
             id,
@@ -45,8 +43,6 @@ internal static class SpecFixtures
             ClipStageRawIndex: clipStageRawIndex ?? clipStageIndex ?? 0,
             IcLoraStrengths: icLoraStrengths,
             FrameRefStrengths: frameRefStrengths,
-            Loras: loras,
-            LoraWeights: loraWeights,
             RetakeWindow: retakeWindow);
 
     internal static ClipSpec Clip(

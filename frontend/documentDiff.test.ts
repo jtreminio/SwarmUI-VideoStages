@@ -307,8 +307,7 @@ describe("diffDocuments", () => {
 
     it("emits one cleanup-aware conversion before same-architecture stage retargets", () => {
         const before = document();
-        before.clips[0].loras = [{ name: "detail.safetensors" }];
-        before.clips[0].stages[0].loraWeights = [1];
+        before.clips[0].loras = [{ name: "detail.safetensors", weight: 1 }];
         before.clips[0].stages[0].upscale = 2;
         before.clips[0].frameRefs = [canonicalRef("conversion-ref")];
         const { catalog, target } = crossArchitectureCatalog();
@@ -717,10 +716,9 @@ describe("diffDocuments", () => {
             },
         },
         {
-            name: "stage with owned arrays",
+            name: "stage with owned reference strengths",
             type: "stage.patch",
             mutate: (after: CanonicalAuthoringDocument) => {
-                after.clips[0].stages[0].loraWeights = [0.6];
                 after.clips[0].stages[0].frameRefStrengths = [0.9, 0.4];
             },
         },

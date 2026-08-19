@@ -67,39 +67,54 @@ export interface ClipFixture {
     references?: Partial<ClipReference>[];
 }
 
-const clipRecord = (clip: ClipFixture): Record<string, unknown> => ({
-    duration: clip.duration,
-    skipped: clip.skipped ?? false,
-    boundaryOut: clip.boundaryOut ?? "cut",
-    boundaryOutOverlap: clip.boundaryOutOverlap ?? 8,
-    boundaryOutCarryAudio: clip.boundaryOutCarryAudio ?? false,
-    audioSource: clip.audioSource ?? "Native",
-    ...(clip.uploadedAudio ? { uploadedAudio: clip.uploadedAudio } : {}),
-    ...(clip.uploadedAudioDurationSeconds === undefined
-        ? {}
-        : {
-              uploadedAudioDurationSeconds: clip.uploadedAudioDurationSeconds,
-              uploadedAudioStartSeconds: clip.uploadedAudioStartSeconds ?? 0,
-              uploadedAudioLengthSeconds: clip.uploadedAudioLengthSeconds ?? 0,
-          }),
-    controlNetLora: clip.controlNetLora ?? "",
-    ...(clip.icLoras ? { icLoras: clip.icLoras } : {}),
-    reuseAudio: clip.reuseAudio ?? false,
-    clipLengthFromAudio: clip.clipLengthFromAudio ?? false,
-    stages: clip.stages.map((s) => ({
-        model: s.model ?? "ltx-2.3.safetensors",
-        skipped: s.skipped ?? false,
-        loras: s.loras ?? [],
-        upscale: s.upscale,
-        control: s.control,
-        steps: s.steps,
-    })),
-    frameRefs: clip.frameRefs ?? [],
-    references: clip.references ?? [],
-    promptWindows: [],
-    ...(clip.retake ? { retake: clip.retake } : {}),
-    ...(clip.initVideo ? { initVideo: clip.initVideo } : {}),
-});
+const clipRecord = (clip: ClipFixture): Record<string, unknown> => {
+    const loras: StageFixture["loras"] = [];
+    const names = new Set<string>();
+    for (const stage of clip.stages) {
+        for (const lora of stage.loras ?? []) {
+            if (!names.has(lora.name)) {
+                names.add(lora.name);
+                loras.push(lora);
+            }
+        }
+    }
+    return {
+        duration: clip.duration,
+        skipped: clip.skipped ?? false,
+        boundaryOut: clip.boundaryOut ?? "cut",
+        boundaryOutOverlap: clip.boundaryOutOverlap ?? 8,
+        boundaryOutCarryAudio: clip.boundaryOutCarryAudio ?? false,
+        audioSource: clip.audioSource ?? "Native",
+        ...(clip.uploadedAudio ? { uploadedAudio: clip.uploadedAudio } : {}),
+        ...(clip.uploadedAudioDurationSeconds === undefined
+            ? {}
+            : {
+                  uploadedAudioDurationSeconds:
+                      clip.uploadedAudioDurationSeconds,
+                  uploadedAudioStartSeconds:
+                      clip.uploadedAudioStartSeconds ?? 0,
+                  uploadedAudioLengthSeconds:
+                      clip.uploadedAudioLengthSeconds ?? 0,
+              }),
+        controlNetLora: clip.controlNetLora ?? "",
+        ...(clip.icLoras ? { icLoras: clip.icLoras } : {}),
+        reuseAudio: clip.reuseAudio ?? false,
+        clipLengthFromAudio: clip.clipLengthFromAudio ?? false,
+        loras,
+        stages: clip.stages.map((stage) => ({
+            model: stage.model ?? "ltx-2.3.safetensors",
+            skipped: stage.skipped ?? false,
+            upscale: stage.upscale,
+            control: stage.control,
+            steps: stage.steps,
+        })),
+        frameRefs: clip.frameRefs ?? [],
+        references: clip.references ?? [],
+        promptWindows: [],
+        ...(clip.retake ? { retake: clip.retake } : {}),
+        ...(clip.initVideo ? { initVideo: clip.initVideo } : {}),
+    };
+};
 
 // Prompt windows + clip prompts ride in the prompt box as tags.
 const promptText = (fixtures: ClipFixture[]): string => {

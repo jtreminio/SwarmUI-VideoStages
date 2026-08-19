@@ -1859,9 +1859,7 @@
     background: color-mix(in srgb, var(--emphasis) 8%, transparent);
 }
 
-/* Every repeating section uses the same native-outline rail. Stages,
-   references, LoRAs, IC-LoRAs, audio tracks, and their nested repeaters keep
-   SwarmUI's input-group structure; only the hierarchy cue is additive. */
+/* Repeating sections share one outline rail. */
 .vst-detail
     .vst-detail-section.input-group-open
     > .vst-detail-section-content {
@@ -1947,13 +1945,11 @@
     color: var(--emphasis);
 }
 
-.vst-detail .vst-stage-lora-weight-row > label,
 .vst-detail .vst-stage-iclora-strength-row > label {
     flex: 1 1 0;
     min-width: 0;
     overflow: hidden;
 }
-.vst-stage-lora-weight-row .vst-detail-field-label,
 .vst-stage-iclora-strength-row .vst-detail-field-label {
     display: block;
     width: auto;
@@ -1962,12 +1958,33 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.vst-detail .vst-stage-lora-weight-row,
 .vst-detail .vst-stage-iclora-strength-row {
     flex-wrap: nowrap;
 }
-.vst-detail .vst-stage-lora-weight,
 .vst-detail .vst-stage-iclora-strength {
+    flex: none;
+    width: 3rem;
+}
+
+.vst-detail-loras-section > .vst-detail-section-content > .vst-clip-lora-entry {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 4px 8px;
+    border-left-width: 2px;
+    border-left-style: solid;
+    border-left-color: var(--vst-detail-guide);
+}
+.vst-clip-lora-entry > .vst-detail-delete-lora {
+    flex: none;
+}
+.vst-clip-lora-entry > .vst-audio-select {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.vst-clip-lora-entry > .vst-clip-lora-weight {
     flex: none;
     width: 3rem;
 }
