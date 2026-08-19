@@ -50,7 +50,7 @@ public class RequestReaderTests
             ["clipLengthFromAudio"] = clipLengthFromAudio,
             ["clipLengthFromControlNet"] = clipLengthFromControlNet,
             ["reuseAudio"] = reuseAudio,
-            ["frameRefs"] = new JArray(refs ?? []),
+            ["keyframes"] = new JArray(refs ?? []),
             ["stages"] = new JArray(stages),
         };
         if (icLoras is not null)
@@ -1224,7 +1224,7 @@ public class RequestReaderTests
     public void ReadRequest_ClipExposesRefsAndStageNormalizedRefStrengths()
     {
         JObject stage = MakeStage("model-a");
-        stage["frameRefStrengths"] = new JArray(0.55, 0.66);
+        stage["keyframeStrengths"] = new JArray(0.55, 0.66);
         string json = JsonConvert.SerializeObject(new JArray(
             MakeClip(
                 stages: [stage],

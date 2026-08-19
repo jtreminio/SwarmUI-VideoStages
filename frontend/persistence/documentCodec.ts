@@ -150,7 +150,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 startSeconds: reference.startSeconds,
                 lengthSeconds: reference.lengthSeconds,
             })),
-            frameRefs: clip.frameRefs.map((ref) => ({
+            keyframes: clip.frameRefs.map((ref) => ({
                 id: ref.id,
                 source: ref.source,
                 uploadFileName: ref.uploadFileName,
@@ -165,7 +165,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 controlNetStrength: stage.controlNetStrength,
                 icLoraStrengths: stage.icLoraStrengths,
                 loraWeights: stage.loraWeights,
-                frameRefStrengths: stage.frameRefStrengths,
+                keyframeStrengths: stage.frameRefStrengths,
                 upscale: stage.upscale,
                 upscaleMethod: stage.upscaleMethod,
                 model: stage.model,
@@ -368,7 +368,7 @@ const hasValidStoredCollections = (
     for (const clip of parsed.clips) {
         if (
             !hasArrayOfRecords(clip, "stages") ||
-            !hasArrayOfRecords(clip, "frameRefs") ||
+            !hasArrayOfRecords(clip, "keyframes") ||
             !hasArrayOfRecords(clip, "references") ||
             !hasArrayOfRecords(clip, "icLoras") ||
             (Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras"))
@@ -394,9 +394,9 @@ const hasValidStoredCollections = (
                                 typeof strength === "number" &&
                                 Number.isFinite(strength),
                         ))) ||
-                (Object.hasOwn(stage, "frameRefStrengths") &&
-                    (!Array.isArray(stage.frameRefStrengths) ||
-                        !stage.frameRefStrengths.every(
+                (Object.hasOwn(stage, "keyframeStrengths") &&
+                    (!Array.isArray(stage.keyframeStrengths) ||
+                        !stage.keyframeStrengths.every(
                             (strength: unknown) =>
                                 typeof strength === "number" &&
                                 Number.isFinite(strength),
@@ -521,7 +521,7 @@ const noticeDivergentProjection = (serialized: string): void => {
     getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
 };
 
-const FRAME_REFS_LEGACY_SCHEMA_VERSION = 6;
+const FRAME_REFS_SCHEMA_VERSION = 7;
 
 const renameKey = (
     target: Record<string, unknown>,
@@ -537,7 +537,7 @@ const renameKey = (
     delete target[oldKey];
 };
 
-/** Renames the v6 keyframe fields. */
+/** Renames the v7 frame-reference fields to the product vocabulary. */
 const migrateStoredDocument = (
     parsed: Record<string, unknown>,
 ): Record<string, unknown> | null => {
@@ -545,7 +545,7 @@ const migrateStoredDocument = (
         return parsed;
     }
     if (
-        parsed.schemaVersion !== FRAME_REFS_LEGACY_SCHEMA_VERSION ||
+        parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION ||
         !Array.isArray(parsed.clips)
     ) {
         return null;
@@ -556,13 +556,13 @@ const migrateStoredDocument = (
         if (!isRecord(rawClip)) {
             continue;
         }
-        renameKey(rawClip, "refs", "frameRefs");
+        renameKey(rawClip, "frameRefs", "keyframes");
         if (!Array.isArray(rawClip.stages)) {
             continue;
         }
         for (const rawStage of rawClip.stages) {
             if (isRecord(rawStage)) {
-                renameKey(rawStage, "refStrengths", "frameRefStrengths");
+                renameKey(rawStage, "frameRefStrengths", "keyframeStrengths");
             }
         }
     }
@@ -618,7 +618,8 @@ const hasCanonicalStoredId = (
         typeof value.id !== "string" ||
         value.id.length === 0 ||
         value.id.trim() !== value.id ||
-        seen.has(value.id)
+        seen.has(value.id) ||
+        value.id.includes("_legacy_")
     ) {
         return false;
     }
@@ -642,7 +643,7 @@ export const storedDocumentNeedsCanonicalIdRepair = (
         const seenIds = new Set<string>();
         for (const rawClip of parsed.clips) {
             if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-            for (const key of ["stages", "frameRefs", "references"] as const) {
+            for (const key of ["stages", "keyframes", "references"] as const) {
                 const children = rawClip[key];
                 if (
                     !Array.isArray(children) ||

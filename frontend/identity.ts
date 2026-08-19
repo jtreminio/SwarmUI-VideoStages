@@ -7,7 +7,7 @@ import {
 export type EntityKind =
     | "clip"
     | "stage"
-    | "ref"
+    | "keyframe"
     | "clip_reference"
     | "ic_lora"
     | "prompt_window"
@@ -32,7 +32,7 @@ const normalizedExistingId = (value: unknown): string | null => {
         return null;
     }
     const id = value.trim();
-    return id.length > 0 ? id : null;
+    return id.length > 0 && !id.includes("_legacy_") ? id : null;
 };
 
 export const createEntityId = (kind: EntityKind): string => {
@@ -55,8 +55,7 @@ const assignUniqueId = (
         return reservedId;
     }
 
-    // `_legacy_` is retained in the persisted ID format for stability.
-    const base = `${entry.kind}_legacy_${entry.repairPath}`;
+    const base = `${entry.kind}_${entry.repairPath}`;
     let id = base;
     let collision = 1;
     while (used.has(id)) {
@@ -93,7 +92,7 @@ const clipIdentityEntries = (
         for (let refIndex = 0; refIndex < clip.frameRefs.length; refIndex++) {
             entries.push({
                 entity: clip.frameRefs[refIndex],
-                kind: "ref",
+                kind: "keyframe",
                 repairPath: `${clipIndex}_${refIndex}`,
             });
         }

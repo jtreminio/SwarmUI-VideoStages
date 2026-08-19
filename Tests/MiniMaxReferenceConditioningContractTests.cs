@@ -28,7 +28,7 @@ public class MiniMaxReferenceConditioningContractTests
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
-        clip["frameRefs"] = new JArray(MakeRef("Refiner"), MakeRef("Refiner", fromEnd: true));
+        clip["keyframes"] = new JArray(MakeRef("Refiner"), MakeRef("Refiner", fromEnd: true));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(
             MakeDocument(clip),
@@ -62,7 +62,7 @@ public class MiniMaxReferenceConditioningContractTests
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
-        clip["frameRefs"] = new JArray(UploadedReference("RklSU1Q=", fromEnd: false));
+        clip["keyframes"] = new JArray(UploadedReference("RklSU1Q=", fromEnd: false));
         clip["references"] = new JArray(
             MakeClipReference("image", "data:image/png;base64,U1VCSkVDVA==", "subject.png"),
             MakeClipReference(

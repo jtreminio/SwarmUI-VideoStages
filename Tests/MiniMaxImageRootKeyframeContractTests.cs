@@ -17,7 +17,7 @@ public class MiniMaxImageRootKeyframeContractTests
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 5.0;
-        clip["frameRefs"] = new JArray(MakeRef("Refiner", frame: 21));
+        clip["keyframes"] = new JArray(MakeRef("Refiner", frame: 21));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);

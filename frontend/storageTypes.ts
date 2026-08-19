@@ -8,8 +8,8 @@ import type {
 } from "./types";
 
 /**
- * Canonical lists of the fields each stored type persists. Exhaustiveness
- * assertions force every new domain field to be classified explicitly.
+ * Domain fields included in each storage projection. The wire calls frame
+ * references keyframes; exhaustiveness still classifies the domain fields.
  */
 export const STORED_REF_KEYS = [
     "id",
@@ -133,8 +133,10 @@ export type StoredClipReference = RequireEntityId<
 >;
 
 export type StoredStage = RequireEntityId<
-    Pick<Stage, (typeof STORED_STAGE_KEYS)[number]>
->;
+    Omit<Pick<Stage, (typeof STORED_STAGE_KEYS)[number]>, "frameRefStrengths">
+> & {
+    keyframeStrengths: number[];
+};
 
 export type StoredClip = RequireEntityId<
     Pick<
@@ -148,6 +150,6 @@ export type StoredClip = RequireEntityId<
     icLoras: CanonicalIcLora[];
     retake: CanonicalRetake | null;
     references: StoredClipReference[];
-    frameRefs: StoredFrameRefImage[];
+    keyframes: StoredFrameRefImage[];
     stages: StoredStage[];
 };

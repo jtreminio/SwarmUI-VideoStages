@@ -115,7 +115,7 @@ describe("normalization", () => {
             {
                 duration: 1.05,
                 stages: [{ ...minimalStageRaw, model: "removed-model" }],
-                frameRefs: [{ source: MEDIA_SOURCE_BASE, frame: 33 }],
+                keyframes: [{ source: MEDIA_SOURCE_BASE, frame: 33 }],
             },
             moduleRootDefaults(),
             testStageModel,
@@ -256,11 +256,11 @@ describe("normalization", () => {
     it("normalizeClip pads frameRefStrengths for each stage from raw", () => {
         const rawClip: Record<string, unknown> = {
             duration: 2,
-            frameRefs: [{ source: MEDIA_SOURCE_BASE, frame: 1 }],
+            keyframes: [{ source: MEDIA_SOURCE_BASE, frame: 1 }],
             stages: [
                 {
                     model: "ltx",
-                    frameRefStrengths: [0.3],
+                    keyframeStrengths: [0.3],
                 },
             ],
         };
@@ -794,7 +794,7 @@ describe("normalization", () => {
                 duration: 1.05,
                 audioSource: "Upload",
                 clipLengthFromAudio: true,
-                frameRefs: [{ source: "Base", frame: 100 }],
+                keyframes: [{ source: "Base", frame: 100 }],
                 stages: [{ model: "ltx-2.3.safetensors" }],
             },
             moduleRootDefaults(),
@@ -812,7 +812,7 @@ describe("normalization", () => {
                 duration: 1.05,
                 audioSource: "Native",
                 clipLengthFromAudio: true,
-                frameRefs: [{ source: "Base", frame: 100 }],
+                keyframes: [{ source: "Base", frame: 100 }],
                 stages: [{ model: "ltx-2.3.safetensors" }],
             },
             moduleRootDefaults(),
@@ -1074,10 +1074,10 @@ describe("appendRefToClip / removeRefAt", () => {
         normalizeClip(
             {
                 duration: 4,
-                frameRefs: [{ source: MEDIA_SOURCE_REFINER, frame: 2 }],
+                keyframes: [{ source: MEDIA_SOURCE_REFINER, frame: 2 }],
                 stages: [
-                    { frameRefStrengths: [0.3] },
-                    { frameRefStrengths: [0.7] },
+                    { keyframeStrengths: [0.3] },
+                    { keyframeStrengths: [0.7] },
                 ],
             },
             moduleRootDefaults(),
@@ -1192,7 +1192,7 @@ describe("clip LoRAs with per-stage weights", () => {
         const clip = normalizeClip(
             {
                 duration: 2,
-                frameRefs: [],
+                keyframes: [],
                 stages: [
                     {
                         model: "ltx",

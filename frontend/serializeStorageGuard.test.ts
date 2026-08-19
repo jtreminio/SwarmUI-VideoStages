@@ -50,12 +50,25 @@ const getRootDefaults = (): RootDefaults => ({
 const testStageModel = getRootDefaults().modelValues[0] ?? "";
 
 /** normalizeClip on a JSON-cloned raw record, mirroring the persistence parse. */
-const normalize = (raw: unknown): Clip =>
-    normalizeClip(
-        JSON.parse(JSON.stringify(raw)) as Record<string, unknown>,
-        getRootDefaults(),
-        testStageModel,
-    );
+const normalize = (raw: unknown): Clip => {
+    const stored = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
+    if ("frameRefs" in stored && !("keyframes" in stored)) {
+        stored.keyframes = stored.frameRefs;
+        delete stored.frameRefs;
+    }
+    if (Array.isArray(stored.stages)) {
+        for (const stage of stored.stages as Array<Record<string, unknown>>) {
+            if (
+                "frameRefStrengths" in stage &&
+                !("keyframeStrengths" in stage)
+            ) {
+                stage.keyframeStrengths = stage.frameRefStrengths;
+                delete stage.frameRefStrengths;
+            }
+        }
+    }
+    return normalizeClip(stored, getRootDefaults(), testStageModel);
+};
 
 const store = (clip: Clip): StoredClip => serializeClipsForStorage([clip])[0];
 
@@ -174,26 +187,33 @@ describe("serialize storage completeness guard", () => {
         const stored = store(normalize(maximalClip()));
 
         for (const key of STORED_CLIP_KEYS) {
-            expect(Object.hasOwn(stored, key)).toBe(true);
+            expect(
+                Object.hasOwn(stored, key === "frameRefs" ? "keyframes" : key),
+            ).toBe(true);
         }
         for (const key of STORED_CLIP_REFERENCE_KEYS) {
             expect(Object.hasOwn(stored.references[0], key)).toBe(true);
         }
         for (const key of STORED_REF_KEYS) {
-            expect(Object.hasOwn(stored.frameRefs[0], key)).toBe(true);
+            expect(Object.hasOwn(stored.keyframes[0], key)).toBe(true);
         }
         for (const key of STORED_STAGE_KEYS) {
-            expect(Object.hasOwn(stored.stages[0], key)).toBe(true);
+            expect(
+                Object.hasOwn(
+                    stored.stages[0],
+                    key === "frameRefStrengths" ? "keyframeStrengths" : key,
+                ),
+            ).toBe(true);
         }
         // Every optional container is present, so the nested projections above
         // are genuinely exercised.
         expect(stored.icLoras.length).toBeGreaterThan(0);
         expect(stored.references.length).toBeGreaterThan(0);
-        expect(stored.frameRefs.length).toBeGreaterThan(0);
+        expect(stored.keyframes.length).toBeGreaterThan(0);
         expect(stored.stages.length).toBeGreaterThan(0);
         expect(stored.loras.length).toBeGreaterThan(0);
         expect(stored.stages[0].loraWeights.length).toBeGreaterThan(0);
-        expect(stored.stages[0].frameRefStrengths.length).toBeGreaterThan(0);
+        expect(stored.stages[0].keyframeStrengths.length).toBeGreaterThan(0);
         expect(stored.retake).not.toBeNull();
         expect(stored.uploadedAudio).not.toBeNull();
     });

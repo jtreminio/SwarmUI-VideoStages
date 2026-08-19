@@ -95,10 +95,10 @@ describe("persistence", () => {
             );
 
         it.each([
-            ["missing clips", { schemaVersion: 7 }],
-            ["non-array clips", { schemaVersion: 7, clips: {} }],
-            ["null clip item", { schemaVersion: 7, clips: [null] }],
-            ["scalar clip item", { schemaVersion: 7, clips: ["clip"] }],
+            ["missing clips", { schemaVersion: 8 }],
+            ["non-array clips", { schemaVersion: 8, clips: {} }],
+            ["null clip item", { schemaVersion: 8, clips: [null] }],
+            ["scalar clip item", { schemaVersion: 8, clips: ["clip"] }],
         ])("rejects %s", (_label, document) => {
             expect(decode(document)).toBeNull();
         });
@@ -108,8 +108,8 @@ describe("persistence", () => {
             ["root audioTracks item", { audioTracks: [null] }],
             ["clip stages", { clips: [{ stages: {} }] }],
             ["clip stage item", { clips: [{ stages: [null] }] }],
-            ["clip frameRefs", { clips: [{ frameRefs: {} }] }],
-            ["clip ref item", { clips: [{ frameRefs: [1] }] }],
+            ["clip keyframes", { clips: [{ keyframes: {} }] }],
+            ["clip keyframe item", { clips: [{ keyframes: [1] }] }],
             ["clip icLoras", { clips: [{ icLoras: {} }] }],
             ["clip IC-LoRA item", { clips: [{ icLoras: [false] }] }],
             ["clip LoRAs", { clips: [{ loras: {} }] }],
@@ -125,12 +125,12 @@ describe("persistence", () => {
                 { clips: [{ stages: [{ loraWeights: [null] }] }] },
             ],
             [
-                "stage ref strengths",
-                { clips: [{ stages: [{ frameRefStrengths: {} }] }] },
+                "stage keyframe strengths",
+                { clips: [{ stages: [{ keyframeStrengths: {} }] }] },
             ],
             [
-                "stage ref-strength item",
-                { clips: [{ stages: [{ frameRefStrengths: [null] }] }] },
+                "stage keyframe-strength item",
+                { clips: [{ stages: [{ keyframeStrengths: [null] }] }] },
             ],
             ["audio-track spans", { audioTracks: [{ spans: {} }] }],
             ["audio-track span item", { audioTracks: [{ spans: [null] }] }],
@@ -138,7 +138,7 @@ describe("persistence", () => {
         ])("rejects a malformed present %s collection", (_label, partial) => {
             expect(
                 decode({
-                    schemaVersion: 7,
+                    schemaVersion: 8,
                     clips: [],
                     ...partial,
                 }),
@@ -159,16 +159,43 @@ describe("persistence", () => {
             );
         });
 
-        it("migrates the version-six reference fields to their frame names", () => {
+        it("migrates version-seven frame-reference fields to keyframes", () => {
             const decoded = decode({
-                schemaVersion: 6,
+                schemaVersion: 7,
                 clips: [
                     {
-                        refs: [{ source: "Upload", frame: 1, fromEnd: false }],
+                        id: "clip_legacy_0",
+                        frameRefs: [
+                            {
+                                id: "ref_legacy_0_0",
+                                source: "Upload",
+                                frame: 1,
+                                fromEnd: false,
+                            },
+                        ],
                         stages: [
                             {
+                                id: "stage_legacy_0_0",
                                 model: "model.safetensors",
-                                refStrengths: [0.6],
+                                frameRefStrengths: [0.6],
+                            },
+                        ],
+                    },
+                ],
+                audioTracks: [
+                    {
+                        id: "audio_track_legacy_0",
+                        source: {
+                            kind: "Upload",
+                            reference: "",
+                            uploadedAudio: null,
+                        },
+                        spans: [
+                            {
+                                id: "audio_span_legacy_0_0",
+                                timelineStartSeconds: 0,
+                                timelineLengthSeconds: 1,
+                                sourceStartSeconds: 0,
                             },
                         ],
                     },
@@ -182,19 +209,60 @@ describe("persistence", () => {
             ]);
             const reencoded = JSON.parse(
                 serializeStateForStorage({
-                    schemaVersion: 7,
+                    schemaVersion: 8,
                     ...decoded?.dims,
                     clips: decoded?.clips ?? [],
                     audioTracks: decoded?.audioTracks ?? [],
                 } as AuthoringDocument),
-            ) as { schemaVersion: number; clips: Record<string, unknown>[] };
-            expect(reencoded.schemaVersion).toBe(7);
-            expect(reencoded.clips[0].frameRefs).toHaveLength(1);
-            expect(reencoded.clips[0].refs).toBeUndefined();
+            ) as {
+                schemaVersion: number;
+                clips: Array<{
+                    id: string;
+                    keyframes?: Array<{ id: string }>;
+                    frameRefs?: unknown[];
+                    stages: Array<{
+                        id: string;
+                        keyframeStrengths?: number[];
+                        frameRefStrengths?: number[];
+                    }>;
+                }>;
+                audioTracks: Array<{
+                    id: string;
+                    spans: Array<{
+                        id: string;
+                        projection: {
+                            firstClipId: string;
+                            lastClipId: string;
+                        };
+                    }>;
+                }>;
+            };
+            expect(reencoded.schemaVersion).toBe(8);
+            expect(reencoded.clips[0].keyframes).toHaveLength(1);
+            expect(reencoded.clips[0].frameRefs).toBeUndefined();
+            expect(reencoded.clips[0].stages[0].keyframeStrengths).toEqual([
+                0.6,
+            ]);
+            expect(
+                reencoded.clips[0].stages[0].frameRefStrengths,
+            ).toBeUndefined();
+            expect(reencoded.clips[0].id).not.toContain("legacy");
+            expect(reencoded.clips[0].stages[0].id).not.toContain("legacy");
+            expect(reencoded.clips[0].keyframes?.[0].id).not.toContain(
+                "legacy",
+            );
+            expect(reencoded.audioTracks[0].id).not.toContain("legacy");
+            expect(reencoded.audioTracks[0].spans[0].id).not.toContain(
+                "legacy",
+            );
+            expect(reencoded.audioTracks[0].spans[0].projection).toMatchObject({
+                firstClipId: reencoded.clips[0].id,
+                lastClipId: reencoded.clips[0].id,
+            });
         });
 
         it("accepts omitted optional collections without inventing stored items", () => {
-            const decoded = decode({ schemaVersion: 7, clips: [{}] });
+            const decoded = decode({ schemaVersion: 8, clips: [{}] });
 
             expect(decoded).not.toBeNull();
             expect(decoded?.clips).toHaveLength(1);
@@ -208,7 +276,7 @@ describe("persistence", () => {
 
         it("canonicalizes every clip and stage after the first skip marker", () => {
             const decoded = decode({
-                schemaVersion: 7,
+                schemaVersion: 8,
                 clips: [
                     {
                         stages: [
@@ -234,7 +302,7 @@ describe("persistence", () => {
 
         it("round-trips an explicit IC-LoRA Drive Media kind contract", () => {
             const decoded = decode({
-                schemaVersion: 7,
+                schemaVersion: 8,
                 clips: [
                     {
                         icLoras: [
@@ -371,7 +439,7 @@ describe("persistence", () => {
                             lengthSeconds: 0,
                         },
                     ],
-                    frameRefs: [
+                    keyframes: [
                         {
                             id: clips[0].frameRefs[0].id as string,
                             source: MEDIA_SOURCE_BASE,
@@ -389,7 +457,7 @@ describe("persistence", () => {
                             controlNetStrength: 0.7,
                             icLoraStrengths: [],
                             loraWeights: [0.6],
-                            frameRefStrengths: [0.8],
+                            keyframeStrengths: [0.8],
                             upscale: 1,
                             upscaleMethod: "latentmodel-test.safetensors",
                             model: "ltx-2.3.safetensors",
@@ -482,7 +550,7 @@ describe("persistence", () => {
                 clips: Array<{
                     uploadedAudio: unknown;
                     initVideo: unknown;
-                    frameRefs: Array<{
+                    keyframes: Array<{
                         uploadedImage: unknown;
                         frame: number;
                         fromEnd: boolean;
@@ -506,7 +574,7 @@ describe("persistence", () => {
                 duration: 4,
                 uploadedAudio: null,
                 initVideo: null,
-                frameRefs: [
+                keyframes: [
                     {
                         uploadedImage: null,
                         frame: 8,
@@ -587,7 +655,7 @@ describe("persistence", () => {
                 getLoraDefaultWeight,
             });
             const serialized = JSON.stringify({
-                schemaVersion: 6,
+                schemaVersion: 8,
                 clips: [{ stages: [{}, {}] }, { stages: [{}, {}, {}] }],
             });
 
@@ -844,7 +912,7 @@ describe("persistence", () => {
 
         it("preserves unknown architecture identities for diagnostics and repair", () => {
             mountVideoStagesData({
-                schemaVersion: 7,
+                schemaVersion: 8,
                 clips: [
                     {
                         architectureHint: "removed-architecture",

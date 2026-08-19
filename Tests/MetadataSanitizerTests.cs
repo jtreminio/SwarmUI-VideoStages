@@ -32,7 +32,7 @@ public class MetadataSanitizerTests
                         ["data"] = "data:audio/wav;base64,QUJD",
                         ["fileName"] = "a.wav"
                     },
-                    ["frameRefs"] = new JArray
+                    ["keyframes"] = new JArray
                     {
                         new JObject
                         {
@@ -63,13 +63,46 @@ public class MetadataSanitizerTests
         JObject clip = (JObject)root["clips"]![0]!;
         Assert.Null(clip["uploadedAudio"]!["data"]);
         Assert.Equal("a.wav", $"{clip["uploadedAudio"]!["fileName"]}");
-        JObject ref0 = (JObject)clip["frameRefs"]![0]!;
+        JObject ref0 = (JObject)clip["keyframes"]![0]!;
         Assert.Null(ref0["uploadedImage"]!["data"]);
         Assert.Equal("r.png", $"{ref0["uploadedImage"]!["fileName"]}");
         JObject icLora = (JObject)clip["icLoras"]![0]!;
         Assert.Null(icLora["driveMedia"]!["data"]);
         Assert.Equal("drive.mp4", $"{icLora["driveMedia"]!["fileName"]}");
         Assert.Equal("some-lora", $"{icLora["lora"]}");
+    }
+
+    [Fact]
+    public void StripUploadData_RemovesVersionSevenKeyframePayloads()
+    {
+        string raw = new JObject
+        {
+            ["schemaVersion"] = 7,
+            ["clips"] = new JArray
+            {
+                new JObject
+                {
+                    ["frameRefs"] = new JArray
+                    {
+                        new JObject
+                        {
+                            ["uploadedImage"] = new JObject
+                            {
+                                ["data"] = "data:image/png;base64,QUJD",
+                                ["fileName"] = "old.png"
+                            }
+                        }
+                    }
+                }
+            }
+        }.ToString();
+
+        JObject sanitized = JObject.Parse(
+            MetadataSanitizer.StripUploadDataFromJsonParameter(raw));
+        JObject keyframe = (JObject)sanitized["clips"]![0]!["frameRefs"]![0]!;
+
+        Assert.Null(keyframe["uploadedImage"]!["data"]);
+        Assert.Equal("old.png", $"{keyframe["uploadedImage"]!["fileName"]}");
     }
 
     [Fact]

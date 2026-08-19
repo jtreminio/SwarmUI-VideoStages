@@ -141,7 +141,7 @@ public class MiniMaxInitVideoContractTests
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
-        clip["frameRefs"] = new JArray(UploadedReference("RklSU1Q=", fromEnd: false));
+        clip["keyframes"] = new JArray(UploadedReference("RklSU1Q=", fromEnd: false));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -169,7 +169,7 @@ public class MiniMaxInitVideoContractTests
             ["data"] = "data:video/mp4;base64,ESIz",
             ["fileName"] = "source.mp4",
         };
-        clip["frameRefs"] = new JArray(
+        clip["keyframes"] = new JArray(
             UploadedReference("RklSU1Q=", fromEnd: false),
             UploadedReference("TEFTVA==", fromEnd: true));
 
@@ -206,7 +206,7 @@ public class MiniMaxInitVideoContractTests
             ["data"] = "data:video/mp4;base64,ESIz",
             ["fileName"] = "source.mp4",
         };
-        clip["frameRefs"] = new JArray(UploadedReference("RklSU1Q="));
+        clip["keyframes"] = new JArray(UploadedReference("RklSU1Q="));
         clip["refFraming"] = Constants.ReferenceFramingFitGreen;
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));

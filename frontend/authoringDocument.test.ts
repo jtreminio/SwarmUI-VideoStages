@@ -102,13 +102,13 @@ describe("versioned authoring document identity", () => {
         expect(collectAuthoringEntityIds(state)).toEqual([]);
     });
 
-    it("derives the same missing v3 IDs across a prompt-only cache invalidation before save", () => {
+    it("derives the same missing IDs across a prompt-only cache invalidation before save", () => {
         mountVideoStagesData({
             schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
             clips: [
                 {
                     duration: 3,
-                    frameRefs: [{ source: "Base", frame: 1 }],
+                    keyframes: [{ source: "Base", frame: 1 }],
                     stages: [
                         {
                             model: "ltx-2.3.safetensors",
@@ -128,14 +128,14 @@ describe("versioned authoring document identity", () => {
 
         expect(after).toEqual(before);
         expect(after).toEqual([
-            "clip_legacy_0",
-            "stage_legacy_0_0",
-            "ref_legacy_0_0",
-            "prompt_window_legacy_0_0",
+            "clip_0",
+            "stage_0_0",
+            "keyframe_0_0",
+            "prompt_window_0_0",
         ]);
     });
 
-    it("durably canonicalizes whitespace and globally duplicate v3 carrier IDs on a no-op save", () => {
+    it("durably canonicalizes whitespace and globally duplicate carrier IDs on a no-op save", () => {
         mountVideoStagesData({
             schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
             clips: [
@@ -149,7 +149,7 @@ describe("versioned authoring document identity", () => {
                             modelProfileId: "ltx-2.3",
                         },
                     ],
-                    frameRefs: [{ id: "duplicate", source: "Base", frame: 1 }],
+                    keyframes: [{ id: "duplicate", source: "Base", frame: 1 }],
                     icLoras: [
                         defaultIcLora({
                             id: "duplicate",
@@ -172,14 +172,14 @@ describe("versioned authoring document identity", () => {
             clips: {
                 id: string;
                 stages: { id: string }[];
-                frameRefs: { id: string }[];
+                keyframes: { id: string }[];
                 icLoras: { id: string }[];
             }[];
         };
         const storedIds = [
             stored.clips[0].id,
             stored.clips[0].stages[0].id,
-            stored.clips[0].frameRefs[0].id,
+            stored.clips[0].keyframes[0].id,
             stored.clips[0].icLoras[0].id,
         ];
         expect(storedIds).toEqual([
@@ -254,17 +254,17 @@ describe("versioned authoring document identity", () => {
 
     it("reserves later stable IDs before assigning missing clip and nested IDs", () => {
         const stableClip = minimalClip({
-            id: "clip_legacy_0",
+            id: "clip_0",
             stages: [minimalStage({ id: "stage-stable" })],
         });
         const nestedClip = minimalClip({
             id: "clip-nested",
-            stages: [minimalStage(), minimalStage({ id: "stage_legacy_1_0" })],
-            frameRefs: [minimalRef(), minimalRef({ id: "ref_legacy_1_0" })],
+            stages: [minimalStage(), minimalStage({ id: "stage_1_0" })],
+            frameRefs: [minimalRef(), minimalRef({ id: "keyframe_1_0" })],
             promptWindows: [
                 { prompt: "new", start: 0, duration: 0.5 },
                 {
-                    id: "prompt_window_legacy_1_0",
+                    id: "prompt_window_1_0",
                     prompt: "stable",
                     start: 1,
                     duration: 0.5,
@@ -278,7 +278,7 @@ describe("versioned authoring document identity", () => {
         const stableRef = nestedClip.frameRefs[1];
         const stableWindow = nestedClip.promptWindows[1];
         const stableSpan = {
-            id: "audio_span_legacy_0_0",
+            id: "audio_span_0_0",
             timelineStartSeconds: null,
             timelineLengthSeconds: null,
             sourceStartSeconds: 0,
@@ -306,15 +306,15 @@ describe("versioned authoring document identity", () => {
 
         ensureAuthoringDocumentIdentity(state);
 
-        expect(stableClip.id).toBe("clip_legacy_0");
+        expect(stableClip.id).toBe("clip_0");
         expect(missingClip.id).not.toBe(stableClip.id);
-        expect(stableStage.id).toBe("stage_legacy_1_0");
+        expect(stableStage.id).toBe("stage_1_0");
         expect(nestedClip.stages[0].id).not.toBe(stableStage.id);
-        expect(stableRef.id).toBe("ref_legacy_1_0");
+        expect(stableRef.id).toBe("keyframe_1_0");
         expect(nestedClip.frameRefs[0].id).not.toBe(stableRef.id);
-        expect(stableWindow.id).toBe("prompt_window_legacy_1_0");
+        expect(stableWindow.id).toBe("prompt_window_1_0");
         expect(nestedClip.promptWindows[0].id).not.toBe(stableWindow.id);
-        expect(stableSpan.id).toBe("audio_span_legacy_0_0");
+        expect(stableSpan.id).toBe("audio_span_0_0");
         expect(state.audioTracks?.[0].spans[0].id).not.toBe(stableSpan.id);
         expect(new Set(collectAuthoringEntityIds(state)).size).toBe(
             collectAuthoringEntityIds(state).length,

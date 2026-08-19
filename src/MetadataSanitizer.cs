@@ -32,7 +32,13 @@ internal static class MetadataSanitizer
         new(
             [
                 UploadPathStep.Each(UploadContainers.ClipsCollection),
-                UploadPathStep.Each(UploadContainers.FrameRefsCollection)
+                UploadPathStep.Each(UploadContainers.KeyframesCollection)
+            ],
+            UploadContainers.RefImage),
+        new(
+            [
+                UploadPathStep.Each(UploadContainers.ClipsCollection),
+                UploadPathStep.Each(UploadContainers.VersionSevenKeyframesCollection)
             ],
             UploadContainers.RefImage),
         new(

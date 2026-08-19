@@ -59,7 +59,7 @@ export interface AuthoringDocument {
     audioTracks?: AudioTrack[];
 }
 
-export const CURRENT_AUTHORING_SCHEMA_VERSION = 7;
+export const CURRENT_AUTHORING_SCHEMA_VERSION = 8;
 
 export interface UploadedMedia {
     data: string;

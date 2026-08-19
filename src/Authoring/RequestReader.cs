@@ -513,7 +513,7 @@ internal static class RequestReader
         }
 
         List<double> strengths = [];
-        if (DocumentJson.GetArray(stage, "frameRefStrengths") is JArray array)
+        if (DocumentJson.GetArray(stage, "keyframeStrengths") is JArray array)
         {
             foreach (JToken entry in array)
             {

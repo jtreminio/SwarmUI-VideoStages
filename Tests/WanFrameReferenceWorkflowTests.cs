@@ -28,7 +28,7 @@ public class WanFrameReferenceWorkflowTests
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.Create();
         JObject clip = MakeClip(fixture.Stage(steps: 10));
-        clip["frameRefs"] = new JArray(UploadedReference("RklSU1Q="));
+        clip["keyframes"] = new JArray(UploadedReference("RklSU1Q="));
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -73,7 +73,7 @@ public class WanFrameReferenceWorkflowTests
             };
         }
         JObject clip = MakeClip(fixture.Stage(steps: 10));
-        clip["frameRefs"] = new JArray(reference);
+        clip["keyframes"] = new JArray(reference);
 
         SwarmReadableErrorException error = await Assert.ThrowsAsync<SwarmReadableErrorException>(
             () => fixture.GenerateAsync(MakeDocument(clip)));
@@ -94,7 +94,7 @@ public class WanFrameReferenceWorkflowTests
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.Create(modelFixturePath);
         JObject clip = MakeClip(fixture.Stage(steps: 10));
-        clip["frameRefs"] = new JArray(UploadedReference("TEFTVA==", fromEnd: true));
+        clip["keyframes"] = new JArray(UploadedReference("TEFTVA==", fromEnd: true));
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -143,7 +143,7 @@ public class WanFrameReferenceWorkflowTests
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.Create();
         JObject clip = MakeClip(fixture.Stage(steps: 10));
-        clip["frameRefs"] = new JArray(
+        clip["keyframes"] = new JArray(
             UploadedReference("not-valid-base64"),
             UploadedReference("TEFTVA==", fromEnd: true));
 
@@ -169,7 +169,7 @@ public class WanFrameReferenceWorkflowTests
             fixture.Stage(control: 1, steps: 10),
             fixture.Stage("PreviousStage", control: 0.5, steps: 12),
             fixture.Stage("PreviousStage", control: 0, steps: 13));
-        clip["frameRefs"] = new JArray(UploadedReference("TEFTVA==", fromEnd: true));
+        clip["keyframes"] = new JArray(UploadedReference("TEFTVA==", fromEnd: true));
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -209,7 +209,7 @@ public class WanFrameReferenceWorkflowTests
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage(steps: 10));
-        clip["frameRefs"] = new JArray(
+        clip["keyframes"] = new JArray(
             UploadedReference("RklSU1Q="),
             UploadedReference("TEFTVA==", fromEnd: true));
 
@@ -402,7 +402,7 @@ public class WanFrameReferenceWorkflowTests
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage(control: 1, steps: 10));
-        clip["frameRefs"] = new JArray(MakeRef("Base", fromEnd: true));
+        clip["keyframes"] = new JArray(MakeRef("Base", fromEnd: true));
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
@@ -441,7 +441,7 @@ public class WanFrameReferenceWorkflowTests
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(fixture.Stage(control: 1, steps: 10));
-        clip["frameRefs"] = new JArray(MakeRef("Upload", fromEnd: true));
+        clip["keyframes"] = new JArray(MakeRef("Upload", fromEnd: true));
 
         SwarmReadableErrorException error = await Assert.ThrowsAsync<SwarmReadableErrorException>(
             () => ComfyWorkflowApiTestHarness.GenerateAsync(

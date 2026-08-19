@@ -404,7 +404,7 @@ export const normalizeStage = (
             : [...fallback.icLoraStrengths],
         loraWeights,
         frameRefStrengths: normalizeStageRefStrengths(
-            rawStage.frameRefStrengths,
+            rawStage.keyframeStrengths,
             refCount,
         ),
         upscale: firstStageUpscale.upscale,

@@ -210,7 +210,7 @@ export const normalizeClip = (
         Math.max(CLIP_DURATION_MIN, rawDuration),
         fps,
     );
-    const refsRaw = Array.isArray(rawClip.frameRefs) ? rawClip.frameRefs : [];
+    const refsRaw = Array.isArray(rawClip.keyframes) ? rawClip.keyframes : [];
     const clipScopedLoras = normalizeStageLoras(rawClip.loras);
     const loraNames: string[] = [];
     const loraDefaultWeightByName = new Map<string, number>();

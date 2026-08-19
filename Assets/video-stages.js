@@ -2579,7 +2579,7 @@
   };
 
   // frontend/types.ts
-  var CURRENT_AUTHORING_SCHEMA_VERSION = 7;
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 8;
 
   // frontend/identity.ts
   var fallbackSequence = 0;
@@ -2588,7 +2588,7 @@
       return null;
     }
     const id = value.trim();
-    return id.length > 0 ? id : null;
+    return id.length > 0 && !id.includes("_legacy_") ? id : null;
   };
   var createEntityId = (kind) => {
     const randomUuid = globalThis.crypto?.randomUUID?.();
@@ -2604,7 +2604,7 @@
       entry.entity.id = reservedId;
       return reservedId;
     }
-    const base = `${entry.kind}_legacy_${entry.repairPath}`;
+    const base = `${entry.kind}_${entry.repairPath}`;
     let id = base;
     let collision = 1;
     while (used.has(id)) {
@@ -2634,7 +2634,7 @@
       for (let refIndex = 0; refIndex < clip.frameRefs.length; refIndex++) {
         entries.push({
           entity: clip.frameRefs[refIndex],
-          kind: "ref",
+          kind: "keyframe",
           repairPath: `${clipIndex}_${refIndex}`
         });
       }
@@ -4031,7 +4031,7 @@
       ) : [...fallback.icLoraStrengths],
       loraWeights,
       frameRefStrengths: normalizeStageRefStrengths(
-        rawStage.frameRefStrengths,
+        rawStage.keyframeStrengths,
         refCount
       ),
       upscale: firstStageUpscale.upscale,
@@ -4172,7 +4172,7 @@
       Math.max(CLIP_DURATION_MIN, rawDuration),
       fps
     );
-    const refsRaw = Array.isArray(rawClip.frameRefs) ? rawClip.frameRefs : [];
+    const refsRaw = Array.isArray(rawClip.keyframes) ? rawClip.keyframes : [];
     const clipScopedLoras = normalizeStageLoras(rawClip.loras);
     const loraNames = [];
     const loraDefaultWeightByName = /* @__PURE__ */ new Map();
@@ -4426,7 +4426,7 @@
           startSeconds: reference.startSeconds,
           lengthSeconds: reference.lengthSeconds
         })),
-        frameRefs: clip.frameRefs.map((ref) => ({
+        keyframes: clip.frameRefs.map((ref) => ({
           id: ref.id,
           source: ref.source,
           uploadFileName: ref.uploadFileName,
@@ -4441,7 +4441,7 @@
           controlNetStrength: stage.controlNetStrength,
           icLoraStrengths: stage.icLoraStrengths,
           loraWeights: stage.loraWeights,
-          frameRefStrengths: stage.frameRefStrengths,
+          keyframeStrengths: stage.frameRefStrengths,
           upscale: stage.upscale,
           upscaleMethod: stage.upscaleMethod,
           model: stage.model,
@@ -4584,7 +4584,7 @@
       return false;
     }
     for (const clip of parsed.clips) {
-      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "frameRefs") || !hasArrayOfRecords(clip, "references") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
+      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "keyframes") || !hasArrayOfRecords(clip, "references") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
         return false;
       }
       const stages = Array.isArray(clip.stages) ? clip.stages : [];
@@ -4593,7 +4593,7 @@
           (weight) => typeof weight === "number" && Number.isFinite(weight)
         )) || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
           (strength) => typeof strength === "number" && Number.isFinite(strength)
-        )) || Object.hasOwn(stage, "frameRefStrengths") && (!Array.isArray(stage.frameRefStrengths) || !stage.frameRefStrengths.every(
+        )) || Object.hasOwn(stage, "keyframeStrengths") && (!Array.isArray(stage.keyframeStrengths) || !stage.keyframeStrengths.every(
           (strength) => typeof strength === "number" && Number.isFinite(strength)
         ))) {
           return false;
@@ -4672,7 +4672,7 @@
     noticedDivergentProjection = serialized;
     getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
   };
-  var FRAME_REFS_LEGACY_SCHEMA_VERSION = 6;
+  var FRAME_REFS_SCHEMA_VERSION = 7;
   var renameKey = (target, oldKey, newKey) => {
     if (!(oldKey in target)) {
       return;
@@ -4686,7 +4686,7 @@
     if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
       return parsed;
     }
-    if (parsed.schemaVersion !== FRAME_REFS_LEGACY_SCHEMA_VERSION || !Array.isArray(parsed.clips)) {
+    if (parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION || !Array.isArray(parsed.clips)) {
       return null;
     }
     const migrated = structuredClone(parsed);
@@ -4695,13 +4695,13 @@
       if (!isRecord(rawClip)) {
         continue;
       }
-      renameKey(rawClip, "refs", "frameRefs");
+      renameKey(rawClip, "frameRefs", "keyframes");
       if (!Array.isArray(rawClip.stages)) {
         continue;
       }
       for (const rawStage of rawClip.stages) {
         if (isRecord(rawStage)) {
-          renameKey(rawStage, "refStrengths", "frameRefStrengths");
+          renameKey(rawStage, "frameRefStrengths", "keyframeStrengths");
         }
       }
     }
@@ -4742,7 +4742,7 @@
     }
   };
   var hasCanonicalStoredId = (value, seen) => {
-    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id)) {
+    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id) || value.id.includes("_legacy_")) {
       return false;
     }
     seen.add(value.id);
@@ -4757,7 +4757,7 @@
       const seenIds = /* @__PURE__ */ new Set();
       for (const rawClip of parsed.clips) {
         if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-        for (const key of ["stages", "frameRefs", "references"]) {
+        for (const key of ["stages", "keyframes", "references"]) {
           const children = rawClip[key];
           if (!Array.isArray(children) || children.some(
             (child) => !hasCanonicalStoredId(child, seenIds)
@@ -16065,7 +16065,7 @@ ${slot}`;
                   ...buildDefaultRef(),
                   frame: position.frame,
                   fromEnd: position.fromEnd,
-                  id: createEntityId("ref")
+                  id: createEntityId("keyframe")
                 }
               },
               ...refStrengthPatches(clip, (strengths) => [
@@ -16107,7 +16107,7 @@ ${slot}`;
           const ref = {
             ...buildDefaultRef(MEDIA_SOURCE_UPLOAD),
             ...position,
-            id: createEntityId("ref"),
+            id: createEntityId("keyframe"),
             uploadFileName: upload.fileName,
             uploadedImage: upload
           };

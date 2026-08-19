@@ -68,13 +68,41 @@ const ensureTextarea = (id: string): HTMLTextAreaElement => {
 
 export const mountVideoStagesData = (state: unknown): HTMLTextAreaElement => {
     const el = ensureTextarea("input_videostages");
-    const persisted =
+    const persisted: unknown =
         typeof state === "object" &&
         state !== null &&
         !Array.isArray(state) &&
         !Object.hasOwn(state, "schemaVersion")
-            ? { ...state, schemaVersion: 7 }
-            : state;
+            ? { ...state, schemaVersion: 8 }
+            : structuredClone(state);
+    if (
+        typeof persisted === "object" &&
+        persisted !== null &&
+        !Array.isArray(persisted) &&
+        "schemaVersion" in persisted &&
+        persisted.schemaVersion === 8 &&
+        "clips" in persisted &&
+        Array.isArray(persisted.clips)
+    ) {
+        for (const clip of persisted.clips) {
+            if (typeof clip !== "object" || clip === null) continue;
+            if ("frameRefs" in clip && !("keyframes" in clip)) {
+                clip.keyframes = clip.frameRefs;
+                delete clip.frameRefs;
+            }
+            if (!("stages" in clip) || !Array.isArray(clip.stages)) continue;
+            for (const stage of clip.stages) {
+                if (typeof stage !== "object" || stage === null) continue;
+                if (
+                    "frameRefStrengths" in stage &&
+                    !("keyframeStrengths" in stage)
+                ) {
+                    stage.keyframeStrengths = stage.frameRefStrengths;
+                    delete stage.frameRefStrengths;
+                }
+            }
+        }
+    }
     el.value =
         typeof persisted === "string" ? persisted : JSON.stringify(persisted);
     return el;

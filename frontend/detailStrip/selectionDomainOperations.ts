@@ -192,7 +192,7 @@ export const createDetailSelectionDomainOperations = (
                                 ...buildDefaultRef(),
                                 frame: position.frame,
                                 fromEnd: position.fromEnd,
-                                id: createEntityId("ref"),
+                                id: createEntityId("keyframe"),
                             },
                         },
                         ...refStrengthPatches(clip, (strengths) => [
@@ -243,7 +243,7 @@ export const createDetailSelectionDomainOperations = (
                 const ref = {
                     ...buildDefaultRef(MEDIA_SOURCE_UPLOAD),
                     ...position,
-                    id: createEntityId("ref"),
+                    id: createEntityId("keyframe"),
                     uploadFileName: upload.fileName,
                     uploadedImage: upload,
                 };

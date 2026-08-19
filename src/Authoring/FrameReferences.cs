@@ -10,7 +10,7 @@ internal static class FrameReferences
         Action<string> warn = null)
     {
         List<JObject> rawReferences = DocumentJson.GetObjectArray(
-            clipObject, UploadContainers.FrameRefsCollection);
+            clipObject, UploadContainers.KeyframesCollection);
         List<FrameRefSpec> references = [];
         for (int index = 0; index < rawReferences.Count; index++)
         {

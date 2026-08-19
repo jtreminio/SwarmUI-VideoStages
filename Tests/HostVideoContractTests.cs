@@ -364,7 +364,7 @@ public class HostVideoContractTests
             steps: 8);
         stage["controlNetStrength"] = 0.8;
         stage["icLoraStrengths"] = new JArray(1.0);
-        stage["frameRefStrengths"] = new JArray(0.7);
+        stage["keyframeStrengths"] = new JArray(0.7);
         JObject clip = MakeClip(1.0, fixture.Stage(steps: 8), stage);
         clip["saveAudioTrack"] = true;
         clip["reuseAudio"] = true;

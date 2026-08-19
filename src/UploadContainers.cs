@@ -11,7 +11,8 @@ internal static class UploadContainers
     public const string ClipReferenceMedia = "uploadedMedia";
     public const string ClipsCollection = "clips";
     public const string IcLorasCollection = "icLoras";
-    public const string FrameRefsCollection = "frameRefs";
+    public const string KeyframesCollection = "keyframes";
+    public const string VersionSevenKeyframesCollection = "frameRefs";
     public const string ClipReferencesCollection = "references";
     public const string AudioTracksCollection = "audioTracks";
     public const string AudioTrackSource = "source";

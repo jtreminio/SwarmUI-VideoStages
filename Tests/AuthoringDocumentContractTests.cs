@@ -16,7 +16,7 @@ public class AuthoringDocumentContractTests
     [
         // UI-only entity identity.
         "clips[].stages[].id",
-        "clips[].frameRefs[].id",
+        "clips[].keyframes[].id",
         "clips[].references[].id",
         "clips[].icLoras[].id",
         "clips[].retake.id",
@@ -46,7 +46,7 @@ public class AuthoringDocumentContractTests
         // API-only split model/text-encoder weight.
         "clips[].stages[].loras[].textEncoderWeight",
         // Legacy/API frame reference payload.
-        "clips[].frameRefs[].data",
+        "clips[].keyframes[].data",
         // Prompt-tag-only image reference override.
         "clips[].stages[].imageReference",
     ];
@@ -249,18 +249,18 @@ public class AuthoringDocumentContractTests
     }
 
     [Fact]
-    public void MigratesTheVersionSixReferenceFieldsToTheirFrameNames()
+    public void MigratesVersionSevenFrameReferenceFieldsToKeyframes()
     {
         JObject document = JObject.Parse(FixtureJson());
-        document["schemaVersion"] = 6;
+        document["schemaVersion"] = 7;
         foreach (JObject clip in document["clips"].Values<JObject>())
         {
-            clip["refs"] = clip["frameRefs"];
-            clip.Remove("frameRefs");
+            clip["frameRefs"] = clip["keyframes"];
+            clip.Remove("keyframes");
             foreach (JObject stage in clip["stages"].Values<JObject>())
             {
-                stage["refStrengths"] = stage["frameRefStrengths"];
-                stage.Remove("frameRefStrengths");
+                stage["frameRefStrengths"] = stage["keyframeStrengths"];
+                stage.Remove("keyframeStrengths");
             }
         }
         T2IParamInput input = new(null);

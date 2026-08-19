@@ -47,7 +47,7 @@ describe("timeline-wide audio span gestures", () => {
             });
         }
         return {
-            schemaVersion: 7,
+            schemaVersion: 8,
             clips,
             audioTracks: withTrack
                 ? [

@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 7,
+    "schemaVersion": 8,
     "width": 768,
     "height": 512,
     "clips": [
@@ -102,7 +102,7 @@
                     "lengthSeconds": 2.5
                 }
             ],
-            "frameRefs": [
+            "keyframes": [
                 {
                     "id": "ref-0",
                     "source": "Upload",
@@ -127,7 +127,7 @@
                     "loraWeights": [
                         0.5
                     ],
-                    "frameRefStrengths": [
+                    "keyframeStrengths": [
                         0.6
                     ],
                     "upscale": 1,
@@ -150,7 +150,7 @@
                     "loraWeights": [
                         0
                     ],
-                    "frameRefStrengths": [
+                    "keyframeStrengths": [
                         0.4
                     ],
                     "upscale": 1.5,
@@ -193,7 +193,7 @@
             "initVideo": null,
             "retake": null,
             "references": [],
-            "frameRefs": [],
+            "keyframes": [],
             "stages": [
                 {
                     "id": "stage-2",
@@ -202,7 +202,7 @@
                     "controlNetStrength": 0.8,
                     "icLoraStrengths": [],
                     "loraWeights": [],
-                    "frameRefStrengths": [],
+                    "keyframeStrengths": [],
                     "upscale": 1,
                     "upscaleMethod": "pixel-lanczos",
                     "model": "ltx-2.3.safetensors",
