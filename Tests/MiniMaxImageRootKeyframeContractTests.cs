@@ -52,4 +52,30 @@ public class MiniMaxImageRootKeyframeContractTests
         live.AssertLive(keyframes);
         AssertShippable(bridge, workflow, live);
     }
+
+    [Fact]
+    public async Task Attached_reference_media_replaces_the_image_root_first_frame_fallback()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.CreateWithBaseModel();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["references"] = new JArray(
+            MakeClipReference(
+                "image",
+                "data:image/png;base64,U1VCSkVDVA==",
+                "subject.png"));
+
+        JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
+        ComfyNode reference = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        Assert.Same(reference, StageSampler(bridge, 0).Positive.Connection?.Node);
+
+        live.AssertLive(reference);
+        AssertShippable(bridge, workflow, live);
+    }
 }

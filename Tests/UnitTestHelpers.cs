@@ -167,6 +167,7 @@ internal static class UnitTestStubs
         Ensure(ref ComfyUIBackendExtension.PixelDecoderModel, "Pixel Decoder Model", "");
         Ensure(ref ComfyUIBackendExtension.SeedVRModel, "SeedVR Model", "None");
         Ensure(ref ComfyUIBackendExtension.SeedVRUpscale, "SeedVR Upscale", "1");
+        Ensure(ref ComfyUIBackendExtension.SeedVRPreDownscale, "SeedVR Pre-Downscale", "1");
         Ensure(ref ComfyUIBackendExtension.SeedVRUpscaleMethod, "SeedVR Upscale Method", "pixel-lanczos");
         Ensure(ref ComfyUIBackendExtension.SeedVRColorCorrectionBehavior, "SeedVR Color Correction Behavior", "lab");
         Ensure(ref ComfyUIBackendExtension.SeedVRSplitLatent, "SeedVR Split Latent", "false");
@@ -369,6 +370,7 @@ internal static class TestModelFactory
         }
         Install("Clip", "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors");
         Install("VAE", CommonModels.Known["minimax-h3-video-vae"].FileName);
+        Install("VAE", CommonModels.Known["minimax-h3-video-int8-vae"].FileName);
         Install("VAE", CommonModels.Known["minimax-h3-audio-vae"].FileName);
     }
 

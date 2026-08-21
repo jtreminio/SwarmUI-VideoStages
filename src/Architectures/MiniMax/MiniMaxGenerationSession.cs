@@ -67,7 +67,8 @@ internal sealed class MiniMaxGenerationSession(
             payload.FirstFrameReference,
             "MiniMax H3 first keyframe");
         _endFrame = ResolveEndFrame(payload.LastFrameReference);
-        bool hasExplicitKeyframe = payload.FirstFrameReference is not null
+        bool hasAuthoredGuide = payload.References.Count > 0
+            || payload.FirstFrameReference is not null
             || payload.LastFrameReference is not null
             || clip.Stages.Any(stage =>
                 stage.ArchitecturePayload is StockHostVideoStagePayload stagePayload
@@ -85,8 +86,8 @@ internal sealed class MiniMaxGenerationSession(
         else
         {
             _entryMedia.SelectGenerated(clip, _firstFrame);
-            // A host image is the opening frame only when the clip has no authored keyframe.
-            if (!hasExplicitKeyframe)
+            // A host image is the opening frame only when the clip has no authored guide.
+            if (!hasAuthoredGuide)
             {
                 _firstFrame = g.CurrentMedia;
             }
