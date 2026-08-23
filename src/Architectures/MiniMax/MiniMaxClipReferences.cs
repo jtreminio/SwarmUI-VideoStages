@@ -4,6 +4,7 @@ using VideoStages.Planning;
 namespace VideoStages.Architectures.MiniMax;
 
 internal sealed record MiniMaxReferencePlan(
+    string Id,
     ClipReferenceKind Kind,
     string Source,
     UploadedMediaSpec Media,
@@ -20,6 +21,35 @@ internal static class MiniMaxClipReferences
 
     internal static IReadOnlyList<MiniMaxReferencePlan> Compile(
         ClipSpec clip,
+        ICollection<PlanDiagnostic> diagnostics) =>
+        Compile(clip, clip.References ?? [], diagnostics);
+
+    internal static IReadOnlyList<MiniMaxReferencePlan> CompileSelected(
+        ClipSpec clip,
+        IReadOnlyList<string> ids,
+        ICollection<PlanDiagnostic> diagnostics)
+    {
+        Dictionary<string, ClipReferenceSpec> byId = (clip.References ?? [])
+            .Where(reference => !string.IsNullOrWhiteSpace(reference.Id))
+            .GroupBy(reference => reference.Id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        List<ClipReferenceSpec> selected = [];
+        HashSet<string> seen = new(StringComparer.Ordinal);
+        foreach (string id in ids ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(id)
+                && seen.Add(id)
+                && byId.TryGetValue(id, out ClipReferenceSpec reference))
+            {
+                selected.Add(reference);
+            }
+        }
+        return Compile(clip, selected, diagnostics);
+    }
+
+    private static IReadOnlyList<MiniMaxReferencePlan> Compile(
+        ClipSpec clip,
+        IEnumerable<ClipReferenceSpec> references,
         ICollection<PlanDiagnostic> diagnostics)
     {
         List<MiniMaxReferencePlan> compiled = [];
@@ -31,7 +61,7 @@ internal static class MiniMaxClipReferences
                 clip.Id));
         Dictionary<ClipReferenceKind, int> counts = [];
 
-        foreach (ClipReferenceSpec reference in clip.References ?? [])
+        foreach (ClipReferenceSpec reference in references)
         {
             bool uploaded = StringUtils.Equals(reference.Source, MediaSource.Upload);
             bool hostCapture = reference.Kind == ClipReferenceKind.Image
@@ -72,6 +102,7 @@ internal static class MiniMaxClipReferences
             bool isVideo = reference.Kind == ClipReferenceKind.Video;
             bool isTimed = reference.Kind is ClipReferenceKind.Video or ClipReferenceKind.Audio;
             compiled.Add(new(
+                reference.Id,
                 reference.Kind,
                 reference.Source?.Trim() ?? "",
                 reference.Media,

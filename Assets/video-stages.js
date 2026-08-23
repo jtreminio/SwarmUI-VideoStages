@@ -3788,6 +3788,23 @@
     return true;
   };
 
+  // frontend/generatedMiniMaxCharacterRefine.ts
+  var MINIMAX_CHARACTER_REFINE_FEATURE = "bonita";
+  var MINIMAX_CHARACTER_REFINE_REPOSITORY_URL = "https://github.com/jtreminio/ComfyUI-Bonita";
+  var MINIMAX_CHARACTER_REFINE_FINDER_DEFAULT = "sam3";
+  var MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT = "person";
+  var MINIMAX_CHARACTER_REFINE_PART_DEFAULT = "face";
+  var MINIMAX_CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT = 0.25;
+  var MINIMAX_CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT = 0.1;
+  var MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN = 0;
+  var MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX = 1;
+  var MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_STEP = 0.05;
+  var MINIMAX_CHARACTER_REFINE_CROP_WIDTH_DEFAULT = 512;
+  var MINIMAX_CHARACTER_REFINE_CROP_HEIGHT_DEFAULT = 512;
+  var MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN = 64;
+  var MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX = 4096;
+  var MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP = 32;
+
   // frontend/normalizationStage.ts
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find((value) => value === "pixel-lanczos") ?? upscaleMethodValues[0] ?? "";
   var normalizeStageRefStrengthValue = (value) => snapValueToStep(
@@ -3865,7 +3882,58 @@
       steps: previousStage ? previousStage.steps : defaults.steps,
       cfgScale: previousStage ? previousStage.cfgScale : defaults.cfgScale,
       sampler: previousStage ? previousStage.sampler : defaults.samplerValues[0] ?? "euler",
-      scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal"
+      scheduler: previousStage ? previousStage.scheduler : defaults.schedulerValues[0] ?? "normal",
+      characterRefine: null
+    };
+  };
+  var defaultCharacterRefine = (pictureReferenceIds) => ({
+    pictureReferenceIds: [...pictureReferenceIds],
+    verifyIdentity: pictureReferenceIds.length > 0,
+    finder: MINIMAX_CHARACTER_REFINE_FINDER_DEFAULT,
+    subject: MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT,
+    part: MINIMAX_CHARACTER_REFINE_PART_DEFAULT,
+    subjectConfidence: MINIMAX_CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT,
+    partConfidence: MINIMAX_CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT,
+    cropWidth: MINIMAX_CHARACTER_REFINE_CROP_WIDTH_DEFAULT,
+    cropHeight: MINIMAX_CHARACTER_REFINE_CROP_HEIGHT_DEFAULT
+  });
+  var referenceIds = (value) => Array.isArray(value) ? [...new Set(value.map(trimmedText).filter(Boolean))] : [];
+  var normalizeCharacterRefine = (value) => {
+    if (!isRecord(value)) return null;
+    const legacyIdentity = trimmedText(value.identityReferenceId);
+    const pictures = Array.isArray(value.pictureReferenceIds) ? referenceIds(value.pictureReferenceIds) : referenceIds([legacyIdentity, ...referenceIds(value.referenceIds)]);
+    return {
+      pictureReferenceIds: pictures,
+      verifyIdentity: typeof value.verifyIdentity === "boolean" ? value.verifyIdentity : Boolean(legacyIdentity),
+      finder: value.finder === "yolo" ? "yolo" : MINIMAX_CHARACTER_REFINE_FINDER_DEFAULT,
+      subject: trimmedText(value.subject) || trimmedText(value.coarseTarget) || MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT,
+      part: trimmedText(value.part) || trimmedText(value.fineTarget) || MINIMAX_CHARACTER_REFINE_PART_DEFAULT,
+      subjectConfidence: clampedNumber(
+        value.subjectConfidence ?? value.trackDetectionThreshold,
+        MINIMAX_CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT,
+        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX
+      ),
+      partConfidence: clampedNumber(
+        value.partConfidence ?? value.targetDetectionThreshold,
+        MINIMAX_CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT,
+        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX
+      ),
+      cropWidth: snapValueToStep(
+        value.cropWidth,
+        MINIMAX_CHARACTER_REFINE_CROP_WIDTH_DEFAULT,
+        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
+        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
+        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP
+      ),
+      cropHeight: snapValueToStep(
+        value.cropHeight,
+        MINIMAX_CHARACTER_REFINE_CROP_HEIGHT_DEFAULT,
+        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
+        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
+        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP
+      )
     };
   };
   var buildDefaultRef = (source = MEDIA_SOURCE_REFINER) => ({
@@ -4016,8 +4084,12 @@
         defaults.cfgScaleMax
       ),
       sampler: textOr(rawStage.sampler, fallback.sampler),
-      scheduler: textOr(rawStage.scheduler, fallback.scheduler)
+      scheduler: textOr(rawStage.scheduler, fallback.scheduler),
+      characterRefine: normalizeCharacterRefine(rawStage.characterRefine)
     };
+    if (stage.characterRefine) {
+      stage.upscale = 1;
+    }
     stage.modelProfileId = modelProfileForModel(defaults.modelCatalog, stage.model) || trimmedText(readRawStageProp(rawStage, "modelProfileId")) || fallback.modelProfileId;
     if (!defaults.upscaleMethodValues.includes(stage.upscaleMethod) && defaults.upscaleMethodValues.length > 0) {
       stage.upscaleMethod = forcedFirstStage ? defaults.upscaleMethodValues[0] ?? "" : stage.upscaleMethod || fallback.upscaleMethod;
@@ -4399,7 +4471,8 @@
           steps: stage.steps,
           cfgScale: stage.cfgScale,
           sampler: stage.sampler,
-          scheduler: stage.scheduler
+          scheduler: stage.scheduler,
+          ...stage.characterRefine ? { characterRefine: stage.characterRefine } : {}
         }))
       })
     );
@@ -4929,7 +5002,8 @@
       "steps",
       "cfgScale",
       "sampler",
-      "scheduler"
+      "scheduler",
+      "characterRefine"
     ],
     reservedKeys: ["id", "model", "modelProfileId"],
     reconcilesClipIdentity: true,
@@ -4969,6 +5043,7 @@
       "lengthSeconds"
     ],
     reservedKeys: ["id"],
+    reconcilesCharacterRefineReferences: true,
     collection: (clip) => clip.references
   });
   var PROMPT_WINDOW_ENTITY = defineList()(
@@ -5525,6 +5600,75 @@
   });
   var hasOwn = (value, key) => Object.hasOwn(value, key);
 
+  // frontend/imageSource.ts
+  var buildImageSourceOptions = (currentValue = "", includeControlNet = false) => {
+    const options = [
+      { value: MEDIA_SOURCE_BASE, label: "Base Output" },
+      { value: MEDIA_SOURCE_REFINER, label: "Refiner Output" },
+      { value: MEDIA_SOURCE_UPLOAD, label: "Upload" }
+    ];
+    for (const editRef of getBase2EditStageRefs()) {
+      const editStage = parseBase2EditStageIndex(editRef);
+      options.push({
+        value: editRef,
+        label: `Base2Edit Edit ${editStage} Output`
+      });
+    }
+    if (includeControlNet) {
+      for (const source of CONTROLNET_SOURCE_OPTIONS) {
+        options.push({ value: source, label: source });
+      }
+    }
+    preserveSelectedOption(options, currentValue, "start", (value) => {
+      const isBase2Edit = parseBase2EditStageIndex(value) != null;
+      return {
+        value,
+        label: isBase2Edit ? `Missing Base2Edit ${value}` : value,
+        disabled: isBase2Edit
+      };
+    });
+    return options;
+  };
+  var resolveImageSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, MEDIA_SOURCE_REFINER);
+
+  // frontend/clipReferenceSource.ts
+  var buildClipReferenceSourceOptions = (kind, currentValue = "") => {
+    if (kind === "image") {
+      return buildImageSourceOptions(currentValue, true);
+    }
+    const options = [
+      { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
+      ...CONTROLNET_SOURCE_OPTIONS.map((source) => ({
+        value: source,
+        label: source
+      }))
+    ];
+    if (kind === "audio") {
+      options.push(
+        ...buildAudioTrackSourceOptions(currentValue).filter(
+          (option) => option.value !== MEDIA_SOURCE_UPLOAD
+        )
+      );
+    }
+    preserveSelectedOption(options, currentValue, "start", (value) => ({
+      value,
+      label: `${value} (unsupported persisted value)`
+    }));
+    return options;
+  };
+  var resolveClipReferenceSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, MEDIA_SOURCE_UPLOAD);
+  var clipReferenceSourceSupportsKind = (kind, source) => {
+    const value = `${source ?? ""}`.trim();
+    if (value === MEDIA_SOURCE_UPLOAD || canonicalControlNetSource(value)) {
+      return true;
+    }
+    if (kind === "audio") {
+      return isAceStepFunAudioSource(value);
+    }
+    return kind === "image" && (value === MEDIA_SOURCE_BASE || value === MEDIA_SOURCE_REFINER || parseBase2EditStageIndex(value) !== null);
+  };
+  var clipReferenceIsUsable = (reference) => clipReferenceSourceSupportsKind(reference.kind, reference.source) && (reference.source.trim() !== MEDIA_SOURCE_UPLOAD || Boolean(reference.uploadedMedia?.data.trim()));
+
   // frontend/documentCommands/listReducer.ts
   var applyListCommand = (document2, descriptor, operation, command, context) => {
     const fields = command;
@@ -5539,6 +5683,10 @@
       target
     );
     const id = fields[descriptor.idField];
+    const affectedId = operation === "add" ? fields[descriptor.entityField].id : id;
+    const wasUsableImage = descriptor.reconcilesCharacterRefineReferences && owner.references.some(
+      (reference) => reference.id === affectedId && reference.kind === "image" && clipReferenceIsUsable(reference)
+    );
     const beforeId = fields[descriptor.beforeIdField] ?? null;
     let mutated;
     switch (operation) {
@@ -5573,6 +5721,32 @@
     }
     if (!mutated) {
       return failure(document2, "missing-target");
+    }
+    if (descriptor.reconcilesCharacterRefineReferences) {
+      const reference = owner.references.find(
+        (candidate) => candidate.id === affectedId
+      );
+      const usableImage = operation !== "remove" && reference !== void 0 && reference.kind === "image" && clipReferenceIsUsable(reference);
+      for (const stage of owner.stages) {
+        if (!stage.characterRefine) continue;
+        if (usableImage && !wasUsableImage) {
+          if (!stage.characterRefine.pictureReferenceIds.includes(
+            affectedId
+          )) {
+            stage.characterRefine.pictureReferenceIds.push(affectedId);
+          }
+        } else if (!usableImage) {
+          stage.characterRefine.pictureReferenceIds = stage.characterRefine.pictureReferenceIds.filter(
+            (referenceId) => referenceId !== affectedId
+          );
+        }
+        const hasUsableImage = owner.references.some(
+          (candidate) => candidate.kind === "image" && clipReferenceIsUsable(candidate)
+        );
+        if (!hasUsableImage) {
+          stage.characterRefine.verifyIdentity = false;
+        }
+      }
     }
     if (descriptor.reconcilesClipIdentity) {
       const candidate = target;
@@ -9246,8 +9420,11 @@
   };
   var buildAccordionSection = (spec) => {
     const firstBuild = !seenAccordionSections.has(spec.key);
-    const open = spec.open === true || firstBuild && spec.defaultOpen === true || rememberedAccordionSections.has(spec.key);
-    seenAccordionSections.add(spec.key);
+    const enabled = spec.toggle?.checked ?? true;
+    const open = enabled && (spec.open === true || firstBuild && spec.defaultOpen === true || rememberedAccordionSections.has(spec.key));
+    if (enabled) {
+      seenAccordionSections.add(spec.key);
+    }
     if (open) {
       rememberedAccordionSections.add(spec.key);
     }
@@ -9264,6 +9441,26 @@
     header.setAttribute("role", "button");
     header.setAttribute("aria-expanded", `${open}`);
     appendSectionHeaderActions(actions, spec);
+    if (spec.toggle) {
+      const switchWrap = document.createElement("span");
+      switchWrap.className = "form-check form-switch toggle-switch display-inline-block group-toggler-switch";
+      const toggle2 = document.createElement("input");
+      toggle2.type = "checkbox";
+      toggle2.className = "auto-slider-toggle form-check-input";
+      toggle2.checked = spec.toggle.checked;
+      toggle2.disabled = spec.toggle.disabled === true;
+      toggle2.title = spec.toggle.title;
+      toggle2.setAttribute("aria-label", spec.toggle.title);
+      toggle2.addEventListener("click", (event) => event.stopPropagation());
+      toggle2.addEventListener("change", (event) => {
+        event.stopPropagation();
+        spec.toggle?.onChange(toggle2.checked);
+      });
+      const switchContent = document.createElement("div");
+      switchContent.className = "auto-slider-toggle-content";
+      switchWrap.append(toggle2, switchContent);
+      actions.appendChild(switchWrap);
+    }
     const content = document.createElement("div");
     content.className = "input-group-content vst-detail-section-content";
     content.hidden = !open;
@@ -9271,6 +9468,9 @@
     const toggle = (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (spec.toggle?.checked === false) {
+        return;
+      }
       const opening = content.hidden === true;
       setAccordionOpen(section, opening);
       if (opening) {
@@ -13224,74 +13424,6 @@ ${slot}`;
     return built.section;
   };
 
-  // frontend/imageSource.ts
-  var buildImageSourceOptions = (currentValue = "", includeControlNet = false) => {
-    const options = [
-      { value: MEDIA_SOURCE_BASE, label: "Base Output" },
-      { value: MEDIA_SOURCE_REFINER, label: "Refiner Output" },
-      { value: MEDIA_SOURCE_UPLOAD, label: "Upload" }
-    ];
-    for (const editRef of getBase2EditStageRefs()) {
-      const editStage = parseBase2EditStageIndex(editRef);
-      options.push({
-        value: editRef,
-        label: `Base2Edit Edit ${editStage} Output`
-      });
-    }
-    if (includeControlNet) {
-      for (const source of CONTROLNET_SOURCE_OPTIONS) {
-        options.push({ value: source, label: source });
-      }
-    }
-    preserveSelectedOption(options, currentValue, "start", (value) => {
-      const isBase2Edit = parseBase2EditStageIndex(value) != null;
-      return {
-        value,
-        label: isBase2Edit ? `Missing Base2Edit ${value}` : value,
-        disabled: isBase2Edit
-      };
-    });
-    return options;
-  };
-  var resolveImageSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, MEDIA_SOURCE_REFINER);
-
-  // frontend/clipReferenceSource.ts
-  var buildClipReferenceSourceOptions = (kind, currentValue = "") => {
-    if (kind === "image") {
-      return buildImageSourceOptions(currentValue, true);
-    }
-    const options = [
-      { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
-      ...CONTROLNET_SOURCE_OPTIONS.map((source) => ({
-        value: source,
-        label: source
-      }))
-    ];
-    if (kind === "audio") {
-      options.push(
-        ...buildAudioTrackSourceOptions(currentValue).filter(
-          (option) => option.value !== MEDIA_SOURCE_UPLOAD
-        )
-      );
-    }
-    preserveSelectedOption(options, currentValue, "start", (value) => ({
-      value,
-      label: `${value} (unsupported persisted value)`
-    }));
-    return options;
-  };
-  var resolveClipReferenceSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, MEDIA_SOURCE_UPLOAD);
-  var clipReferenceSourceSupportsKind = (kind, source) => {
-    const value = `${source ?? ""}`.trim();
-    if (value === MEDIA_SOURCE_UPLOAD || canonicalControlNetSource(value)) {
-      return true;
-    }
-    if (kind === "audio") {
-      return isAceStepFunAudioSource(value);
-    }
-    return kind === "image" && (value === MEDIA_SOURCE_BASE || value === MEDIA_SOURCE_REFINER || parseBase2EditStageIndex(value) !== null);
-  };
-
   // frontend/detailStrip/clipReferencePanel.ts
   var REFERENCE_TRIM_MIN = 0.1;
   var appendReferenceTrim = (ctx, fields, reference, shown, commitReference) => {
@@ -14365,6 +14497,249 @@ ${slot}`;
     return buildSection();
   };
 
+  // frontend/detailStrip/stagePanel/characterRefineSection.ts
+  var referenceLabel = (reference) => reference.uploadedMedia?.fileName?.trim() || reference.source.trim() || "Image reference";
+  var textInput2 = (bindings, key, fallback) => {
+    const input2 = document.createElement("input");
+    input2.type = "text";
+    input2.className = "auto-text";
+    input2.maxLength = 120;
+    input2.placeholder = fallback;
+    input2.value = bindings.stage.characterRefine?.[key] ?? fallback;
+    input2.addEventListener("change", () => {
+      const value = input2.value.trim() || fallback;
+      input2.value = value;
+      bindings.commit((stage) => {
+        if (stage.characterRefine) stage.characterRefine[key] = value;
+      });
+    });
+    return input2;
+  };
+  var pictureRows = (bindings, imageReferences) => {
+    const rows = document.createElement("div");
+    rows.className = "vst-detail-span-full vst-character-refine-pictures";
+    const title = document.createElement("div");
+    title.className = "vst-character-refine-pictures-title";
+    title.setAttribute("role", "heading");
+    title.setAttribute("aria-level", "4");
+    title.textContent = "Reference Pictures";
+    rows.appendChild(title);
+    imageReferences.forEach((reference, index) => {
+      if (!reference.id) return;
+      const row = document.createElement("label");
+      row.className = "vst-character-refine-picture";
+      row.title = "Use this picture to guide how the person should look after the repair.";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "auto-checkbox";
+      checkbox.checked = bindings.stage.characterRefine?.pictureReferenceIds.includes(
+        reference.id
+      ) ?? false;
+      checkbox.addEventListener(
+        "change",
+        () => bindings.commit((stage) => {
+          if (!stage.characterRefine || !reference.id) return;
+          const selected = new Set(
+            stage.characterRefine.pictureReferenceIds
+          );
+          if (checkbox.checked) selected.add(reference.id);
+          else selected.delete(reference.id);
+          stage.characterRefine.pictureReferenceIds = imageReferences.map((candidate) => candidate.id).filter(
+            (id) => Boolean(id && selected.has(id))
+          );
+        })
+      );
+      const text2 = document.createElement("span");
+      text2.textContent = `<picture ${index + 1}> ${referenceLabel(reference)}`;
+      row.append(checkbox, text2);
+      rows.appendChild(row);
+    });
+    return rows;
+  };
+  var appendCharacterRefineSection = (bindings) => {
+    const {
+      context,
+      clip,
+      clipIdx,
+      stage,
+      stageIdx,
+      fields: stageFields,
+      commit,
+      slider
+    } = bindings;
+    if (context.authoring().capabilities.forClip(clip).architectureId !== "minimax" || !getVideoStagesHostBridge().hasBackendFeature(
+      MINIMAX_CHARACTER_REFINE_FEATURE
+    )) {
+      return;
+    }
+    const decodedInput = stageIdx > 0 || clip.initVideo !== null;
+    const imageReferences = clip.references.filter(
+      (reference) => reference.kind === "image" && reference.id && clipReferenceIsUsable(reference)
+    );
+    const fields = document.createElement("div");
+    fields.className = "vst-detail-fields vst-character-refine-fields";
+    const appendGroup = () => {
+      const enabled = stage.characterRefine !== null;
+      const help = !decodedInput ? "Add a source video or use this on a later stage." : "Repair a person or character in this stage.";
+      const built = buildAccordionSection({
+        key: `bonita-${clip.id ?? clipIdx}-${stage.id ?? stageIdx}`,
+        label: "Make Them Bonita",
+        content: fields,
+        defaultOpen: enabled,
+        flattenContent: true,
+        className: "vst-character-refine-section vst-detail-span-full",
+        toggle: {
+          checked: enabled,
+          disabled: !decodedInput,
+          title: enabled ? "Turn off Make Them Bonita" : "Turn on Make Them Bonita",
+          onChange: (checked) => {
+            commit((target) => {
+              target.characterRefine = checked ? defaultCharacterRefine(
+                imageReferences.flatMap(
+                  (reference) => reference.id ? [reference.id] : []
+                )
+              ) : null;
+              if (checked) target.upscale = 1;
+            });
+            context.render();
+          }
+        }
+      });
+      appendHelp(built.heading, built.section, "Make Them Bonita", help);
+      stageFields.appendChild(built.section);
+    };
+    if (!stage.characterRefine) {
+      appendGroup();
+      return;
+    }
+    fields.appendChild(
+      buildField(
+        "Finder",
+        buildOptionSelect(
+          [
+            { value: "sam3", label: "SAM3" },
+            { value: "yolo", label: "YOLO" }
+          ],
+          stage.characterRefine.finder,
+          (value) => commit((target) => {
+            if (target.characterRefine) {
+              target.characterRefine.finder = value;
+            }
+          })
+        ),
+        void 0,
+        "SAM3 is usually best for movement. YOLO is faster for simple shots."
+      )
+    );
+    fields.appendChild(
+      buildField(
+        "Subject",
+        textInput2(
+          bindings,
+          "subject",
+          MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT
+        ),
+        void 0,
+        'Describe who or what to follow, such as "person" or "dog".'
+      )
+    );
+    fields.appendChild(
+      buildField(
+        "Part",
+        textInput2(bindings, "part", MINIMAX_CHARACTER_REFINE_PART_DEFAULT),
+        void 0,
+        'Name the area you want to repair, such as "face" or "hand".'
+      )
+    );
+    fields.appendChild(
+      slider(
+        "Subject Confidence",
+        "character-refine-subject-confidence",
+        stage.characterRefine.subjectConfidence,
+        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
+        (target, value) => {
+          if (target.characterRefine) {
+            target.characterRefine.subjectConfidence = value;
+          }
+        },
+        {
+          help: "Lower this if Bonita loses the subject. Raise it if Bonita follows the wrong one."
+        }
+      )
+    );
+    fields.appendChild(
+      slider(
+        "Part Confidence",
+        "character-refine-part-confidence",
+        stage.characterRefine.partConfidence,
+        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
+        (target, value) => {
+          if (target.characterRefine) {
+            target.characterRefine.partConfidence = value;
+          }
+        },
+        {
+          help: "Lower this if Bonita misses the area. Raise it if Bonita chooses the wrong area."
+        }
+      )
+    );
+    for (const [label, key, help] of [
+      [
+        "Crop Width",
+        "cropWidth",
+        "Choose a wider repair image to include more space around the subject."
+      ],
+      [
+        "Crop Height",
+        "cropHeight",
+        "Choose a taller repair image to include more space above and below the subject."
+      ]
+    ]) {
+      fields.appendChild(
+        slider(
+          label,
+          `character-refine-${key}`,
+          stage.characterRefine[key],
+          MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
+          MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
+          MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP,
+          (target, value) => {
+            if (target.characterRefine) {
+              target.characterRefine[key] = value;
+            }
+          },
+          {
+            help,
+            sliderMin: 256,
+            sliderMax: 2048,
+            isPot: true
+          }
+        )
+      );
+    }
+    fields.appendChild(pictureRows(bindings, imageReferences));
+    fields.appendChild(
+      buildCheckbox(
+        "Verify Identity",
+        stage.characterRefine.verifyIdentity,
+        (enabled) => commit((target) => {
+          if (target.characterRefine) {
+            target.characterRefine.verifyIdentity = enabled;
+          }
+        }),
+        {
+          disabled: imageReferences.length === 0,
+          help: "InsightFace adds a slower identity check. Turn it on only when the scene has more than one person."
+        }
+      )
+    );
+    appendGroup();
+  };
+
   // frontend/detailStrip/stagePanel/modelSection.ts
   var appendStageModelSection = ({
     context,
@@ -14699,6 +15074,7 @@ ${slot}`;
   var appendStageUpscaleSection = (bindings, isRefine) => {
     if (!isRefine) return;
     const { context, clip, stage, defaults, fields, slider, commit } = bindings;
+    const bonitaEnabled = stage.characterRefine !== null;
     const capabilities = context.authoring().capabilities.forClip(clip);
     const supportedMethods = defaults.upscaleMethodValues.flatMap(
       (value, index) => {
@@ -14735,10 +15111,10 @@ ${slot}`;
     );
     methodField.classList.add("vst-detail-span-2");
     const syncMethod = (upscale) => {
-      const disabled = Math.abs(upscale - 1) < UPSCALE_EPSILON;
+      const disabled = bonitaEnabled || Math.abs(upscale - 1) < UPSCALE_EPSILON;
       methodSelect.disabled = disabled;
       methodField.classList.toggle("vst-field-disabled", disabled);
-      methodField.title = disabled ? "Set Upscale above 1× to choose a method" : "";
+      methodField.title = bonitaEnabled ? "Upscale is unavailable while Make Them Bonita is on" : disabled ? "Set Upscale above 1× to choose a method" : "";
     };
     const upscaleSlider = slider(
       "Upscale",
@@ -14755,6 +15131,13 @@ ${slot}`;
         help: "Resolution multiplier applied to the incoming frames before this stage refines them. 1× keeps the size; above 1× enlarges using the Upscale Method."
       }
     );
+    if (bonitaEnabled) {
+      upscaleSlider.querySelectorAll("input").forEach((input2) => {
+        input2.disabled = true;
+      });
+      upscaleSlider.classList.add("vst-field-disabled");
+      upscaleSlider.title = "Upscale is unavailable while Make Them Bonita is on";
+    }
     fields.append(upscaleSlider, methodField);
     syncMethod(stage.upscale);
   };
@@ -14795,7 +15178,9 @@ ${slot}`;
         options ? {
           title: options.title,
           help: options.help,
-          sliderMax: options.sliderMax
+          sliderMin: options.sliderMin,
+          sliderMax: options.sliderMax,
+          isPot: options.isPot
         } : void 0
       ),
       focusKey
@@ -14819,6 +15204,7 @@ ${slot}`;
     appendStageDenoisingSection(bindings, isRefine);
     appendStageUpscaleSection(bindings, isRefine);
     appendStageSamplerSchedulerSection(bindings);
+    appendCharacterRefineSection(bindings);
     appendStageReferenceGuideSection(bindings);
     if (initVideoStage0) {
       const note = document.createElement("p");
@@ -15283,6 +15669,50 @@ ${slot}`;
   var TITLE_ID2 = "vst_timeline_settings_title";
   var STORAGE_PREFIX = "videostages";
   var currentModal3 = null;
+  var buildBonitaInstallSetting = () => {
+    const installed = getVideoStagesHostBridge().hasBackendFeature(
+      MINIMAX_CHARACTER_REFINE_FEATURE
+    );
+    const section = document.createElement("fieldset");
+    section.id = "vst_bonita_install";
+    section.className = "vst-bonita-install-setting";
+    const legend = document.createElement("legend");
+    legend.textContent = "Make Them Bonita";
+    const hint = document.createElement("small");
+    if (installed) {
+      hint.textContent = "ComfyUI-Bonita is installed.";
+    } else {
+      const repository = document.createElement("a");
+      repository.href = MINIMAX_CHARACTER_REFINE_REPOSITORY_URL;
+      repository.target = "_blank";
+      repository.rel = "noopener noreferrer";
+      repository.textContent = "ComfyUI-Bonita";
+      hint.append(
+        "Install ",
+        repository,
+        " - a facefixer useful for MiniMax H3 videos"
+      );
+    }
+    const install = buildDetailActionButton({
+      label: installed ? "ComfyUI-Bonita Installed" : "Install ComfyUI-Bonita",
+      title: installed ? "ComfyUI-Bonita is installed" : "Install ComfyUI-Bonita",
+      className: "vst-install-bonita",
+      disabled: installed,
+      onClick: () => {
+        if (!installHostFeature(
+          MINIMAX_CHARACTER_REFINE_FEATURE,
+          section.id
+        )) {
+          getVideoStagesHostBridge().showError(
+            "SwarmUI's ComfyUI feature installer is unavailable."
+          );
+        }
+      }
+    });
+    install.dataset.vstInstallBonita = "true";
+    section.append(legend, hint, install);
+    return section;
+  };
   var buildLoraFolderSetting = (onChange) => {
     const folders = availableLoraFolders(
       getDropdownOptions("loras", "input_loras").values
@@ -15432,6 +15862,7 @@ ${slot}`;
           resetRememberedAccordionSections();
         }
       }),
+      buildBonitaInstallSetting(),
       buildLoraFolderSetting(() => {
         refreshOnClose = true;
       })

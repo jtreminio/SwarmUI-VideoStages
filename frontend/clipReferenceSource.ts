@@ -14,7 +14,11 @@ import {
     parseBase2EditStageIndex,
 } from "./mediaSourceSyntax";
 import { preserveSelectedOption, resolveSelectValue } from "./selectOption";
-import type { ClipReferenceKind, ImageSourceOption } from "./types";
+import type {
+    ClipReference,
+    ClipReferenceKind,
+    ImageSourceOption,
+} from "./types";
 
 export const buildClipReferenceSourceOptions = (
     kind: ClipReferenceKind,
@@ -67,3 +71,10 @@ export const clipReferenceSourceSupportsKind = (
             parseBase2EditStageIndex(value) !== null)
     );
 };
+
+export const clipReferenceIsUsable = (
+    reference: Pick<ClipReference, "kind" | "source" | "uploadedMedia">,
+): boolean =>
+    clipReferenceSourceSupportsKind(reference.kind, reference.source) &&
+    (reference.source.trim() !== MEDIA_SOURCE_UPLOAD ||
+        Boolean(reference.uploadedMedia?.data.trim()));

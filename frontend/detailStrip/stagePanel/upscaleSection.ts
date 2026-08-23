@@ -25,6 +25,7 @@ export const appendStageUpscaleSection = (
 ): void => {
     if (!isRefine) return;
     const { context, clip, stage, defaults, fields, slider, commit } = bindings;
+    const bonitaEnabled = stage.characterRefine !== null;
     const capabilities = context.authoring().capabilities.forClip(clip);
     const supportedMethods: OptionSpec[] = defaults.upscaleMethodValues.flatMap(
         (value, index) => {
@@ -67,12 +68,15 @@ export const appendStageUpscaleSection = (
     );
     methodField.classList.add("vst-detail-span-2");
     const syncMethod = (upscale: number): void => {
-        const disabled = Math.abs(upscale - 1) < UPSCALE_EPSILON;
+        const disabled =
+            bonitaEnabled || Math.abs(upscale - 1) < UPSCALE_EPSILON;
         methodSelect.disabled = disabled;
         methodField.classList.toggle("vst-field-disabled", disabled);
-        methodField.title = disabled
-            ? "Set Upscale above 1× to choose a method"
-            : "";
+        methodField.title = bonitaEnabled
+            ? "Upscale is unavailable while Make Them Bonita is on"
+            : disabled
+              ? "Set Upscale above 1× to choose a method"
+              : "";
     };
     const upscaleSlider = slider(
         "Upscale",
@@ -92,6 +96,16 @@ export const appendStageUpscaleSection = (
                 "above 1× enlarges using the Upscale Method.",
         },
     );
+    if (bonitaEnabled) {
+        upscaleSlider
+            .querySelectorAll<HTMLInputElement>("input")
+            .forEach((input) => {
+                input.disabled = true;
+            });
+        upscaleSlider.classList.add("vst-field-disabled");
+        upscaleSlider.title =
+            "Upscale is unavailable while Make Them Bonita is on";
+    }
     fields.append(upscaleSlider, methodField);
     syncMethod(stage.upscale);
 };

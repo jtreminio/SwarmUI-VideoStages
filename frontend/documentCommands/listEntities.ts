@@ -59,6 +59,8 @@ export interface ListEntityDescriptor<
     readonly reservedKeys: readonly (keyof TEntity)[];
     /** True when mutating the list can change the owning clip's identity. */
     readonly reconcilesClipIdentity?: boolean;
+    /** True when edits can invalidate Character Refine reference selections. */
+    readonly reconcilesCharacterRefineReferences?: boolean;
     collection(owner: TOwner): TEntity[];
 }
 
@@ -168,6 +170,7 @@ const STAGE_ENTITY = defineList<CanonicalClip, CanonicalStage>()({
         "cfgScale",
         "sampler",
         "scheduler",
+        "characterRefine",
     ],
     reservedKeys: ["id", "model", "modelProfileId"],
     reconcilesClipIdentity: true,
@@ -212,6 +215,7 @@ const CLIP_REFERENCE_ENTITY = defineList<
         "lengthSeconds",
     ],
     reservedKeys: ["id"],
+    reconcilesCharacterRefineReferences: true,
     collection: (clip) => clip.references,
 });
 

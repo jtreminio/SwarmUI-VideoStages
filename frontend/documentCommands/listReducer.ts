@@ -1,4 +1,5 @@
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
+import { clipReferenceIsUsable } from "../clipReferenceSource";
 import type { CanonicalAuthoringDocument, CanonicalClip } from "../types";
 import {
     addBefore,
@@ -55,10 +56,21 @@ export const applyListCommand = (
         target,
     );
     const id = fields[descriptor.idField] as string;
+    const affectedId =
+        operation === "add"
+            ? (fields[descriptor.entityField] as Entity).id
+            : id;
+    const wasUsableImage =
+        descriptor.reconcilesCharacterRefineReferences &&
+        (owner as CanonicalClip).references.some(
+            (reference) =>
+                reference.id === affectedId &&
+                reference.kind === "image" &&
+                clipReferenceIsUsable(reference),
+        );
     const beforeId = (fields[descriptor.beforeIdField] ?? null) as
         | string
         | null;
-
     let mutated: boolean;
     switch (operation) {
         case "add": {
@@ -96,6 +108,41 @@ export const applyListCommand = (
     }
     if (!mutated) {
         return failure(document, "missing-target");
+    }
+    if (descriptor.reconcilesCharacterRefineReferences) {
+        const reference = (owner as CanonicalClip).references.find(
+            (candidate) => candidate.id === affectedId,
+        );
+        const usableImage =
+            operation !== "remove" &&
+            reference !== undefined &&
+            reference.kind === "image" &&
+            clipReferenceIsUsable(reference);
+        for (const stage of (owner as CanonicalClip).stages) {
+            if (!stage.characterRefine) continue;
+            if (usableImage && !wasUsableImage) {
+                if (
+                    !stage.characterRefine.pictureReferenceIds.includes(
+                        affectedId,
+                    )
+                ) {
+                    stage.characterRefine.pictureReferenceIds.push(affectedId);
+                }
+            } else if (!usableImage) {
+                stage.characterRefine.pictureReferenceIds =
+                    stage.characterRefine.pictureReferenceIds.filter(
+                        (referenceId) => referenceId !== affectedId,
+                    );
+            }
+            const hasUsableImage = (owner as CanonicalClip).references.some(
+                (candidate) =>
+                    candidate.kind === "image" &&
+                    clipReferenceIsUsable(candidate),
+            );
+            if (!hasUsableImage) {
+                stage.characterRefine.verifyIdentity = false;
+            }
+        }
     }
     if (descriptor.reconcilesClipIdentity) {
         const candidate = target as CanonicalClip;

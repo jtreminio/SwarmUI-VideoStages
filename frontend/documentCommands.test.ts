@@ -7,6 +7,7 @@ import {
     canonicalAudioSpan,
     canonicalAudioTrack,
     canonicalClip,
+    canonicalClipReference,
     canonicalDocument,
     canonicalPromptWindow,
     canonicalRef,
@@ -17,6 +18,7 @@ import {
     type DocumentCommand,
     reduceDocumentCommand,
 } from "./documentCommands";
+import { defaultCharacterRefine } from "./normalizationStage";
 import type { CanonicalAuthoringDocument, CanonicalIcLora } from "./types";
 
 const document = (): CanonicalAuthoringDocument =>
@@ -143,6 +145,159 @@ describe("reduceDocumentCommand", () => {
             "clip-c",
             "clip-a",
         ]);
+    });
+
+    it("clears optional Character Refine selections when their reference is deleted", () => {
+        const source = document();
+        source.clips[0].references = [
+            canonicalClipReference("identity-ref"),
+            canonicalClipReference("face-ref"),
+        ];
+        for (const stage of source.clips[0].stages) {
+            stage.characterRefine = {
+                ...defaultCharacterRefine(["identity-ref"]),
+                pictureReferenceIds: ["face-ref", "keep-ref"],
+            };
+        }
+
+        const result = reduceDocumentCommand(source, {
+            type: "clip-reference.remove",
+            clipId: "clip-a",
+            referenceId: "face-ref",
+        });
+
+        expect(result.applied).toBe(true);
+        for (const stage of result.document.clips[0].stages) {
+            expect(stage.characterRefine?.pictureReferenceIds).toEqual([
+                "keep-ref",
+            ]);
+        }
+    });
+
+    it("selects a usable image added after Make Them Bonita is enabled", () => {
+        const source = document();
+        source.clips[0].stages[0].characterRefine = defaultCharacterRefine([]);
+
+        const result = reduceDocumentCommand(source, {
+            type: "clip-reference.add",
+            clipId: "clip-a",
+            reference: canonicalClipReference("new-picture"),
+        });
+
+        expect(result.applied).toBe(true);
+        expect(
+            result.document.clips[0].stages[0].characterRefine
+                ?.pictureReferenceIds,
+        ).toEqual(["new-picture"]);
+    });
+
+    it("selects a picture when its upload first becomes usable", () => {
+        const source = document();
+        source.clips[0].references = [
+            canonicalClipReference("new-picture", { uploadedMedia: null }),
+        ];
+        source.clips[0].stages[0].characterRefine = defaultCharacterRefine([]);
+
+        const result = reduceDocumentCommand(source, {
+            type: "clip-reference.patch",
+            clipId: "clip-a",
+            referenceId: "new-picture",
+            patch: {
+                uploadedMedia: {
+                    data: "data:image/png;base64,QQ==",
+                    fileName: "subject.png",
+                },
+            },
+        });
+
+        expect(result.applied).toBe(true);
+        expect(
+            result.document.clips[0].stages[0].characterRefine
+                ?.pictureReferenceIds,
+        ).toEqual(["new-picture"]);
+    });
+
+    it("keeps Character Refine but disables identity verification when its last image is deleted", () => {
+        const source = document();
+        source.clips[0].references = [canonicalClipReference("identity-ref")];
+        source.clips[0].stages[0].characterRefine = defaultCharacterRefine([
+            "identity-ref",
+        ]);
+
+        const result = reduceDocumentCommand(source, {
+            type: "clip-reference.remove",
+            clipId: "clip-a",
+            referenceId: "identity-ref",
+        });
+
+        expect(result.applied).toBe(true);
+        expect(result.document.clips[0].stages[0].characterRefine).toEqual({
+            ...defaultCharacterRefine([]),
+        });
+    });
+
+    it("keeps Character Refine but disables identity verification when its last image changes kind", () => {
+        const source = document();
+        source.clips[0].references = [canonicalClipReference("identity-ref")];
+        source.clips[0].stages[0].characterRefine = defaultCharacterRefine([
+            "identity-ref",
+        ]);
+
+        const result = reduceDocumentCommand(source, {
+            type: "clip-reference.patch",
+            clipId: "clip-a",
+            referenceId: "identity-ref",
+            patch: { kind: "video" },
+        });
+
+        expect(result.applied).toBe(true);
+        expect(result.document.clips[0].stages[0].characterRefine).toEqual({
+            ...defaultCharacterRefine([]),
+        });
+    });
+
+    it.each([
+        { patch: { source: "Native" }, label: "source becomes unsupported" },
+        {
+            patch: { uploadedMedia: { data: "", fileName: "identity.png" } },
+            label: "uploaded image is cleared",
+        },
+    ])("reconciles Character Refine when $label", ({ patch }) => {
+        const source = document();
+        source.clips[0].references = [
+            canonicalClipReference("identity-ref"),
+            canonicalClipReference("optional-ref"),
+        ];
+        source.clips[0].stages[0].characterRefine = defaultCharacterRefine([
+            "identity-ref",
+            "optional-ref",
+        ]);
+        source.clips[0].stages[1].characterRefine = defaultCharacterRefine([
+            "identity-ref",
+            "optional-ref",
+        ]);
+
+        const identity = reduceDocumentCommand(source, {
+            type: "clip-reference.patch",
+            clipId: "clip-a",
+            referenceId: "identity-ref",
+            patch,
+        });
+        const optional = reduceDocumentCommand(source, {
+            type: "clip-reference.patch",
+            clipId: "clip-a",
+            referenceId: "optional-ref",
+            patch,
+        });
+
+        expect(
+            identity.document.clips[0].stages[0].characterRefine
+                ?.pictureReferenceIds,
+        ).toEqual(["optional-ref"]);
+        expect(
+            optional.document.clips[0].stages[1].characterRefine
+                ?.pictureReferenceIds,
+        ).toEqual(["identity-ref"]);
     });
 
     it("toggles clip skip suffixes atomically without mutating the source", () => {

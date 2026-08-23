@@ -1,8 +1,4 @@
-"""ComfyUI-facing wiring: node registration.
-
-This is the only module that ComfyUI's loader needs; the package root
-re-exports it lazily so the pure helper modules stay importable without ComfyUI.
-"""
+"""ComfyUI node registration."""
 
 from comfy_api.latest import io
 

@@ -3,6 +3,12 @@ import {
     buildDetailActionButton,
     resetRememberedAccordionSections,
 } from "../detailWidgets";
+import {
+    MINIMAX_CHARACTER_REFINE_FEATURE,
+    MINIMAX_CHARACTER_REFINE_REPOSITORY_URL,
+} from "../generatedMiniMaxCharacterRefine";
+import { getVideoStagesHostBridge } from "../host";
+import { installHostFeature } from "../host/swarmUiAdapters";
 import { availableLoraFolders, ROOT_LORA_FOLDER } from "../loraFolderFilter";
 import { getState, saveState } from "../persistence/repository";
 import { getDropdownOptions } from "../swarmInputs";
@@ -18,6 +24,57 @@ const BACKDROP_CLASS = "vst-timeline-settings-backdrop";
 const TITLE_ID = "vst_timeline_settings_title";
 const STORAGE_PREFIX = "videostages";
 let currentModal: ManagedModal | null = null;
+
+const buildBonitaInstallSetting = (): HTMLElement => {
+    const installed = getVideoStagesHostBridge().hasBackendFeature(
+        MINIMAX_CHARACTER_REFINE_FEATURE,
+    );
+    const section = document.createElement("fieldset");
+    section.id = "vst_bonita_install";
+    section.className = "vst-bonita-install-setting";
+    const legend = document.createElement("legend");
+    legend.textContent = "Make Them Bonita";
+    const hint = document.createElement("small");
+    if (installed) {
+        hint.textContent = "ComfyUI-Bonita is installed.";
+    } else {
+        const repository = document.createElement("a");
+        repository.href = MINIMAX_CHARACTER_REFINE_REPOSITORY_URL;
+        repository.target = "_blank";
+        repository.rel = "noopener noreferrer";
+        repository.textContent = "ComfyUI-Bonita";
+        hint.append(
+            "Install ",
+            repository,
+            " - a facefixer useful for MiniMax H3 videos",
+        );
+    }
+    const install = buildDetailActionButton({
+        label: installed
+            ? "ComfyUI-Bonita Installed"
+            : "Install ComfyUI-Bonita",
+        title: installed
+            ? "ComfyUI-Bonita is installed"
+            : "Install ComfyUI-Bonita",
+        className: "vst-install-bonita",
+        disabled: installed,
+        onClick: () => {
+            if (
+                !installHostFeature(
+                    MINIMAX_CHARACTER_REFINE_FEATURE,
+                    section.id,
+                )
+            ) {
+                getVideoStagesHostBridge().showError(
+                    "SwarmUI's ComfyUI feature installer is unavailable.",
+                );
+            }
+        },
+    });
+    install.dataset.vstInstallBonita = "true";
+    section.append(legend, hint, install);
+    return section;
+};
 
 const buildLoraFolderSetting = (onChange: () => void): HTMLElement => {
     const folders = availableLoraFolders(
@@ -172,6 +229,7 @@ export const openTimelineAuthoringSettingsModal = (): void => {
                 resetRememberedAccordionSections();
             }
         }),
+        buildBonitaInstallSetting(),
         buildLoraFolderSetting(() => {
             refreshOnClose = true;
         }),

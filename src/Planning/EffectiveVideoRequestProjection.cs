@@ -160,10 +160,11 @@ internal static class EffectiveVideoRequestProjection
 
         List<int> activeGrids = [];
         foreach (StageSpec stage in clip.Stages.Where(stage =>
-            !StagePassthroughPolicy.IsPassthrough(
-                stage,
-                assignment.Architecture)
-            || (countRootStageGrid && stage.ClipStageIndex == 0)))
+            (assignment.Module?.UsesResolvedTemporalGrid(clip, stage) ?? true)
+            && (!StagePassthroughPolicy.IsPassthrough(
+                    stage,
+                    assignment.Architecture)
+                || (countRootStageGrid && stage.ClipStageIndex == 0))))
         {
             if (!assignment.StageModels.TryGetValue(
                     stage.ClipStageRawIndex,

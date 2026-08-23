@@ -13,6 +13,10 @@ public class GeneratedBindingRetentionTests
     [
         nameof(ClipProjApplyNode),
         nameof(H3WindowAttentionPatchNode),
+        nameof(BonitaSAM3FinderNode),
+        nameof(BonitaYOLOFinderNode),
+        nameof(BonitaFindAndCropNode),
+        nameof(BonitaApplyRepairNode),
         nameof(SwarmAudioLengthToFramesNode),
         nameof(SwarmFrameWindowNode),
         nameof(SwarmPromptRelayEncodeNode),

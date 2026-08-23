@@ -117,6 +117,11 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         return true;
     }
 
+    public bool UsesResolvedTemporalGrid(ClipSpec clip, StageSpec stage) =>
+        stage.CharacterRefine is null
+        || StagePassthroughPolicy.IsPassthrough(stage, Descriptor)
+        || (clip.InitVideo is null && stage.ClipStageIndex == 0);
+
     public ArchitectureClipCompilation ValidateAndCompileClip(
         ClipSpec clip,
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
@@ -141,6 +146,9 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 clip.Id));
         }
         Dictionary<int, IArchitectureStagePayload> stages = [];
+        IReadOnlyList<MiniMaxReferencePlan> references = MiniMaxClipReferences.Compile(
+            clip,
+            diagnostics);
         (NativeFrameReferencePlan first, NativeFrameReferencePlan last) =
             NativeFrameReferences.Compile(
                 clip,
@@ -158,6 +166,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             // Assignments are resolver-vetted; a missing key is a caller contract violation.
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool passthrough = StagePassthroughPolicy.IsPassthrough(stage, Descriptor);
+            bool characterRefine = stage.CharacterRefine is not null && !passthrough;
             bool decodedInput = !passthrough
                 && (context.EntryMode == ArchitectureEntryMode.InitVideo
                     || stage.ClipStageIndex > 0);
@@ -173,6 +182,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                     stage.ClipStageRawIndex));
             }
             if (decodedInput
+                && !characterRefine
                 && StageStartStepPolicy.PartialControlRoundsToZero(
                     stage.Steps,
                     stage.Control))
@@ -182,6 +192,29 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                     "minimax.stage-control.quantized-zero",
                     $"Clip {clip.Id}: stage {stage.Id} control is partial but rounds to sampler "
                         + "start step 0.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
+            if (characterRefine && !decodedInput)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "minimax.character-refine.decoded-input-required",
+                    $"Clip {clip.Id}: stage {stage.Id} Make Them Bonita requires InitVideo or the "
+                        + "previous stage's decoded output.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
+            if (characterRefine
+                && StageUpscalePlanCompiler.Compile(stage).Mode == StageUpscaleMode.Latent)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "minimax.character-refine.latent-upscale-unsupported",
+                    $"Clip {clip.Id}: stage {stage.Id} Make Them Bonita cannot use latent upscale. "
+                        + "Use pixel or model upscale before tracking.",
                     clip.Id,
                     stage.Id,
                     stage.ClipStageRawIndex));
@@ -199,7 +232,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                     stage.ClipStageRawIndex));
             }
 
-            stages[stage.ClipStageRawIndex] = StockHostVideoStagePayload.Compile(
+            StockHostVideoStagePayload host = StockHostVideoStagePayload.Compile(
                     ArchitectureId,
                     clip,
                     stage,
@@ -209,6 +242,10 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 {
                     FrameReferences = FrameRefPlanCompiler.Compile(clip, stage),
                 };
+            MiniMaxCharacterRefinePlan characterRefinePlan = characterRefine
+                ? CompileCharacterRefine(clip, stage, diagnostics)
+                : null;
+            stages[stage.ClipStageRawIndex] = new MiniMaxStagePayload(host, characterRefinePlan);
         }
 
         return new(
@@ -220,9 +257,81 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 clip.H3TextEncoder,
                 first,
                 last,
-                MiniMaxClipReferences.Compile(clip, diagnostics)),
+                references),
             stages,
             diagnostics.AsReadOnly());
+    }
+
+    private static MiniMaxCharacterRefinePlan CompileCharacterRefine(
+        ClipSpec clip,
+        StageSpec stage,
+        ICollection<PlanDiagnostic> diagnostics)
+    {
+        MiniMaxCharacterRefineSpec settings = stage.CharacterRefine;
+        if (settings is null)
+        {
+            return null;
+        }
+        string[] imageIds = (clip.References ?? [])
+            .Where(reference => reference.Kind == ClipReferenceKind.Image)
+            .Select(reference => reference.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToArray();
+        HashSet<string> selectedIds = new(settings.PictureReferenceIds, StringComparer.Ordinal);
+        string[] orderedSelectedIds = imageIds.Where(selectedIds.Contains).ToArray();
+        IReadOnlyList<MiniMaxReferencePlan> pictures = MiniMaxClipReferences.CompileSelected(
+            clip,
+            orderedSelectedIds,
+            diagnostics);
+        if (pictures.Count != selectedIds.Count)
+        {
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Error,
+                "minimax.character-refine.picture-reference-invalid",
+                $"Clip {clip.Id}: stage {stage.Id} Make Them Bonita pictureReferenceIds must "
+                    + "name usable image references on this clip.",
+                clip.Id,
+                stage.Id,
+                stage.ClipStageRawIndex));
+        }
+        MiniMaxReferencePlan identity = null;
+        if (settings.VerifyIdentity)
+        {
+            foreach (string imageId in imageIds)
+            {
+                identity = pictures.FirstOrDefault(reference => reference.Id == imageId)
+                    ?? MiniMaxClipReferences.CompileSelected(
+                        clip,
+                        [imageId],
+                        diagnostics).FirstOrDefault();
+                if (identity is not null)
+                {
+                    break;
+                }
+            }
+        }
+        if (settings.VerifyIdentity && identity is null)
+        {
+            diagnostics.Add(new(
+                PlanDiagnosticSeverity.Error,
+                "minimax.character-refine.identity-reference-missing",
+                $"Clip {clip.Id}: stage {stage.Id} Make Them Bonita Verify Identity requires "
+                    + "a usable image reference on this clip.",
+                clip.Id,
+                stage.Id,
+                stage.ClipStageRawIndex));
+            return null;
+        }
+        return new(
+            pictures,
+            identity,
+            settings.Finder,
+            settings.Subject,
+            settings.Part,
+            settings.SubjectConfidence,
+            settings.PartConfidence,
+            settings.CropWidth,
+            settings.CropHeight);
     }
 }
 

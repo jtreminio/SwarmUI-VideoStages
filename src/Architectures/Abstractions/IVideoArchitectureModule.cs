@@ -23,6 +23,8 @@ internal interface IVideoArchitectureModule
 
     bool TryResolveModel(T2IModel model, out ResolvedVideoModel resolved);
 
+    bool UsesResolvedTemporalGrid(ClipSpec clip, StageSpec stage) => true;
+
     /// <summary>
     /// Performs only architecture-owned semantic validation and payload compilation.
     /// </summary>

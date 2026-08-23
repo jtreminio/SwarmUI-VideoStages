@@ -44,6 +44,8 @@ public class AuthoringDocumentContractTests
         "clips[].keyframes[].data",
         // Prompt-tag-only image reference override.
         "clips[].stages[].imageReference",
+        // Inactive character refinement is omitted.
+        "clips[].stages[].characterRefine",
     ];
 
     private static string FixtureJson() =>

@@ -31,6 +31,7 @@ import {
     appendRefToClip,
     buildDefaultRef,
     buildDefaultStage,
+    defaultCharacterRefine,
     normalizeRef,
     normalizeStage,
     normalizeStageLoras,
@@ -92,6 +93,56 @@ const minimalStageRaw = {
 } as const;
 
 describe("normalization", () => {
+    it("normalizes Character Refine pictures and finder settings", () => {
+        const stage = normalizeStage(
+            moduleRootDefaults(),
+            testStageModel,
+            {
+                ...minimalStageRaw,
+                upscale: 1.5,
+                characterRefine: {
+                    pictureReferenceIds: ["ref-a", "ref-a", "ref-b"],
+                    verifyIdentity: true,
+                    finder: "yolo",
+                    subject: " person ",
+                    part: " face ",
+                    subjectConfidence: 0.2,
+                    partConfidence: 0.1,
+                    cropWidth: 769,
+                    cropHeight: 640,
+                },
+            },
+            null,
+            0,
+            0,
+            true,
+        );
+
+        expect(stage.characterRefine).toEqual({
+            pictureReferenceIds: ["ref-a", "ref-b"],
+            verifyIdentity: true,
+            finder: "yolo",
+            subject: "person",
+            part: "face",
+            subjectConfidence: 0.2,
+            partConfidence: 0.1,
+            cropWidth: 768,
+            cropHeight: 640,
+        });
+        expect(stage.upscale).toBe(1);
+        expect(defaultCharacterRefine(["identity-ref"])).toEqual({
+            pictureReferenceIds: ["identity-ref"],
+            verifyIdentity: true,
+            finder: "sam3",
+            subject: "person",
+            part: "face",
+            subjectConfidence: 0.25,
+            partConfidence: 0.1,
+            cropWidth: 512,
+            cropHeight: 512,
+        });
+    });
+
     it("readRawStageProp reads only canonical camelCase", () => {
         expect(
             readRawStageProp({ control: 0.5, Control: 0.9 }, "control"),

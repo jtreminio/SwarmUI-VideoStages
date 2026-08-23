@@ -42,6 +42,37 @@ public sealed class EffectiveVideoRequestProjectionTests
     }
 
     [Fact]
+    public void Stale_character_refine_data_does_not_disable_another_architectures_grid()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with
+        {
+            CharacterRefine = new(
+                ["identity"],
+                true,
+                "sam3",
+                "person",
+                "face",
+                0.25,
+                0.1,
+                1024,
+                1024),
+        };
+        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        TimelineSpec authored = Spec(clip);
+        VideoArchitectureDescriptor descriptor =
+            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+
+        EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
+            authored,
+            TestPlanCompiler.Resolve(
+                authored,
+                _ => Ltx2ArchitectureModule.Instance,
+                _ => descriptor));
+
+        Assert.Equal(33, request.Spec.Clips[0].Frames);
+    }
+
+    [Fact]
     public void Full_length_retake_tracks_the_resolved_effective_frame_count()
     {
         StageSpec stage = Stage(0, rawIndex: 0, model: "grid-model") with

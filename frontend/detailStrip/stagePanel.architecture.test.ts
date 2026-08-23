@@ -1,4 +1,11 @@
-import { afterEach, describe, expect, it, jest } from "@jest/globals";
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    it,
+    jest,
+} from "@jest/globals";
 import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectureCatalog";
 import {
     fakeArchitectureCatalog,
@@ -7,7 +14,9 @@ import {
     testRootDefaults,
 } from "../__test_helpers__/architectureFixtures";
 import {
+    initVideoFixture,
     minimalClip,
+    minimalClipReference,
     minimalRef,
     minimalStage,
 } from "../__test_helpers__/clipFixtures";
@@ -22,6 +31,7 @@ import type { GeneratedEntryMode } from "../architectures/generatedFeatures";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
+import { defaultCharacterRefine } from "../normalizationStage";
 import * as persistence from "../persistence/repository";
 import {
     __resetPersistenceForTests,
@@ -78,6 +88,24 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
             entryModes: ["text-to-video", "image-to-video", "init-video"],
         },
     );
+    return models;
+};
+
+const catalogWithMiniMax = (): ArchitectureModelCatalog => {
+    const models = catalog();
+    const minimax = structuredClone(models.architectures[0]);
+    minimax.id = "minimax";
+    minimax.label = "MiniMax H3";
+    models.architectures.push(minimax);
+    models.entries.push({
+        value: "minimax.safetensors",
+        label: "MiniMax H3",
+        architectureId: "minimax",
+        modelProfileId: "minimax-h3",
+        modelClassId: "minimax-h3",
+        compatibilityClassId: "minimax-h3",
+        entryModes: ["text-to-video", "image-to-video", "init-video"],
+    });
     return models;
 };
 
@@ -153,7 +181,14 @@ const dispatchSpy = () =>
         .spyOn(persistence, "dispatchDocumentCommand")
         .mockReturnValue({ applied: false, revision: 0 });
 
+beforeEach(() => {
+    (
+        globalThis as { currentBackendFeatureSet?: string[] }
+    ).currentBackendFeatureSet = ["bonita"];
+});
+
 afterEach(() => {
+    Reflect.deleteProperty(globalThis, "currentBackendFeatureSet");
     jest.restoreAllMocks();
     resetArchitectureCatalogForTests();
     setVideoStagesHostBridgeForTests(null);
@@ -1032,5 +1067,454 @@ describe("stage architecture model filtering", () => {
         expect(field("Scheduler")?.querySelector("select")?.disabled).toBe(
             false,
         );
+    });
+
+    it("renders Make Them Bonita with standard fields, sliders, and plain help", () => {
+        const models = catalogWithMiniMax();
+        const stage = minimalStage({
+            model: "minimax.safetensors",
+            modelProfileId: "minimax-h3",
+            upscale: 1.5,
+            characterRefine: defaultCharacterRefine([
+                "identity-ref",
+                "context-ref",
+            ]),
+        });
+        const clip = minimalClip({
+            architectureHint: "minimax",
+            modelProfileId: "minimax-h3",
+            initVideo: initVideoFixture(),
+            references: [
+                minimalClipReference({
+                    id: "identity-ref",
+                    uploadedMedia: {
+                        data: "data:image/png;base64,QQ==",
+                        fileName: "identity.png",
+                    },
+                }),
+                minimalClipReference({
+                    id: "context-ref",
+                    uploadedMedia: {
+                        data: "data:image/png;base64,Qg==",
+                        fileName: "context.png",
+                    },
+                }),
+                minimalClipReference({
+                    id: "video-ref",
+                    kind: "video",
+                    uploadedMedia: {
+                        data: "data:video/mp4;base64,Qw==",
+                        fileName: "context.mp4",
+                    },
+                }),
+            ],
+            stages: [stage],
+        });
+
+        const panelContext = context(models);
+        panelContext.commit = jest.fn((mutate: (clips: Clip[]) => void) =>
+            mutate([clip]),
+        );
+        panelContext.debouncedCommit = jest.fn(
+            (_key: string, mutate: (clips: Clip[]) => void) => mutate([clip]),
+        );
+        const column = buildStageParamsColumn(
+            panelContext,
+            clip,
+            0,
+            0,
+            stage,
+            testRootDefaults(models),
+        );
+        const field = (label: string) =>
+            Array.from(
+                column.querySelectorAll<HTMLElement>(".auto-input"),
+            ).find((candidate) =>
+                candidate.querySelector("label")?.textContent?.includes(label),
+            );
+        const slider = (label: string) =>
+            Array.from(
+                column.querySelectorAll<HTMLElement>(".vst-stage-slider"),
+            ).find((candidate) =>
+                candidate.querySelector("label")?.textContent?.includes(label),
+            );
+
+        expect(column.textContent).toContain("Make Them Bonita");
+        const bonitaGroup = column.querySelector<HTMLElement>(
+            ".vst-character-refine-section",
+        );
+        const bonitaContent = bonitaGroup?.querySelector<HTMLElement>(
+            ":scope > .input-group-content",
+        );
+        const bonitaToggle = bonitaGroup?.querySelector<HTMLInputElement>(
+            ".group-toggler-switch input[type='checkbox']",
+        );
+        expect(bonitaGroup?.parentElement).toBe(column);
+        expect(bonitaGroup?.classList).toContain("input-group-open");
+        expect(bonitaContent?.hidden).toBe(false);
+        expect(bonitaToggle?.checked).toBe(true);
+        expect(field("Finder")?.closest(".vst-character-refine-section")).toBe(
+            bonitaGroup,
+        );
+        const upscaleInputs = Array.from(
+            slider("Upscale")?.querySelectorAll<HTMLInputElement>("input") ??
+                [],
+        );
+        expect(upscaleInputs).toHaveLength(2);
+        expect(upscaleInputs.every((input) => input.disabled)).toBe(true);
+
+        const finderField = field("Finder");
+        expect(finderField?.querySelector("select")?.value).toBe("sam3");
+        const finder = finderField?.querySelector("select");
+        if (!finder) throw new Error("Finder must render");
+        finder.value = "yolo";
+        finder.dispatchEvent(new Event("change"));
+        expect(stage.characterRefine?.finder).toBe("yolo");
+
+        const subject =
+            field("Subject")?.querySelector<HTMLInputElement>("input");
+        const part = field("Part")?.querySelector<HTMLInputElement>("input");
+        if (!subject || !part) throw new Error("Subject and Part must render");
+        expect(field("Subject")?.classList).toContain("auto-text-box");
+        expect(field("Part")?.classList).toContain("auto-text-box");
+        subject.value = "animal";
+        subject.dispatchEvent(new Event("change"));
+        part.value = "hand";
+        part.dispatchEvent(new Event("change"));
+        expect(stage.characterRefine?.subject).toBe("animal");
+        expect(stage.characterRefine?.part).toBe("hand");
+        const subjectConfidence = slider(
+            "Subject Confidence",
+        )?.querySelector<HTMLInputElement>("input.auto-slider-number");
+        const partConfidence = slider(
+            "Part Confidence",
+        )?.querySelector<HTMLInputElement>("input.auto-slider-number");
+        if (!subjectConfidence || !partConfidence)
+            throw new Error("Subject and Part Confidence must render");
+        subjectConfidence.value = "0.15";
+        subjectConfidence.dispatchEvent(new Event("change"));
+        partConfidence.value = "0.05";
+        partConfidence.dispatchEvent(new Event("change"));
+        expect(stage.characterRefine?.subjectConfidence).toBe(0.15);
+        expect(stage.characterRefine?.partConfidence).toBe(0.05);
+        expect(
+            slider("Crop Width")?.querySelector<HTMLInputElement>(
+                "input.auto-slider-number",
+            )?.value,
+        ).toBe("512");
+        expect(
+            slider("Crop Height")?.querySelector<HTMLInputElement>(
+                "input.auto-slider-number",
+            )?.value,
+        ).toBe("512");
+        for (const label of ["Crop Width", "Crop Height"]) {
+            const cropSlider = slider(label);
+            const number = cropSlider?.querySelector<HTMLInputElement>(
+                "input.auto-slider-number",
+            );
+            const range = cropSlider?.querySelector<HTMLInputElement>(
+                "input.auto-slider-range",
+            );
+            expect(number?.step).toBe("32");
+            expect(number?.dataset.ispot).toBe("true");
+            expect(range?.min).toBe("256");
+            expect(range?.max).toBe("2048");
+            expect(range?.step).toBe("32");
+            expect(range?.dataset.ispot).toBe("true");
+        }
+        expect(
+            field("Verify Identity")?.querySelector<HTMLInputElement>("input")
+                ?.checked,
+        ).toBe(true);
+        const help = Array.from(
+            column.querySelectorAll<HTMLElement>(".sui-info-popover"),
+        ).map((popover) => popover.textContent);
+        expect(help).toEqual(
+            expect.arrayContaining([
+                expect.stringContaining("Repair a person or character"),
+                expect.stringContaining("usually best for movement"),
+                expect.stringContaining("who or what to follow"),
+                expect.stringContaining("area you want to repair"),
+                expect.stringContaining("loses the subject"),
+                expect.stringContaining("misses the area"),
+                expect.stringContaining("wider repair image"),
+                expect.stringContaining("taller repair image"),
+                expect.stringContaining("slower"),
+                expect.stringContaining("InsightFace"),
+                expect.stringContaining("more than one person"),
+            ]),
+        );
+        const pictureSection = column.querySelector<HTMLElement>(
+            ".vst-character-refine-pictures",
+        );
+        const verifyIdentity = field("Verify Identity");
+        expect(
+            pictureSection?.querySelector(
+                ".vst-character-refine-pictures-title",
+            )?.textContent,
+        ).toBe("Reference Pictures");
+        expect(pictureSection).not.toBeNull();
+        expect(verifyIdentity).not.toBeUndefined();
+        const bonitaChildren = Array.from(
+            pictureSection?.parentElement?.children ?? [],
+        );
+        expect(
+            bonitaChildren.indexOf(pictureSection as HTMLElement),
+        ).toBeLessThan(bonitaChildren.indexOf(verifyIdentity as HTMLElement));
+        const pictures = Array.from(
+            column.querySelectorAll<HTMLElement>(
+                ".vst-character-refine-picture",
+            ),
+        );
+        expect(pictures.map((row) => row.textContent)).toEqual([
+            "<picture 1> identity.png",
+            "<picture 2> context.png",
+        ]);
+        expect(
+            pictures.every(
+                (row) =>
+                    row.firstElementChild instanceof HTMLInputElement &&
+                    row.firstElementChild.checked,
+            ),
+        ).toBe(true);
+        bonitaGroup
+            ?.querySelector<HTMLElement>(":scope > .input-group-header")
+            ?.click();
+        const rebuilt = buildStageParamsColumn(
+            panelContext,
+            clip,
+            0,
+            0,
+            stage,
+            testRootDefaults(models),
+        );
+        const rebuiltBonita = rebuilt.querySelector<HTMLElement>(
+            ".vst-character-refine-section",
+        );
+        expect(rebuiltBonita?.classList).toContain("input-group-closed");
+        expect(
+            rebuiltBonita?.querySelector<HTMLElement>(
+                ":scope > .input-group-content",
+            )?.hidden,
+        ).toBe(true);
+        expect(column.textContent).not.toContain("license");
+    });
+
+    it("rebuilds the stage panel after Make Them Bonita is enabled", () => {
+        const models = catalogWithMiniMax();
+        const stage = minimalStage({
+            model: "minimax.safetensors",
+            modelProfileId: "minimax-h3",
+            upscale: 1.5,
+        });
+        const clip = minimalClip({
+            architectureHint: "minimax",
+            modelProfileId: "minimax-h3",
+            initVideo: initVideoFixture(),
+            references: [
+                minimalClipReference({
+                    id: "identity-ref",
+                    uploadedMedia: {
+                        data: "data:image/png;base64,QQ==",
+                        fileName: "identity.png",
+                    },
+                }),
+            ],
+            stages: [stage],
+        });
+        const panelContext = context(models);
+        panelContext.commit = jest.fn((mutate: (clips: Clip[]) => void) =>
+            mutate([clip]),
+        );
+        const column = buildStageParamsColumn(
+            panelContext,
+            clip,
+            0,
+            0,
+            stage,
+            testRootDefaults(models),
+        );
+        const input = column.querySelector<HTMLInputElement>(
+            ".vst-character-refine-section .group-toggler-switch input",
+        );
+
+        if (!input) throw new Error("Make Them Bonita toggle not rendered");
+        input.checked = true;
+        input.dispatchEvent(new Event("change"));
+
+        expect(stage.characterRefine?.pictureReferenceIds).toEqual([
+            "identity-ref",
+        ]);
+        expect(stage.characterRefine?.verifyIdentity).toBe(true);
+        expect(stage.upscale).toBe(1);
+        expect(panelContext.render).toHaveBeenCalledTimes(1);
+    });
+
+    it("allows Make Them Bonita without usable image references", () => {
+        const models = catalogWithMiniMax();
+        const stage = minimalStage({
+            model: "minimax.safetensors",
+            modelProfileId: "minimax-h3",
+        });
+        const clip = minimalClip({
+            architectureHint: "minimax",
+            modelProfileId: "minimax-h3",
+            initVideo: initVideoFixture(),
+            references: [
+                minimalClipReference({
+                    id: "empty-upload",
+                    uploadedMedia: { data: "", fileName: "empty.png" },
+                }),
+                minimalClipReference({
+                    id: "unsupported-source",
+                    source: "Native",
+                }),
+            ],
+            stages: [stage],
+        });
+
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            stage,
+            testRootDefaults(models),
+        );
+        const group = column.querySelector<HTMLElement>(
+            ".vst-character-refine-section",
+        );
+        const toggle = group?.querySelector<HTMLInputElement>(
+            ".group-toggler-switch input",
+        );
+
+        expect(toggle?.disabled).toBe(false);
+        expect(toggle?.checked).toBe(false);
+        expect(group?.classList).toContain("input-group-closed");
+        expect(
+            group?.querySelector<HTMLElement>(":scope > .input-group-content")
+                ?.hidden,
+        ).toBe(true);
+        group
+            ?.querySelector<HTMLElement>(":scope > .input-group-header")
+            ?.click();
+        expect(group?.classList).toContain("input-group-closed");
+        expect(
+            group?.querySelector<HTMLElement>(":scope > .input-group-content")
+                ?.hidden,
+        ).toBe(true);
+        expect(
+            column.querySelectorAll(".vst-character-refine-picture"),
+        ).toHaveLength(0);
+    });
+
+    it("offers a Base2Edit image for Make Them Bonita identity verification", () => {
+        const models = catalogWithMiniMax();
+        const stage = minimalStage({
+            model: "minimax.safetensors",
+            modelProfileId: "minimax-h3",
+        });
+        const clip = minimalClip({
+            architectureHint: "minimax",
+            modelProfileId: "minimax-h3",
+            initVideo: initVideoFixture(),
+            references: [
+                minimalClipReference({
+                    id: "edit-identity",
+                    source: "edit2",
+                    uploadedMedia: null,
+                }),
+            ],
+            stages: [stage],
+        });
+
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            stage,
+            testRootDefaults(models),
+        );
+        const toggle = column.querySelector<HTMLInputElement>(
+            ".vst-character-refine-section .group-toggler-switch input",
+        );
+
+        expect(toggle?.disabled).toBe(false);
+    });
+
+    it("shows Make Them Bonita only for MiniMax and requires decoded input", () => {
+        const models = catalogWithMiniMax();
+        const generated = minimalStage({
+            model: "minimax.safetensors",
+            modelProfileId: "minimax-h3",
+        });
+        const minimax = minimalClip({
+            architectureHint: "minimax",
+            modelProfileId: "minimax-h3",
+            stages: [generated],
+        });
+        const minimaxColumn = buildStageParamsColumn(
+            context(models),
+            minimax,
+            0,
+            0,
+            generated,
+            testRootDefaults(models),
+        );
+        const minimaxToggle = minimaxColumn.querySelector<HTMLInputElement>(
+            ".vst-character-refine-section .group-toggler-switch input",
+        );
+        expect(minimaxToggle?.disabled).toBe(true);
+
+        const ltxStage = minimalStage({
+            model: "ltx-2.3.safetensors",
+            modelProfileId: "ltx-2.3",
+        });
+        const ltx = minimalClip({
+            architectureHint: "ltx2",
+            modelProfileId: "ltx-2.3",
+            stages: [ltxStage],
+        });
+        const ltxColumn = buildStageParamsColumn(
+            context(models),
+            ltx,
+            0,
+            0,
+            ltxStage,
+            testRootDefaults(models),
+        );
+        expect(ltxColumn.textContent).not.toContain("Make Them Bonita");
+    });
+
+    it("hides Make Them Bonita when ComfyUI-Bonita is not installed", () => {
+        (
+            globalThis as { currentBackendFeatureSet?: string[] }
+        ).currentBackendFeatureSet = [];
+        const models = catalogWithMiniMax();
+        const stage = minimalStage({
+            model: "minimax.safetensors",
+            modelProfileId: "minimax-h3",
+        });
+        const clip = minimalClip({
+            architectureHint: "minimax",
+            modelProfileId: "minimax-h3",
+            initVideo: initVideoFixture(),
+            stages: [stage],
+        });
+
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            stage,
+            testRootDefaults(models),
+        );
+
+        expect(
+            column.querySelector(".vst-character-refine-section"),
+        ).toBeNull();
+        expect(column.textContent).not.toContain("Make Them Bonita");
     });
 });

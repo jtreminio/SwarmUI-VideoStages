@@ -19,7 +19,9 @@ export type StageSliderBuilder = (
         title?: string;
         onValue?: (value: number) => void;
         help?: string;
+        sliderMin?: number;
         sliderMax?: number;
+        isPot?: boolean;
     },
 ) => HTMLElement;
 export interface StagePanelBindings {

@@ -1739,18 +1739,21 @@
     flex-direction: column;
     gap: 8px;
 }
-.vst-lora-folder-setting {
+.vst-lora-folder-setting,
+.vst-bonita-install-setting {
     min-width: 0;
     margin: 4px 0 0;
     padding: 8px;
     border: 1px solid var(--vst-hairline);
     border-radius: var(--vst-radius-sm);
 }
-.vst-lora-folder-setting legend {
+.vst-lora-folder-setting legend,
+.vst-bonita-install-setting legend {
     padding: 0 4px;
     font-weight: 600;
 }
-.vst-lora-folder-setting > small {
+.vst-lora-folder-setting > small,
+.vst-bonita-install-setting > small {
     display: block;
     margin-bottom: 6px;
     color: var(--text-soft);
@@ -1926,7 +1929,8 @@
     > .input-group.vst-detail-section,
 .vst-detail
     .vst-detail-section-content
-    > .input-group.vst-detail-section {
+    > .input-group.vst-detail-section,
+.vst-detail .vst-detail-params > .input-group.vst-detail-section {
     box-sizing: border-box;
     padding-left: 7px;
     border: 0;
@@ -1938,6 +1942,11 @@
 }
 .vst-detail
     .vst-detail-repeating-group-content
+    > .vst-detail-section
+    > .vst-detail-section-header
+    > .header-label-wrap,
+.vst-detail
+    .vst-detail-params
     > .vst-detail-section
     > .vst-detail-section-header
     > .header-label-wrap {
@@ -1987,6 +1996,29 @@
 .vst-clip-lora-entry > .vst-clip-lora-weight {
     flex: none;
     width: 3rem;
+}
+
+.vst-character-refine-pictures {
+    display: grid;
+    gap: 4px;
+}
+.vst-character-refine-pictures-title {
+    color: var(--text-color);
+    font-weight: 600;
+    padding: 4px 8px 2px;
+}
+.vst-character-refine-picture {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 4px 8px;
+    border-left: 2px solid var(--vst-detail-guide);
+}
+.vst-character-refine-picture > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* --- boundary (seam) chips ------------------------------------------------ */

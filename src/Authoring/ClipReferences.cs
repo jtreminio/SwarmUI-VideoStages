@@ -54,7 +54,8 @@ internal static class ClipReferences
                 Math.Max(
                     0,
                     DocumentJson.GetOptionalDouble(
-                        raw[index], "lengthSeconds", 0, where, warn))));
+                        raw[index], "lengthSeconds", 0, where, warn)),
+                DocumentJson.GetString(raw[index], "id")?.Trim()));
         }
         return references;
     }

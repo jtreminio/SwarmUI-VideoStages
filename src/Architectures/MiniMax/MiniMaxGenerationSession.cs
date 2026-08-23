@@ -71,7 +71,7 @@ internal sealed class MiniMaxGenerationSession(
             || payload.FirstFrameReference is not null
             || payload.LastFrameReference is not null
             || clip.Stages.Any(stage =>
-                stage.ArchitecturePayload is StockHostVideoStagePayload stagePayload
+                stage.ArchitecturePayload is MiniMaxStagePayload stagePayload
                 && stagePayload.FrameReferences.Any(reference =>
                     !reference.IsEndpoint && reference.Strength > 0));
         if (clip.EntryMode == ArchitectureEntryMode.InitVideo)
@@ -136,10 +136,10 @@ internal sealed class MiniMaxGenerationSession(
                     + $"{continuation.StageId}.");
         }
         (string positive, string negative) = _prompts.Resolve(clip, stage);
-        StockHostVideoStagePayload payload = stage.RequireStockHostVideoPayload(
-            ArchitectureId,
-            MiniMaxArchitectureModule.Instance.Descriptor.DisplayName);
+        MiniMaxStagePayload payload = stage.RequireMiniMaxStagePayload();
         MiniMaxClipPayload clipPayload = clip.RequireMiniMaxPayload();
+        bool finalGeneratingStage = stage.StageId
+            == clip.Stages.Last(candidate => !candidate.IsPassthrough).StageId;
         PrepareReusableAudio(clipPayload, stage);
         StageCorePlan core = stage.Core;
         using (StageModelLoadScope modelScope = new(
@@ -162,6 +162,13 @@ internal sealed class MiniMaxGenerationSession(
                 sectionId,
                 positive,
                 negative);
+            if (payload.CharacterRefine is not null
+                && g.CurrentMedia?.Frames is int incomingFrames)
+            {
+                // Validate the decoded stage at its incoming length; Character Refine grid-aligns
+                // only its internal sample and publishes this original count.
+                genInfo.Frames = incomingFrames;
+            }
             WGNodeData incoming = null;
             int startStep = 0;
             if (stage.Input is StageInputKind.PreviousStage or StageInputKind.InitVideo)
@@ -179,15 +186,29 @@ internal sealed class MiniMaxGenerationSession(
                     core.Steps,
                     core.Control);
             }
-            SampleJointLatent(
-                clip,
-                stage,
-                genInfo,
-                incoming,
-                startStep,
-                core.Upscale);
+            WGNodeData originalAudio = incoming?.AttachedAudio?.Duplicate();
+            if (payload.CharacterRefine is null)
+            {
+                SampleJointLatent(
+                    clip,
+                    stage,
+                    genInfo,
+                    incoming,
+                    startStep,
+                    core.Upscale);
+            }
+            else
+            {
+                SampleCharacterRefine(
+                    clip,
+                    stage,
+                    genInfo,
+                    incoming,
+                    payload.CharacterRefine);
+                g.CurrentMedia.AttachedAudio = originalAudio;
+            }
             RestoreReusableAudio(clipPayload, stage);
-            if (stage.StageId == clip.Stages.Last(candidate => !candidate.IsPassthrough).StageId)
+            if (finalGeneratingStage)
             {
                 AttachDecodedAudio();
             }
@@ -297,10 +318,7 @@ internal sealed class MiniMaxGenerationSession(
             ApplyLatentInterpolation(stageUpscale);
             AttachKeyframes(
                 genInfo,
-                stage.RequireStockHostVideoPayload(
-                        ArchitectureId,
-                        MiniMaxArchitectureModule.Instance.Descriptor.DisplayName)
-                    .FrameReferences);
+                stage.RequireMiniMaxStagePayload().FrameReferences);
             string sampled = g.CreateKSampler(
                 genInfo.Model.Path,
                 genInfo.PosCond,
@@ -331,10 +349,182 @@ internal sealed class MiniMaxGenerationSession(
         }
     }
 
+    private void SampleCharacterRefine(
+        ClipPlan clip,
+        StagePlan stage,
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        WGNodeData incoming,
+        MiniMaxCharacterRefinePlan plan)
+    {
+        if (incoming?.Path is not JArray incomingPath)
+        {
+            throw Invariant.Failure(
+                $"Make Them Bonita stage {stage.StageId} requires decoded video.");
+        }
+        int samplerSteps = stage.Core.Steps;
+        int startStep = StageStartStepPolicy.StartStep(samplerSteps, stage.Core.Control);
+        if (startStep >= samplerSteps)
+        {
+            genInfo.Vae = g.CurrentVae;
+            g.CurrentMedia = incoming;
+            return;
+        }
+        int incomingFrames = incoming.Frames
+            ?? throw Invariant.Failure(
+                $"Make Them Bonita stage {stage.StageId} has no input frame count.");
+        int samplingFrames = StaticGeneratedFrameGrid.SnapUp(
+            incomingFrames,
+            MiniMaxArchitectureModule.FrameGrid,
+            MiniMaxArchitectureModule.FrameGridOrigin);
+        bool ambientImageToVideo = g.IsImageToVideo;
+        try
+        {
+            g.IsImageToVideo = true;
+            JArray identityImage = null;
+            if (plan.IdentityReference is not null)
+            {
+                MiniMaxCharacterRefineIntegration.EnsureBuffaloModel(g);
+                identityImage = ReferenceImage(
+                    plan.IdentityReference,
+                    $"clip {clip.ClipId} Make Them Bonita identity reference",
+                    0)
+                    ?? throw Invariant.Failure(
+                        $"Make Them Bonita stage {stage.StageId} has no identity image.");
+            }
+            int blur = g.UserInput.Get(T2IParamTypes.SegmentMaskBlur, 10);
+            int targetWidth = plan.CropWidth;
+            int targetHeight = plan.CropHeight;
+            using WorkflowBridge cropBridge = BridgeSync.For(g);
+            JArray finderPath;
+            if (plan.Finder == "yolo")
+            {
+                MiniMaxCharacterRefineIntegration.EnsureYoloModels(g);
+                BonitaYOLOFinderNode finder = cropBridge.AddNode(
+                    new BonitaYOLOFinderNode().With(
+                        SubjectModel: MiniMaxCharacterRefineIntegration.YoloSubjectModel,
+                        PartModel: MiniMaxCharacterRefineIntegration.YoloPartModel,
+                        SubjectConfidence: plan.SubjectConfidence,
+                        PartConfidence: plan.PartConfidence));
+                finderPath = finder.Finder.ToPath();
+            }
+            else
+            {
+                MiniMaxCharacterRefineIntegration.EnsureSamCheckpoint(g);
+                CheckpointLoaderSimpleNode samLoader = cropBridge.AddNode(
+                    new CheckpointLoaderSimpleNode().With(
+                        CkptName: MiniMaxCharacterRefineIntegration.SamCheckpointRelativePath));
+                BonitaSAM3FinderNode finder = cropBridge.AddNode(
+                    new BonitaSAM3FinderNode().With(
+                        SubjectConfidence: plan.SubjectConfidence,
+                        PartConfidence: plan.PartConfidence));
+                finder.Sam3Model.ConnectTo(samLoader.MODEL);
+                finder.Sam3Clip.ConnectTo(samLoader.CLIP);
+                finderPath = finder.Finder.ToPath();
+            }
+            BonitaFindAndCropNode crop = cropBridge.AddNode(
+                new BonitaFindAndCropNode().With(
+                    Subject: plan.Subject,
+                    Part: plan.Part,
+                    CropWidth: targetWidth,
+                    CropHeight: targetHeight,
+                    SurroundingArea: MiniMaxCharacterRefineIntegration.SurroundingArea,
+                    TrackedAreaBlur: blur));
+            crop.VideoFrames.ConnectFromPath(cropBridge, incomingPath);
+            crop.Finder.ConnectFromPath(cropBridge, finderPath);
+            if (identityImage is not null)
+            {
+                crop.CharacterReference.ConnectFromPath(cropBridge, identityImage);
+            }
+
+            genInfo.Frames = samplingFrames;
+            bool identityIsFirstPicture = plan.IdentityReference is not null
+                && plan.PictureReferences.FirstOrDefault()?.Id == plan.IdentityReference.Id;
+            PrepModelAndPrompt(
+                clip,
+                genInfo,
+                plan.PictureReferences,
+                targetWidth,
+                targetHeight,
+                includeBoundaryReference: false,
+                firstReferenceImage: identityIsFirstPicture ? identityImage : null);
+            MiniMaxAttentionWindowGraph.Apply(
+                g,
+                clip.RequireMiniMaxPayload().AttentionWindowSeconds,
+                genInfo);
+            JArray cropPath = crop.CropsToRepair.ToPath();
+            if (samplingFrames != incomingFrames)
+            {
+                SwarmFrameWindowNode pad = cropBridge.AddNode(
+                    new SwarmFrameWindowNode().With(
+                        StartFrame: 0,
+                        FrameCount: samplingFrames));
+                pad.ImagesInput.ConnectTo(crop.CropsToRepair);
+                cropPath = pad.Images.ToPath();
+            }
+            WGNodeData crops = incoming.WithPath(cropPath, WGNodeData.DT_VIDEO);
+            crops.Width = targetWidth;
+            crops.Height = targetHeight;
+            WGNodeData latent = JointLatent(crops, genInfo);
+
+            string sampled = g.CreateKSampler(
+                genInfo.Model.Path,
+                genInfo.PosCond,
+                genInfo.NegCond,
+                latent.Path,
+                genInfo.VideoCFG.Value,
+                samplerSteps,
+                startStep,
+                endStep: 10000,
+                seed: genInfo.Seed,
+                returnWithLeftoverNoise: false,
+                addNoise: true,
+                sigmin: 0.002,
+                sigmax: 1000,
+                previews: g.UserInput.Get(
+                    ComfyUIBackendExtension.VideoPreviewType,
+                    "animate"),
+                hadSpecialCond: true,
+                explicitSampler: genInfo.DefaultSampler,
+                explicitScheduler: genInfo.DefaultScheduler,
+                sectionId: genInfo.ContextID);
+            WGNodeData decoded = latent.WithPath([sampled, 0]).DecodeLatents(genInfo.Vae, false);
+            JArray decodedPath = (JArray)decoded.Path;
+            if (samplingFrames != incomingFrames)
+            {
+                using WorkflowBridge trimBridge = BridgeSync.For(g);
+                SwarmFrameWindowNode trim = trimBridge.AddNode(
+                    new SwarmFrameWindowNode().With(
+                        StartFrame: 0,
+                        FrameCount: incomingFrames));
+                trim.ImagesInput.ConnectFromPath(trimBridge, decodedPath);
+                decodedPath = trim.Images.ToPath();
+            }
+
+            using WorkflowBridge finishBridge = BridgeSync.For(g);
+            BonitaApplyRepairNode finish = finishBridge.AddNode(new BonitaApplyRepairNode());
+            finish.VideoFrames.ConnectFromPath(finishBridge, incomingPath);
+            finish.RepairedCrops.ConnectFromPath(finishBridge, decodedPath);
+            finish.PlacementData.ConnectTo(crop.PlacementData);
+            g.CurrentMedia = incoming.WithPath(
+                finish.RepairedFrames.ToPath(),
+                WGNodeData.DT_VIDEO);
+            genInfo.Frames = incomingFrames;
+            g.CurrentVae = genInfo.Vae;
+        }
+        finally
+        {
+            g.IsImageToVideo = ambientImageToVideo;
+        }
+    }
+
     private void PrepModelAndPrompt(
         ClipPlan clip,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
-        IReadOnlyList<MiniMaxReferencePlan> references)
+        IReadOnlyList<MiniMaxReferencePlan> references,
+        int? width = null,
+        int? height = null,
+        bool includeBoundaryReference = true,
+        JArray firstReferenceImage = null)
     {
         g.FinalLoadedModel = genInfo.VideoModel;
         (genInfo.VideoModel, genInfo.Model, WGNodeData textEncoder, genInfo.Vae) =
@@ -354,7 +544,14 @@ internal sealed class MiniMaxGenerationSession(
         g.CurrentVae = genInfo.Vae;
         // Whole-clip references are tokenized WITH the prompt, so they replace the text encode
         // rather than decorating its output.
-        genInfo.PosCond = BuildReferenceConditioning(clip.ClipId, references, genInfo)
+        genInfo.PosCond = BuildReferenceConditioning(
+                clip.ClipId,
+                references,
+                genInfo,
+                width,
+                height,
+                includeBoundaryReference,
+                firstReferenceImage)
             ?? g.CreateConditioning(
                 genInfo.Prompt, textEncoder.Path, genInfo.VideoModel, true, isVideo: true);
         genInfo.NegCond = g.CreateConditioning(
@@ -692,13 +889,17 @@ internal sealed class MiniMaxGenerationSession(
     private JArray BuildReferenceConditioning(
         int clipId,
         IReadOnlyList<MiniMaxReferencePlan> references,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        int? width = null,
+        int? height = null,
+        bool includeBoundaryReference = true,
+        JArray firstReferenceImage = null)
     {
         List<JArray> images = [];
-        List<JArray> videos = _boundaryReference is null
+        List<JArray> videos = !includeBoundaryReference || _boundaryReference is null
             ? []
             : [_boundaryReference.Video];
-        List<JArray> videoAudios = _boundaryReference is null
+        List<JArray> videoAudios = !includeBoundaryReference || _boundaryReference is null
             ? []
             : [_boundaryReference.Audio];
         List<JArray> audios = [];
@@ -709,7 +910,11 @@ internal sealed class MiniMaxGenerationSession(
             switch (reference.Kind)
             {
                 case ClipReferenceKind.Image:
-                    if (ReferenceImage(reference, descriptor, images.Count) is JArray image)
+                    if (images.Count == 0 && firstReferenceImage is not null)
+                    {
+                        images.Add(firstReferenceImage);
+                    }
+                    else if (ReferenceImage(reference, descriptor, images.Count) is JArray image)
                     {
                         images.Add(image);
                     }
@@ -760,8 +965,8 @@ internal sealed class MiniMaxGenerationSession(
         MiniMaxH3ReferenceToVideoNode node = bridge.AddNode(
             new MiniMaxH3ReferenceToVideoNode().With(
                 Prompt: genInfo.Prompt,
-                Width: (int)genInfo.Width,
-                Height: (int)genInfo.Height,
+                Width: width ?? (int)genInfo.Width,
+                Height: height ?? (int)genInfo.Height,
                 Length: frames,
                 RefImageSize: "match"));
         node.Clip.ConnectFromPath(bridge, genInfo.Clip.Path);

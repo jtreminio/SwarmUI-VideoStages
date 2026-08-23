@@ -6,14 +6,19 @@
 # it prints a *smaller total*, and that is invisible with nothing to hold it against.
 
 BASELINE="$(dirname "$0")/.test-baseline"
+PYTHON_TESTS="$(dirname "$0")/scripts/run-python-tests"
 
 if [ ! -s "$BASELINE" ]; then
-    dotnet test "SwarmUI-VideoStages.Tests.sln" && npm run test
+    dotnet test "SwarmUI-VideoStages.Tests.sln" \
+        && npm run test \
+        && bash "$PYTHON_TESTS"
     exit
 fi
 
 echo "CURRENT RUN:"
-dotnet test "SwarmUI-VideoStages.Tests.sln" && npm run test
+dotnet test "SwarmUI-VideoStages.Tests.sln" \
+    && npm run test \
+    && bash "$PYTHON_TESTS"
 status=$?
 
 printf '\nBASE RUN:\n'

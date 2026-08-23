@@ -41,4 +41,10 @@
     <Compile Remove="**/._*" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource
+      Include="src/Architectures/MiniMax/buffalo_l_manifest.json"
+      LogicalName="VideoStages.buffalo_l_manifest.json" />
+  </ItemGroup>
+
 </Project>

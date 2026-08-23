@@ -1,0 +1,17 @@
+{
+    "archive": {
+        "fileName": "buffalo_l.zip",
+        "url": "https://huggingface.co/vladmandic/insightface-faceanalysis/resolve/main/buffalo_l.zip",
+        "sha256": "ae9b8642895228b3d2d44f3c3386902aace046f6cc510d04520d848a157b9f92"
+    },
+    "models": {
+        "det_10g.onnx": {
+            "size": 16923827,
+            "sha256": "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91"
+        },
+        "w600k_r50.onnx": {
+            "size": 174383860,
+            "sha256": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43"
+        }
+    }
+}

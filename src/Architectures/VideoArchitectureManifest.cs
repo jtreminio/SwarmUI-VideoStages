@@ -38,7 +38,8 @@ internal static class VideoArchitectureManifest
         new(
             MiniMaxArchitectureModule.Instance.Descriptor,
             MiniMaxArchitectureModule.Instance,
-            generator => new MiniMaxSessionProvider(generator)),
+            generator => new MiniMaxSessionProvider(generator),
+            RegisterDependencies: MiniMaxCharacterRefineIntegration.RegisterDependencies),
         // Wan's graph is built by SwarmUI's stock image-to-video path. Narrow host callbacks keep
         // request-global options out of the discarded core pass; the authored session applies the
         // supported values itself.

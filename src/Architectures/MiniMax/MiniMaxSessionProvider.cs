@@ -41,10 +41,17 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
             }
             foreach (StagePlan stage in clip.Stages)
             {
+                MiniMaxCharacterRefinePlan characterRefine =
+                    stage.RequireMiniMaxStagePayload().CharacterRefine;
+                if (characterRefine is not null
+                    && StageStartStepPolicy.StartStep(
+                        stage.Core.Steps,
+                        stage.Core.Control) < stage.Core.Steps)
+                {
+                    PreflightCharacterRefine(clip, stage, diagnostics);
+                }
                 foreach (FrameRefPlan reference in
-                    stage.RequireStockHostVideoPayload(
-                            ArchitectureId,
-                            MiniMaxArchitectureModule.Instance.Descriptor.DisplayName)
+                    stage.RequireMiniMaxStagePayload()
                         .FrameReferences
                         .Where(reference =>
                             !reference.IsEndpoint
@@ -98,6 +105,32 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
         return diagnostics;
     }
 
+    private void PreflightCharacterRefine(
+        ClipPlan clip,
+        StagePlan stage,
+        ICollection<PlanDiagnostic> diagnostics)
+    {
+        void Error(string code, string message) => diagnostics.Add(new(
+            PlanDiagnosticSeverity.Error,
+            $"minimax.character-refine.{code}",
+            message,
+            clip.ClipId,
+            stage.StageId,
+            stage.ClipStageRawIndex));
+        string[] missingNodes = MiniMaxCharacterRefineIntegration.NodeRequirements
+            .Where(requirement => !generator.Features.Contains(requirement.Feature))
+            .Select(requirement => requirement.ClassType)
+            .ToArray();
+        if (missingNodes.Length > 0)
+        {
+            Error(
+                "nodes-missing",
+                $"Make Them Bonita is missing required nodes "
+                    + $"{string.Join(", ", missingNodes)}. Install ComfyUI-Bonita and "
+                    + "restart ComfyUI.");
+        }
+    }
+
     public void CaptureBaseReference(VideoExecutionPlan plan)
     {
         if (AnyClipReferences(plan, MediaSource.Base))
@@ -132,9 +165,7 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
                 }
                     .Concat(payload.References.Select(reference => reference.Source))
                     .Concat(clip.Stages.SelectMany(stage =>
-                        stage.RequireStockHostVideoPayload(
-                                MiniMaxArchitectureModule.ArchitectureId,
-                                MiniMaxArchitectureModule.Instance.Descriptor.DisplayName)
+                        stage.RequireMiniMaxStagePayload()
                             .FrameReferences
                             .Where(reference => !reference.IsEndpoint)
                             .Select(reference => reference.RawSource)));

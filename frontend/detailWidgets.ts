@@ -489,6 +489,12 @@ export interface AccordionSectionSpec {
     flattenContent?: boolean;
     headerAction?: SectionHeaderAction;
     headerActions?: SectionHeaderAction[];
+    toggle?: {
+        checked: boolean;
+        disabled?: boolean;
+        title: string;
+        onChange: (checked: boolean) => void;
+    };
 }
 
 export interface SectionHeaderAction {
@@ -671,11 +677,15 @@ export const buildAccordionSection = (
     content: HTMLElement;
 } => {
     const firstBuild = !seenAccordionSections.has(spec.key);
+    const enabled = spec.toggle?.checked ?? true;
     const open =
-        spec.open === true ||
-        (firstBuild && spec.defaultOpen === true) ||
-        rememberedAccordionSections.has(spec.key);
-    seenAccordionSections.add(spec.key);
+        enabled &&
+        (spec.open === true ||
+            (firstBuild && spec.defaultOpen === true) ||
+            rememberedAccordionSections.has(spec.key));
+    if (enabled) {
+        seenAccordionSections.add(spec.key);
+    }
     if (open) {
         rememberedAccordionSections.add(spec.key);
     }
@@ -695,6 +705,27 @@ export const buildAccordionSection = (
     header.setAttribute("role", "button");
     header.setAttribute("aria-expanded", `${open}`);
     appendSectionHeaderActions(actions, spec);
+    if (spec.toggle) {
+        const switchWrap = document.createElement("span");
+        switchWrap.className =
+            "form-check form-switch toggle-switch display-inline-block group-toggler-switch";
+        const toggle = document.createElement("input");
+        toggle.type = "checkbox";
+        toggle.className = "auto-slider-toggle form-check-input";
+        toggle.checked = spec.toggle.checked;
+        toggle.disabled = spec.toggle.disabled === true;
+        toggle.title = spec.toggle.title;
+        toggle.setAttribute("aria-label", spec.toggle.title);
+        toggle.addEventListener("click", (event) => event.stopPropagation());
+        toggle.addEventListener("change", (event) => {
+            event.stopPropagation();
+            spec.toggle?.onChange(toggle.checked);
+        });
+        const switchContent = document.createElement("div");
+        switchContent.className = "auto-slider-toggle-content";
+        switchWrap.append(toggle, switchContent);
+        actions.appendChild(switchWrap);
+    }
 
     const content = document.createElement("div");
     content.className = "input-group-content vst-detail-section-content";
@@ -704,6 +735,9 @@ export const buildAccordionSection = (
     const toggle = (event: Event): void => {
         event.preventDefault();
         event.stopPropagation();
+        if (spec.toggle?.checked === false) {
+            return;
+        }
         const opening = content.hidden === true;
         setAccordionOpen(section, opening);
         if (opening) {

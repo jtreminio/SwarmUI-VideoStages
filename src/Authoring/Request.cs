@@ -48,7 +48,8 @@ public sealed record StageSpec(
     IReadOnlyList<double> IcLoraStrengths = null,
     IReadOnlyList<double> FrameRefStrengths = null,
     bool ImageRefWasExplicit = false,
-    RetakeWindowSpec RetakeWindow = null
+    RetakeWindowSpec RetakeWindow = null,
+    MiniMaxCharacterRefineSpec CharacterRefine = null
 );
 
 public sealed record FrameRefSpec(
@@ -90,7 +91,8 @@ public sealed record ClipReferenceSpec(
     bool IncludeSoundtrack = false,
     double MediaScale = ReferenceScale.Full,
     double StartSeconds = 0,
-    double LengthSeconds = 0
+    double LengthSeconds = 0,
+    string Id = null
 );
 
 /// <summary>

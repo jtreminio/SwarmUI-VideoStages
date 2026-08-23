@@ -48,6 +48,7 @@ export const STORED_STAGE_KEYS = [
     "cfgScale",
     "sampler",
     "scheduler",
+    "characterRefine",
 ] as const satisfies readonly (keyof Stage)[];
 
 export const STORED_CLIP_KEYS = [
@@ -132,9 +133,13 @@ export type StoredClipReference = RequireEntityId<
 >;
 
 export type StoredStage = RequireEntityId<
-    Omit<Pick<Stage, (typeof STORED_STAGE_KEYS)[number]>, "frameRefStrengths">
+    Omit<
+        Pick<Stage, (typeof STORED_STAGE_KEYS)[number]>,
+        "frameRefStrengths" | "characterRefine"
+    >
 > & {
     keyframeStrengths: number[];
+    characterRefine?: NonNullable<Stage["characterRefine"]>;
 };
 
 export type StoredClip = RequireEntityId<

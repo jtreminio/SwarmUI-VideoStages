@@ -4,6 +4,7 @@ import type {
     CanonicalAudioTrackSpan,
     CanonicalAuthoringDocument,
     CanonicalClip,
+    CanonicalClipReference,
     CanonicalFrameRefImage,
     CanonicalPromptWindow,
     CanonicalRetake,
@@ -57,6 +58,7 @@ export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
     cfgScale: 1,
     sampler: "euler",
     scheduler: "normal",
+    characterRefine: null,
     ...overrides,
 });
 
@@ -148,6 +150,15 @@ export const canonicalRef = (
     overrides: Partial<CanonicalFrameRefImage> = {},
 ): CanonicalFrameRefImage => ({
     ...minimalRef({ frame: 1 }),
+    id,
+    ...overrides,
+});
+
+export const canonicalClipReference = (
+    id: string,
+    overrides: Partial<CanonicalClipReference> = {},
+): CanonicalClipReference => ({
+    ...minimalClipReference(),
     id,
     ...overrides,
 });

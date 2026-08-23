@@ -13,6 +13,20 @@ import {
 } from "./constants";
 import { MEDIA_SOURCE_REFINER } from "./generatedMediaSource";
 import {
+    MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
+    MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
+    MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP,
+    MINIMAX_CHARACTER_REFINE_CROP_HEIGHT_DEFAULT,
+    MINIMAX_CHARACTER_REFINE_CROP_WIDTH_DEFAULT,
+    MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+    MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+    MINIMAX_CHARACTER_REFINE_FINDER_DEFAULT,
+    MINIMAX_CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT,
+    MINIMAX_CHARACTER_REFINE_PART_DEFAULT,
+    MINIMAX_CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT,
+    MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT,
+} from "./generatedMiniMaxCharacterRefine";
+import {
     STAGE_CONTROLNET_STRENGTH_DEFAULT,
     STAGE_CONTROLNET_STRENGTH_MAX,
     STAGE_CONTROLNET_STRENGTH_MIN,
@@ -30,7 +44,13 @@ import {
     trimmedText,
 } from "./normalizationShared";
 import { framesForClip, NEUTRAL_FRAME_GRID } from "./renderUtils";
-import type { Clip, FrameRefImage, RootDefaults, Stage } from "./types";
+import type {
+    CharacterRefine,
+    Clip,
+    FrameRefImage,
+    RootDefaults,
+    Stage,
+} from "./types";
 import { isRecord } from "./utils";
 
 const resolveRootPreferredUpscaleMethod = (
@@ -168,6 +188,79 @@ export const buildDefaultStage = (
         scheduler: previousStage
             ? previousStage.scheduler
             : (defaults.schedulerValues[0] ?? "normal"),
+        characterRefine: null,
+    };
+};
+
+export const defaultCharacterRefine = (
+    pictureReferenceIds: readonly string[],
+): CharacterRefine => ({
+    pictureReferenceIds: [...pictureReferenceIds],
+    verifyIdentity: pictureReferenceIds.length > 0,
+    finder: MINIMAX_CHARACTER_REFINE_FINDER_DEFAULT,
+    subject: MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT,
+    part: MINIMAX_CHARACTER_REFINE_PART_DEFAULT,
+    subjectConfidence: MINIMAX_CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT,
+    partConfidence: MINIMAX_CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT,
+    cropWidth: MINIMAX_CHARACTER_REFINE_CROP_WIDTH_DEFAULT,
+    cropHeight: MINIMAX_CHARACTER_REFINE_CROP_HEIGHT_DEFAULT,
+});
+
+const referenceIds = (value: unknown): string[] =>
+    Array.isArray(value)
+        ? [...new Set(value.map(trimmedText).filter(Boolean))]
+        : [];
+
+const normalizeCharacterRefine = (value: unknown): CharacterRefine | null => {
+    if (!isRecord(value)) return null;
+    const legacyIdentity = trimmedText(value.identityReferenceId);
+    const pictures = Array.isArray(value.pictureReferenceIds)
+        ? referenceIds(value.pictureReferenceIds)
+        : referenceIds([legacyIdentity, ...referenceIds(value.referenceIds)]);
+    return {
+        pictureReferenceIds: pictures,
+        verifyIdentity:
+            typeof value.verifyIdentity === "boolean"
+                ? value.verifyIdentity
+                : Boolean(legacyIdentity),
+        finder:
+            value.finder === "yolo"
+                ? "yolo"
+                : MINIMAX_CHARACTER_REFINE_FINDER_DEFAULT,
+        subject:
+            trimmedText(value.subject) ||
+            trimmedText(value.coarseTarget) ||
+            MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT,
+        part:
+            trimmedText(value.part) ||
+            trimmedText(value.fineTarget) ||
+            MINIMAX_CHARACTER_REFINE_PART_DEFAULT,
+        subjectConfidence: clampedNumber(
+            value.subjectConfidence ?? value.trackDetectionThreshold,
+            MINIMAX_CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT,
+            MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+            MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+        ),
+        partConfidence: clampedNumber(
+            value.partConfidence ?? value.targetDetectionThreshold,
+            MINIMAX_CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT,
+            MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+            MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+        ),
+        cropWidth: snapValueToStep(
+            value.cropWidth,
+            MINIMAX_CHARACTER_REFINE_CROP_WIDTH_DEFAULT,
+            MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
+            MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
+            MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP,
+        ),
+        cropHeight: snapValueToStep(
+            value.cropHeight,
+            MINIMAX_CHARACTER_REFINE_CROP_HEIGHT_DEFAULT,
+            MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
+            MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
+            MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP,
+        ),
     };
 };
 
@@ -390,7 +483,11 @@ export const normalizeStage = (
         ),
         sampler: textOr(rawStage.sampler, fallback.sampler),
         scheduler: textOr(rawStage.scheduler, fallback.scheduler),
+        characterRefine: normalizeCharacterRefine(rawStage.characterRefine),
     };
+    if (stage.characterRefine) {
+        stage.upscale = 1;
+    }
     // The catalog owns resolved models; a persisted hint only repairs an unresolved model.
     stage.modelProfileId =
         modelProfileForModel(defaults.modelCatalog, stage.model) ||

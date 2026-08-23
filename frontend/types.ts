@@ -88,6 +88,19 @@ export interface Stage {
     cfgScale: number;
     sampler: string;
     scheduler: string;
+    characterRefine: CharacterRefine | null;
+}
+
+export interface CharacterRefine {
+    pictureReferenceIds: string[];
+    verifyIdentity: boolean;
+    finder: "sam3" | "yolo";
+    subject: string;
+    part: string;
+    subjectConfidence: number;
+    partConfidence: number;
+    cropWidth: number;
+    cropHeight: number;
 }
 
 export interface PromptWindow {

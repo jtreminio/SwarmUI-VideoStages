@@ -582,6 +582,90 @@ public class MiniMaxArchitectureTests
                 diagnostic.Code));
     }
 
+    [Fact]
+    public void Character_refine_compiles_stage_references_without_reordering_clip_references()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject first = MakeStage(models.VideoModel.Name, "Generated", steps: 4, cfgScale: 1);
+        first["characterRefine"] = new JObject
+        {
+            ["pictureReferenceIds"] = new JArray("identity-2", "identity-0"),
+            ["verifyIdentity"] = true,
+        };
+        JObject second = MakeStage(models.VideoModel.Name, "Generated", steps: 4, cfgScale: 1);
+        second["characterRefine"] = new JObject
+        {
+            ["pictureReferenceIds"] = new JArray("identity-1"),
+            ["verifyIdentity"] = false,
+        };
+        JObject clipObject = MakeClip(first, second);
+        clipObject["references"] = new JArray(
+            Enumerable.Range(0, 3).Select(index =>
+                MakeClipReference(
+                    "image",
+                    "data:image/png;base64,REVG",
+                    $"identity-{index}.png")));
+        for (int index = 0; index < 3; index++)
+        {
+            ((JObject)clipObject["references"]![index]!)["id"] = $"identity-{index}";
+        }
+
+        ArchitectureClipCompilation compilation = Compile(
+            ParseClip(clipObject, models),
+            models,
+            ArchitectureEntryMode.InitVideo);
+        MiniMaxClipPayload payload = Assert.IsType<MiniMaxClipPayload>(compilation.Payload);
+
+        Assert.Equal(
+            Enumerable.Range(0, 3).Select(index => $"identity-{index}"),
+            payload.References.Select(reference => reference.Id));
+        MiniMaxCharacterRefinePlan firstPlan = Assert.IsType<MiniMaxStagePayload>(
+            compilation.StagePayloads[0]).CharacterRefine;
+        MiniMaxCharacterRefinePlan secondPlan = Assert.IsType<MiniMaxStagePayload>(
+            compilation.StagePayloads[1]).CharacterRefine;
+        Assert.Equal("identity-0", firstPlan.IdentityReference.Id);
+        Assert.Equal(
+            ["identity-0", "identity-2"],
+            firstPlan.PictureReferences.Select(item => item.Id));
+        Assert.Null(secondPlan.IdentityReference);
+        Assert.Equal(["identity-1"], secondPlan.PictureReferences.Select(item => item.Id));
+    }
+
+    [Fact]
+    public void Character_refine_ignores_a_reference_with_no_id_without_crashing()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject stage = MakeStage(models.VideoModel.Name, "Generated", steps: 4, cfgScale: 1);
+        stage["characterRefine"] = new JObject
+        {
+            ["pictureReferenceIds"] = new JArray("identity-ref"),
+            ["verifyIdentity"] = true,
+        };
+        JObject clipObject = MakeClip(stage);
+        JObject unnamed = MakeClipReference(
+            "image",
+            "data:image/png;base64,REVG",
+            "unnamed.png");
+        unnamed.Remove("id");
+        JObject identity = MakeClipReference(
+            "image",
+            "data:image/png;base64,REVG",
+            "identity.png");
+        identity["id"] = "identity-ref";
+        clipObject["references"] = new JArray(unnamed, identity);
+
+        ArchitectureClipCompilation compilation = Compile(
+            ParseClip(clipObject, models),
+            models,
+            ArchitectureEntryMode.InitVideo);
+
+        MiniMaxCharacterRefinePlan plan = Assert.IsType<MiniMaxStagePayload>(
+            compilation.StagePayloads[0]).CharacterRefine;
+        Assert.Equal("identity-ref", plan.IdentityReference.Id);
+    }
+
     private static IReadOnlyList<PlanDiagnostic> CompileDiagnostics(
         TestModelBundle models,
         params JObject[] stages) =>

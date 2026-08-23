@@ -135,7 +135,21 @@
                     "steps": 12,
                     "cfgScale": 4.5,
                     "sampler": "euler",
-                    "scheduler": "normal"
+                    "scheduler": "normal",
+                    "characterRefine": {
+                        "pictureReferenceIds": [
+                            "clip-reference-0",
+                            "clip-reference-1"
+                        ],
+                        "verifyIdentity": true,
+                        "finder": "sam3",
+                        "subject": "person",
+                        "part": "face",
+                        "subjectConfidence": 0.25,
+                        "partConfidence": 0.1,
+                        "cropWidth": 1024,
+                        "cropHeight": 1024
+                    }
                 },
                 {
                     "id": "stage-1",

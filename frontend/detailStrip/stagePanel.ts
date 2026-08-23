@@ -1,6 +1,7 @@
 import { buildSlider, tagFocus } from "../detailWidgets";
 import type { Clip, RootDefaults, Stage } from "../types";
 import type { DetailStripContext } from "./context";
+import { appendCharacterRefineSection } from "./stagePanel/characterRefineSection";
 import { appendStageModelSection } from "./stagePanel/modelSection";
 import { appendStageReferenceGuideSection } from "./stagePanel/referenceGuideSection";
 import {
@@ -68,7 +69,9 @@ export const buildStageParamsColumn = (
                     ? {
                           title: options.title,
                           help: options.help,
+                          sliderMin: options.sliderMin,
                           sliderMax: options.sliderMax,
+                          isPot: options.isPot,
                       }
                     : undefined,
             ),
@@ -94,6 +97,7 @@ export const buildStageParamsColumn = (
     appendStageDenoisingSection(bindings, isRefine);
     appendStageUpscaleSection(bindings, isRefine);
     appendStageSamplerSchedulerSection(bindings);
+    appendCharacterRefineSection(bindings);
     appendStageReferenceGuideSection(bindings);
 
     if (initVideoStage0) {

@@ -34,6 +34,8 @@ const VIDEO_STAGES_KEYS = [
 
 describe("timeline authoring settings modal", () => {
     beforeEach(() => {
+        Reflect.deleteProperty(globalThis, "installFeatureById");
+        Reflect.deleteProperty(globalThis, "currentBackendFeatureSet");
         __resetPersistenceForTests();
         localStorage.clear();
         document.body.innerHTML = "";
@@ -54,6 +56,8 @@ describe("timeline authoring settings modal", () => {
     });
 
     afterEach(() => {
+        Reflect.deleteProperty(globalThis, "installFeatureById");
+        Reflect.deleteProperty(globalThis, "currentBackendFeatureSet");
         closeTimelineAuthoringSettingsModal();
         __resetPersistenceForTests();
         localStorage.clear();
@@ -148,5 +152,48 @@ describe("timeline authoring settings modal", () => {
             TIMELINE_AUTHORING_SETTINGS_CHANGED,
             changed,
         );
+    });
+
+    it("installs ComfyUI-Bonita and reports when it is already installed", () => {
+        const installFeatureById = jest.fn();
+        (
+            globalThis as typeof globalThis & {
+                installFeatureById?: typeof installFeatureById;
+            }
+        ).installFeatureById = installFeatureById;
+
+        openTimelineAuthoringSettingsModal();
+        const install = document.querySelector<HTMLButtonElement>(
+            "[data-vst-install-bonita]",
+        );
+        const container = document.querySelector<HTMLElement>(
+            ".vst-bonita-install-setting",
+        );
+        const repo = container?.querySelector<HTMLAnchorElement>("small a");
+        expect(container?.querySelector("small")?.textContent).toBe(
+            "Install ComfyUI-Bonita - a facefixer useful for MiniMax H3 videos",
+        );
+        expect(repo?.textContent).toBe("ComfyUI-Bonita");
+        expect(repo?.href).toBe("https://github.com/jtreminio/ComfyUI-Bonita");
+        expect(repo?.target).toBe("_blank");
+        expect(repo?.rel).toBe("noopener noreferrer");
+        expect(install?.textContent).toBe("Install ComfyUI-Bonita");
+        expect(install?.disabled).toBe(false);
+        install?.click();
+        expect(installFeatureById).toHaveBeenCalledWith(
+            "bonita",
+            container?.id,
+        );
+
+        closeTimelineAuthoringSettingsModal();
+        (
+            globalThis as { currentBackendFeatureSet?: string[] }
+        ).currentBackendFeatureSet = ["bonita"];
+        openTimelineAuthoringSettingsModal();
+        const installed = document.querySelector<HTMLButtonElement>(
+            "[data-vst-install-bonita]",
+        );
+        expect(installed?.textContent).toBe("ComfyUI-Bonita Installed");
+        expect(installed?.disabled).toBe(true);
     });
 });
