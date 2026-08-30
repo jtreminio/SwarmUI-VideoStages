@@ -148,7 +148,8 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         Dictionary<int, IArchitectureStagePayload> stages = [];
         IReadOnlyList<MiniMaxReferencePlan> references = MiniMaxClipReferences.Compile(
             clip,
-            diagnostics);
+            diagnostics,
+            context.HasPreviousClipOutput);
         (NativeFrameReferencePlan first, NativeFrameReferencePlan last) =
             NativeFrameReferences.Compile(
                 clip,

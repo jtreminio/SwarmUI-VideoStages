@@ -5632,12 +5632,18 @@
   var resolveImageSourceValue = (currentValue, options) => resolveSelectValue(currentValue, options, MEDIA_SOURCE_REFINER);
 
   // frontend/clipReferenceSource.ts
-  var buildClipReferenceSourceOptions = (kind, currentValue = "") => {
+  var buildClipReferenceSourceOptions = (kind, currentValue = "", allowPreviousClip = false) => {
     if (kind === "image") {
       return buildImageSourceOptions(currentValue, true);
     }
     const options = [
       { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
+      ...kind === "video" && allowPreviousClip ? [
+        {
+          value: MEDIA_SOURCE_PREVIOUS_CLIP,
+          label: "Previous Clip"
+        }
+      ] : [],
       ...CONTROLNET_SOURCE_OPTIONS.map((source) => ({
         value: source,
         label: source
@@ -5664,6 +5670,9 @@
     }
     if (kind === "audio") {
       return isAceStepFunAudioSource(value);
+    }
+    if (kind === "video" && value === MEDIA_SOURCE_PREVIOUS_CLIP) {
+      return true;
     }
     return kind === "image" && (value === MEDIA_SOURCE_BASE || value === MEDIA_SOURCE_REFINER || parseBase2EditStageIndex(value) !== null);
   };
@@ -13729,7 +13738,8 @@ ${slot}`;
       );
       const options = buildClipReferenceSourceOptions(
         reference.kind,
-        reference.source ?? ""
+        reference.source ?? "",
+        clipIdx > 0
       );
       const source = resolveClipReferenceSourceValue(
         reference.source ?? "",
@@ -13742,7 +13752,11 @@ ${slot}`;
             commitReference((target) => {
               const resolved = resolveClipReferenceSourceValue(
                 value,
-                buildClipReferenceSourceOptions(target.kind, value)
+                buildClipReferenceSourceOptions(
+                  target.kind,
+                  value,
+                  clipIdx > 0
+                )
               );
               target.source = resolved;
               if (resolved !== MEDIA_SOURCE_UPLOAD) {

@@ -5,6 +5,7 @@ import {
 import {
     CONTROLNET_SOURCE_OPTIONS,
     MEDIA_SOURCE_BASE,
+    MEDIA_SOURCE_PREVIOUS_CLIP,
     MEDIA_SOURCE_REFINER,
     MEDIA_SOURCE_UPLOAD,
 } from "./generatedMediaSource";
@@ -23,12 +24,21 @@ import type {
 export const buildClipReferenceSourceOptions = (
     kind: ClipReferenceKind,
     currentValue = "",
+    allowPreviousClip = false,
 ): ImageSourceOption[] => {
     if (kind === "image") {
         return buildImageSourceOptions(currentValue, true);
     }
     const options: ImageSourceOption[] = [
         { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
+        ...(kind === "video" && allowPreviousClip
+            ? [
+                  {
+                      value: MEDIA_SOURCE_PREVIOUS_CLIP,
+                      label: "Previous Clip",
+                  },
+              ]
+            : []),
         ...CONTROLNET_SOURCE_OPTIONS.map((source) => ({
             value: source,
             label: source,
@@ -63,6 +73,9 @@ export const clipReferenceSourceSupportsKind = (
     }
     if (kind === "audio") {
         return isAceStepFunAudioSource(value);
+    }
+    if (kind === "video" && value === MEDIA_SOURCE_PREVIOUS_CLIP) {
+        return true;
     }
     return (
         kind === "image" &&

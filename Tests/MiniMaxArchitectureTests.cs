@@ -532,6 +532,30 @@ public class MiniMaxArchitectureTests
     }
 
     [Fact]
+    public void A_video_clip_reference_can_use_the_previous_clip_output()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject clipObject = MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1));
+        clipObject["references"] = new JArray
+        {
+            MakeClipReference("video", source: MediaSource.PreviousClip),
+        };
+
+        ArchitectureClipCompilation compilation = Compile(
+            ParseClip(clipObject, models),
+            models,
+            hasPreviousClipOutput: true);
+
+        Assert.Empty(compilation.Diagnostics);
+        MiniMaxReferencePlan reference = Assert.Single(
+            Assert.IsType<MiniMaxClipPayload>(compilation.Payload).References);
+        Assert.Equal(MediaSource.PreviousClip, reference.Source);
+        Assert.Null(reference.Media);
+    }
+
+    [Fact]
     public void An_uploaded_clip_reference_with_no_media_is_warned_and_dropped()
     {
         using SwarmUiTestContext context = new();
@@ -674,7 +698,8 @@ public class MiniMaxArchitectureTests
     private static ArchitectureClipCompilation Compile(
         ClipSpec clip,
         TestModelBundle models,
-        ArchitectureEntryMode entryMode = ArchitectureEntryMode.ImageToVideo)
+        ArchitectureEntryMode entryMode = ArchitectureEntryMode.ImageToVideo,
+        bool hasPreviousClipOutput = false)
     {
         Assert.True(VideoArchitectureRegistry.Production.TryResolveModel(
             models.VideoModel,
@@ -684,7 +709,7 @@ public class MiniMaxArchitectureTests
         return MiniMaxArchitectureModule.Instance.ValidateAndCompileClip(
             clip,
             stageModels,
-            new(1344, 768, 24, entryMode));
+            new(1344, 768, 24, entryMode, hasPreviousClipOutput));
     }
 
     private static ClipSpec ParseClip(JObject clip, TestModelBundle models)

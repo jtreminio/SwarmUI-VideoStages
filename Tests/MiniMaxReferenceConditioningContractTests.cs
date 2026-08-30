@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
+using VideoStages.Architectures.MiniMax;
 using VideoStages.Execution.Audio;
 using VideoStages.Generated;
 using Xunit;
@@ -107,6 +108,65 @@ public class MiniMaxReferenceConditioningContractTests
 
         live.AssertLive(keyframes);
         AssertShippable(bridge, workflow, live);
+    }
+
+    [Fact]
+    public async Task A_video_reference_can_use_the_previous_clip_output()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject first = MakeClip(fixture.Stage());
+        first["duration"] = 1.0;
+        JObject second = MakeClip(fixture.Stage());
+        second["duration"] = 1.0;
+        second["references"] = new JArray(
+            MakeClipReference("video", source: MediaSource.PreviousClip));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(first, second));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        ComfyNode referenceNode = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        JArray videoPath = Assert.IsType<JArray>(
+            workflow[referenceNode.Id]?["inputs"]?["ref_videos.ref_video_0"]);
+        ComfyNode previousVideo = bridge.Graph.Nodes[videoPath[0].Value<string>()];
+        SwarmKSamplerNode firstSampler = StageSampler(bridge, 0);
+        SwarmKSamplerNode secondSampler = StageSampler(bridge, 1);
+
+        Assert.True(ReachesUpstream(bridge, previousVideo, firstSampler.Id));
+        Assert.True(ReachesUpstream(bridge, secondSampler, referenceNode.Id));
+
+        live.AssertAllLive(referenceNode, previousVideo, firstSampler, secondSampler);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    [Fact]
+    public async Task A_previous_clip_video_reference_is_resampled_to_the_model_rate()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject first = MakeClip(fixture.Stage());
+        first["duration"] = 1.0;
+        JObject second = MakeClip(fixture.Stage());
+        second["duration"] = 1.0;
+        second["references"] = new JArray(
+            MakeClipReference("video", source: MediaSource.PreviousClip));
+
+        JObject workflow = await fixture.GenerateAsync(
+            MakeDocument(first, second),
+            post => post["videofps"] = 30);
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        ComfyNode referenceNode = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+        SwarmVideoResampleFPSNode resample = bridge.NodeAt<SwarmVideoResampleFPSNode>(
+            (JArray)workflow[referenceNode.Id]?["inputs"]?["ref_videos.ref_video_0"]);
+
+        Assert.Equal(30, resample.FpsIn.LiteralAsDouble());
+        Assert.Equal(
+            MiniMaxArchitectureModule.ReferenceFramesPerSecond,
+            resample.FpsOut.LiteralAsDouble());
     }
 
     /// <summary>

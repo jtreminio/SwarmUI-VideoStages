@@ -446,6 +446,7 @@ export const buildClipReferenceSection = (
         const options = buildClipReferenceSourceOptions(
             reference.kind,
             reference.source ?? "",
+            clipIdx > 0,
         );
         const source = resolveClipReferenceSourceValue(
             reference.source ?? "",
@@ -458,7 +459,11 @@ export const buildClipReferenceSection = (
                     commitReference((target) => {
                         const resolved = resolveClipReferenceSourceValue(
                             value,
-                            buildClipReferenceSourceOptions(target.kind, value),
+                            buildClipReferenceSourceOptions(
+                                target.kind,
+                                value,
+                                clipIdx > 0,
+                            ),
                         );
                         target.source = resolved;
                         if (resolved !== MEDIA_SOURCE_UPLOAD) {

@@ -334,6 +334,38 @@ describe("buildClipReferenceSection", () => {
             "audio0",
             "audio2",
         ]);
+
+        mountVideoStagesData({
+            clips: [
+                { duration: 5, stages: [{ model: "ltx-2.3.safetensors" }] },
+                {
+                    duration: 5,
+                    stages: [{ model: "ltx-2.3.safetensors" }],
+                    references: [{ kind: "video" }],
+                },
+            ],
+        });
+        const clips = getClips();
+        const secondClipVideo = buildClipReferenceSection(
+            {
+                authoring: () =>
+                    testAuthoringTransactionSnapshot(
+                        catalogSupportingClipReferences(),
+                    ),
+            } as unknown as DetailStripContext,
+            1,
+            0,
+            clips,
+            getState().fps,
+        );
+
+        expect(sourceValues(secondClipVideo)).toEqual([
+            "Upload",
+            "Previous Clip",
+            "ControlNet 1",
+            "ControlNet 2",
+            "ControlNet 3",
+        ]);
     });
 
     it("shows the soundtrack toggle only on a video reference", () => {

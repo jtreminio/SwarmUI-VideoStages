@@ -46,6 +46,7 @@ internal sealed class MiniMaxGenerationSession(
     private WGNodeData _reusedAudio;
     private WGNodeData _boundaryCarryAudio;
     private MiniMaxBoundaryReference _boundaryReference;
+    private DecodedClipArtifact _previousTimelineClipOutput;
     private double _boundaryCarryDuration;
     private double _boundaryCarrySourceStart;
     private ReferenceFramingMode _referenceFraming;
@@ -58,6 +59,7 @@ internal sealed class MiniMaxGenerationSession(
         ClipPlan clip = context.Clip;
         MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
         _reusedAudio = null;
+        _previousTimelineClipOutput = context.PreviousTimelineClipOutput;
         _boundaryReference = _boundaryReferenceBuilder.TryBuild(
             context,
             ResolveFrames(context.Clip));
@@ -1010,22 +1012,30 @@ internal sealed class MiniMaxGenerationSession(
         string descriptor)
     {
         JArray frames = video.Path;
-        JArray fps = video.FPS as JArray;
+        JArray fpsPath = video.FPS as JArray;
+        double? literalFps = video.FPS is JValue value
+            ? value.Value<double>()
+            : null;
+        bool hasFps = fpsPath is not null || literalFps is not null;
         double scale = reference.MediaScale;
         bool trims = reference.LengthSeconds > 0;
-        if (fps is null && !trims && scale >= 1)
+        if (!hasFps && !trims && scale >= 1)
         {
             return frames;
         }
         using WorkflowBridge bridge = BridgeSync.For(g);
-        if (fps is not null)
+        if (hasFps)
         {
             SwarmVideoResampleFPSNode resampled = bridge.AddNode(
                 new SwarmVideoResampleFPSNode().With(
+                    FpsIn: literalFps ?? 0,
                     FpsOut: MiniMaxArchitectureModule.ReferenceFramesPerSecond,
                     Method: "linear"));
             resampled.ImagesInput.ConnectFromPath(bridge, frames);
-            resampled.FpsIn.ConnectFromPath(bridge, fps);
+            if (fpsPath is not null)
+            {
+                resampled.FpsIn.ConnectFromPath(bridge, fpsPath);
+            }
             frames = WorkflowBridge.ToPath(resampled.Images);
         }
         else if (trims)
@@ -1035,7 +1045,7 @@ internal sealed class MiniMaxGenerationSession(
                 $"VideoStages: {descriptor} carries no frame rate, so its trim cannot be "
                     + "converted to frames; the whole reference is used for this generation.");
         }
-        if (trims && fps is not null)
+        if (trims && hasFps)
         {
             double rate = MiniMaxArchitectureModule.ReferenceFramesPerSecond;
             SwarmFrameWindowNode window = bridge.AddNode(new SwarmFrameWindowNode().With(
@@ -1115,6 +1125,11 @@ internal sealed class MiniMaxGenerationSession(
         MiniMaxReferencePlan reference,
         string descriptor)
     {
+        if (StringUtils.Equals(reference.Source, MediaSource.PreviousClip)
+            && _previousTimelineClipOutput is not null)
+        {
+            return _previousTimelineClipOutput.ToHostMedia(g);
+        }
         if (StringUtils.Equals(reference.Source, MediaSource.Upload))
         {
             return g.LoadImage(

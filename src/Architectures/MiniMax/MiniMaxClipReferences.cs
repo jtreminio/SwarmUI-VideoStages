@@ -21,8 +21,9 @@ internal static class MiniMaxClipReferences
 
     internal static IReadOnlyList<MiniMaxReferencePlan> Compile(
         ClipSpec clip,
-        ICollection<PlanDiagnostic> diagnostics) =>
-        Compile(clip, clip.References ?? [], diagnostics);
+        ICollection<PlanDiagnostic> diagnostics,
+        bool hasPreviousClipOutput = false) =>
+        Compile(clip, clip.References ?? [], diagnostics, hasPreviousClipOutput);
 
     internal static IReadOnlyList<MiniMaxReferencePlan> CompileSelected(
         ClipSpec clip,
@@ -50,7 +51,8 @@ internal static class MiniMaxClipReferences
     private static IReadOnlyList<MiniMaxReferencePlan> Compile(
         ClipSpec clip,
         IEnumerable<ClipReferenceSpec> references,
-        ICollection<PlanDiagnostic> diagnostics)
+        ICollection<PlanDiagnostic> diagnostics,
+        bool hasPreviousClipOutput = false)
     {
         List<MiniMaxReferencePlan> compiled = [];
         void Ignore(string code, string message) =>
@@ -69,7 +71,10 @@ internal static class MiniMaxClipReferences
             bool controlNet = MediaSource.TryParseControlNetIndex(reference.Source, out _);
             bool aceStepFun = reference.Kind == ClipReferenceKind.Audio
                 && MediaSource.TryParseAceStepFunIndex(reference.Source, out _);
-            if (!uploaded && !hostCapture && !controlNet && !aceStepFun)
+            bool previousClip = hasPreviousClipOutput
+                && reference.Kind == ClipReferenceKind.Video
+                && StringUtils.Equals(reference.Source, MediaSource.PreviousClip);
+            if (!uploaded && !hostCapture && !controlNet && !aceStepFun && !previousClip)
             {
                 Ignore(
                     "source-ignored",
