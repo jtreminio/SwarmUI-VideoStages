@@ -365,10 +365,9 @@ public class MiniMaxGeneratedWorkflowContractTests
             persisted,
             lora => Assert.Equal(0.6, lora.FindInput("strength_model").LiteralAsDouble()));
 
-        Assert.True(generator.NodeHelpers.TryGetValue(
+        Assert.DoesNotContain(
             $"modelloader_{fixture.Model.Name}_image2video",
-            out string cachedLoader));
-        Assert.Equal(secondSampler.Model.Connection?.Node.Id, cachedLoader.Split(':')[0]);
+            generator.NodeHelpers.Keys);
 
         live.AssertAllLive([firstSampler, secondSampler, .. loras]);
         AssertShippable(bridge, workflow, live);
