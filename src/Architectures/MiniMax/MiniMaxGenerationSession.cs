@@ -508,7 +508,7 @@ internal sealed class MiniMaxGenerationSession(
             finish.RepairedCrops.ConnectFromPath(finishBridge, decodedPath);
             finish.PlacementData.ConnectTo(crop.PlacementData);
             g.CurrentMedia = incoming.WithPath(
-                finish.RepairedFrames.ToPath(),
+                finish.RepairedVideoFrames.ToPath(),
                 WGNodeData.DT_VIDEO);
             genInfo.Frames = incomingFrames;
             g.CurrentVae = genInfo.Vae;
@@ -544,18 +544,24 @@ internal sealed class MiniMaxGenerationSession(
         // H3's reference conditioning reads the host VAE, which this session leaves unset so no
         // foreign root VAE binds to an uploaded frame. The model just loaded its own.
         g.CurrentVae = genInfo.Vae;
-        // Whole-clip references are tokenized WITH the prompt, so they replace the text encode
-        // rather than decorating its output.
-        genInfo.PosCond = BuildReferenceConditioning(
+        JArray referenceCollection = BuildReferenceCollection(
                 clip.ClipId,
                 references,
                 genInfo,
                 width,
                 height,
                 includeBoundaryReference,
-                firstReferenceImage)
-            ?? g.CreateConditioning(
-                genInfo.Prompt, textEncoder.Path, genInfo.VideoModel, true, isVideo: true);
+                firstReferenceImage);
+        // Whole-clip references are tokenized with the prompt, so they replace the text encode
+        // rather than decorating its output.
+        genInfo.PosCond = referenceCollection is null
+            ? g.CreateConditioning(
+                genInfo.Prompt, textEncoder.Path, genInfo.VideoModel, true, isVideo: true)
+            : EncodeReferenceConditioning(
+                genInfo,
+                referenceCollection,
+                width,
+                height);
         genInfo.NegCond = g.CreateConditioning(
             genInfo.NegativePrompt, textEncoder.Path, genInfo.VideoModel, false, isVideo: true);
     }
@@ -567,13 +573,16 @@ internal sealed class MiniMaxGenerationSession(
         JArray framesConnection = null)
     {
         using WorkflowBridge bridge = BridgeSync.For(g);
-        EmptyMiniMaxH3LatentAVNode emptyNode = latentNodeId is null
-            ? bridge.AddNode(new EmptyMiniMaxH3LatentAVNode())
-            : bridge.AddNode(new EmptyMiniMaxH3LatentAVNode(), latentNodeId);
+        SwarmEmptyMiniMaxH3LatentAVNode emptyNode = latentNodeId is null
+            ? bridge.AddNode(new SwarmEmptyMiniMaxH3LatentAVNode())
+            : bridge.AddNode(new SwarmEmptyMiniMaxH3LatentAVNode(), latentNodeId);
         emptyNode.With(Width: (int)genInfo.Width, Height: (int)genInfo.Height);
         emptyNode.Length.SetFromToken(bridge, (JToken)framesConnection ?? new JValue(frames));
-        string empty = emptyNode.Id;
-        return new WGNodeData([empty, 0], g, WGNodeData.DT_LATENT_AUDIOVIDEO, genInfo.Model.Compat)
+        return new WGNodeData(
+            emptyNode.LATENT.ToPath(),
+            g,
+            WGNodeData.DT_LATENT_AUDIOVIDEO,
+            genInfo.Model.Compat)
         {
             Width = (int)genInfo.Width,
             Height = (int)genInfo.Height,
@@ -884,11 +893,10 @@ internal sealed class MiniMaxGenerationSession(
     }
 
     /// <summary>
-    /// Builds H3's <c>MiniMaxH3ReferenceToVideo</c> conditioning, or null when the clip authored
-    /// no usable reference. Its second output is an empty AV latent this session already builds
-    /// itself, so only the conditioning is taken.
+    /// Builds the reference collection Swarm's advanced text encoder consumes, or null when the
+    /// clip authored no usable reference.
     /// </summary>
-    private JArray BuildReferenceConditioning(
+    private JArray BuildReferenceCollection(
         int clipId,
         IReadOnlyList<MiniMaxReferencePlan> references,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
@@ -964,21 +972,19 @@ internal sealed class MiniMaxGenerationSession(
             ?? throw Invariant.Failure(
                 "MiniMax H3 reference conditioning has no resolved frame count.");
         using WorkflowBridge bridge = BridgeSync.For(g);
-        MiniMaxH3ReferenceToVideoNode node = bridge.AddNode(
-            new MiniMaxH3ReferenceToVideoNode().With(
-                Prompt: genInfo.Prompt,
+        SwarmMiniMaxH3CollectReferencesNode node = bridge.AddNode(
+            new SwarmMiniMaxH3CollectReferencesNode().With(
                 Width: width ?? (int)genInfo.Width,
                 Height: height ?? (int)genInfo.Height,
                 Length: frames,
                 RefImageSize: "match"));
-        node.Clip.ConnectFromPath(bridge, genInfo.Clip.Path);
         node.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
         node.AudioVae.ConnectFromPath(bridge, audioVae.Path);
         Fill(node.RefImages, images);
         Fill(node.RefVideos, videos);
         Fill(node.RefVideoAudios, videoAudios);
         Fill(node.RefAudios, audios);
-        return WorkflowBridge.ToPath(node.Positive);
+        return WorkflowBridge.ToPath(node.MiniMaxReferences);
 
         void Fill(INodeInputList list, IReadOnlyList<JArray> paths)
         {
@@ -987,6 +993,28 @@ internal sealed class MiniMaxGenerationSession(
                 list.AppendUnsetSlot().TryConnectToUntyped(bridge.ResolvePath(path));
             }
         }
+    }
+
+    private JArray EncodeReferenceConditioning(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        JArray references,
+        int? width,
+        int? height)
+    {
+        int targetWidth = width ?? (int)genInfo.Width;
+        int targetHeight = height ?? (int)genInfo.Height;
+        using WorkflowBridge bridge = BridgeSync.For(g);
+        SwarmClipTextEncodeAdvancedNode encode = bridge.AddNode(
+            new SwarmClipTextEncodeAdvancedNode().With(
+                Steps: genInfo.Steps,
+                Prompt: genInfo.Prompt,
+                Width: targetWidth,
+                Height: targetHeight,
+                TargetWidth: targetWidth,
+                TargetHeight: targetHeight));
+        encode.Clip.ConnectFromPath(bridge, genInfo.Clip.Path);
+        encode.MinimaxRefs.ConnectFromPath(bridge, references);
+        return WorkflowBridge.ToPath(encode.CONDITIONING);
     }
 
     /// <summary>

@@ -55,7 +55,7 @@ public sealed class ArchitectureContractGraphTests
             case "minimax":
                 // MiniMax keyframes ride the conditioning, so the joint latent reaches the sampler
                 // unwrapped.
-                Assert.IsType<EmptyMiniMaxH3LatentAVNode>(latent);
+                Assert.IsType<SwarmEmptyMiniMaxH3LatentAVNode>(latent);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(family), family, null);

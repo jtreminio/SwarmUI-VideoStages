@@ -43,8 +43,8 @@ public class MiniMaxUpscaleContractTests
         Assert.Empty(bridge.Graph.NodesOfType<ImageUpscaleWithModelNode>());
 
         SwarmKSamplerNode sampler = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
-        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
-            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        SwarmEmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
         Assert.Equal(MiniMaxWorkflowFixture.Width, latent.Width.LiteralAsInt());
         Assert.Equal(MiniMaxWorkflowFixture.Height, latent.Height.LiteralAsInt());
 

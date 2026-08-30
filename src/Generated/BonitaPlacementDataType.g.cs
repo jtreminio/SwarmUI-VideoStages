@@ -4,7 +4,5 @@ using ComfyTyped.Types;
 
 namespace VideoStages.Generated;
 
-public sealed class BonitaPlacementDataType : IComfyType
-{
-    public static string TypeName => "BONITA_PLACEMENT_DATA";
-}
+/// <summary>Marker for ComfyUI type "BONITA_PLACEMENT_DATA".</summary>
+public sealed class BonitaPlacementDataType : IComfyType { public static string TypeName => "BONITA_PLACEMENT_DATA"; }

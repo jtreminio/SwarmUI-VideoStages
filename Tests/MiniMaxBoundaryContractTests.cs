@@ -29,7 +29,7 @@ public class MiniMaxBoundaryContractTests
         // ceil(s*fps)+1 gives 6 and 25 frames, which snap up to 22 and 39 on the 17k+5 grid.
         Assert.Equal(
             [22, 39],
-            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>()
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>()
                 .Select(node => node.Length.LiteralAsInt())
                 .Order());
 

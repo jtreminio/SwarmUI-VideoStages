@@ -5,16 +5,22 @@ using ComfyTyped.Types;
 
 namespace VideoStages.Generated;
 
+/// <summary>Follow a person or object through the video, then make steady crops of the face or body part you want to repair.</summary>
+/// <remarks>Category: Bonita</remarks>
 public sealed class BonitaFindAndCropNode : ComfyNode
 {
+    /// <summary>ComfyUI <c>class_type</c> for this node — use for static refs (switch cases, <c>g.CreateNode(...)</c>).</summary>
     public const string ClassType = "BonitaFindAndCrop";
     public override string ClassTypeName => ClassType;
+
+    // ── Outputs ──
     public NodeOutput<ImageType> CropsToRepair { get; }
-    public NodeOutput<MaskType> RepairMasks { get; }
+    public NodeOutput<MaskType> RepairAreaMasks { get; }
     public NodeOutput<BonitaPlacementDataType> PlacementData { get; }
+
+    // ── Inputs ──
     public NodeInput<ImageType> VideoFrames { get; }
     public NodeInput<BonitaFinderType> Finder { get; }
-    public NodeInput<ImageType> CharacterReference { get; }
     public NodeInput<StringType> Subject { get; }
     public NodeInput<StringType> Part { get; }
     public NodeInput<IntType> CropWidth { get; }
@@ -22,40 +28,51 @@ public sealed class BonitaFindAndCropNode : ComfyNode
     public NodeInput<FloatType> SurroundingArea { get; }
     public NodeInput<IntType> TrackedAreaBlur { get; }
     public NodeInput<StringType> PerformanceReport { get; }
+    public NodeInput<ImageType> CharacterReference { get; } // optional
 
     public BonitaFindAndCropNode()
     {
-        CropsToRepair = AddOutput<ImageType>(0, "crops_to_repair");
-        RepairMasks = AddOutput<MaskType>(1, "repair_masks");
-        PlacementData = AddOutput<BonitaPlacementDataType>(2, "placement_data");
+        CropsToRepair = AddOutput<ImageType>(0, "crops to repair");
+        RepairAreaMasks = AddOutput<MaskType>(1, "repair area masks");
+        PlacementData = AddOutput<BonitaPlacementDataType>(2, "placement data");
         VideoFrames = AddInput<ImageType>("video_frames");
         Finder = AddInput<BonitaFinderType>("finder");
-        CharacterReference = AddInput<ImageType>("character_reference");
         Subject = AddInput<StringType>("subject");
-        Part = AddInput<StringType>("part");
-        CropWidth = AddInput<IntType>("crop_width");
-        CropHeight = AddInput<IntType>("crop_height");
-        SurroundingArea = AddInput<FloatType>("surrounding_area");
-        TrackedAreaBlur = AddInput<IntType>("tracked_area_blur");
-        PerformanceReport = AddInput<StringType>("performance_report");
         Subject.Set("person");
+        Part = AddInput<StringType>("part");
         Part.Set("face");
-        CropWidth.Set(1024);
-        CropHeight.Set(1024);
+        CropWidth = AddInput<IntType>("crop_width");
+        CropWidth.Set(1024L);
+        CropHeight = AddInput<IntType>("crop_height");
+        CropHeight.Set(1024L);
+        SurroundingArea = AddInput<FloatType>("surrounding_area");
         SurroundingArea.Set(2.5);
-        TrackedAreaBlur.Set(4);
+        TrackedAreaBlur = AddInput<IntType>("tracked_area_blur");
+        TrackedAreaBlur.Set(4L);
+        PerformanceReport = AddInput<StringType>("performance_report");
         PerformanceReport.Set("off");
+        CharacterReference = AddInput<ImageType>("character_reference");
     }
 
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public BonitaFindAndCropNode With(
+        In<ImageType>? VideoFrames = null,
+        In<BonitaFinderType>? Finder = null,
         StringArg? Subject = null,
         StringArg? Part = null,
         IntArg? CropWidth = null,
         IntArg? CropHeight = null,
         FloatArg? SurroundingArea = null,
         IntArg? TrackedAreaBlur = null,
-        StringArg? PerformanceReport = null)
+        StringArg? PerformanceReport = null,
+        In<ImageType>? CharacterReference = null
+    )
     {
+        VideoFrames?.ApplyTo(this.VideoFrames);
+        Finder?.ApplyTo(this.Finder);
         Subject?.ApplyTo(this.Subject);
         Part?.ApplyTo(this.Part);
         CropWidth?.ApplyTo(this.CropWidth);
@@ -63,6 +80,7 @@ public sealed class BonitaFindAndCropNode : ComfyNode
         SurroundingArea?.ApplyTo(this.SurroundingArea);
         TrackedAreaBlur?.ApplyTo(this.TrackedAreaBlur);
         PerformanceReport?.ApplyTo(this.PerformanceReport);
+        CharacterReference?.ApplyTo(this.CharacterReference);
         return this;
     }
 }

@@ -1,7 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
-using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -72,10 +71,13 @@ public class MiniMaxImageRootKeyframeContractTests
         Assert.Empty(bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
         ComfyNode reference = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
-        Assert.Same(reference, StageSampler(bridge, 0).Positive.Connection?.Node);
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
+        ComfyNode conditioning = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "SwarmClipTextEncodeAdvanced");
+        Assert.Same(conditioning, StageSampler(bridge, 0).Positive.Connection?.Node);
 
-        live.AssertLive(reference);
+        live.AssertAllLive(reference, conditioning);
         AssertShippable(bridge, workflow, live);
     }
 }

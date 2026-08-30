@@ -5,11 +5,18 @@ using ComfyTyped.Types;
 
 namespace VideoStages.Generated;
 
+/// <summary>Use one YOLO model to find the subject and another to find the face or body part named in Find &amp; Crop.</summary>
+/// <remarks>Category: Bonita/finders</remarks>
 public sealed class BonitaYOLOFinderNode : ComfyNode
 {
+    /// <summary>ComfyUI <c>class_type</c> for this node — use for static refs (switch cases, <c>g.CreateNode(...)</c>).</summary>
     public const string ClassType = "BonitaYOLOFinder";
     public override string ClassTypeName => ClassType;
+
+    // ── Outputs ──
     public NodeOutput<BonitaFinderType> Finder { get; }
+
+    // ── Inputs ──
     public NodeInput<StringType> SubjectModel { get; }
     public NodeInput<StringType> PartModel { get; }
     public NodeInput<FloatType> SubjectConfidence { get; }
@@ -21,26 +28,31 @@ public sealed class BonitaYOLOFinderNode : ComfyNode
     {
         Finder = AddOutput<BonitaFinderType>(0, "finder");
         SubjectModel = AddInput<StringType>("subject_model");
-        PartModel = AddInput<StringType>("part_model");
-        SubjectConfidence = AddInput<FloatType>("subject_confidence");
-        PartConfidence = AddInput<FloatType>("part_confidence");
-        InferenceSize = AddInput<IntType>("inference_size");
-        Device = AddInput<StringType>("device");
         SubjectModel.Set("yolov8m.pt");
+        PartModel = AddInput<StringType>("part_model");
         PartModel.Set("face_yolov8m.pt");
+        SubjectConfidence = AddInput<FloatType>("subject_confidence");
         SubjectConfidence.Set(0.25);
+        PartConfidence = AddInput<FloatType>("part_confidence");
         PartConfidence.Set(0.25);
-        InferenceSize.Set(640);
+        InferenceSize = AddInput<IntType>("inference_size");
+        InferenceSize.Set(640L);
+        Device = AddInput<StringType>("device");
         Device.Set("auto");
     }
 
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public BonitaYOLOFinderNode With(
         StringArg? SubjectModel = null,
         StringArg? PartModel = null,
         FloatArg? SubjectConfidence = null,
         FloatArg? PartConfidence = null,
         IntArg? InferenceSize = null,
-        StringArg? Device = null)
+        StringArg? Device = null
+    )
     {
         SubjectModel?.ApplyTo(this.SubjectModel);
         PartModel?.ApplyTo(this.PartModel);

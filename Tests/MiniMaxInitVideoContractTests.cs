@@ -113,7 +113,7 @@ public class MiniMaxInitVideoContractTests
         Assert.DoesNotContain(
             bridge.Graph.NodesOfType<SwarmKSamplerNode>(),
             node => ReachesUpstream(bridge, save.Images.Connection?.Node, node.Id));
-        Assert.Empty(bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
 
         // The handoff the next clip or stage would read: unsnapped frame count, and the source's
         // own audio still attached rather than a generated track.

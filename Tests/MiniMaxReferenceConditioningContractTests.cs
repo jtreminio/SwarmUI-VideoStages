@@ -14,6 +14,10 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class MiniMaxReferenceConditioningContractTests
 {
+    private static ComfyNode ReferenceConditioning(WorkflowBridge bridge) => Assert.Single(
+        bridge.Graph.Nodes.Values,
+        node => node.ClassTypeName == "SwarmClipTextEncodeAdvanced");
+
     /// <summary>The global end-frame param rejects anything that is not a decodable image.</summary>
     private const string OnePixelPng =
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
@@ -79,8 +83,12 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
+        ComfyNode conditioning = Assert.Single(
+            bridge.Graph.Nodes.Values,
+            node => node.ClassTypeName == "SwarmClipTextEncodeAdvanced");
         JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
+        JObject conditioningInputs = (JObject)workflow[conditioning.Id]["inputs"];
         Assert.Equal("match", inputs["ref_image_size"]?.ToString());
         Assert.Equal(
             MiniMaxWorkflowFixture.GeneratedFrames,
@@ -98,12 +106,13 @@ public class MiniMaxReferenceConditioningContractTests
         Assert.Equal(
             inputs["ref_videos.ref_video_0"][0],
             inputs["ref_video_audios.ref_video_audio_0"][0]);
+        Assert.Equal(referenceNode.Id, conditioningInputs["minimax_refs"]?[0]);
 
         // The reference node feeds the keyframe wrapper, which feeds the sampler's positive.
         SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
             bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
         // A plain text encode here would mean the references never reached the tokenizer.
-        Assert.Same(referenceNode, keyframes.ConditioningInput.Connection?.Node);
+        Assert.Same(conditioning, keyframes.ConditioningInput.Connection?.Node);
         Assert.Same(keyframes, StageSampler(bridge, 0).Positive.Connection?.Node);
 
         live.AssertLive(keyframes);
@@ -127,7 +136,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         JArray videoPath = Assert.IsType<JArray>(
             workflow[referenceNode.Id]?["inputs"]?["ref_videos.ref_video_0"]);
         ComfyNode previousVideo = bridge.Graph.Nodes[videoPath[0].Value<string>()];
@@ -135,7 +144,7 @@ public class MiniMaxReferenceConditioningContractTests
         SwarmKSamplerNode secondSampler = StageSampler(bridge, 1);
 
         Assert.True(ReachesUpstream(bridge, previousVideo, firstSampler.Id));
-        Assert.True(ReachesUpstream(bridge, secondSampler, referenceNode.Id));
+        Assert.True(ReachesUpstream(bridge, secondSampler, ReferenceConditioning(bridge).Id));
 
         live.AssertAllLive(referenceNode, previousVideo, firstSampler, secondSampler);
         AssertShippable(bridge, workflow, live);
@@ -159,7 +168,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         SwarmVideoResampleFPSNode resample = bridge.NodeAt<SwarmVideoResampleFPSNode>(
             (JArray)workflow[referenceNode.Id]?["inputs"]?["ref_videos.ref_video_0"]);
 
@@ -201,7 +210,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
         Assert.Equal(window.Id, inputs["ref_videos.ref_video_0"][0].ToString());
 
@@ -239,7 +248,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
         Assert.Equal(
             trim.Id,
@@ -273,7 +282,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
         Assert.Equal(trim.Id, inputs["ref_audios.ref_audio_0"][0].ToString());
     }
@@ -329,7 +338,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
         GetVideoComponentsNode captured = Assert.Single(
             bridge.Graph.NodesOfType<GetVideoComponentsNode>());
@@ -355,7 +364,7 @@ public class MiniMaxReferenceConditioningContractTests
                 bridge.ResolvePath((JArray)inputs["ref_audios.ref_audio_0"]));
         }
 
-        Assert.Same(referenceNode, StageSampler(bridge, 0).Positive.Connection?.Node);
+        Assert.Same(ReferenceConditioning(bridge), StageSampler(bridge, 0).Positive.Connection?.Node);
         AssertShippable(bridge, workflow, live);
     }
 
@@ -403,12 +412,12 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
         Assert.Equal(
             AudioHandler.MakeAceStepFunDecodeId(0),
             ((JArray)inputs["ref_audios.ref_audio_0"])[0].ToString());
-        Assert.Same(referenceNode, StageSampler(bridge, 0).Positive.Connection?.Node);
+        Assert.Same(ReferenceConditioning(bridge), StageSampler(bridge, 0).Positive.Connection?.Node);
         AssertShippable(bridge, workflow, live);
     }
 
@@ -437,9 +446,11 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
-        Assert.Equal("continue this shot exactly", inputs.Value<string>("prompt"));
+        Assert.Equal(
+            "continue this shot exactly",
+            ((JObject)workflow[ReferenceConditioning(bridge).Id]["inputs"]).Value<string>("prompt"));
         Assert.All(
             new[]
             {
@@ -465,10 +476,10 @@ public class MiniMaxReferenceConditioningContractTests
         SwarmKSamplerNode secondSampler = StageSampler(bridge, 1);
         Assert.True(ReachesUpstream(bridge, tail, firstSampler.Id));
         Assert.True(ReachesUpstream(bridge, audio, firstSampler.Id));
-        Assert.True(ReachesUpstream(bridge, secondSampler, referenceNode.Id));
+        Assert.True(ReachesUpstream(bridge, secondSampler, ReferenceConditioning(bridge).Id));
         Assert.Empty(bridge.Graph.NodesOfType<SwarmRampMaskBatchNode>());
         Assert.All(
-            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>(),
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>(),
             latent => Assert.Equal(39, latent.Length.LiteralAsInt()));
 
         live.AssertAllLive(referenceNode, tail, audio, firstSampler, secondSampler);
@@ -494,7 +505,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
         ImageScaleByNode scaled = bridge.NodeAt<ImageScaleByNode>(
             (JArray)inputs["ref_videos.ref_video_0"]);
@@ -531,7 +542,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
         SwarmVideoResampleFPSNode resample = bridge.NodeAt<SwarmVideoResampleFPSNode>(
             (JArray)inputs["ref_videos.ref_video_0"]);
@@ -572,7 +583,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
         ImageFromBatchNode aligned = bridge.NodeAt<ImageFromBatchNode>(
             (JArray)inputs["ref_videos.ref_video_0"]);
@@ -612,7 +623,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         string videoInputNodeId =
             workflow[referenceNode.Id]["inputs"]["ref_videos.ref_video_0"][0].ToString();
 
@@ -670,7 +681,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         JObject inputs = (JObject)workflow[referenceNode.Id]["inputs"];
         Assert.NotNull(inputs["ref_videos.ref_video_0"]);
         Assert.NotNull(inputs["ref_videos.ref_video_1"]);
@@ -704,7 +715,7 @@ public class MiniMaxReferenceConditioningContractTests
             bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
         ComfyNode referenceNode = Assert.Single(
             bridge.Graph.Nodes.Values,
-            node => node.ClassTypeName == "MiniMaxH3ReferenceToVideo");
+            node => node.ClassTypeName == "SwarmMiniMaxH3CollectReferences");
         Assert.Equal(
             published.Id,
             ((JObject)workflow[referenceNode.Id]["inputs"])["ref_images.ref_image_0"][0]
@@ -712,7 +723,7 @@ public class MiniMaxReferenceConditioningContractTests
 
         // The node replaces the positive text encode, so reaching the sampler is what proves the
         // published image was tokenized with the prompt rather than left dangling.
-        Assert.Same(referenceNode, StageSampler(bridge, 0).Positive.Connection?.Node);
+        Assert.Same(ReferenceConditioning(bridge), StageSampler(bridge, 0).Positive.Connection?.Node);
 
         live.AssertAllLive(published, referenceNode);
         AssertShippable(bridge, workflow, live);

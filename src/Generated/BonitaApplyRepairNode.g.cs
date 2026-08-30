@@ -5,16 +5,22 @@ using ComfyTyped.Types;
 
 namespace VideoStages.Generated;
 
+/// <summary>Put every repaired crop back into the frame it came from and blend it smoothly into the original video.</summary>
+/// <remarks>Category: Bonita</remarks>
 public sealed class BonitaApplyRepairNode : ComfyNode
 {
+    /// <summary>ComfyUI <c>class_type</c> for this node — use for static refs (switch cases, <c>g.CreateNode(...)</c>).</summary>
     public const string ClassType = "BonitaApplyRepair";
     public override string ClassTypeName => ClassType;
-    public NodeOutput<ImageType> RepairedFrames { get; }
-    public NodeOutput<MaskType> AppliedMasks { get; }
+
+    // ── Outputs ──
+    public NodeOutput<ImageType> RepairedVideoFrames { get; }
+    public NodeOutput<MaskType> ActualRepairMasks { get; }
+
+    // ── Inputs ──
     public NodeInput<ImageType> VideoFrames { get; }
     public NodeInput<ImageType> RepairedCrops { get; }
     public NodeInput<BonitaPlacementDataType> PlacementData { get; }
-    public NodeInput<MaskType> RepairMasks { get; }
     public NodeInput<FloatType> SmallDetailStrength { get; }
     public NodeInput<FloatType> MediumDetailStrength { get; }
     public NodeInput<FloatType> CloseupStrength { get; }
@@ -23,34 +29,42 @@ public sealed class BonitaApplyRepairNode : ComfyNode
     public NodeInput<IntType> MaskFeatherPixels { get; }
     public NodeInput<FloatType> ColorMatchStrength { get; }
     public NodeInput<StringType> PerformanceReport { get; }
+    public NodeInput<MaskType> RepairMasks { get; } // optional
 
     public BonitaApplyRepairNode()
     {
-        RepairedFrames = AddOutput<ImageType>(0, "repaired_frames");
-        AppliedMasks = AddOutput<MaskType>(1, "applied_masks");
+        RepairedVideoFrames = AddOutput<ImageType>(0, "repaired video frames");
+        ActualRepairMasks = AddOutput<MaskType>(1, "actual repair masks");
         VideoFrames = AddInput<ImageType>("video_frames");
         RepairedCrops = AddInput<ImageType>("repaired_crops");
         PlacementData = AddInput<BonitaPlacementDataType>("placement_data");
-        RepairMasks = AddInput<MaskType>("repair_masks");
         SmallDetailStrength = AddInput<FloatType>("small_detail_strength");
-        MediumDetailStrength = AddInput<FloatType>("medium_detail_strength");
-        CloseupStrength = AddInput<FloatType>("closeup_strength");
-        StrengthSmoothingFrames = AddInput<IntType>("strength_smoothing_frames");
-        MaskExpandPixels = AddInput<IntType>("mask_expand_pixels");
-        MaskFeatherPixels = AddInput<IntType>("mask_feather_pixels");
-        ColorMatchStrength = AddInput<FloatType>("color_match_strength");
-        PerformanceReport = AddInput<StringType>("performance_report");
         SmallDetailStrength.Set(1.0);
+        MediumDetailStrength = AddInput<FloatType>("medium_detail_strength");
         MediumDetailStrength.Set(0.65);
+        CloseupStrength = AddInput<FloatType>("closeup_strength");
         CloseupStrength.Set(0.15);
-        StrengthSmoothingFrames.Set(5);
-        MaskExpandPixels.Set(0);
-        MaskFeatherPixels.Set(0);
+        StrengthSmoothingFrames = AddInput<IntType>("strength_smoothing_frames");
+        StrengthSmoothingFrames.Set(5L);
+        MaskExpandPixels = AddInput<IntType>("mask_expand_pixels");
+        MaskExpandPixels.Set(0L);
+        MaskFeatherPixels = AddInput<IntType>("mask_feather_pixels");
+        MaskFeatherPixels.Set(0L);
+        ColorMatchStrength = AddInput<FloatType>("color_match_strength");
         ColorMatchStrength.Set(0.5);
+        PerformanceReport = AddInput<StringType>("performance_report");
         PerformanceReport.Set("off");
+        RepairMasks = AddInput<MaskType>("repair_masks");
     }
 
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public BonitaApplyRepairNode With(
+        In<ImageType>? VideoFrames = null,
+        In<ImageType>? RepairedCrops = null,
+        In<BonitaPlacementDataType>? PlacementData = null,
         FloatArg? SmallDetailStrength = null,
         FloatArg? MediumDetailStrength = null,
         FloatArg? CloseupStrength = null,
@@ -58,8 +72,13 @@ public sealed class BonitaApplyRepairNode : ComfyNode
         IntArg? MaskExpandPixels = null,
         IntArg? MaskFeatherPixels = null,
         FloatArg? ColorMatchStrength = null,
-        StringArg? PerformanceReport = null)
+        StringArg? PerformanceReport = null,
+        In<MaskType>? RepairMasks = null
+    )
     {
+        VideoFrames?.ApplyTo(this.VideoFrames);
+        RepairedCrops?.ApplyTo(this.RepairedCrops);
+        PlacementData?.ApplyTo(this.PlacementData);
         SmallDetailStrength?.ApplyTo(this.SmallDetailStrength);
         MediumDetailStrength?.ApplyTo(this.MediumDetailStrength);
         CloseupStrength?.ApplyTo(this.CloseupStrength);
@@ -68,6 +87,7 @@ public sealed class BonitaApplyRepairNode : ComfyNode
         MaskFeatherPixels?.ApplyTo(this.MaskFeatherPixels);
         ColorMatchStrength?.ApplyTo(this.ColorMatchStrength);
         PerformanceReport?.ApplyTo(this.PerformanceReport);
+        RepairMasks?.ApplyTo(this.RepairMasks);
         return this;
     }
 }

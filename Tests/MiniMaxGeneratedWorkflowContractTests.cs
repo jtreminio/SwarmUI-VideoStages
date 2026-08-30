@@ -197,8 +197,8 @@ public class MiniMaxGeneratedWorkflowContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         Assert.Empty(bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
-        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
-            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        SwarmEmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
         SwarmKSamplerNode sampler = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
         VAEDecodeAudioNode audioDecode = Assert.Single(
             bridge.Graph.NodesOfType<VAEDecodeAudioNode>());
@@ -728,8 +728,8 @@ public class MiniMaxGeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
-            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        SwarmEmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
         Assert.Single(bridge.Graph.NodesOfType<VAEDecodeAudioNode>());
 
         live.AssertLive(latent);
@@ -755,8 +755,8 @@ public class MiniMaxGeneratedWorkflowContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
-            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        SwarmEmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
         Assert.Equal(512, latent.Width.LiteralAsInt());
         Assert.Equal(832, latent.Height.LiteralAsInt());
         Assert.Equal(512, generator.CurrentMedia.Width);

@@ -285,8 +285,8 @@ public class MiniMaxCharacterRefineContractTests
             bridge.Graph.NodesOfType<BonitaYOLOFinderNode>());
         BonitaFindAndCropNode crop = Assert.Single(
             bridge.Graph.NodesOfType<BonitaFindAndCropNode>());
-        MiniMaxH3ReferenceToVideoNode reference = Assert.Single(
-            bridge.Graph.NodesOfType<MiniMaxH3ReferenceToVideoNode>());
+        SwarmMiniMaxH3CollectReferencesNode reference = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3CollectReferencesNode>());
 
         Assert.Empty(bridge.Graph.NodesOfType<BonitaSAM3FinderNode>());
         Assert.Empty(bridge.Graph.NodesOfType<CheckpointLoaderSimpleNode>());
@@ -382,9 +382,11 @@ public class MiniMaxCharacterRefineContractTests
             characterNodeClasses.Contains(
                 property.Value["class_type"]?.Value<string>())));
 
-        MiniMaxH3ReferenceToVideoNode reference = Assert.Single(
-            bridge.Graph.NodesOfType<MiniMaxH3ReferenceToVideoNode>());
-        Assert.Equal("refine this character", reference.Prompt.LiteralAsString());
+        SwarmMiniMaxH3CollectReferencesNode reference = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3CollectReferencesNode>());
+        SwarmClipTextEncodeAdvancedNode conditioning = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmClipTextEncodeAdvancedNode>());
+        Assert.Equal("refine this character", conditioning.Prompt.LiteralAsString());
         Assert.Equal(2, reference.RefImages.Items.Count);
         Assert.Same(crop.CharacterReference.Connection?.Node, reference.RefImages.Items[0].Connection?.Node);
         Assert.Equal(
@@ -474,8 +476,8 @@ public class MiniMaxCharacterRefineContractTests
         BonitaApplyRepairNode finish = Assert.Single(
             bridge.Graph.NodesOfType<BonitaApplyRepairNode>());
         Assert.Same(trim, finish.RepairedCrops.Connection?.Node);
-        MiniMaxH3ReferenceToVideoNode reference = Assert.Single(
-            bridge.Graph.NodesOfType<MiniMaxH3ReferenceToVideoNode>());
+        SwarmMiniMaxH3CollectReferencesNode reference = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3CollectReferencesNode>());
         Assert.Equal(39, reference.Length.LiteralAsInt());
         TrimAudioDurationNode audio = Assert.Single(
             bridge.Graph.NodesOfType<TrimAudioDurationNode>());
@@ -513,8 +515,8 @@ public class MiniMaxCharacterRefineContractTests
 
         (JObject workflow, _) = await Generate(fixture, InitVideoClip(stage));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        MiniMaxH3ReferenceToVideoNode reference = Assert.Single(
-            bridge.Graph.NodesOfType<MiniMaxH3ReferenceToVideoNode>());
+        SwarmMiniMaxH3CollectReferencesNode reference = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3CollectReferencesNode>());
         BonitaFindAndCropNode crop = Assert.Single(
             bridge.Graph.NodesOfType<BonitaFindAndCropNode>());
 
@@ -540,8 +542,8 @@ public class MiniMaxCharacterRefineContractTests
 
         (JObject workflow, _) = await Generate(fixture, clip);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
-        MiniMaxH3ReferenceToVideoNode reference = Assert.Single(
-            bridge.Graph.NodesOfType<MiniMaxH3ReferenceToVideoNode>());
+        SwarmMiniMaxH3CollectReferencesNode reference = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmMiniMaxH3CollectReferencesNode>());
         BonitaFindAndCropNode crop = Assert.Single(
             bridge.Graph.NodesOfType<BonitaFindAndCropNode>());
 

@@ -121,8 +121,8 @@ public class MiniMaxAudioContractTests
         Assert.Equal(0, lengthToFrames.FrameCountOffset.LiteralAsInt());
         Assert.True(ReachesUpstream(bridge, lengthToFrames, upload.Id));
 
-        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
-            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        SwarmEmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
         Assert.Same(lengthToFrames.Frames, latent.Length.Connection);
         Assert.Null(latent.Length.LiteralAsInt());
 
@@ -274,8 +274,8 @@ public class MiniMaxAudioContractTests
         Assert.Equal(17, lengthToFrames.FrameGrid.LiteralAsInt());
         Assert.Equal(5, lengthToFrames.FrameGridOrigin.LiteralAsInt());
 
-        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
-            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        SwarmEmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
         Assert.Same(lengthToFrames.Frames, latent.Length.Connection);
 
         VAEEncodeAudioNode encode = Assert.Single(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
@@ -321,8 +321,8 @@ public class MiniMaxAudioContractTests
         Assert.Empty(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
         Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
         Assert.Empty(bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
-        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
-            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        SwarmEmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
         Assert.Equal(MiniMaxWorkflowFixture.GeneratedFrames, latent.Length.LiteralAsInt());
         SwarmKSamplerNode sampler = StageSampler(bridge, 0);
         Assert.Same(latent, sampler.LatentImage.Connection?.Node);
@@ -365,8 +365,8 @@ public class MiniMaxAudioContractTests
             lengthToFrames.AudioInput.Connection?.Node,
             aceDecodeId));
 
-        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
-            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        SwarmEmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
         Assert.Same(lengthToFrames.Frames, latent.Length.Connection);
 
         VAEEncodeAudioNode encode = Assert.Single(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
@@ -406,8 +406,8 @@ public class MiniMaxAudioContractTests
         Assert.Empty(bridge.Graph.NodesOfType<SwarmAudioLengthToFramesNode>());
         Assert.Empty(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
         Assert.Empty(bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
-        EmptyMiniMaxH3LatentAVNode latent = Assert.Single(
-            bridge.Graph.NodesOfType<EmptyMiniMaxH3LatentAVNode>());
+        SwarmEmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
         // The authored length stands, so it is a literal rather than a wired frame count.
         Assert.Equal(MiniMaxWorkflowFixture.GeneratedFrames, latent.Length.LiteralAsInt());
         Assert.Same(latent, StageSampler(bridge, 0).LatentImage.Connection?.Node);

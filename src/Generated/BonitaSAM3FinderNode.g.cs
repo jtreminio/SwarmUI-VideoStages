@@ -5,11 +5,18 @@ using ComfyTyped.Types;
 
 namespace VideoStages.Generated;
 
+/// <summary>Use SAM3 to follow a subject through the clip and find the face or body part named in Find &amp; Crop.</summary>
+/// <remarks>Category: Bonita/finders</remarks>
 public sealed class BonitaSAM3FinderNode : ComfyNode
 {
+    /// <summary>ComfyUI <c>class_type</c> for this node — use for static refs (switch cases, <c>g.CreateNode(...)</c>).</summary>
     public const string ClassType = "BonitaSAM3Finder";
     public override string ClassTypeName => ClassType;
+
+    // ── Outputs ──
     public NodeOutput<BonitaFinderType> Finder { get; }
+
+    // ── Inputs ──
     public NodeInput<ModelType> Sam3Model { get; }
     public NodeInput<ClipType> Sam3Clip { get; }
     public NodeInput<FloatType> SubjectConfidence { get; }
@@ -22,18 +29,27 @@ public sealed class BonitaSAM3FinderNode : ComfyNode
         Sam3Model = AddInput<ModelType>("sam3_model");
         Sam3Clip = AddInput<ClipType>("sam3_clip");
         SubjectConfidence = AddInput<FloatType>("subject_confidence");
-        PartConfidence = AddInput<FloatType>("part_confidence");
-        Performance = AddInput<StringType>("performance");
         SubjectConfidence.Set(0.25);
+        PartConfidence = AddInput<FloatType>("part_confidence");
         PartConfidence.Set(0.1);
+        Performance = AddInput<StringType>("performance");
         Performance.Set("balanced");
     }
 
+    /// <summary>Fluent setter for inputs. Returns <c>this</c> for chaining.
+    /// Pass only the inputs you want to set; omitted (<c>null</c>) args leave the existing value untouched.
+    /// Primitive inputs accept a literal or a same-typed output; connection inputs accept a same-typed
+    /// output (mismatches are a compile error). Input lists are not exposed here — use <c>Add</c>/<c>AddRange</c>.</summary>
     public BonitaSAM3FinderNode With(
+        In<ModelType>? Sam3Model = null,
+        In<ClipType>? Sam3Clip = null,
         FloatArg? SubjectConfidence = null,
         FloatArg? PartConfidence = null,
-        StringArg? Performance = null)
+        StringArg? Performance = null
+    )
     {
+        Sam3Model?.ApplyTo(this.Sam3Model);
+        Sam3Clip?.ApplyTo(this.Sam3Clip);
         SubjectConfidence?.ApplyTo(this.SubjectConfidence);
         PartConfidence?.ApplyTo(this.PartConfidence);
         Performance?.ApplyTo(this.Performance);
