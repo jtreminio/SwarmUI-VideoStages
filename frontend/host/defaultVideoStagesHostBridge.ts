@@ -1,3 +1,4 @@
+import { materializeGenerationMediaValue } from "../generationMedia";
 import { isRecord } from "../utils";
 import type {
     HostOptionList,
@@ -148,6 +149,7 @@ const collectGenerationInput = (
     const { extra_metadata: requestedExtraMetadata, ...generationOverrides } =
         inputOverrides;
     const actualInput = mainGenHandler.getGenInput(generationOverrides, {});
+    materializeGenerationMediaValue(actualInput);
     if (isRecord(requestedExtraMetadata)) {
         actualInput.extra_metadata = {
             ...(isRecord(actualInput.extra_metadata)
@@ -388,13 +390,18 @@ export const createDefaultVideoStagesHostBridge =
                     ...generationOverrides
                 } = inputOverrides;
                 if (!isRecord(requestedExtraMetadata)) {
-                    mainGenHandler.doGenerate(generationOverrides, {});
+                    mainGenHandler.doGenerate(
+                        generationOverrides,
+                        {},
+                        materializeGenerationMediaValue,
+                    );
                     return;
                 }
                 mainGenHandler.doGenerate(
                     generationOverrides,
                     {},
                     (actualInput: unknown): void => {
+                        materializeGenerationMediaValue(actualInput);
                         if (!isRecord(actualInput)) {
                             return;
                         }

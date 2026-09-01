@@ -55,6 +55,7 @@ declare function doPopover(id: string, e?: Event): void;
 declare let currentMetadataVal: string | null;
 
 declare function getImageFullSrc(src: string): string;
+declare function isValidMediaPath(path: unknown): boolean;
 
 declare function interpretMetadata(metadata: string | null): string | null;
 

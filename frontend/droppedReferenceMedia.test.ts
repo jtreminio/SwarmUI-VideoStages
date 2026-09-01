@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
+import {
+    resetBrowserMediaStoreForTests,
+    resolveBrowserMedia,
+} from "./browserMediaStore";
 import { readDroppedReferenceMedia } from "./droppedReferenceMedia";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
@@ -35,18 +39,25 @@ const stubVideo = (duration: number, lastMediaTime?: number): void => {
 };
 
 describe("dropped reference media", () => {
-    afterEach(() => setVideoStagesHostBridgeForTests(null));
+    afterEach(() => {
+        resetBrowserMediaStoreForTests();
+        setVideoStagesHostBridgeForTests(null);
+    });
 
     it("keeps image containers, including WebP, as images", async () => {
-        await expect(
-            readDroppedReferenceMedia(
-                new File(["webp"], "still.webp", { type: "image/webp" }),
-            ),
-        ).resolves.toMatchObject({
+        const media = await readDroppedReferenceMedia(
+            new File(["webp"], "still.webp", { type: "image/webp" }),
+        );
+
+        expect(media).toMatchObject({
             kind: "image",
             mediaDurationSeconds: 0,
             uploadedMedia: { fileName: "still.webp" },
         });
+        expect(media?.uploadedMedia?.data).toMatch(/^vst-browser-media:/);
+        expect(resolveBrowserMedia(media?.uploadedMedia?.data ?? "")).toMatch(
+            /^data:image\/webp;base64,/,
+        );
     });
 
     it("treats a one-frame video container as an image", async () => {

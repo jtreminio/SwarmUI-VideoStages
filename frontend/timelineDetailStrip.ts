@@ -2,6 +2,7 @@ import {
     type AuthoringTransactionSnapshot,
     captureAuthoringTransactionSnapshot,
 } from "./authoringSnapshot";
+import { storeBrowserMedia } from "./browserMediaStore";
 import type { DetailStripContext } from "./detailStrip/context";
 import {
     createDetailDraftQueue,
@@ -37,10 +38,6 @@ const REFERENCE_DROP_TARGET = ".vst-detail-add-ref, .vst-detail-add-clip-ref";
 const FILE_DROP_HOVER_CLASS = "vst-file-drop-hover";
 
 export interface TimelineDetailStrip {
-    /**
-     * @param body listener-host carrying capture-phase timeline chip listeners.
-     * @param dock render-host owned by the caller.
-     */
     attach(
         body: HTMLElement,
         dock: HTMLElement,
@@ -227,7 +224,12 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
                 const uploads = await Promise.all(
                     files.map(async (file) => {
                         const data = await fileAsDataUri(file);
-                        return data ? { data, fileName: file.name } : null;
+                        return data
+                            ? {
+                                  data: storeBrowserMedia(data),
+                                  fileName: file.name,
+                              }
+                            : null;
                     }),
                 );
                 const added = selectionOperations.addRefEntries(

@@ -1,3 +1,7 @@
+import {
+    externalizeSerializedBrowserMedia,
+    resetBrowserMediaStoreForTests,
+} from "../browserMediaStore";
 import { assignMissingHues } from "../clipColor";
 import {
     ensureAuthoringDocumentIdentity,
@@ -44,6 +48,7 @@ let hydratedPromptCarrierValue: string | null = null;
 let pendingHydratedPrompts: ClipTextInput[] | null = null;
 let protectOverriddenBootCarrier = false;
 let bootCarrierProtectionDeadline = 0;
+let externalizedCarrierValue: string | null = null;
 
 const overlayPromptAndUiState = (clips: Clip[]): void => {
     ensureClipEntityIdentities(clips);
@@ -134,6 +139,22 @@ const releaseBootCarrierProtection = (): void => {
     bootCarrierProtectionDeadline = 0;
 };
 
+const externalizeHostDataParam = (): string => {
+    const serialized = readHostDataParam();
+    if (!serialized) {
+        return serialized;
+    }
+    if (serialized === externalizedCarrierValue) {
+        return serialized;
+    }
+    const externalized = externalizeSerializedBrowserMedia(serialized);
+    if (externalized.changed) {
+        writeDataParam(externalized.serialized);
+    }
+    externalizedCarrierValue = externalized.serialized;
+    return externalized.serialized;
+};
+
 const ensureHydratedCarrier = (): void => {
     const dataInput = getDataInput();
     if (!dataInput) {
@@ -182,7 +203,7 @@ const ensureHydratedCarrier = (): void => {
         clearDurableAuthoringState();
     }
 
-    const existing = readHostDataParam();
+    const existing = externalizeHostDataParam();
     if (!existing) {
         return;
     }
@@ -194,13 +215,14 @@ const ensureHydratedCarrier = (): void => {
 
 const readDataParam = (): string => {
     ensureHydratedCarrier();
-    return readHostDataParam();
+    return externalizeHostDataParam();
 };
 
 const writeQuiet = (state: AuthoringDocument, serialized: string): void => {
     releaseBootCarrierProtection();
     ensureAuthoringDocumentIdentity(state);
     assignMissingHues(state.clips);
+    externalizedCarrierValue = serialized;
     writeDataParam(serialized);
     writeClipPrompts(
         state.clips.map((clip) => ({
@@ -212,15 +234,20 @@ const writeQuiet = (state: AuthoringDocument, serialized: string): void => {
     writeDurable(state);
 };
 
+const serializeCarrierState = (state: AuthoringDocument): string =>
+    externalizeSerializedBrowserMedia(serializeStateForStorage(state))
+        .serialized;
+
 export const timelineCarrierAdapter = {
     readToken: (): string => {
         ensureHydratedCarrier();
+        externalizeHostDataParam();
         return `${readStateToken()}\x00${readInheritedDimsSignature()}`;
     },
     readDataParam,
     parse,
     parseEmpty,
-    serialize: serializeStateForStorage,
+    serialize: serializeCarrierState,
     writeQuiet,
     writeDurable,
     notifyHost: notifyCarrierChanged,
@@ -238,6 +265,8 @@ export const resetTimelineCarrierAdapterForTests = (
     pendingHydratedPrompts = null;
     protectOverriddenBootCarrier = false;
     bootCarrierProtectionDeadline = 0;
+    externalizedCarrierValue = null;
+    resetBrowserMediaStoreForTests();
     if (clearDurable) {
         clearDurableAuthoringState();
     }

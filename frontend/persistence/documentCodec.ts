@@ -1,3 +1,5 @@
+import { visitAuthoringMedia } from "../authoringMedia";
+import { isBrowserMediaHandle } from "../browserMediaStore";
 import { sealSkipSuffix } from "../clipSemantics";
 import { ROOT_DIMENSION_MIN } from "../constants";
 import {
@@ -295,7 +297,11 @@ const isTransientBrowserMedia = (
     media: { data: string } | null | undefined,
 ): boolean => {
     const data = media?.data.trim().toLowerCase() ?? "";
-    return data.startsWith("data:") || data.startsWith("blob:");
+    return (
+        data.startsWith("data:") ||
+        data.startsWith("blob:") ||
+        isBrowserMediaHandle(data)
+    );
 };
 
 /** Durable storage excludes transient browser media payloads. */
@@ -306,39 +312,19 @@ export const serializeStateForDurableStorage = (
     const durable = structuredClone(state);
     for (const clip of durable.clips) {
         if (isTransientBrowserMedia(clip.uploadedAudio)) {
-            clip.uploadedAudio = null;
             clip.uploadedAudioDurationSeconds = 0;
             clip.uploadedAudioStartSeconds = 0;
             clip.uploadedAudioLengthSeconds = 0;
         }
+    }
+    visitAuthoringMedia(durable, (media, replace) => {
         if (
-            clip.initVideo &&
-            clip.initVideo.source !== MEDIA_SOURCE_PREVIOUS_CLIP &&
-            isTransientBrowserMedia({ data: clip.initVideo.data })
+            media.source !== MEDIA_SOURCE_PREVIOUS_CLIP &&
+            isTransientBrowserMedia(media)
         ) {
-            clip.initVideo = null;
+            replace(null);
         }
-        for (const ref of clip.frameRefs) {
-            if (isTransientBrowserMedia(ref.uploadedImage)) {
-                ref.uploadedImage = null;
-            }
-        }
-        for (const reference of clip.references) {
-            if (isTransientBrowserMedia(reference.uploadedMedia)) {
-                reference.uploadedMedia = null;
-            }
-        }
-        for (const icLora of clip.icLoras) {
-            if (isTransientBrowserMedia(icLora.driveMedia)) {
-                icLora.driveMedia = null;
-            }
-        }
-    }
-    for (const track of durable.audioTracks ?? []) {
-        if (isTransientBrowserMedia(track.source.uploadedAudio)) {
-            track.source.uploadedAudio = null;
-        }
-    }
+    });
     return serializeStateForStorage(durable);
 };
 

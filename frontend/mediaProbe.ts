@@ -1,3 +1,4 @@
+import { mediaPreviewSrc } from "./constants";
 import { MEDIA_SOURCE_UPLOAD } from "./generatedMediaSource";
 import { getVideoStagesHostBridge } from "./host";
 import type { InitVideo } from "./types";
@@ -106,7 +107,7 @@ const withProbedMedia = <T>(
             }
             onMetadata(video, durationSeconds, finish);
         });
-        video.src = src;
+        video.src = mediaPreviewSrc(src);
     });
 
 export const probeInitVideo = (
@@ -200,7 +201,6 @@ export const probeReferenceVideo = (
         },
     );
 
-/** Reads duration without playback. Returns 0 when unavailable. */
 export const probeMediaDurationSeconds = (
     src: string,
     timeoutMs = 8000,

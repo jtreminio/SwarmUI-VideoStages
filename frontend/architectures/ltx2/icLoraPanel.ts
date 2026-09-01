@@ -41,7 +41,11 @@ import {
     icLoraAutoHint,
 } from "./icLoraAutoDownload";
 import { canUseIncomingIcLoraDrive } from "./icLoraDriveAvailability";
-import { canonicalizeIcLoraFields, defaultIcLora } from "./icLoraNormalization";
+import {
+    canonicalizeIcLoraFields,
+    defaultIcLora,
+    isAcceptedIcLoraDriveMedia,
+} from "./icLoraNormalization";
 import {
     findIcLoraPreset,
     IC_LORA_AUTO,
@@ -274,8 +278,10 @@ export const buildIcLorasSection = (
                         const driveData = target.driveMedia?.data ?? "";
                         if (
                             driveData &&
-                            !target.driveMediaKinds.some((kind) =>
-                                driveData.startsWith(`data:${kind}/`),
+                            !isAcceptedIcLoraDriveMedia(
+                                driveData,
+                                target.driveMedia?.fileName ?? null,
+                                target.driveMediaKinds,
                             )
                         ) {
                             target.driveMedia = null;
@@ -538,8 +544,10 @@ export const buildIcLorasSection = (
                             const data = target.driveMedia?.data ?? "";
                             if (
                                 data &&
-                                !target.driveMediaKinds.some((kind) =>
-                                    data.startsWith(`data:${kind}/`),
+                                !isAcceptedIcLoraDriveMedia(
+                                    data,
+                                    target.driveMedia?.fileName ?? null,
+                                    target.driveMediaKinds,
                                 )
                             ) {
                                 target.driveMedia = null;

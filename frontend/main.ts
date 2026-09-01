@@ -1,5 +1,7 @@
 import { injectTimelineTab } from "./bottomTimelineTab";
+import { materializeGenerationMedia } from "./generationMedia";
 import { getVideoStagesHostBridge } from "./host";
+import { installHostGenerationInputProjector } from "./host/swarmUiAdapters";
 import { refineVideoButton } from "./refineVideoButton";
 import { DATA_INPUT_ID } from "./swarmInputs";
 import { videoStagesTimeline } from "./videoStagesTimeline";
@@ -58,6 +60,7 @@ const initTimeline = (): void => {
     }
     try {
         timeline.init();
+        installHostGenerationInputProjector(materializeGenerationMedia);
     } catch (error) {
         console.warn("VideoStages: failed to init timeline", error);
     }

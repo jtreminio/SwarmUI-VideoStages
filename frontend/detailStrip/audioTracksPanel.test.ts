@@ -212,7 +212,7 @@ describe("timeline-wide audio spans panel", () => {
 
         expect(state.audioTracks?.[0].source).toMatchObject({
             uploadedAudio: {
-                data: "data:audio/wav;base64,AA==",
+                data: expect.stringMatching(/^vst-browser-media:/),
                 fileName: "score.wav",
             },
             mediaDurationSeconds: 12.4,

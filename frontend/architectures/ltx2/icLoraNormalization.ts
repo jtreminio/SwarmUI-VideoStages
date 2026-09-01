@@ -1,3 +1,4 @@
+import { resolveBrowserMedia } from "../../browserMediaStore";
 import {
     CONTROLNET_SOURCE_OPTIONS,
     MEDIA_SOURCE_INCOMING,
@@ -110,6 +111,45 @@ const mediaKindsForData = (
 ): readonly IcLoraDriveMediaKind[] =>
     icLoraDriveMediaContractForData(driveData).acceptedKinds;
 
+const mediaKindByExtension: Readonly<Record<string, IcLoraDriveMediaKind>> = {
+    apng: "image",
+    avif: "image",
+    bmp: "image",
+    gif: "image",
+    jpeg: "image",
+    jpg: "image",
+    png: "image",
+    svg: "image",
+    webp: "image",
+    flac: "audio",
+    m4a: "audio",
+    mp3: "audio",
+    ogg: "audio",
+    wav: "audio",
+    weba: "audio",
+    avi: "video",
+    m4v: "video",
+    mkv: "video",
+    mov: "video",
+    mp4: "video",
+    webm: "video",
+};
+
+export const isAcceptedIcLoraDriveMedia = (
+    value: string,
+    fileName: string | null,
+    acceptedKinds: readonly IcLoraDriveMediaKind[],
+): boolean => {
+    const resolved = resolveBrowserMedia(value);
+    const dataKind = /^data:(image|video|audio)\//i.exec(resolved)?.[1] as
+        | IcLoraDriveMediaKind
+        | undefined;
+    const named = fileName || resolved.split(/[?#]/, 1)[0] || "";
+    const extension = named.slice(named.lastIndexOf(".") + 1).toLowerCase();
+    const kind = dataKind ?? mediaKindByExtension[extension] ?? null;
+    return kind !== null && acceptedKinds.includes(kind);
+};
+
 /** Preserves an explicit declarative contract while dropping incompatible kinds. */
 export const normalizeIcLoraDriveMediaKinds = (
     value: unknown,
@@ -179,8 +219,10 @@ export const normalizeIcLora = (
         driveSource === MEDIA_SOURCE_UPLOAD &&
         driveData !== "none" &&
         normalizedDriveMedia &&
-        driveMediaKinds.some((kind) =>
-            normalizedDriveMedia.data.startsWith(`data:${kind}/`),
+        isAcceptedIcLoraDriveMedia(
+            normalizedDriveMedia.data,
+            normalizedDriveMedia.fileName,
+            driveMediaKinds,
         )
             ? normalizedDriveMedia
             : null;
@@ -222,7 +264,6 @@ export const normalizeIcLora = (
     };
 };
 
-/** Reads the clip's canonical IC-LoRA list. */
 export const normalizeIcLoras = (
     rawClip: Record<string, unknown>,
     stageCount: number = 0,

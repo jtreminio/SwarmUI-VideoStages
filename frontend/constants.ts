@@ -1,4 +1,5 @@
 import type { GeneratedEntryMode } from "./architectures/generatedFeatures";
+import { resolveBrowserMedia } from "./browserMediaStore";
 import { getVideoStagesHostBridge } from "./host";
 
 /**
@@ -57,9 +58,10 @@ export const clamp = (value: number, min: number, max: number): number =>
     Math.min(Math.max(value, min), max);
 
 export const mediaPreviewSrc = (value: string): string => {
-    if (`${value ?? ""}`.startsWith("data:")) {
-        return value;
+    const resolved = resolveBrowserMedia(`${value ?? ""}`);
+    if (resolved.startsWith("data:") || resolved.startsWith("blob:")) {
+        return resolved;
     }
     const prefix = getVideoStagesHostBridge().getMediaOutputPrefix();
-    return `${prefix}/${value}`;
+    return `${prefix}/${resolved}`;
 };

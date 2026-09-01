@@ -347,12 +347,12 @@ describe("createTimelineDetailStrip", () => {
             {
                 source: "Upload",
                 fileName: "first.mp4",
-                data: expect.stringMatching(/^data:video\/mp4;base64,/),
+                data: expect.stringMatching(/^vst-browser-media:/),
             },
             {
                 source: "Upload",
                 fileName: "second.wav",
-                data: expect.stringMatching(/^data:audio\/wav;base64,/),
+                data: expect.stringMatching(/^vst-browser-media:/),
             },
         ]);
         expect(getSelection()).toEqual({

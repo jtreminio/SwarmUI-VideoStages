@@ -4,6 +4,8 @@
  * boundary explicit without coupling application modules to Swarm globals.
  */
 
+import { isRecord } from "../utils";
+
 export interface HostBottomTabMount {
     nav: HTMLElement;
     content: HTMLElement;
@@ -104,8 +106,72 @@ export const enhanceHostPromptEditor = (editor: HTMLElement): void => {
     }
 };
 
+type GenerationInputProjector = (input: Record<string, unknown>) => void;
+
+let generationInputProjector: GenerationInputProjector | null = null;
+let installedGenerationWrapper: ((...args: unknown[]) => void) | null = null;
+let generationProjectorRetry: ReturnType<typeof setTimeout> | null = null;
+
+const retryGenerationProjector = (): void => {
+    if (generationProjectorRetry !== null) {
+        return;
+    }
+    generationProjectorRetry = setTimeout(() => {
+        generationProjectorRetry = null;
+        if (generationInputProjector) {
+            installHostGenerationInputProjector(generationInputProjector);
+        }
+    }, 250);
+};
+
+export const installHostGenerationInputProjector = (
+    projector: GenerationInputProjector,
+): boolean => {
+    generationInputProjector = projector;
+    if (
+        typeof mainGenHandler === "undefined" ||
+        typeof mainGenHandler?.doGenerate !== "function"
+    ) {
+        retryGenerationProjector();
+        return false;
+    }
+    if (generationProjectorRetry !== null) {
+        clearTimeout(generationProjectorRetry);
+        generationProjectorRetry = null;
+    }
+    if (mainGenHandler.doGenerate === installedGenerationWrapper) {
+        return true;
+    }
+    const original = mainGenHandler.doGenerate;
+    const wrapper = function (this: unknown, ...args: unknown[]): void {
+        const existingPostCollect = args[2];
+        args[2] = (actualInput: unknown): void => {
+            try {
+                if (typeof existingPostCollect === "function") {
+                    existingPostCollect(actualInput);
+                }
+                if (isRecord(actualInput)) {
+                    generationInputProjector?.(actualInput);
+                }
+            } catch (error) {
+                if (typeof showError === "function") {
+                    showError(`${error}`);
+                }
+                throw error;
+            }
+        };
+        original.apply(this, args);
+    };
+    mainGenHandler.doGenerate = wrapper;
+    installedGenerationWrapper = wrapper;
+    return true;
+};
+
 export const hasHostInputBrowser = (): boolean =>
     typeof inputBrowserHelper !== "undefined" && Boolean(inputBrowserHelper);
+
+export const isHostReusableMediaPath = (value: string): boolean =>
+    typeof isValidMediaPath === "function" && isValidMediaPath(value);
 
 export const openHostInputBrowser = (
     inputId: string,

@@ -8,6 +8,10 @@ import {
 } from "@jest/globals";
 import { stubRect } from "./__test_helpers__/dom";
 import {
+    resetBrowserMediaStoreForTests,
+    resolveBrowserMedia,
+} from "./browserMediaStore";
+import {
     buildAccordionSection,
     buildCheckbox,
     buildField,
@@ -17,6 +21,8 @@ import {
     type RepeatingGroupItem,
     resetRememberedAccordionSections,
 } from "./detailWidgets";
+import { setVideoStagesHostBridgeForTests } from "./host";
+import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import { setTimelineAuthoringSetting } from "./timelineAuthoringSettings";
 
 type MutableGlobal = typeof globalThis & {
@@ -138,6 +144,8 @@ describe("buildField help popovers", () => {
 
 describe("buildMediaPickRow", () => {
     afterEach(() => {
+        resetBrowserMediaStoreForTests();
+        setVideoStagesHostBridgeForTests(null);
         // Restore whatever the jest setup seeded (site.js creates a real one).
         if (savedBrowser !== undefined) {
             glob.inputBrowserHelper = savedBrowser;
@@ -254,9 +262,43 @@ describe("buildMediaPickRow", () => {
 
         expect(event.defaultPrevented).toBe(true);
         expect(outerDrop).not.toHaveBeenCalled();
-        expect(result?.[0]).toMatch(/^data:video\/mp4;base64,/);
+        expect(result?.[0]).toMatch(/^vst-browser-media:/);
+        expect(resolveBrowserMedia(result?.[0] ?? "")).toMatch(
+            /^data:video\/mp4;base64,/,
+        );
         expect(result?.[1]).toBe("still.mp4");
         expect(onFile).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps an input-browser server path out of the browser media store", () => {
+        const onFile = jest.fn();
+        const toDataUrl = jest.fn(async () => "data:image/png;base64,WRONG");
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            toDataUrl,
+        });
+        const row = buildMediaPickRow(
+            "Image Upload",
+            "image/*",
+            ["image"],
+            null,
+            onFile,
+            () => {},
+        );
+        const input = row.querySelector<HTMLInputElement>('input[type="file"]');
+        if (!input) {
+            throw new Error("media input missing");
+        }
+        input.dataset.filedata = "inputs/references/subject.png";
+        input.dataset.filename = "subject.png";
+
+        input.dispatchEvent(new Event("change"));
+
+        expect(onFile).toHaveBeenCalledWith(
+            "inputs/references/subject.png",
+            "subject.png",
+        );
+        expect(toDataUrl).not.toHaveBeenCalled();
     });
 });
 

@@ -1,3 +1,4 @@
+import { storeBrowserMedia } from "./browserMediaStore";
 import { clamp } from "./constants";
 import { fileAsDataUri } from "./fileDataUri";
 import { hasDroppedFiles } from "./fileDrop";
@@ -5,6 +6,7 @@ import { getVideoStagesHostBridge } from "./host";
 import {
     enhanceHostPromptEditor,
     hasHostInputBrowser,
+    isHostReusableMediaPath,
     openHostInputBrowser,
     renderHostSlider,
     showHostPopover,
@@ -322,7 +324,7 @@ export const buildTextarea = (
 
 let mediaPickCounter = 0;
 
-/** Host server picks arrive through `dataset.filedata`; all picks become data URIs. */
+/** Host server picks arrive through `dataset.filedata`. */
 export const buildMediaPickRow = (
     label: string,
     accept: string,
@@ -372,7 +374,7 @@ export const buildMediaPickRow = (
     const acceptFile = (file: File): void => {
         void fileAsDataUri(file).then((data) => {
             if (data) {
-                onFile(data, file.name);
+                onFile(storeBrowserMedia(data), file.name);
             }
         });
     };
@@ -388,12 +390,16 @@ export const buildMediaPickRow = (
         }
         const pickedName = fileInput.dataset.filename ?? "server file";
         if (picked.startsWith("data:")) {
+            onFile(storeBrowserMedia(picked), pickedName);
+            return;
+        }
+        if (isHostReusableMediaPath(picked)) {
             onFile(picked, pickedName);
             return;
         }
         void getVideoStagesHostBridge()
             .toDataUrl(picked)
-            .then((data) => onFile(data, pickedName));
+            .then((data) => onFile(storeBrowserMedia(data), pickedName));
     });
     row.addEventListener("dragover", (event) => {
         if (!hasDroppedFiles(event.dataTransfer)) {

@@ -1,3 +1,4 @@
+import { storeBrowserMedia } from "./browserMediaStore";
 import { CLIP_REFERENCE_KIND_INFO } from "./clipReferenceAuthoring";
 import { fileAsDataUri } from "./fileDataUri";
 import { probeMediaDurationSeconds, probeReferenceVideo } from "./mediaProbe";
@@ -77,7 +78,10 @@ export const readDroppedReferenceMedia = async (
     if (!data) {
         return null;
     }
-    const uploadedMedia = { data, fileName: file.name };
+    const uploadedMedia = {
+        data: storeBrowserMedia(data),
+        fileName: file.name,
+    };
     if (hintedKind === "image") {
         return { kind: "image", uploadedMedia, mediaDurationSeconds: 0 };
     }

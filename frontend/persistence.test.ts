@@ -544,6 +544,14 @@ describe("persistence", () => {
                                 },
                             }),
                         ],
+                        references: [
+                            minimalClipReference({
+                                uploadedMedia: {
+                                    data: "data:image/png;base64,SEGMENT",
+                                    fileName: "segment.png",
+                                },
+                            }),
+                        ],
                         icLoras: [
                             {
                                 lora: "guide.safetensors",
@@ -592,6 +600,7 @@ describe("persistence", () => {
                         frame: number;
                         fromEnd: boolean;
                     }>;
+                    references: Array<{ uploadedMedia: unknown }>;
                     icLoras: Array<{
                         driveMedia: unknown;
                         lora: string;
@@ -618,6 +627,7 @@ describe("persistence", () => {
                         fromEnd: true,
                     },
                 ],
+                references: [{ uploadedMedia: null }],
                 icLoras: [
                     {
                         driveMedia: null,
@@ -669,6 +679,69 @@ describe("persistence", () => {
                 "a red fox",
                 "a bear",
             ]);
+        });
+
+        it("externalizes inline media when adopting a legacy carrier", () => {
+            mountVideoStagesData({
+                clips: [
+                    {
+                        duration: 4,
+                        references: [
+                            {
+                                kind: "image",
+                                source: "Upload",
+                                uploadedMedia: {
+                                    data: "data:image/png;base64,LEGACY_BYTES",
+                                    fileName: "legacy.png",
+                                },
+                            },
+                        ],
+                        stages: [{}],
+                    },
+                ],
+            });
+            getTimelineStore().invalidate();
+
+            const adopted = getState();
+
+            expect(dataInput().value).not.toContain("LEGACY_BYTES");
+            expect(adopted.clips[0].references[0].uploadedMedia?.data).toMatch(
+                /^vst-browser-media:/,
+            );
+        });
+
+        it("keeps duration edits independent of browser media byte size", () => {
+            const bytes = "X".repeat(1_000_000);
+            saveClips([
+                minimalClip({
+                    duration: 4,
+                    references: [
+                        minimalClipReference({
+                            uploadedMedia: {
+                                data: `data:image/png;base64,${bytes}A`,
+                                fileName: "first.png",
+                            },
+                        }),
+                        minimalClipReference({
+                            uploadedMedia: {
+                                data: `data:image/png;base64,${bytes}B`,
+                                fileName: "second.png",
+                            },
+                        }),
+                    ],
+                }),
+            ]);
+
+            expect(dataInput().value.length).toBeLessThan(10_000);
+            expect(dataInput().value).not.toContain(bytes);
+
+            const clips = getClips();
+            clips[0].duration = 5;
+            saveClips(clips);
+
+            expect(dataInput().value.length).toBeLessThan(10_000);
+            expect(dataInput().value).not.toContain(bytes);
+            expect(getClips()[0].duration).toBe(5);
         });
 
         it("captures host defaults once per parse and refreshes them on the next parse", () => {
@@ -745,7 +818,8 @@ describe("persistence", () => {
                 ],
             };
             saveState(state, { notifyDomChange: false });
-            expect(dataInput().value).toContain("REFRESHME");
+            expect(dataInput().value).not.toContain("REFRESHME");
+            expect(dataInput().value).toContain("vst-browser-media:");
 
             getTimelineStore().resetForTests();
             resetTimelineCarrierAdapterForTests(false);

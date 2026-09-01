@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@jest/globals";
+import { afterEach, describe, expect, it } from "@jest/globals";
 import {
     fakeArchitectureCatalog,
     testArchitectureCatalog,
@@ -10,6 +10,10 @@ import {
     normalizeIcLora,
     normalizeIcLoraDriveMediaKinds,
 } from "./architectures/ltx2/icLoraNormalization";
+import {
+    resetBrowserMediaStoreForTests,
+    storeBrowserMedia,
+} from "./browserMediaStore";
 import { clipReferenceTags } from "./clipReferenceAuthoring";
 import {
     MEDIA_SOURCE_BASE,
@@ -42,6 +46,8 @@ import {
 } from "./normalizationStage";
 import { framesForClip } from "./renderUtils";
 import type { RootDefaults } from "./types";
+
+afterEach(resetBrowserMediaStoreForTests);
 
 const moduleRootDefaults = (): RootDefaults => ({
     modelCatalog: testArchitectureCatalog(),
@@ -542,6 +548,33 @@ describe("normalization", () => {
                 },
             })?.driveMedia,
         ).toBeNull();
+    });
+
+    it("keeps compatible browser-local and server-path IC-LoRA media", () => {
+        const handle = storeBrowserMedia("data:audio/wav;base64,QUJD");
+
+        expect(
+            normalizeIcLora({
+                lora: "lipdub.safetensors",
+                preset: "lipdub",
+                driveData: "audio",
+                driveMedia: { data: handle, fileName: "voice.wav" },
+            })?.driveMedia,
+        ).toEqual({ data: handle, fileName: "voice.wav" });
+        expect(
+            normalizeIcLora({
+                lora: "guide.safetensors",
+                driveData: "visual",
+                driveMediaKinds: ["video"],
+                driveMedia: {
+                    data: "raw/guide.mp4?preview=1",
+                    fileName: "guide.mp4",
+                },
+            })?.driveMedia,
+        ).toEqual({
+            data: "raw/guide.mp4?preview=1",
+            fileName: "guide.mp4",
+        });
     });
 
     it("preserves a normalized IC-LoRA identity", () => {

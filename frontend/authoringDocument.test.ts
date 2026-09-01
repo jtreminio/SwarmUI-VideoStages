@@ -13,6 +13,7 @@ import {
 } from "./__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
 import { defaultIcLora } from "./architectures/ltx2/icLoraNormalization";
+import { isBrowserMediaHandle, resolveBrowserMedia } from "./browserMediaStore";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import {
@@ -477,7 +478,21 @@ describe("versioned authoring document identity", () => {
         const serialized = serializeStateForStorage(state);
         mountVideoStagesData(serialized);
         __resetPersistenceForTests();
-        expect(getState().audioTracks).toEqual(state.audioTracks);
+        const reloaded = getState().audioTracks?.[0];
+        const data = reloaded?.source.uploadedAudio?.data ?? "";
+
+        expect(reloaded).toEqual({
+            ...state.audioTracks?.[0],
+            source: {
+                ...state.audioTracks?.[0]?.source,
+                uploadedAudio: {
+                    data: expect.stringMatching(/^vst-browser-media:/),
+                    fileName: "voice.wav",
+                },
+            },
+        });
+        expect(isBrowserMediaHandle(data)).toBe(true);
+        expect(resolveBrowserMedia(data)).toBe("data:audio/wav;base64,AAAA");
     });
 
     it("round-trips a multi-clip root audio span with an optional timeline window", () => {

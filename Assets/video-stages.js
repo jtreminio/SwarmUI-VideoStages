@@ -1,5 +1,25 @@
 "use strict";
 (() => {
+  // frontend/utils.ts
+  var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+  var toNumber = (value, fallback) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  var roundToTenth = (seconds2) => Math.round(seconds2 * 10) / 10;
+  var gridCeil = (seconds2) => Math.ceil(seconds2 * 10) / 10;
+  var gridFloor = (seconds2) => Math.floor(seconds2 * 10) / 10;
+  var safeJsonParse = (raw, fallback) => {
+    if (raw == null) {
+      return fallback;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return fallback;
+    }
+  };
+
   // frontend/host/swarmUiAdapters.ts
   var findHostBottomTabLink = (tabId) => document.querySelector(`a[href="#${tabId}"]`);
   var getHostBottomTabMount = () => {
@@ -68,7 +88,59 @@
       textPromptAddKeydownHandler(editor);
     }
   };
+  var generationInputProjector = null;
+  var installedGenerationWrapper = null;
+  var generationProjectorRetry = null;
+  var retryGenerationProjector = () => {
+    if (generationProjectorRetry !== null) {
+      return;
+    }
+    generationProjectorRetry = setTimeout(() => {
+      generationProjectorRetry = null;
+      if (generationInputProjector) {
+        installHostGenerationInputProjector(generationInputProjector);
+      }
+    }, 250);
+  };
+  var installHostGenerationInputProjector = (projector) => {
+    generationInputProjector = projector;
+    if (typeof mainGenHandler === "undefined" || typeof mainGenHandler?.doGenerate !== "function") {
+      retryGenerationProjector();
+      return false;
+    }
+    if (generationProjectorRetry !== null) {
+      clearTimeout(generationProjectorRetry);
+      generationProjectorRetry = null;
+    }
+    if (mainGenHandler.doGenerate === installedGenerationWrapper) {
+      return true;
+    }
+    const original = mainGenHandler.doGenerate;
+    const wrapper = function(...args) {
+      const existingPostCollect = args[2];
+      args[2] = (actualInput) => {
+        try {
+          if (typeof existingPostCollect === "function") {
+            existingPostCollect(actualInput);
+          }
+          if (isRecord(actualInput)) {
+            generationInputProjector?.(actualInput);
+          }
+        } catch (error) {
+          if (typeof showError === "function") {
+            showError(`${error}`);
+          }
+          throw error;
+        }
+      };
+      original.apply(this, args);
+    };
+    mainGenHandler.doGenerate = wrapper;
+    installedGenerationWrapper = wrapper;
+    return true;
+  };
   var hasHostInputBrowser = () => typeof inputBrowserHelper !== "undefined" && Boolean(inputBrowserHelper);
+  var isHostReusableMediaPath = (value) => typeof isValidMediaPath === "function" && isValidMediaPath(value);
   var openHostInputBrowser = (inputId, browserTypes) => {
     if (typeof inputBrowserHelper !== "undefined" && inputBrowserHelper) {
       inputBrowserHelper.openInputBrowser(inputId, browserTypes);
@@ -145,23 +217,123 @@
     return body;
   };
 
-  // frontend/utils.ts
-  var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-  var toNumber = (value, fallback) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
+  // frontend/authoringMedia.ts
+  var visitAuthoringMedia = (root, visitor) => {
+    const visit = (value, replace) => {
+      if (Array.isArray(value)) {
+        value.forEach((entry, index) => {
+          visit(entry, (next) => {
+            value[index] = next;
+          });
+        });
+        return;
+      }
+      if (!isRecord(value)) {
+        return;
+      }
+      let current = value;
+      if (typeof value.data === "string") {
+        visitor(value, (next) => {
+          current = next;
+          replace(next);
+        });
+      }
+      if (!isRecord(current)) {
+        return;
+      }
+      const record = current;
+      for (const key of Object.keys(record)) {
+        visit(record[key], (next) => {
+          record[key] = next;
+        });
+      }
+    };
+    visit(root, () => {
+    });
   };
-  var roundToTenth = (seconds2) => Math.round(seconds2 * 10) / 10;
-  var gridCeil = (seconds2) => Math.ceil(seconds2 * 10) / 10;
-  var gridFloor = (seconds2) => Math.floor(seconds2 * 10) / 10;
-  var safeJsonParse = (raw, fallback) => {
-    if (raw == null) {
-      return fallback;
+
+  // frontend/browserMediaStore.ts
+  var HANDLE_PREFIX = "vst-browser-media:";
+  var assets = /* @__PURE__ */ new Map();
+  var handlesByData = /* @__PURE__ */ new Map();
+  var nextHandle = 0;
+  var createHandle = () => {
+    const randomId = globalThis.crypto?.randomUUID?.();
+    return `${HANDLE_PREFIX}${randomId ?? ++nextHandle}`;
+  };
+  var isBrowserMediaHandle = (value) => value.startsWith(HANDLE_PREFIX);
+  var containsBrowserMediaHandle = (value) => value.includes(HANDLE_PREFIX);
+  var storeBrowserMedia = (data) => {
+    if (!data.startsWith("data:")) {
+      return data;
     }
+    const existing = handlesByData.get(data);
+    if (existing) {
+      return existing;
+    }
+    const handle = createHandle();
+    assets.set(handle, data);
+    handlesByData.set(data, handle);
+    return handle;
+  };
+  var resolveBrowserMedia = (value) => assets.get(value) ?? value;
+  var transformSerializedMedia = (serialized, transform) => {
+    let parsed;
     try {
-      return JSON.parse(raw);
+      parsed = JSON.parse(serialized);
     } catch {
-      return fallback;
+      return { serialized, changed: false, missing: [] };
+    }
+    let changed = false;
+    const missing = [];
+    visitAuthoringMedia(parsed, (media) => {
+      if (!media.data) {
+        return;
+      }
+      const fileName = typeof media.fileName === "string" ? media.fileName : null;
+      const result = transform(media.data, fileName);
+      if (result.missing) {
+        missing.push(fileName ?? "unnamed media");
+      }
+      if (result.data !== media.data) {
+        media.data = result.data;
+        changed = true;
+      }
+    });
+    return {
+      serialized: changed ? JSON.stringify(parsed) : serialized,
+      changed,
+      missing
+    };
+  };
+  var externalizeSerializedBrowserMedia = (serialized) => transformSerializedMedia(serialized, (data) => ({
+    data: storeBrowserMedia(data)
+  }));
+  var materializeSerializedBrowserMedia = (serialized) => transformSerializedMedia(serialized, (data) => {
+    if (!isBrowserMediaHandle(data)) {
+      return { data };
+    }
+    const materialized = assets.get(data);
+    return materialized ? { data: materialized } : { data: "", missing: true };
+  });
+
+  // frontend/generationMedia.ts
+  var materializeGenerationMedia = (input2) => {
+    const serialized = input2.videostages;
+    if (typeof serialized !== "string" || !containsBrowserMediaHandle(serialized)) {
+      return;
+    }
+    const materialized = materializeSerializedBrowserMedia(serialized);
+    if (materialized.missing.length > 0) {
+      throw new Error(
+        `Reselect browser-local VideoStages media: ${materialized.missing.join(", ")}.`
+      );
+    }
+    input2.videostages = materialized.serialized;
+  };
+  var materializeGenerationMediaValue = (input2) => {
+    if (isRecord(input2)) {
+      materializeGenerationMedia(input2);
     }
   };
 
@@ -266,6 +438,7 @@
     }
     const { extra_metadata: requestedExtraMetadata, ...generationOverrides } = inputOverrides;
     const actualInput = mainGenHandler.getGenInput(generationOverrides, {});
+    materializeGenerationMediaValue(actualInput);
     if (isRecord(requestedExtraMetadata)) {
       actualInput.extra_metadata = {
         ...isRecord(actualInput.extra_metadata) ? actualInput.extra_metadata : {},
@@ -419,13 +592,18 @@
           ...generationOverrides
         } = inputOverrides;
         if (!isRecord(requestedExtraMetadata)) {
-          mainGenHandler.doGenerate(generationOverrides, {});
+          mainGenHandler.doGenerate(
+            generationOverrides,
+            {},
+            materializeGenerationMediaValue
+          );
           return;
         }
         mainGenHandler.doGenerate(
           generationOverrides,
           {},
           (actualInput) => {
+            materializeGenerationMediaValue(actualInput);
             if (!isRecord(actualInput)) {
               return;
             }
@@ -1682,11 +1860,12 @@
   };
   var clamp = (value, min, max) => Math.min(Math.max(value, min), max);
   var mediaPreviewSrc = (value) => {
-    if (`${value ?? ""}`.startsWith("data:")) {
-      return value;
+    const resolved = resolveBrowserMedia(`${value ?? ""}`);
+    if (resolved.startsWith("data:") || resolved.startsWith("blob:")) {
+      return resolved;
     }
     const prefix = getVideoStagesHostBridge().getMediaOutputPrefix();
-    return `${prefix}/${value}`;
+    return `${prefix}/${resolved}`;
   };
 
   // frontend/dimensionSnap.ts
@@ -2452,7 +2631,7 @@
       }
       onMetadata(video, durationSeconds, finish2);
     });
-    video.src = src;
+    video.src = mediaPreviewSrc(src);
   });
   var probeInitVideo = (src, timeoutMs = 8e3) => withProbedMedia(
     src,
@@ -3509,6 +3688,37 @@
     return compact === "none" || compact === "audio" ? compact : "visual";
   };
   var mediaKindsForData = (driveData) => icLoraDriveMediaContractForData(driveData).acceptedKinds;
+  var mediaKindByExtension = {
+    apng: "image",
+    avif: "image",
+    bmp: "image",
+    gif: "image",
+    jpeg: "image",
+    jpg: "image",
+    png: "image",
+    svg: "image",
+    webp: "image",
+    flac: "audio",
+    m4a: "audio",
+    mp3: "audio",
+    ogg: "audio",
+    wav: "audio",
+    weba: "audio",
+    avi: "video",
+    m4v: "video",
+    mkv: "video",
+    mov: "video",
+    mp4: "video",
+    webm: "video"
+  };
+  var isAcceptedIcLoraDriveMedia = (value, fileName, acceptedKinds) => {
+    const resolved = resolveBrowserMedia(value);
+    const dataKind = /^data:(image|video|audio)\//i.exec(resolved)?.[1];
+    const named = fileName || resolved.split(/[?#]/, 1)[0] || "";
+    const extension = named.slice(named.lastIndexOf(".") + 1).toLowerCase();
+    const kind = dataKind ?? mediaKindByExtension[extension] ?? null;
+    return kind !== null && acceptedKinds.includes(kind);
+  };
   var normalizeIcLoraDriveMediaKinds = (value, driveData) => {
     const allowed = mediaKindsForData(driveData);
     if (!Array.isArray(value)) {
@@ -3552,8 +3762,10 @@
     );
     const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
     let driveSource = normalizeIcLoraDriveSource(raw.driveSource);
-    const driveMedia = driveSource === MEDIA_SOURCE_UPLOAD && driveData !== "none" && normalizedDriveMedia && driveMediaKinds.some(
-      (kind) => normalizedDriveMedia.data.startsWith(`data:${kind}/`)
+    const driveMedia = driveSource === MEDIA_SOURCE_UPLOAD && driveData !== "none" && normalizedDriveMedia && isAcceptedIcLoraDriveMedia(
+      normalizedDriveMedia.data,
+      normalizedDriveMedia.fileName,
+      driveMediaKinds
     ) ? normalizedDriveMedia : null;
     const stage = normalizeIcLoraStage(raw.stage, stageCount);
     if (driveData === "none") {
@@ -4554,42 +4766,23 @@
   };
   var isTransientBrowserMedia = (media) => {
     const data = media?.data.trim().toLowerCase() ?? "";
-    return data.startsWith("data:") || data.startsWith("blob:");
+    return data.startsWith("data:") || data.startsWith("blob:") || isBrowserMediaHandle(data);
   };
   var serializeStateForDurableStorage = (state) => {
     ensureAuthoringDocumentIdentity(state);
     const durable = structuredClone(state);
     for (const clip of durable.clips) {
       if (isTransientBrowserMedia(clip.uploadedAudio)) {
-        clip.uploadedAudio = null;
         clip.uploadedAudioDurationSeconds = 0;
         clip.uploadedAudioStartSeconds = 0;
         clip.uploadedAudioLengthSeconds = 0;
       }
-      if (clip.initVideo && clip.initVideo.source !== MEDIA_SOURCE_PREVIOUS_CLIP && isTransientBrowserMedia({ data: clip.initVideo.data })) {
-        clip.initVideo = null;
-      }
-      for (const ref of clip.frameRefs) {
-        if (isTransientBrowserMedia(ref.uploadedImage)) {
-          ref.uploadedImage = null;
-        }
-      }
-      for (const reference of clip.references) {
-        if (isTransientBrowserMedia(reference.uploadedMedia)) {
-          reference.uploadedMedia = null;
-        }
-      }
-      for (const icLora of clip.icLoras) {
-        if (isTransientBrowserMedia(icLora.driveMedia)) {
-          icLora.driveMedia = null;
-        }
-      }
     }
-    for (const track of durable.audioTracks ?? []) {
-      if (isTransientBrowserMedia(track.source.uploadedAudio)) {
-        track.source.uploadedAudio = null;
+    visitAuthoringMedia(durable, (media, replace) => {
+      if (media.source !== MEDIA_SOURCE_PREVIOUS_CLIP && isTransientBrowserMedia(media)) {
+        replace(null);
       }
-    }
+    });
     return serializeStateForStorage(durable);
   };
   var hasArrayOfRecords = (owner, key) => {
@@ -6396,6 +6589,7 @@
   var pendingHydratedPrompts = null;
   var protectOverriddenBootCarrier = false;
   var bootCarrierProtectionDeadline = 0;
+  var externalizedCarrierValue = null;
   var overlayPromptAndUiState = (clips) => {
     ensureClipEntityIdentities(clips);
     const { sections, windows } = parseClipPrompts(
@@ -6475,6 +6669,21 @@
     protectOverriddenBootCarrier = false;
     bootCarrierProtectionDeadline = 0;
   };
+  var externalizeHostDataParam = () => {
+    const serialized = readDataParam();
+    if (!serialized) {
+      return serialized;
+    }
+    if (serialized === externalizedCarrierValue) {
+      return serialized;
+    }
+    const externalized = externalizeSerializedBrowserMedia(serialized);
+    if (externalized.changed) {
+      writeDataParam(externalized.serialized);
+    }
+    externalizedCarrierValue = externalized.serialized;
+    return externalized.serialized;
+  };
   var ensureHydratedCarrier = () => {
     const dataInput = getDataInput();
     if (!dataInput) {
@@ -6505,7 +6714,7 @@
     if (durable) {
       clearDurableAuthoringState();
     }
-    const existing = readDataParam();
+    const existing = externalizeHostDataParam();
     if (!existing) {
       return;
     }
@@ -6516,12 +6725,13 @@
   };
   var readDataParam2 = () => {
     ensureHydratedCarrier();
-    return readDataParam();
+    return externalizeHostDataParam();
   };
   var writeQuiet = (state, serialized) => {
     releaseBootCarrierProtection();
     ensureAuthoringDocumentIdentity(state);
     assignMissingHues(state.clips);
+    externalizedCarrierValue = serialized;
     writeDataParam(serialized);
     writeClipPrompts(
       state.clips.map((clip) => ({
@@ -6532,15 +6742,17 @@
     saveUiState(state.clips);
     writeDurable(state);
   };
+  var serializeCarrierState = (state) => externalizeSerializedBrowserMedia(serializeStateForStorage(state)).serialized;
   var timelineCarrierAdapter = {
     readToken: () => {
       ensureHydratedCarrier();
+      externalizeHostDataParam();
       return `${readStateToken()}\0${readInheritedDimsSignature()}`;
     },
     readDataParam: readDataParam2,
     parse,
     parseEmpty,
-    serialize: serializeStateForStorage,
+    serialize: serializeCarrierState,
     writeQuiet,
     writeDurable,
     notifyHost: notifyCarrierChanged
@@ -9237,7 +9449,7 @@
     const acceptFile = (file) => {
       void fileAsDataUri(file).then((data) => {
         if (data) {
-          onFile(data, file.name);
+          onFile(storeBrowserMedia(data), file.name);
         }
       });
     };
@@ -9253,10 +9465,14 @@
       }
       const pickedName = fileInput.dataset.filename ?? "server file";
       if (picked.startsWith("data:")) {
+        onFile(storeBrowserMedia(picked), pickedName);
+        return;
+      }
+      if (isHostReusableMediaPath(picked)) {
         onFile(picked, pickedName);
         return;
       }
-      void getVideoStagesHostBridge().toDataUrl(picked).then((data) => onFile(data, pickedName));
+      void getVideoStagesHostBridge().toDataUrl(picked).then((data) => onFile(storeBrowserMedia(data), pickedName));
     });
     row.addEventListener("dragover", (event) => {
       if (!hasDroppedFiles(event.dataTransfer)) {
@@ -12633,8 +12849,10 @@ ${slot}`;
                 target.controlType = "none";
               }
               const driveData = target.driveMedia?.data ?? "";
-              if (driveData && !target.driveMediaKinds.some(
-                (kind) => driveData.startsWith(`data:${kind}/`)
+              if (driveData && !isAcceptedIcLoraDriveMedia(
+                driveData,
+                target.driveMedia?.fileName ?? null,
+                target.driveMediaKinds
               )) {
                 target.driveMedia = null;
               }
@@ -12859,8 +13077,10 @@ ${slot}`;
                   return;
                 }
                 const data = target.driveMedia?.data ?? "";
-                if (data && !target.driveMediaKinds.some(
-                  (kind) => data.startsWith(`data:${kind}/`)
+                if (data && !isAcceptedIcLoraDriveMedia(
+                  data,
+                  target.driveMedia?.fileName ?? null,
+                  target.driveMediaKinds
                 )) {
                   target.driveMedia = null;
                 }
@@ -17118,7 +17338,10 @@ ${slot}`;
     if (!data) {
       return null;
     }
-    const uploadedMedia = { data, fileName: file.name };
+    const uploadedMedia = {
+      data: storeBrowserMedia(data),
+      fileName: file.name
+    };
     if (hintedKind === "image") {
       return { kind: "image", uploadedMedia, mediaDurationSeconds: 0 };
     }
@@ -17295,7 +17518,10 @@ ${slot}`;
           const uploads = await Promise.all(
             files.map(async (file) => {
               const data = await fileAsDataUri(file);
-              return data ? { data, fileName: file.name } : null;
+              return data ? {
+                data: storeBrowserMedia(data),
+                fileName: file.name
+              } : null;
             })
           );
           const added = selectionOperations.addRefEntries(
@@ -19633,6 +19859,7 @@ ${slot}`;
     }
     try {
       timeline.init();
+      installHostGenerationInputProjector(materializeGenerationMedia);
     } catch (error) {
       console.warn("VideoStages: failed to init timeline", error);
     }

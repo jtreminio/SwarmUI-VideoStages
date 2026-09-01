@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
 import { buildArchitectureModelCatalog } from "../architectures/catalog";
 import { buildAudioSourceOptions } from "../audioSource";
+import {
+    resetBrowserMediaStoreForTests,
+    storeBrowserMedia,
+} from "../browserMediaStore";
 import { mediaPreviewSrc } from "../constants";
+import { materializeGenerationMedia } from "../generationMedia";
 import {
     getDataInput,
     getPromptInput,
@@ -14,8 +19,11 @@ import {
     setVideoStagesHostBridgeForTests,
     type VideoStagesHostBridge,
 } from "./index";
+import { installHostGenerationInputProjector } from "./swarmUiAdapters";
 
 afterEach(() => {
+    jest.useRealTimers();
+    resetBrowserMediaStoreForTests();
     setVideoStagesHostBridgeForTests(null);
     const globals = globalThis as typeof globalThis & {
         copyText?: unknown;
@@ -153,6 +161,172 @@ describe("VideoStagesHostBridge compatibility facades", () => {
             original_prompt: "<wildcard:animal>",
             used_wildcards: ["animal"],
         });
+    });
+
+    it("materializes media on the bridge's direct Generate route", () => {
+        const payload = "data:image/png;base64,DIRECT_BRIDGE";
+        const handle = storeBrowserMedia(payload);
+        const carrier = JSON.stringify({
+            clips: [{ initVideo: { data: handle, fileName: "direct.mp4" } }],
+        });
+        const sent: Record<string, unknown>[] = [];
+        const handler = {
+            doGenerate: (
+                overrides: Record<string, unknown>,
+                _preOverrides: Record<string, unknown>,
+                postCollect?: (input: Record<string, unknown>) => void,
+            ): void => {
+                const input = { ...overrides };
+                postCollect?.(input);
+                sent.push(input);
+            },
+        };
+        const globals = globalThis as typeof globalThis & {
+            mainGenHandler?: typeof handler;
+        };
+        globals.mainGenHandler = handler;
+
+        createDefaultVideoStagesHostBridge().generate({
+            videostages: carrier,
+        });
+
+        expect(`${sent[0].videostages}`).toContain("DIRECT_BRIDGE");
+        expect(carrier).toContain(handle);
+        expect(carrier).not.toContain("DIRECT_BRIDGE");
+    });
+
+    it("materializes browser media only in the outbound Generate input", () => {
+        const payload = "data:image/png;base64,GENERATE_ONLY";
+        const handle = storeBrowserMedia(payload);
+        const carrier = JSON.stringify({
+            clips: [
+                {
+                    keyframes: [
+                        {
+                            uploadedImage: {
+                                data: handle,
+                                fileName: "reference.png",
+                            },
+                        },
+                    ],
+                },
+            ],
+        });
+        const sent: Record<string, unknown>[] = [];
+        const handler = {
+            getGenInput: () => ({ videostages: carrier }),
+            doGenerate: (
+                _overrides: Record<string, unknown> = {},
+                _preOverrides: Record<string, unknown> = {},
+                postCollect?: (input: Record<string, unknown>) => void,
+            ): void => {
+                const actualInput = { videostages: carrier };
+                postCollect?.(actualInput);
+                sent.push(actualInput);
+            },
+        };
+        const globals = globalThis as typeof globalThis & {
+            mainGenHandler?: typeof handler;
+        };
+        globals.mainGenHandler = handler;
+        installHostGenerationInputProjector(materializeGenerationMedia);
+
+        handler.doGenerate();
+
+        expect(`${sent[0].videostages}`).toContain("GENERATE_ONLY");
+        expect(carrier).not.toContain("GENERATE_ONLY");
+        expect(carrier).toContain(handle);
+    });
+
+    it("retries a late host handler and rewraps a replaced Generate function", () => {
+        jest.useFakeTimers();
+        const globals = globalThis as typeof globalThis & {
+            mainGenHandler?: {
+                doGenerate: (...args: unknown[]) => void;
+            };
+        };
+        delete globals.mainGenHandler;
+        expect(
+            installHostGenerationInputProjector(materializeGenerationMedia),
+        ).toBe(false);
+
+        const payload = "data:image/png;base64,LATE_HANDLER";
+        const handle = storeBrowserMedia(payload);
+        const carrier = JSON.stringify({
+            clips: [{ initVideo: { data: handle, fileName: "late.mp4" } }],
+        });
+        const sent: Record<string, unknown>[] = [];
+        const send = (...args: unknown[]): void => {
+            const input = { videostages: carrier };
+            const postCollect = args[2];
+            if (typeof postCollect === "function") {
+                postCollect(input);
+            }
+            sent.push(input);
+        };
+        globals.mainGenHandler = { doGenerate: send };
+
+        jest.runOnlyPendingTimers();
+        expect(globals.mainGenHandler.doGenerate).not.toBe(send);
+
+        const replacement = (...args: unknown[]): void => send(...args);
+        globals.mainGenHandler.doGenerate = replacement;
+        expect(
+            installHostGenerationInputProjector(materializeGenerationMedia),
+        ).toBe(true);
+        expect(globals.mainGenHandler.doGenerate).not.toBe(replacement);
+
+        globals.mainGenHandler.doGenerate();
+
+        expect(`${sent[0].videostages}`).toContain("LATE_HANDLER");
+    });
+
+    it("shows an error and aborts Generate when browser media is gone", () => {
+        const handle = storeBrowserMedia(
+            "data:image/png;base64,MISSING_AT_GENERATE",
+        );
+        const carrier = JSON.stringify({
+            clips: [
+                {
+                    references: [
+                        {
+                            uploadedMedia: {
+                                data: handle,
+                                fileName: "missing.png",
+                            },
+                        },
+                    ],
+                },
+            ],
+        });
+        resetBrowserMediaStoreForTests();
+        const sent: Record<string, unknown>[] = [];
+        const handler = {
+            doGenerate: (...args: unknown[]): void => {
+                const input = { videostages: carrier };
+                const postCollect = args[2];
+                if (typeof postCollect === "function") {
+                    postCollect(input);
+                }
+                sent.push(input);
+            },
+        };
+        const showError = jest.fn();
+        const globals = globalThis as typeof globalThis & {
+            mainGenHandler?: typeof handler;
+            showError?: typeof showError;
+        };
+        globals.mainGenHandler = handler;
+        globals.showError = showError;
+        installHostGenerationInputProjector(materializeGenerationMedia);
+
+        expect(() => handler.doGenerate()).toThrow(
+            "Reselect browser-local VideoStages media: missing.png.",
+        );
+        expect(sent).toEqual([]);
+        expect(showError).toHaveBeenCalledWith(
+            expect.stringContaining("missing.png"),
+        );
     });
 
     it("reads the selected Generate-tab video source", () => {
