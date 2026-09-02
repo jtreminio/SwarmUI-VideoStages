@@ -7,6 +7,10 @@ import {
     buildOptionSelect,
 } from "../../detailWidgets";
 import {
+    MEDIA_SOURCE_PREVIOUS_CLIP,
+    MEDIA_SOURCE_UPLOAD,
+} from "../../generatedMediaSource";
+import {
     MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
     MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
     MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP,
@@ -109,16 +113,23 @@ export const appendCharacterRefineSection = (
         commit,
         slider,
     } = bindings;
+    const sourceVideo = clip.initVideo;
+    const sourceVideoKind = sourceVideo?.source ?? MEDIA_SOURCE_UPLOAD;
+    const hasDecodedVideo =
+        stageIdx > 0 ||
+        (sourceVideo !== null &&
+            (sourceVideoKind === MEDIA_SOURCE_UPLOAD ||
+                sourceVideoKind === MEDIA_SOURCE_PREVIOUS_CLIP));
     if (
         context.authoring().capabilities.forClip(clip).architectureId !==
             "minimax" ||
         !getVideoStagesHostBridge().hasBackendFeature(
             MINIMAX_CHARACTER_REFINE_FEATURE,
-        )
+        ) ||
+        !hasDecodedVideo
     ) {
         return;
     }
-    const decodedInput = stageIdx > 0 || clip.initVideo !== null;
     const imageReferences = clip.references.filter(
         (reference) =>
             reference.kind === "image" &&
@@ -129,9 +140,6 @@ export const appendCharacterRefineSection = (
     fields.className = "vst-detail-fields vst-character-refine-fields";
     const appendGroup = (): void => {
         const enabled = stage.characterRefine !== null;
-        const help = !decodedInput
-            ? "Add a source video or use this on a later stage."
-            : "Repair a person or character in this stage.";
         const built = buildAccordionSection({
             key: `bonita-${clip.id ?? clipIdx}-${stage.id ?? stageIdx}`,
             label: "Make Them Bonita",
@@ -141,7 +149,6 @@ export const appendCharacterRefineSection = (
             className: "vst-character-refine-section vst-detail-span-full",
             toggle: {
                 checked: enabled,
-                disabled: !decodedInput,
                 title: enabled
                     ? "Turn off Make Them Bonita"
                     : "Turn on Make Them Bonita",
@@ -160,7 +167,13 @@ export const appendCharacterRefineSection = (
                 },
             },
         });
-        appendHelp(built.heading, built.section, "Make Them Bonita", help);
+        built.section.hidden = stage.upscale !== 1;
+        appendHelp(
+            built.heading,
+            built.section,
+            "Make Them Bonita",
+            "Repair a person or character in this stage.",
+        );
         stageFields.appendChild(built.section);
     };
     if (!stage.characterRefine) {

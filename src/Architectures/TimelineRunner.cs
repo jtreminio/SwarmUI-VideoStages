@@ -1,6 +1,7 @@
 using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Core;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution.Audio;
@@ -68,9 +69,6 @@ internal sealed class TimelineRunner
         _rootOwner = binding.RootOwnerArchitectureId;
     }
 
-    /// <summary>
-    /// Runs request preflight before any VideoStages workflow phase mutates the host graph.
-    /// </summary>
     internal IReadOnlyList<PlanDiagnostic> CollectPreflightDiagnostics()
     {
         UploadedMediaPreflight media = new(_generator.UserInput);
@@ -236,9 +234,7 @@ internal sealed class TimelineRunner
         }
         finalArtifact.PublishTo(_generator);
         rootSession.PublishTimeline(finalArtifact);
-        // Recorded, not acted on. Adoption is meant to leave this empty; a non-empty set says the
-        // timeline built beside one of the host's nodes rather than on it, which is a regression
-        // nothing else in the graph would show — the shipped workflow looks the same either way.
+        // A non-empty set means the timeline built beside the host root instead of adopting it.
         VideoGraphHelpers.CacheRemovalRecord(
             _generator,
             Constants.SweptHostRootNodesKey,
@@ -254,30 +250,140 @@ internal sealed class TimelineRunner
         {
             return output;
         }
+        if (!_generator.UserInput.TryGet(
+                ComfyUIBackendExtension.SeedVRModel,
+                out T2IModel seedVrModel)
+            || seedVrModel is null)
+        {
+            return output;
+        }
         _generator.CurrentMedia = output.ToHostMedia(_generator);
-        _generator.RunSeedVR2Stage(_generator.CurrentVae);
+        WGNodeData vae = _generator.CurrentVae;
+        _generator.SaveOptionalIntermediate();
+        long seed = _generator.UserInput.Get(T2IParamTypes.Seed) + 500;
+        WGNodeData media = _generator.CurrentMedia;
+        double scale = _generator.UserInput.Get(
+            ComfyUIBackendExtension.SeedVRUpscale,
+            1);
+        double downscale = _generator.UserInput.Get(
+            ComfyUIBackendExtension.SeedVRPreDownscale,
+            1);
+        if (downscale <= 0)
+        {
+            throw new SwarmReadableErrorException(
+                $"Invalid SeedVR pre-downscale value {downscale}. Must be greater than 0.");
+        }
+        if (downscale < 1)
+        {
+            media = media.AsRawImage(vae);
+            int width = (int)Math.Round(
+                (media.Width ?? _generator.UserInput.GetImageWidth()) * downscale);
+            int height = (int)Math.Round(
+                (media.Height ?? _generator.UserInput.GetImageHeight()) * downscale);
+            string scaled = _generator.CreateNode("ImageScale", new JObject()
+            {
+                ["image"] = media.Path,
+                ["width"] = width,
+                ["height"] = height,
+                ["upscale_method"] = "bilinear",
+                ["crop"] = "disabled",
+            });
+            media = media.WithPath([scaled, 0]);
+            media.Width = width;
+            media.Height = height;
+            scale /= downscale;
+        }
+        if (scale != 1)
+        {
+            media = UpscaleSeedVrInput(media, vae, seed, scale);
+        }
+        _generator.CurrentMedia = _generator.CreateSeedVR2Restore(
+            seedVrModel,
+            media,
+            vae,
+            seed);
         using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
         return DecodedClipArtifact.FromRuntime(
             RuntimeArtifact.Capture(_generator, bridge),
             clip);
     }
 
-    /// <summary>
-    /// Folds together nodes the timeline built more than once. A clip repeating the previous clip's
-    /// prompt encodes it twice otherwise, and a stage repeating the previous stage's IC-LoRA builds
-    /// the whole loader and guide chain again; neither is cheap, and both compute the same thing.
-    /// <para>
-    /// Runs last, once the graph is final. Merging a node invalidates any path still naming it, and
-    /// the passes that rewrite a node in place for one stage — frame-count connection, the host
-    /// clamp widening — have all had their turn by now, so nothing can mutate a node another stage
-    /// has since been folded onto.
-    /// </para>
-    /// <para>
-    /// Only a node something reads may be folded. One that nothing reads is there for its effect
-    /// rather than for a value — a save, a preview — and two of those are two outputs the request
-    /// asked for, not one computed twice; <c>outputintermediateimages</c> is exactly that case.
-    /// </para>
-    /// </summary>
+    private WGNodeData UpscaleSeedVrInput(
+        WGNodeData media,
+        WGNodeData vae,
+        long seed,
+        double scale)
+    {
+        string method = _generator.UserInput.Get(
+            ComfyUIBackendExtension.SeedVRUpscaleMethod,
+            "pixel-lanczos");
+        int width = (int)Math.Round(
+            (media.Width ?? _generator.UserInput.GetImageWidth()) * scale) / 16 * 16;
+        int height = (int)Math.Round(
+            (media.Height ?? _generator.UserInput.GetImageHeight()) * scale) / 16 * 16;
+        if (method.StartsWith("latent-"))
+        {
+            media = media.AsLatentImage(vae);
+            string scaled = _generator.CreateNode("LatentUpscaleBy", new JObject()
+            {
+                ["samples"] = media.Path,
+                ["upscale_method"] = method[7..],
+                ["scale_by"] = scale,
+            });
+            media = media.WithPath([scaled, 0]);
+            media.Width = width;
+            media.Height = height;
+            return media;
+        }
+
+        media = media.AsRawImage(vae);
+        if (method.StartsWith("pidmodel-"))
+        {
+            T2IModel model = ComfyUIBackendExtension.GetPidModel(
+                method[9..],
+                _generator.UserInput.SourceSession);
+            return _generator.CreatePixelDecode(model, media, vae, seed);
+        }
+        if (method.StartsWith("model-"))
+        {
+            string loader = _generator.CreateNode("UpscaleModelLoader", new JObject()
+            {
+                ["model_name"] = method[6..],
+            });
+            string scaled = _generator.CreateNode("ImageUpscaleWithModel", new JObject()
+            {
+                ["upscale_model"] = new JArray(loader, 0),
+                ["image"] = media.Path,
+            });
+            media = media.WithPath([scaled, 0]);
+            media.Width = null;
+            media.Height = null;
+            return media;
+        }
+        if (!method.StartsWith("pixel-"))
+        {
+            throw new SwarmReadableErrorException(
+                $"Unsupported upscale method '{method}' for SeedVR");
+        }
+        if (media.Width == width && media.Height == height)
+        {
+            return media;
+        }
+        string imageScale = _generator.CreateNode("ImageScale", new JObject()
+        {
+            ["image"] = media.Path,
+            ["width"] = width,
+            ["height"] = height,
+            ["upscale_method"] = method[6..],
+            ["crop"] = "disabled",
+        });
+        media = media.WithPath([imageScale, 0]);
+        media.Width = width;
+        media.Height = height;
+        return media;
+    }
+
+    // Runs only after every graph rewrite so merged nodes cannot be mutated later.
     private void CollapseDuplicateNodes()
     {
         using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
@@ -289,9 +395,7 @@ internal sealed class TimelineRunner
         {
             return;
         }
-        // Every tracker, not only the media: core's own later steps read the VAEs off the generator
-        // to attach audio and to save, and a tracker naming a folded node would reach a node the
-        // workflow no longer has.
+        // Core's later audio and save steps also read the non-media trackers.
         foreach (WGNodeData tracked in new[]
         {
             _generator.CurrentMedia,

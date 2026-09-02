@@ -68,6 +68,9 @@ export const appendStageUpscaleSection = (
     );
     methodField.classList.add("vst-detail-span-2");
     const syncMethod = (upscale: number): void => {
+        fields
+            .querySelector<HTMLElement>(".vst-character-refine-section")
+            ?.toggleAttribute("hidden", upscale !== 1);
         const disabled =
             bonitaEnabled || Math.abs(upscale - 1) < UPSCALE_EPSILON;
         methodSelect.disabled = disabled;

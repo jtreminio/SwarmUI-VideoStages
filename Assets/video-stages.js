@@ -14801,12 +14801,14 @@ ${slot}`;
       commit,
       slider
     } = bindings;
+    const sourceVideo = clip.initVideo;
+    const sourceVideoKind = sourceVideo?.source ?? MEDIA_SOURCE_UPLOAD;
+    const hasDecodedVideo = stageIdx > 0 || sourceVideo !== null && (sourceVideoKind === MEDIA_SOURCE_UPLOAD || sourceVideoKind === MEDIA_SOURCE_PREVIOUS_CLIP);
     if (context.authoring().capabilities.forClip(clip).architectureId !== "minimax" || !getVideoStagesHostBridge().hasBackendFeature(
       MINIMAX_CHARACTER_REFINE_FEATURE
-    )) {
+    ) || !hasDecodedVideo) {
       return;
     }
-    const decodedInput = stageIdx > 0 || clip.initVideo !== null;
     const imageReferences = clip.references.filter(
       (reference) => reference.kind === "image" && reference.id && clipReferenceIsUsable(reference)
     );
@@ -14814,7 +14816,6 @@ ${slot}`;
     fields.className = "vst-detail-fields vst-character-refine-fields";
     const appendGroup = () => {
       const enabled = stage.characterRefine !== null;
-      const help = !decodedInput ? "Add a source video or use this on a later stage." : "Repair a person or character in this stage.";
       const built = buildAccordionSection({
         key: `bonita-${clip.id ?? clipIdx}-${stage.id ?? stageIdx}`,
         label: "Make Them Bonita",
@@ -14824,7 +14825,6 @@ ${slot}`;
         className: "vst-character-refine-section vst-detail-span-full",
         toggle: {
           checked: enabled,
-          disabled: !decodedInput,
           title: enabled ? "Turn off Make Them Bonita" : "Turn on Make Them Bonita",
           onChange: (checked) => {
             commit((target) => {
@@ -14839,7 +14839,13 @@ ${slot}`;
           }
         }
       });
-      appendHelp(built.heading, built.section, "Make Them Bonita", help);
+      built.section.hidden = stage.upscale !== 1;
+      appendHelp(
+        built.heading,
+        built.section,
+        "Make Them Bonita",
+        "Repair a person or character in this stage."
+      );
       stageFields.appendChild(built.section);
     };
     if (!stage.characterRefine) {
@@ -15345,6 +15351,7 @@ ${slot}`;
     );
     methodField.classList.add("vst-detail-span-2");
     const syncMethod = (upscale) => {
+      fields.querySelector(".vst-character-refine-section")?.toggleAttribute("hidden", upscale !== 1);
       const disabled = bonitaEnabled || Math.abs(upscale - 1) < UPSCALE_EPSILON;
       methodSelect.disabled = disabled;
       methodField.classList.toggle("vst-field-disabled", disabled);

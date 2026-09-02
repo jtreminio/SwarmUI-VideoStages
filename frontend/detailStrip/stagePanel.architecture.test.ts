@@ -29,6 +29,10 @@ import { buildArchitectureIcLorasSection } from "../architectures/authoringPanel
 import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
 import type { GeneratedEntryMode } from "../architectures/generatedFeatures";
 import type { ArchitectureModelCatalog } from "../architectures/types";
+import {
+    MEDIA_SOURCE_PREVIOUS_CLIP,
+    MEDIA_SOURCE_UPLOAD,
+} from "../generatedMediaSource";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
 import { defaultCharacterRefine } from "../normalizationStage";
@@ -40,7 +44,7 @@ import {
     saveState,
 } from "../persistence/repository";
 import { createTimelineHistory } from "../timelineHistory";
-import type { Clip } from "../types";
+import type { CharacterRefine, Clip } from "../types";
 import { buildClipLorasSection } from "./clipLorasPanel";
 import type { DetailStripContext } from "./context";
 import type { StructuralOutcome } from "./draftQueue";
@@ -1074,7 +1078,7 @@ describe("stage architecture model filtering", () => {
         const stage = minimalStage({
             model: "minimax.safetensors",
             modelProfileId: "minimax-h3",
-            upscale: 1.5,
+            upscale: 1,
             characterRefine: defaultCharacterRefine([
                 "identity-ref",
                 "context-ref",
@@ -1305,7 +1309,7 @@ describe("stage architecture model filtering", () => {
         const stage = minimalStage({
             model: "minimax.safetensors",
             modelProfileId: "minimax-h3",
-            upscale: 1.5,
+            upscale: 1,
         });
         const clip = minimalClip({
             architectureHint: "minimax",
@@ -1443,29 +1447,86 @@ describe("stage architecture model filtering", () => {
         expect(toggle?.disabled).toBe(false);
     });
 
-    it("shows Make Them Bonita only for MiniMax and requires decoded input", () => {
+    it("shows Make Them Bonita only with an eligible video input and 1x upscale", () => {
         const models = catalogWithMiniMax();
-        const generated = minimalStage({
-            model: "minimax.safetensors",
-            modelProfileId: "minimax-h3",
-        });
-        const minimax = minimalClip({
-            architectureHint: "minimax",
-            modelProfileId: "minimax-h3",
-            stages: [generated],
-        });
-        const minimaxColumn = buildStageParamsColumn(
-            context(models),
-            minimax,
-            0,
-            0,
-            generated,
-            testRootDefaults(models),
-        );
-        const minimaxToggle = minimaxColumn.querySelector<HTMLInputElement>(
-            ".vst-character-refine-section .group-toggler-switch input",
-        );
-        expect(minimaxToggle?.disabled).toBe(true);
+        const renderMiniMax = (
+            stageIdx: number,
+            initVideo: Clip["initVideo"],
+            upscale = 1,
+            characterRefine: CharacterRefine | null = null,
+        ): HTMLElement => {
+            const stages = Array.from({ length: stageIdx + 1 }, () =>
+                minimalStage({
+                    model: "minimax.safetensors",
+                    modelProfileId: "minimax-h3",
+                    upscale,
+                    characterRefine,
+                }),
+            );
+            const clip = minimalClip({
+                architectureHint: "minimax",
+                modelProfileId: "minimax-h3",
+                initVideo,
+                stages,
+            });
+            return buildStageParamsColumn(
+                context(models),
+                clip,
+                0,
+                stageIdx,
+                stages[stageIdx],
+                testRootDefaults(models),
+            );
+        };
+        const bonita = (column: HTMLElement) =>
+            column.querySelector<HTMLElement>(".vst-character-refine-section");
+
+        expect(bonita(renderMiniMax(0, null))).toBeNull();
+        expect(
+            bonita(
+                renderMiniMax(
+                    0,
+                    initVideoFixture({ source: MEDIA_SOURCE_UPLOAD }),
+                ),
+            ),
+        ).not.toBeNull();
+        expect(
+            bonita(
+                renderMiniMax(
+                    0,
+                    initVideoFixture({
+                        source: MEDIA_SOURCE_PREVIOUS_CLIP,
+                        data: "",
+                    }),
+                ),
+            ),
+        ).not.toBeNull();
+        expect(
+            bonita(
+                renderMiniMax(0, initVideoFixture({ source: "unsupported" })),
+            ),
+        ).toBeNull();
+        expect(bonita(renderMiniMax(1, null))).not.toBeNull();
+        expect(
+            bonita(
+                renderMiniMax(
+                    0,
+                    initVideoFixture({ source: MEDIA_SOURCE_UPLOAD }),
+                    1.5,
+                ),
+            )?.hidden,
+        ).toBe(true);
+        expect(bonita(renderMiniMax(1, null, 1.5))?.hidden).toBe(true);
+        expect(
+            bonita(
+                renderMiniMax(
+                    0,
+                    initVideoFixture(),
+                    1.5,
+                    defaultCharacterRefine([]),
+                ),
+            )?.hidden,
+        ).toBe(true);
 
         const ltxStage = minimalStage({
             model: "ltx-2.3.safetensors",
@@ -1485,6 +1546,57 @@ describe("stage architecture model filtering", () => {
             testRootDefaults(models),
         );
         expect(ltxColumn.textContent).not.toContain("Make Them Bonita");
+    });
+
+    it("updates Make Them Bonita visibility as upscale changes", () => {
+        const models = catalogWithMiniMax();
+        const stage = minimalStage({
+            model: "minimax.safetensors",
+            modelProfileId: "minimax-h3",
+        });
+        const clip = minimalClip({
+            architectureHint: "minimax",
+            modelProfileId: "minimax-h3",
+            initVideo: initVideoFixture(),
+            stages: [stage],
+        });
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            stage,
+            testRootDefaults(models),
+        );
+        const bonita = column.querySelector<HTMLElement>(
+            ".vst-character-refine-section",
+        );
+        const upscale = Array.from(
+            column.querySelectorAll<HTMLElement>(".vst-stage-slider"),
+        )
+            .find((candidate) =>
+                candidate
+                    .querySelector("label")
+                    ?.textContent?.includes("Upscale"),
+            )
+            ?.querySelector<HTMLInputElement>("input.auto-slider-number");
+        if (!bonita || !upscale) {
+            throw new Error("Bonita and Upscale controls must render");
+        }
+
+        upscale.value = "1.5";
+        upscale.dispatchEvent(new Event("input"));
+        expect(bonita.hidden).toBe(true);
+        expect(column.querySelector(".vst-character-refine-section")).toBe(
+            bonita,
+        );
+
+        upscale.value = "1";
+        upscale.dispatchEvent(new Event("input"));
+        expect(bonita.hidden).toBe(false);
+        expect(column.querySelector(".vst-character-refine-section")).toBe(
+            bonita,
+        );
     });
 
     it("hides Make Them Bonita when ComfyUI-Bonita is not installed", () => {
