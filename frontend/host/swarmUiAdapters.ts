@@ -1,9 +1,3 @@
-/**
- * Narrow adapters for legacy SwarmUI UI services that are not part of the
- * VideoStages document/carrier bridge. Keeping these reads here makes the host
- * boundary explicit without coupling application modules to Swarm globals.
- */
-
 import { isRecord } from "../utils";
 
 export interface HostBottomTabMount {
@@ -107,10 +101,55 @@ export const enhanceHostPromptEditor = (editor: HTMLElement): void => {
 };
 
 type GenerationInputProjector = (input: Record<string, unknown>) => void;
+type HostGenerationInputCollector = (
+    inputOverrides?: Record<string, unknown>,
+    inputPreOverrides?: Record<string, unknown>,
+) => Record<string, unknown>;
 
 let generationInputProjector: GenerationInputProjector | null = null;
 let installedGenerationWrapper: ((...args: unknown[]) => void) | null = null;
+let installedInputCollector: HostGenerationInputCollector | null = null;
 let generationProjectorRetry: ReturnType<typeof setTimeout> | null = null;
+
+const projectGenerationInput = (
+    actualInput: unknown,
+    beforeProjection?: () => void,
+): void => {
+    try {
+        beforeProjection?.();
+        if (isRecord(actualInput)) {
+            generationInputProjector?.(actualInput);
+        }
+    } catch (error) {
+        if (typeof showError === "function") {
+            showError(`${error}`);
+        }
+        throw error;
+    }
+};
+
+const installHostInputCollectorProjector = (): void => {
+    const host = globalThis as typeof globalThis & {
+        getGenInput?: HostGenerationInputCollector;
+    };
+    if (
+        typeof host.getGenInput !== "function" ||
+        host.getGenInput === installedInputCollector
+    ) {
+        return;
+    }
+    const original = host.getGenInput;
+    const wrapper: HostGenerationInputCollector = function (
+        this: unknown,
+        ...args: Parameters<HostGenerationInputCollector>
+    ): Record<string, unknown> {
+        const actualInput = original.apply(this, args);
+        projectGenerationInput(actualInput);
+        return actualInput;
+    };
+    host.getGenInput = wrapper;
+    installedInputCollector = wrapper;
+};
 
 const retryGenerationProjector = (): void => {
     if (generationProjectorRetry !== null) {
@@ -128,6 +167,7 @@ export const installHostGenerationInputProjector = (
     projector: GenerationInputProjector,
 ): boolean => {
     generationInputProjector = projector;
+    installHostInputCollectorProjector();
     if (
         typeof mainGenHandler === "undefined" ||
         typeof mainGenHandler?.doGenerate !== "function"
@@ -145,21 +185,13 @@ export const installHostGenerationInputProjector = (
     const original = mainGenHandler.doGenerate;
     const wrapper = function (this: unknown, ...args: unknown[]): void {
         const existingPostCollect = args[2];
-        args[2] = (actualInput: unknown): void => {
-            try {
-                if (typeof existingPostCollect === "function") {
-                    existingPostCollect(actualInput);
-                }
-                if (isRecord(actualInput)) {
-                    generationInputProjector?.(actualInput);
-                }
-            } catch (error) {
-                if (typeof showError === "function") {
-                    showError(`${error}`);
-                }
-                throw error;
-            }
-        };
+        args[2] = (actualInput: unknown): void =>
+            projectGenerationInput(
+                actualInput,
+                typeof existingPostCollect === "function"
+                    ? () => existingPostCollect(actualInput)
+                    : undefined,
+            );
         original.apply(this, args);
     };
     mainGenHandler.doGenerate = wrapper;

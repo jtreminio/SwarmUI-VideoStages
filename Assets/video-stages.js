@@ -90,7 +90,35 @@
   };
   var generationInputProjector = null;
   var installedGenerationWrapper = null;
+  var installedInputCollector = null;
   var generationProjectorRetry = null;
+  var projectGenerationInput = (actualInput, beforeProjection) => {
+    try {
+      beforeProjection?.();
+      if (isRecord(actualInput)) {
+        generationInputProjector?.(actualInput);
+      }
+    } catch (error) {
+      if (typeof showError === "function") {
+        showError(`${error}`);
+      }
+      throw error;
+    }
+  };
+  var installHostInputCollectorProjector = () => {
+    const host = globalThis;
+    if (typeof host.getGenInput !== "function" || host.getGenInput === installedInputCollector) {
+      return;
+    }
+    const original = host.getGenInput;
+    const wrapper = function(...args) {
+      const actualInput = original.apply(this, args);
+      projectGenerationInput(actualInput);
+      return actualInput;
+    };
+    host.getGenInput = wrapper;
+    installedInputCollector = wrapper;
+  };
   var retryGenerationProjector = () => {
     if (generationProjectorRetry !== null) {
       return;
@@ -104,6 +132,7 @@
   };
   var installHostGenerationInputProjector = (projector) => {
     generationInputProjector = projector;
+    installHostInputCollectorProjector();
     if (typeof mainGenHandler === "undefined" || typeof mainGenHandler?.doGenerate !== "function") {
       retryGenerationProjector();
       return false;
@@ -118,21 +147,10 @@
     const original = mainGenHandler.doGenerate;
     const wrapper = function(...args) {
       const existingPostCollect = args[2];
-      args[2] = (actualInput) => {
-        try {
-          if (typeof existingPostCollect === "function") {
-            existingPostCollect(actualInput);
-          }
-          if (isRecord(actualInput)) {
-            generationInputProjector?.(actualInput);
-          }
-        } catch (error) {
-          if (typeof showError === "function") {
-            showError(`${error}`);
-          }
-          throw error;
-        }
-      };
+      args[2] = (actualInput) => projectGenerationInput(
+        actualInput,
+        typeof existingPostCollect === "function" ? () => existingPostCollect(actualInput) : void 0
+      );
       original.apply(this, args);
     };
     mainGenHandler.doGenerate = wrapper;

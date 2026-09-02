@@ -28,6 +28,7 @@ afterEach(() => {
     const globals = globalThis as typeof globalThis & {
         copyText?: unknown;
         currentMetadataVal?: unknown;
+        getGenInput?: unknown;
         getImageFullSrc?: unknown;
         mainGenHandler?: unknown;
         genericRequest?: unknown;
@@ -36,6 +37,7 @@ afterEach(() => {
     };
     Reflect.deleteProperty(globals, "copyText");
     Reflect.deleteProperty(globals, "currentMetadataVal");
+    Reflect.deleteProperty(globals, "getGenInput");
     Reflect.deleteProperty(globals, "getImageFullSrc");
     delete globals.mainGenHandler;
     Reflect.deleteProperty(globals, "genericRequest");
@@ -236,6 +238,46 @@ describe("VideoStagesHostBridge compatibility facades", () => {
         expect(`${sent[0].videostages}`).toContain("GENERATE_ONLY");
         expect(carrier).not.toContain("GENERATE_ONLY");
         expect(carrier).toContain(handle);
+    });
+
+    it("materializes browser media for host tools that collect Generate-tab inputs", () => {
+        const payload = "data:image/png;base64,WORKFLOW_IMPORT";
+        const handle = storeBrowserMedia(payload);
+        const carrier = JSON.stringify({
+            clips: [
+                {
+                    references: [
+                        {
+                            kind: "image",
+                            uploadedMedia: {
+                                data: handle,
+                                fileName: "reference.png",
+                            },
+                        },
+                    ],
+                },
+            ],
+        });
+        const getGenInput = jest.fn(() => ({ videostages: carrier }));
+        const globals = globalThis as typeof globalThis & {
+            getGenInput?: typeof getGenInput;
+            mainGenHandler?: {
+                doGenerate: (...args: unknown[]) => void;
+                getGenInput: typeof getGenInput;
+            };
+        };
+        globals.getGenInput = getGenInput;
+        globals.mainGenHandler = {
+            doGenerate: jest.fn(),
+            getGenInput,
+        };
+
+        installHostGenerationInputProjector(materializeGenerationMedia);
+
+        const actualInput = globals.getGenInput();
+        expect(`${actualInput.videostages}`).toContain("WORKFLOW_IMPORT");
+        expect(carrier).toContain(handle);
+        expect(carrier).not.toContain("WORKFLOW_IMPORT");
     });
 
     it("retries a late host handler and rewraps a replaced Generate function", () => {
