@@ -271,27 +271,12 @@ public class TimelineOutputContractTests
     }
 
     /// <summary>
-    /// Core's own pre-save frame trim is displaced by the timeline rather than left in place for
-    /// the extension's trim to stack on top of. The text-to-video shape is the only one that
-    /// reaches it: core emits its trim only when <c>IsVideoModel() &amp;&amp; !formedFromSingleImage
-    /// &amp;&amp; !willHaveFollowupVideo</c>, and an image-to-video request always fails the last —
-    /// its <c>videomodel</c> is exactly the follow-up video that clause names. The spy is the
-    /// positive control — core's wrapper genuinely exists before the timeline runs.
+    /// Core's deferred final cleanup must not stack a second trim over the assembled timeline.
     /// </summary>
     [Fact]
-    public async Task Cores_own_pre_save_trim_is_displaced_rather_than_stacked_on()
+    public async Task Cores_deferred_cleanup_does_not_stack_a_second_trim()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
-        string coreTrimId = null;
-        // After core's pre-video-save prep (priority 10), before the timeline claims the root.
-        WorkflowGenerator.WorkflowGenStep spy = new(
-            g =>
-            {
-                using WorkflowBridge staged = WorkflowBridge.Create(g.Workflow);
-                coreTrimId = Assert.Single(
-                    staged.Graph.NodesOfType<SwarmTrimFramesNode>()).Id;
-            },
-            Constants.WorkflowStepPriority.CoreImageToVideo - 0.5);
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
@@ -303,15 +288,12 @@ public class TimelineOutputContractTests
                     {
                         post["trimvideostartframes"] = 2;
                         post["trimvideoendframes"] = 3;
-                    }),
-                extraSteps: [spy]);
+                    }));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         BatchImagesNodeNode merge = Assert.Single(bridge.Graph.NodesOfType<BatchImagesNodeNode>());
         SwarmTrimFramesNode trim = Assert.Single(bridge.Graph.NodesOfType<SwarmTrimFramesNode>());
-        Assert.NotNull(coreTrimId);
-        Assert.NotEqual(coreTrimId, trim.Id);
         Assert.Same(merge, trim.Image.Connection?.Node);
         Assert.Equal(new JArray(trim.Id, 0), generator.CurrentMedia.Path);
         Assert.Equal(45, generator.CurrentMedia.Frames);

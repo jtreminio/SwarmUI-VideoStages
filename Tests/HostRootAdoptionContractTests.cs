@@ -453,13 +453,11 @@ public sealed class HostRootAdoptionContractTests
     }
 
     /// <summary>
-    /// <c>outputintermediateimages</c> with frame interpolation gives core's root decode a second
-    /// save, one the root cleanup deliberately spares. A node the cleanup spares is a node someone
-    /// else still publishes, so claiming it would ship that stage's output twice under two names
-    /// and lose the host pass the setting exists to show.
+    /// Interpolation runs over the assembled timeline, so the first stage can claim the root while
+    /// one pre-interpolation intermediate and the final result are published.
     /// </summary>
     [Fact]
-    public async Task An_intermediate_save_on_cores_decode_refuses_the_claim()
+    public async Task Deferred_interpolation_keeps_the_root_claim_and_one_intermediate()
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.Create();
 
@@ -474,14 +472,12 @@ public sealed class HostRootAdoptionContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        Assert.NotEqual(CoreSamplerId, StageSampler(bridge, 0).Id);
-        // Core's own root pass still reaches a save of its own, which is what the setting promised.
+        Assert.Equal(CoreSamplerId, StageSampler(bridge, 0).Id);
         Assert.Contains(
             bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>(),
             save => save.Images.Connection?.Node?.Id == CoreDecodeId);
 
-        // The timeline's own save, plus the two the setting asked for.
-        AssertShippable(bridge, workflow, live, publishedVideoSaves: 3);
+        AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
     /// <summary>

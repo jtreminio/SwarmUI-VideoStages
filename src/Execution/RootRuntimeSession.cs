@@ -48,6 +48,7 @@ internal sealed class RootRuntimeSession
         RuntimeArtifact hostRoot = RuntimeArtifact.Capture(
             generator,
             bridge);
+        RemoveDuplicateCoreSave(generator, bridge, hostRoot);
         IReadOnlySet<string> hostAnimationSaveIds = CaptureHostAnimationSaveIds(bridge, hostRoot);
         HashSet<string> componentSeeds = [];
         AddArtifactNodeIds(componentSeeds, hostRoot);
@@ -63,6 +64,22 @@ internal sealed class RootRuntimeSession
             hostAnimationSaveIds,
             rootComponentIds,
             plan.Root.IgnoresHostRootOutput || plan.Clips.Count > 1);
+    }
+
+    private static void RemoveDuplicateCoreSave(
+        WorkflowGenerator generator,
+        WorkflowBridge bridge,
+        RuntimeArtifact hostRoot)
+    {
+        if (bridge.Graph.GetNode(CoreSupersededImageSaveNodeId)
+                is SwarmSaveAnimationWSNode save
+            && SameOutput(save.Images.Connection, hostRoot?.Media?.Output))
+        {
+            VideoGraphHelpers.RemoveNode(
+                generator,
+                bridge,
+                CoreSupersededImageSaveNodeId);
+        }
     }
 
     /// <summary>

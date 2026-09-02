@@ -177,18 +177,15 @@ public class WanSourceClipWorkflowTests
     }
 
     /// <summary>
-    /// Core really does build a whole WAN video root before the timeline runs — its own sampler,
-    /// its published media and its save node. A source clip replaces all of it: the sampler and the
-    /// media are pruned, and the save is retargeted rather than duplicated, so the request ends up
-    /// with exactly one video output and it is the source's.
+    /// Core builds a WAN sampler and decoded root before the timeline runs. A source clip prunes
+    /// both, and core's deferred save publishes the source once.
     /// </summary>
     [Fact]
-    public async Task A_source_clip_prunes_cores_video_root_and_reuses_its_save()
+    public async Task A_source_clip_prunes_cores_video_root_before_the_deferred_save()
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
         string coreSamplerId = null;
         string coreMediaId = null;
-        string coreSaveId = null;
         WorkflowGenerator generator = null;
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
@@ -203,8 +200,7 @@ public class WanSourceClipWorkflowTests
                         core.Graph.NodesOfType<SwarmKSamplerNode>(),
                         sampler => sampler.NoiseSeed.LiteralAsLong()
                             == VideoStagesWorkflowFixture.StageSeed(0)).Id;
-                    coreSaveId = Assert.Single(
-                        core.Graph.NodesOfType<SwarmSaveAnimationWSNode>()).Id;
+                    Assert.Empty(core.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
                     coreMediaId = core.ResolvePath(g.CurrentMedia.Path)?.Node.Id;
                 }, Constants.WorkflowStepPriority.DropCoreImageToVideoOutput - 0.01),
                 new(g => generator = g, double.MaxValue),
@@ -224,7 +220,6 @@ public class WanSourceClipWorkflowTests
 
         SwarmSaveAnimationWSNode save = Assert.Single(
             bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        Assert.Equal(coreSaveId, save.Id);
         Assert.True(ReachesUpstream(bridge, save.Images.Connection?.Node, stage.Id));
         Assert.False(save.Audio.HasValue);
         Assert.Null(generator.CurrentMedia.AttachedAudio);

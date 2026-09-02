@@ -1,8 +1,8 @@
 using ComfyTyped.Core;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Core;
 using SwarmUI.Text2Image;
+using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Execution.Audio;
 using VideoStages.Execution.Graph;
@@ -521,11 +521,17 @@ internal sealed class TimelineRunner
                 throw RootHandoffError(
                     "the pre-core workflow snapshot references removed nodes");
             }
+            HashSet<string> preservedNodeIds = [.. snapshot.PreCoreNodeIds];
+            if (_generator.CurrentAudioVae?.Path is JArray { Count: 2 } audioVaePath
+                && bridge.ResolvePath(audioVaePath) is not null)
+            {
+                preservedNodeIds.Add($"{audioVaePath[0]}");
+            }
             _generator.CurrentMedia = snapshot.Media;
             _generator.CurrentVae = snapshot.Vae;
             WorkflowGraphCleanup.PruneNodesAddedSince(
                 bridge,
-                snapshot.PreCoreNodeIds,
+                preservedNodeIds,
                 _generator.NodeHelpers);
         }
         finally

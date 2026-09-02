@@ -9,10 +9,15 @@ public static class Constants
         public const double ControlNetPreprocessors = -5.9;
         public const double CaptureBase = -4.2;
         public const double CaptureRefiner = 5.89;
+        public const double PrepareCoreMedia = 9.99;
         public const double CapturePreCoreVideoMedia = 10.95;
         public const double DropCoreImageToVideoOutput = 11.05;
         public const double ApplyRootAudioMaskDimensions = 11.4;
         public const double RunConfiguredStages = 11.5;
+        public const double SuppressCoreSeedVr = 39.99;
+        public const double RestoreCoreSeedVr = 40.01;
+        public const double SuppressCoreFinalCleanup = 49.99;
+        public const double RestoreCoreFinalCleanup = 50.01;
     }
 
     public const int SectionID_VideoStages = 48823;
