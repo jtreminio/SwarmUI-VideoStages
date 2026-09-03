@@ -28,6 +28,9 @@ internal enum ArchitectureFeature
     LatentModelUpscale = 1 << 10,
     ClipReferences = 1 << 11,
     StageReferenceStrengths = 1 << 12,
+    CharacterRefine = 1 << 13,
+    CharacterRefineAppearanceReferences = 1 << 14,
+    CharacterRefineIdentityReferences = 1 << 15,
 }
 
 /// <summary>The frame positions a model's native image-conditioning path accepts.</summary>

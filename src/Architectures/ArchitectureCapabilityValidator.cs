@@ -71,6 +71,9 @@ internal static class ArchitectureCapabilityValidator
                     || stages.Any(stage => stage.FrameRefStrengths is { Count: > 0 })),
             ArchitectureFeature.FrameReferences,
             "keyframes");
+        bool identityReferencesSupported =
+            !Unsupported(ArchitectureFeature.CharacterRefineIdentityReferences)
+            && stages.Any(stage => stage.CharacterRefine?.VerifyIdentity == true);
         Warn(
             Unsupported(ArchitectureFeature.PromptRelay)
                 && clip.PromptWindows is { Count: > 0 },
@@ -106,6 +109,13 @@ internal static class ArchitectureCapabilityValidator
             Unsupported(ArchitectureFeature.AudioReuse) && clip.ReuseAudio,
             ArchitectureFeature.AudioReuse,
             "captured stage audio reuse");
+        Warn(
+            Unsupported(ArchitectureFeature.ClipReferences)
+                && (clip.References ?? []).Any(reference =>
+                    !identityReferencesSupported
+                    || reference.Kind != ClipReferenceKind.Image),
+            ArchitectureFeature.ClipReferences,
+            "clip references");
 
         AudioSourceKind authoredAudioKind =
             AudioSource.Parse(clip.AudioSource).Kind;
@@ -151,6 +161,29 @@ internal static class ArchitectureCapabilityValidator
         for (int index = 0; index < stages.Count; index++)
         {
             StageSpec stage = stages[index];
+            Warn(
+                Unsupported(ArchitectureFeature.CharacterRefine)
+                    && stage.CharacterRefine is not null,
+                ArchitectureFeature.CharacterRefine,
+                "character refinement",
+                stage.Id,
+                stage.ClipStageRawIndex);
+            Warn(
+                !Unsupported(ArchitectureFeature.CharacterRefine)
+                    && Unsupported(ArchitectureFeature.CharacterRefineAppearanceReferences)
+                    && stage.CharacterRefine?.PictureReferenceIds.Count > 0,
+                ArchitectureFeature.CharacterRefineAppearanceReferences,
+                "character appearance references",
+                stage.Id,
+                stage.ClipStageRawIndex);
+            Warn(
+                !Unsupported(ArchitectureFeature.CharacterRefine)
+                    && Unsupported(ArchitectureFeature.CharacterRefineIdentityReferences)
+                    && stage.CharacterRefine?.VerifyIdentity == true,
+                ArchitectureFeature.CharacterRefineIdentityReferences,
+                "character identity verification",
+                stage.Id,
+                stage.ClipStageRawIndex);
             StageGuideReferenceSelection guide =
                 StageGuideReference.Classify(stage.ImageReference);
             if (!descriptor.StageGuideReferences.Allows(guide))

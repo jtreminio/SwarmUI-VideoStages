@@ -18,6 +18,8 @@ export const testArchitectureCapabilities = (
         "promptRelay",
         "frameReferences",
         "stageReferenceStrengths",
+        "characterRefine",
+        "characterRefineIdentityReferences",
         "referenceFraming",
         "retake",
         "audioBoundaryCarry",

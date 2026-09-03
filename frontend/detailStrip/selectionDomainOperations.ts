@@ -7,7 +7,10 @@ import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity
 import { NONE_ARCHITECTURE_ID } from "../architectures/none/identity";
 import { referenceEndpointPolicy } from "../architectures/referenceEndpoints";
 import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
-import { buildDefaultClipReference } from "../clipReferenceAuthoring";
+import {
+    buildDefaultClipReference,
+    clipReferenceAuthoring,
+} from "../clipReferenceAuthoring";
 import {
     clamp,
     PROMPT_WINDOW_DEFAULT_DURATION,
@@ -80,7 +83,7 @@ export interface DetailSelectionDomainOperations {
             ClipReference,
             "kind" | "uploadedMedia" | "mediaDurationSeconds"
         >[],
-    ): void;
+    ): number;
     deleteClipReference(clipIdx: number, referenceIdx: number): void;
     addPromptWindow(clipIdx: number): void;
     deleteWindowEntry(clipIdx: number, windowIdx: number): void;
@@ -283,18 +286,19 @@ export const createDetailSelectionDomainOperations = (
         structuralCommit((clips) => {
             const clip = clips[clipIdx];
             const { capabilities } = captureAuthoringTransaction();
-            if (
-                !clip?.id ||
-                !capabilities.forClip(clip).decision("clipReferences").supported
-            ) {
+            if (!clip?.id) {
                 return null;
             }
+            const authoring = clipReferenceAuthoring(
+                capabilities.forClip(clip),
+            );
+            if (authoring.mode === "none") return null;
             return {
                 command: {
                     type: "clip-reference.add",
                     clipId: clip.id,
                     reference: {
-                        ...buildDefaultClipReference(),
+                        ...buildDefaultClipReference("image"),
                         id: createEntityId("clip_reference"),
                     },
                 },
@@ -310,23 +314,31 @@ export const createDetailSelectionDomainOperations = (
     const addClipReferences: DetailSelectionDomainOperations["addClipReferences"] =
         (clipId, references) => {
             if (references.length === 0) {
-                return;
+                return 0;
             }
+            let added = 0;
             structuralCommit((clips) => {
                 const clipIdx = clips.findIndex((clip) => clip.id === clipId);
                 const clip = clips[clipIdx];
                 const { capabilities } = captureAuthoringTransaction();
-                if (
-                    !clip ||
-                    !capabilities.forClip(clip).decision("clipReferences")
-                        .supported
-                ) {
+                if (!clip) {
                     return null;
                 }
+                const authoring = clipReferenceAuthoring(
+                    capabilities.forClip(clip),
+                );
+                const accepted = references.filter(
+                    (reference) =>
+                        authoring.mode === "all" ||
+                        (authoring.mode === "identity-images" &&
+                            reference.kind === "image"),
+                );
+                if (accepted.length === 0) return null;
+                added = accepted.length;
                 return {
                     command: {
                         type: "batch",
-                        commands: references.map((reference) => ({
+                        commands: accepted.map((reference) => ({
                             type: "clip-reference.add" as const,
                             clipId,
                             reference: {
@@ -340,10 +352,11 @@ export const createDetailSelectionDomainOperations = (
                         kind: "clip-ref",
                         clipIdx,
                         referenceIdx:
-                            clip.references.length + references.length - 1,
+                            clip.references.length + accepted.length - 1,
                     },
                 };
             });
+            return added;
         };
 
     const deleteClipReference = (

@@ -6,6 +6,7 @@ using VideoStages.Architectures.MiniMax;
 using VideoStages.Architectures.Wan;
 using VideoStages.Execution;
 using VideoStages.Architectures.Ltx2.Runtime;
+using VideoStages.CharacterRefine;
 
 namespace VideoStages.Architectures;
 
@@ -38,8 +39,7 @@ internal static class VideoArchitectureManifest
         new(
             MiniMaxArchitectureModule.Instance.Descriptor,
             MiniMaxArchitectureModule.Instance,
-            generator => new MiniMaxSessionProvider(generator),
-            RegisterDependencies: MiniMaxCharacterRefineIntegration.RegisterDependencies),
+            generator => new MiniMaxSessionProvider(generator)),
         // Wan's graph is built by SwarmUI's stock image-to-video path. Narrow host callbacks keep
         // request-global options out of the discarded core pass; the authored session applies the
         // supported values itself.
@@ -109,6 +109,7 @@ internal static class VideoArchitectureManifest
 
     internal static void RegisterProductionDependencies()
     {
+        BonitaIntegration.RegisterDependencies();
         foreach (VideoArchitectureRegistration registration in Production)
         {
             registration.RegisterDependencies?.Invoke();

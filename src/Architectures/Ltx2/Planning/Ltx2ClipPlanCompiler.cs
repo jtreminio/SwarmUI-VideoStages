@@ -3,6 +3,7 @@ using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 using VideoStages.Planning;
 using VideoStages.Architectures.Ltx2.Runtime.Stage;
+using VideoStages.CharacterRefine;
 
 namespace VideoStages.Architectures.Ltx2.Planning;
 
@@ -28,6 +29,16 @@ internal static class Ltx2ClipPlanCompiler
         Dictionary<int, IArchitectureStagePayload> stages = [];
         foreach (StageSpec stage in clip.Stages ?? [])
         {
+            bool passthrough = StagePassthroughPolicy.IsPassthrough(
+                stage,
+                Ltx2ArchitectureModule.Instance.Descriptor);
+            bool characterRefine = stage.CharacterRefine is not null && !passthrough;
+            bool decodedInput = !passthrough
+                && StagePassthroughPolicy.HasDecodedVideoBefore(
+                    clip,
+                    stage,
+                    context.EntryMode,
+                    Ltx2ArchitectureModule.Instance.Descriptor);
             RetakePlan retake = CompileRetake(stage.RetakeWindow);
             if (retake is not null && context.EntryMode != ArchitectureEntryMode.InitVideo)
             {
@@ -39,6 +50,81 @@ internal static class Ltx2ClipPlanCompiler
                     stage.Id));
                 retake = null;
             }
+            if (characterRefine && !decodedInput)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "ltx2.character-refine.decoded-input-required",
+                    $"Clip {clip.Id}: stage {stage.Id} Make Them Bonita requires InitVideo or "
+                        + "the previous stage's decoded output.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
+            StageUpscalePlan upscale = StageUpscalePlanCompiler.Compile(stage);
+            if (characterRefine && upscale.Mode != StageUpscaleMode.None)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "ltx2.character-refine.upscale-unsupported",
+                    $"Clip {clip.Id}: stage {stage.Id} Make Them Bonita cannot upscale while "
+                        + "tracking. Use a separate stage to upscale first.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
+            if (characterRefine && retake is not null)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "ltx2.character-refine.retake-unsupported",
+                    $"Clip {clip.Id}: stage {stage.Id} Make Them Bonita and Retake cannot run "
+                        + "in the same stage.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
+            ImmutableArray<IcLoraPlan> stageIcLoras =
+                icLoras.Stages[stage.ClipStageRawIndex];
+            if (characterRefine && !stageIcLoras.IsDefaultOrEmpty)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "ltx2.character-refine.ic-lora-unsupported",
+                    $"Clip {clip.Id}: stage {stage.Id} Make Them Bonita and IC-LoRAs cannot "
+                        + "run in the same stage.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
+            ImmutableArray<FrameRefPlan> frameReferences =
+                stage.CharacterRefine is not null
+                    ? []
+                    : FrameRefPlanCompiler.Compile(clip, stage);
+            if (characterRefine && stage.ImageRefWasExplicit)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "ltx2.character-refine.guide-unsupported",
+                    $"Clip {clip.Id}: stage {stage.Id} Make Them Bonita cannot use a stage "
+                        + "image guide. Remove the guide or use it in a separate stage.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
+            if (characterRefine
+                && (AudioSourceKindPolicy.CanUseAudioDerivedLength(clip)
+                    || clip.ClipLengthFromControlNet))
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "ltx2.character-refine.runtime-duration-unsupported",
+                    $"Clip {clip.Id}: stage {stage.Id} Make Them Bonita requires a fixed clip "
+                        + "duration; audio- and ControlNet-derived durations are not supported.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
             Ltx2StagePayload payload = new(
                 new StageCorePlan(
                     stage.Control,
@@ -46,15 +132,18 @@ internal static class Ltx2ClipPlanCompiler
                     stage.CfgScale,
                     stage.Sampler,
                     stage.Scheduler,
-                    StageUpscalePlanCompiler.Compile(stage),
+                    upscale,
                     LoraPlanCompiler.Compile(clip, LoraTarget.ModelAndTextEncoder)),
                 CompileGuideReference(stage.ImageReference),
                 stage.ImageRefWasExplicit,
-                icLoras.Stages[stage.ClipStageRawIndex],
+                stageIcLoras,
                 retake,
                 relay,
-                FrameRefPlanCompiler.Compile(clip, stage),
-                CompileAudioAction(clip, stage));
+                frameReferences,
+                CompileAudioAction(clip, stage),
+                characterRefine
+                    ? CompileCharacterRefine(clip, stage, diagnostics)
+                    : null);
             stages.Add(stage.ClipStageRawIndex, payload);
             PlanDiagnostic dimensionDiagnostic = StageDimensionRules.SnapDiagnostic(
                 clip.Id,
@@ -75,6 +164,45 @@ internal static class Ltx2ClipPlanCompiler
             stages,
             diagnostics.AsReadOnly());
     }
+
+    private static LtxCharacterRefinePlan CompileCharacterRefine(
+        ClipSpec clip,
+        StageSpec stage,
+        ICollection<PlanDiagnostic> diagnostics)
+    {
+        CharacterRefineSpec settings = stage.CharacterRefine;
+        List<LtxCharacterRefineReferencePlan> identities = [];
+        if (settings.VerifyIdentity)
+        {
+            identities.AddRange((clip.References ?? [])
+                .Where(candidate =>
+                    candidate.Kind == ClipReferenceKind.Image
+                    && CharacterRefineCanRead(candidate))
+                .Select(reference => new LtxCharacterRefineReferencePlan(
+                    reference.Source,
+                    reference.Media)));
+            if (identities.Count == 0)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "ltx2.character-refine.identity-reference-missing",
+                    $"Clip {clip.Id}: stage {stage.Id} Make Them Bonita Verify Identity "
+                        + "requires a usable image reference on this clip.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
+        }
+        return new(
+            CharacterRefineSettingsPlan.From(settings),
+            identities.AsReadOnly());
+    }
+
+    private static bool CharacterRefineCanRead(ClipReferenceSpec reference) =>
+        StringUtils.Equals(reference.Source, MediaSource.Upload)
+            ? !string.IsNullOrWhiteSpace(reference.Media?.Data)
+            : MediaSource.IsHostStageSource(reference.Source)
+                || MediaSource.TryParseControlNetIndex(reference.Source, out _);
 
     private static RetakePlan CompileRetake(RetakeWindowSpec retake) => retake is null
         ? null

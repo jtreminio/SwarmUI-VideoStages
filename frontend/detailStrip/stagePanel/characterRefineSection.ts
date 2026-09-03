@@ -1,3 +1,4 @@
+import { stageProducesDecodedVideo } from "../../architectures/temporalGrid";
 import { clipReferenceIsUsable } from "../../clipReferenceSource";
 import {
     appendHelp,
@@ -7,20 +8,20 @@ import {
     buildOptionSelect,
 } from "../../detailWidgets";
 import {
+    CHARACTER_REFINE_CROP_DIMENSION_MAX,
+    CHARACTER_REFINE_CROP_DIMENSION_MIN,
+    CHARACTER_REFINE_CROP_DIMENSION_STEP,
+    CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+    CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+    CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
+    CHARACTER_REFINE_PART_DEFAULT,
+    CHARACTER_REFINE_REQUIRED_FEATURES,
+    CHARACTER_REFINE_SUBJECT_DEFAULT,
+} from "../../generatedCharacterRefine";
+import {
     MEDIA_SOURCE_PREVIOUS_CLIP,
     MEDIA_SOURCE_UPLOAD,
 } from "../../generatedMediaSource";
-import {
-    MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
-    MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
-    MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP,
-    MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
-    MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
-    MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
-    MINIMAX_CHARACTER_REFINE_FEATURE,
-    MINIMAX_CHARACTER_REFINE_PART_DEFAULT,
-    MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT,
-} from "../../generatedMiniMaxCharacterRefine";
 import { getVideoStagesHostBridge } from "../../host";
 import { defaultCharacterRefine } from "../../normalizationStage";
 import type { CharacterRefine, ClipReference } from "../../types";
@@ -115,16 +116,26 @@ export const appendCharacterRefineSection = (
     } = bindings;
     const sourceVideo = clip.initVideo;
     const sourceVideoKind = sourceVideo?.source ?? MEDIA_SOURCE_UPLOAD;
+    const architecture = context.authoring().capabilities.forClip(clip);
+    const supportsAppearanceReferences = architecture.decision(
+        "characterRefineAppearanceReferences",
+    ).supported;
     const hasDecodedVideo =
-        stageIdx > 0 ||
+        clip.stages
+            .slice(0, stageIdx)
+            .some((candidate) =>
+                stageProducesDecodedVideo(
+                    candidate,
+                    (feature) => architecture.decision(feature).supported,
+                ),
+            ) ||
         (sourceVideo !== null &&
             (sourceVideoKind === MEDIA_SOURCE_UPLOAD ||
                 sourceVideoKind === MEDIA_SOURCE_PREVIOUS_CLIP));
     if (
-        context.authoring().capabilities.forClip(clip).architectureId !==
-            "minimax" ||
-        !getVideoStagesHostBridge().hasBackendFeature(
-            MINIMAX_CHARACTER_REFINE_FEATURE,
+        !architecture.decision("characterRefine").supported ||
+        !CHARACTER_REFINE_REQUIRED_FEATURES.every((feature) =>
+            getVideoStagesHostBridge().hasBackendFeature(feature),
         ) ||
         !hasDecodedVideo
     ) {
@@ -156,9 +167,11 @@ export const appendCharacterRefineSection = (
                     commit((target) => {
                         target.characterRefine = checked
                             ? defaultCharacterRefine(
-                                  imageReferences.flatMap((reference) =>
-                                      reference.id ? [reference.id] : [],
-                                  ),
+                                  supportsAppearanceReferences
+                                      ? imageReferences.flatMap((reference) =>
+                                            reference.id ? [reference.id] : [],
+                                        )
+                                      : [],
                               )
                             : null;
                         if (checked) target.upscale = 1;
@@ -205,11 +218,7 @@ export const appendCharacterRefineSection = (
     fields.appendChild(
         buildField(
             "Subject",
-            textInput(
-                bindings,
-                "subject",
-                MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT,
-            ),
+            textInput(bindings, "subject", CHARACTER_REFINE_SUBJECT_DEFAULT),
             undefined,
             'Describe who or what to follow, such as "person" or "dog".',
         ),
@@ -217,7 +226,7 @@ export const appendCharacterRefineSection = (
     fields.appendChild(
         buildField(
             "Part",
-            textInput(bindings, "part", MINIMAX_CHARACTER_REFINE_PART_DEFAULT),
+            textInput(bindings, "part", CHARACTER_REFINE_PART_DEFAULT),
             undefined,
             'Name the area you want to repair, such as "face" or "hand".',
         ),
@@ -227,9 +236,9 @@ export const appendCharacterRefineSection = (
             "Subject Confidence",
             "character-refine-subject-confidence",
             stage.characterRefine.subjectConfidence,
-            MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
-            MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
-            MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
+            CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+            CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+            CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
             (target, value) => {
                 if (target.characterRefine) {
                     target.characterRefine.subjectConfidence = value;
@@ -245,9 +254,9 @@ export const appendCharacterRefineSection = (
             "Part Confidence",
             "character-refine-part-confidence",
             stage.characterRefine.partConfidence,
-            MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
-            MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
-            MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
+            CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+            CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+            CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
             (target, value) => {
                 if (target.characterRefine) {
                     target.characterRefine.partConfidence = value;
@@ -275,9 +284,9 @@ export const appendCharacterRefineSection = (
                 label,
                 `character-refine-${key}`,
                 stage.characterRefine[key],
-                MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
-                MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
-                MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP,
+                CHARACTER_REFINE_CROP_DIMENSION_MIN,
+                CHARACTER_REFINE_CROP_DIMENSION_MAX,
+                CHARACTER_REFINE_CROP_DIMENSION_STEP,
                 (target, value) => {
                     if (target.characterRefine) {
                         target.characterRefine[key] = value;
@@ -292,7 +301,9 @@ export const appendCharacterRefineSection = (
             ),
         );
     }
-    fields.appendChild(pictureRows(bindings, imageReferences));
+    if (supportsAppearanceReferences) {
+        fields.appendChild(pictureRows(bindings, imageReferences));
+    }
     fields.appendChild(
         buildCheckbox(
             "Verify Identity",

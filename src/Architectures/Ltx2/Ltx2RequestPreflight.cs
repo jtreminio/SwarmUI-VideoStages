@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Ltx2.Planning;
+using VideoStages.CharacterRefine;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2;
@@ -18,11 +19,64 @@ internal static class Ltx2RequestPreflight
         UploadedMediaPreflight media = new(generator.UserInput);
         bool nodesAvailable = generator.Features.Contains(Ltx2HostIntegration.FeatureFlag);
         bool reportedMissingNodes = false;
+        HashSet<int> continueTargetClipIds = plan.Boundaries
+            .Select((boundary, index) => (boundary, index))
+            .Where(entry => entry.boundary.EffectiveJoin == BoundaryJoinType.Continue
+                && entry.index + 1 < plan.Clips.Count)
+            .Select(entry => plan.Clips[entry.index + 1].ClipId)
+            .ToHashSet();
         foreach (ClipPlan clip in plan.Clips.Where(
             clip => clip.Architecture.Id == Ltx2ArchitectureModule.ArchitectureId))
         {
             foreach (StagePlan stage in clip.Stages)
             {
+                LtxCharacterRefinePlan characterRefine =
+                    stage.RequireLtx2Payload().CharacterRefine;
+                if (characterRefine is not null
+                    && StageStartStepPolicy.StartStep(
+                        stage.Core.Steps,
+                        stage.Core.Control) < stage.Core.Steps)
+                {
+                    string[] missingBonitaNodes = BonitaGraph.MissingNodeClassTypes(generator);
+                    if (missingBonitaNodes.Length > 0)
+                    {
+                        diagnostics.Add(new(
+                            PlanDiagnosticSeverity.Error,
+                            "ltx2.character-refine.nodes-missing",
+                            $"Make Them Bonita is missing required nodes "
+                                + $"{string.Join(", ", missingBonitaNodes)}. Install "
+                                + "ComfyUI-Bonita and restart ComfyUI.",
+                            clip.ClipId,
+                            stage.StageId,
+                            stage.ClipStageRawIndex));
+                    }
+                }
+                if (characterRefine is not null && continueTargetClipIds.Contains(clip.ClipId))
+                {
+                    diagnostics.Add(new(
+                        PlanDiagnosticSeverity.Error,
+                        "ltx2.character-refine.continue-unsupported",
+                        $"Clip {clip.ClipId}: stage {stage.StageId} Make Them Bonita cannot run "
+                            + "in a Continue-boundary target because crop refinement cannot "
+                            + "preserve the opening continuity anchor. Use a cut or crossfade.",
+                        clip.ClipId,
+                        stage.StageId,
+                        stage.ClipStageRawIndex));
+                }
+                foreach (LtxCharacterRefineReferencePlan identity in
+                    characterRefine?.IdentityReferences ?? [])
+                {
+                    if (StringUtils.Equals(identity.Source, MediaSource.Upload)
+                        && media.ImageDiagnostic(
+                            identity.Media?.Data,
+                            identity.Media?.FileName,
+                            $"clip {clip.ClipId} Make Them Bonita identity reference",
+                            clip.ClipId,
+                            stage.StageId) is { } unreadableIdentity)
+                    {
+                        diagnostics.Add(unreadableIdentity);
+                    }
+                }
                 foreach (FrameRefPlan reference in
                     stage.RequireLtx2Payload().FrameReferences.Where(
                         entry => entry.SourceKind == FrameRefSourceKind.Upload))

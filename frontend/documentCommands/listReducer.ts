@@ -1,4 +1,5 @@
 import { reconcileClipArchitectureIdentity } from "../architectures/clipIdentity";
+import { createCapabilityViewResolver } from "../architectures/policy";
 import { clipReferenceIsUsable } from "../clipReferenceSource";
 import type { CanonicalAuthoringDocument, CanonicalClip } from "../types";
 import {
@@ -110,6 +111,11 @@ export const applyListCommand = (
         return failure(document, "missing-target");
     }
     if (descriptor.reconcilesCharacterRefineReferences) {
+        const supportsAppearanceReferences =
+            context.architectureCatalog !== null &&
+            createCapabilityViewResolver(context.architectureCatalog)
+                .forClip(owner as CanonicalClip)
+                .decision("characterRefineAppearanceReferences").supported;
         const reference = (owner as CanonicalClip).references.find(
             (candidate) => candidate.id === affectedId,
         );
@@ -120,7 +126,11 @@ export const applyListCommand = (
             clipReferenceIsUsable(reference);
         for (const stage of (owner as CanonicalClip).stages) {
             if (!stage.characterRefine) continue;
-            if (usableImage && !wasUsableImage) {
+            if (
+                supportsAppearanceReferences &&
+                usableImage &&
+                !wasUsableImage
+            ) {
                 if (
                     !stage.characterRefine.pictureReferenceIds.includes(
                         affectedId,

@@ -683,13 +683,31 @@ describe("buildClipReferenceSection", () => {
     });
 
     it("disables Add for an architecture that does not support clip references", () => {
-        const add = buildBody(
-            [],
-            0,
-            testArchitectureCatalog(),
-        ).querySelector<HTMLButtonElement>(".vst-detail-add-clip-ref");
+        const catalog = testArchitectureCatalog();
+        catalog.architectures[0].capabilities.features =
+            catalog.architectures[0].capabilities.features.filter(
+                (feature) => feature !== "characterRefineIdentityReferences",
+            );
+        const add = buildBody([], 0, catalog).querySelector<HTMLButtonElement>(
+            ".vst-detail-add-clip-ref",
+        );
 
         expect(add?.disabled).toBe(true);
+    });
+
+    it("allows image identity references without claiming general clip references", () => {
+        const catalog = testArchitectureCatalog();
+        const addClipReference = jest.fn();
+        const body = buildBody([], 0, catalog, {
+            addClipReference,
+        } as unknown as Partial<DetailStripContext>);
+        const add = body.querySelector<HTMLButtonElement>(
+            ".vst-detail-add-clip-ref",
+        );
+
+        expect(add?.disabled).toBe(false);
+        add?.click();
+        expect(addClipReference).toHaveBeenCalledWith(0);
     });
 
     it("offers the length toggle only on timed media", () => {

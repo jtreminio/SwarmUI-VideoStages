@@ -823,6 +823,9 @@
     frameReferences: "Keyframes",
     stageReferenceStrengths: "Stage keyframe strengths",
     clipReferences: "Clip references",
+    characterRefine: "Character refinement",
+    characterRefineAppearanceReferences: "Appearance references",
+    characterRefineIdentityReferences: "Identity references",
     referenceFraming: "Reference framing",
     retake: "Retake",
     audioBoundaryCarry: "Boundary audio carry",
@@ -1147,6 +1150,18 @@
     const specs = models.map(frameGridForModel);
     return specs.some((spec) => spec === null) ? { status: "unknown" } : resolveCompatibleFrameGrid(specs);
   };
+  var stageProducesDecodedVideo = (stage, supports) => {
+    if (stage.control > 0) {
+      return true;
+    }
+    const upscaleMode = upscaleModeForMethod(stage.upscaleMethod ?? "");
+    if ((stage.upscale ?? 1) === 1 || upscaleMode !== "latent" && upscaleMode !== "latent-model") {
+      return false;
+    }
+    return supports(
+      upscaleMode === "latent" ? "latentUpscale" : "latentModelUpscale"
+    );
+  };
   var effectiveGridModels = (clip, modelForName, architectureForId) => {
     const stages = clip.stages.slice(0, activeStageCount(clip));
     if (stages.length === 0) {
@@ -1160,17 +1175,13 @@
       if (stageIndex === 0 && clip.initVideo == null) {
         return true;
       }
-      if (stage.control > 0 || stageIndex === stages.length - 1 && retakeCanExecute) {
+      if (stageProducesDecodedVideo(
+        stage,
+        (feature) => clipCapabilities === null ? true : architectureFeatureSupport(feature, clipCapabilities)
+      ) || stageIndex === stages.length - 1 && retakeCanExecute) {
         return true;
       }
-      const upscaleMode = upscaleModeForMethod(stage.upscaleMethod ?? "");
-      if ((stage.upscale ?? 1) === 1 || upscaleMode !== "latent" && upscaleMode !== "latent-model") {
-        return false;
-      }
-      return clipCapabilities === null || architectureFeatureSupport(
-        upscaleMode === "latent" ? "latentUpscale" : "latentModelUpscale",
-        clipCapabilities
-      );
+      return false;
     }).map((stage) => stage.model);
   };
   var clipHasGenerationStageForLookup = (clip, modelForName, architectureForId) => effectiveGridModels(clip, modelForName, architectureForId).length > 0;
@@ -2931,6 +2942,18 @@
   var REFERENCE_SCALES = [1, 0.5, 0.25];
 
   // frontend/clipReferenceAuthoring.ts
+  var clipReferenceAuthoring = (capabilities) => {
+    const general = capabilities.decision("clipReferences");
+    if (general.supported) {
+      return { mode: "all", decision: general, feature: "clipReferences" };
+    }
+    const identity = capabilities.decision("characterRefineIdentityReferences");
+    return identity.supported ? {
+      mode: "identity-images",
+      decision: identity,
+      feature: "characterRefineIdentityReferences"
+    } : { mode: "none", decision: general, feature: "clipReferences" };
+  };
   var CLIP_REFERENCE_KIND_INFO = {
     image: {
       label: "Image",
@@ -4018,22 +4041,28 @@
     return true;
   };
 
-  // frontend/generatedMiniMaxCharacterRefine.ts
-  var MINIMAX_CHARACTER_REFINE_FEATURE = "bonita";
-  var MINIMAX_CHARACTER_REFINE_REPOSITORY_URL = "https://github.com/jtreminio/ComfyUI-Bonita";
-  var MINIMAX_CHARACTER_REFINE_FINDER_DEFAULT = "sam3";
-  var MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT = "person";
-  var MINIMAX_CHARACTER_REFINE_PART_DEFAULT = "face";
-  var MINIMAX_CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT = 0.25;
-  var MINIMAX_CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT = 0.1;
-  var MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN = 0;
-  var MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX = 1;
-  var MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_STEP = 0.05;
-  var MINIMAX_CHARACTER_REFINE_CROP_WIDTH_DEFAULT = 512;
-  var MINIMAX_CHARACTER_REFINE_CROP_HEIGHT_DEFAULT = 512;
-  var MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN = 64;
-  var MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX = 4096;
-  var MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP = 32;
+  // frontend/generatedCharacterRefine.ts
+  var CHARACTER_REFINE_INSTALL_FEATURE = "bonita";
+  var CHARACTER_REFINE_REQUIRED_FEATURES = [
+    "bonita.sam3-finder",
+    "bonita.yolo-finder",
+    "bonita.find-and-crop",
+    "bonita.apply-repair"
+  ];
+  var CHARACTER_REFINE_REPOSITORY_URL = "https://github.com/jtreminio/ComfyUI-Bonita";
+  var CHARACTER_REFINE_FINDER_DEFAULT = "sam3";
+  var CHARACTER_REFINE_SUBJECT_DEFAULT = "person";
+  var CHARACTER_REFINE_PART_DEFAULT = "face";
+  var CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT = 0.25;
+  var CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT = 0.1;
+  var CHARACTER_REFINE_DETECTION_THRESHOLD_MIN = 0;
+  var CHARACTER_REFINE_DETECTION_THRESHOLD_MAX = 1;
+  var CHARACTER_REFINE_DETECTION_THRESHOLD_STEP = 0.05;
+  var CHARACTER_REFINE_CROP_WIDTH_DEFAULT = 512;
+  var CHARACTER_REFINE_CROP_HEIGHT_DEFAULT = 512;
+  var CHARACTER_REFINE_CROP_DIMENSION_MIN = 64;
+  var CHARACTER_REFINE_CROP_DIMENSION_MAX = 4096;
+  var CHARACTER_REFINE_CROP_DIMENSION_STEP = 32;
 
   // frontend/normalizationStage.ts
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find((value) => value === "pixel-lanczos") ?? upscaleMethodValues[0] ?? "";
@@ -4119,13 +4148,13 @@
   var defaultCharacterRefine = (pictureReferenceIds) => ({
     pictureReferenceIds: [...pictureReferenceIds],
     verifyIdentity: pictureReferenceIds.length > 0,
-    finder: MINIMAX_CHARACTER_REFINE_FINDER_DEFAULT,
-    subject: MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT,
-    part: MINIMAX_CHARACTER_REFINE_PART_DEFAULT,
-    subjectConfidence: MINIMAX_CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT,
-    partConfidence: MINIMAX_CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT,
-    cropWidth: MINIMAX_CHARACTER_REFINE_CROP_WIDTH_DEFAULT,
-    cropHeight: MINIMAX_CHARACTER_REFINE_CROP_HEIGHT_DEFAULT
+    finder: CHARACTER_REFINE_FINDER_DEFAULT,
+    subject: CHARACTER_REFINE_SUBJECT_DEFAULT,
+    part: CHARACTER_REFINE_PART_DEFAULT,
+    subjectConfidence: CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT,
+    partConfidence: CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT,
+    cropWidth: CHARACTER_REFINE_CROP_WIDTH_DEFAULT,
+    cropHeight: CHARACTER_REFINE_CROP_HEIGHT_DEFAULT
   });
   var referenceIds = (value) => Array.isArray(value) ? [...new Set(value.map(trimmedText).filter(Boolean))] : [];
   var normalizeCharacterRefine = (value) => {
@@ -4135,34 +4164,34 @@
     return {
       pictureReferenceIds: pictures,
       verifyIdentity: typeof value.verifyIdentity === "boolean" ? value.verifyIdentity : Boolean(legacyIdentity),
-      finder: value.finder === "yolo" ? "yolo" : MINIMAX_CHARACTER_REFINE_FINDER_DEFAULT,
-      subject: trimmedText(value.subject) || trimmedText(value.coarseTarget) || MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT,
-      part: trimmedText(value.part) || trimmedText(value.fineTarget) || MINIMAX_CHARACTER_REFINE_PART_DEFAULT,
+      finder: value.finder === "yolo" ? "yolo" : CHARACTER_REFINE_FINDER_DEFAULT,
+      subject: trimmedText(value.subject) || trimmedText(value.coarseTarget) || CHARACTER_REFINE_SUBJECT_DEFAULT,
+      part: trimmedText(value.part) || trimmedText(value.fineTarget) || CHARACTER_REFINE_PART_DEFAULT,
       subjectConfidence: clampedNumber(
         value.subjectConfidence ?? value.trackDetectionThreshold,
-        MINIMAX_CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT,
-        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
-        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX
+        CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MAX
       ),
       partConfidence: clampedNumber(
         value.partConfidence ?? value.targetDetectionThreshold,
-        MINIMAX_CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT,
-        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
-        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX
+        CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MAX
       ),
       cropWidth: snapValueToStep(
         value.cropWidth,
-        MINIMAX_CHARACTER_REFINE_CROP_WIDTH_DEFAULT,
-        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
-        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
-        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP
+        CHARACTER_REFINE_CROP_WIDTH_DEFAULT,
+        CHARACTER_REFINE_CROP_DIMENSION_MIN,
+        CHARACTER_REFINE_CROP_DIMENSION_MAX,
+        CHARACTER_REFINE_CROP_DIMENSION_STEP
       ),
       cropHeight: snapValueToStep(
         value.cropHeight,
-        MINIMAX_CHARACTER_REFINE_CROP_HEIGHT_DEFAULT,
-        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
-        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
-        MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP
+        CHARACTER_REFINE_CROP_HEIGHT_DEFAULT,
+        CHARACTER_REFINE_CROP_DIMENSION_MIN,
+        CHARACTER_REFINE_CROP_DIMENSION_MAX,
+        CHARACTER_REFINE_CROP_DIMENSION_STEP
       )
     };
   };
@@ -5943,13 +5972,14 @@
       return failure(document2, "missing-target");
     }
     if (descriptor.reconcilesCharacterRefineReferences) {
+      const supportsAppearanceReferences = context.architectureCatalog !== null && createCapabilityViewResolver(context.architectureCatalog).forClip(owner).decision("characterRefineAppearanceReferences").supported;
       const reference = owner.references.find(
         (candidate) => candidate.id === affectedId
       );
       const usableImage = operation !== "remove" && reference !== void 0 && reference.kind === "image" && clipReferenceIsUsable(reference);
       for (const stage of owner.stages) {
         if (!stage.characterRefine) continue;
-        if (usableImage && !wasUsableImage) {
+        if (supportsAppearanceReferences && usableImage && !wasUsableImage) {
           if (!stage.characterRefine.pictureReferenceIds.includes(
             affectedId
           )) {
@@ -7342,9 +7372,33 @@
       !supports("frameReferences") && clip.frameRefs.length > 0,
       "frameReferences"
     );
+    const identityImagesSupported = supports("characterRefineIdentityReferences") && clip.stages.some(
+      (stage) => stage.characterRefine?.verifyIdentity === true
+    );
     unsupportedFeature(
-      !supports("clipReferences") && clip.references.length > 0,
+      !supports("clipReferences") && clip.references.some(
+        (reference) => !identityImagesSupported || reference.kind !== "image"
+      ),
       "clipReferences"
+    );
+    const characterRefineConfigured = clip.stages.some(
+      (stage) => stage.characterRefine !== null
+    );
+    unsupportedFeature(
+      !supports("characterRefine") && characterRefineConfigured,
+      "characterRefine"
+    );
+    unsupportedFeature(
+      supports("characterRefine") && !supports("characterRefineAppearanceReferences") && clip.stages.some(
+        (stage) => (stage.characterRefine?.pictureReferenceIds.length ?? 0) > 0
+      ),
+      "characterRefineAppearanceReferences"
+    );
+    unsupportedFeature(
+      supports("characterRefine") && !supports("characterRefineIdentityReferences") && clip.stages.some(
+        (stage) => stage.characterRefine?.verifyIdentity === true
+      ),
+      "characterRefineIdentityReferences"
     );
     unsupportedFeature(
       !supports("referenceFraming") && clip.refFraming !== "crop",
@@ -13801,13 +13855,14 @@ ${slot}`;
     const clip = clips[clipIdx];
     const references = clip.references;
     const { capabilities, defaults } = ctx.authoring();
-    const decision = capabilities.forClip(clip).decision("clipReferences");
-    const incomingBoundary = incomingReferenceContinueForClip(
+    const authoring = clipReferenceAuthoring(capabilities.forClip(clip));
+    const decision = authoring.decision;
+    const incomingBoundary = authoring.mode === "all" ? incomingReferenceContinueForClip(
       clips,
       fps,
       capabilities,
       clipIdx
-    );
+    ) : null;
     const incomingReference = {
       kind: "video",
       includeSoundtrack: incomingBoundary ? clips[incomingBoundary.leftIdx].boundaryOutReferenceIncludeSoundtrack : false
@@ -13867,7 +13922,7 @@ ${slot}`;
     const buildSection = (editorForItem) => {
       const section = buildRepeatingEditor({
         key: "clip-references",
-        label: "References",
+        label: authoring.mode === "identity-images" ? "Identity References" : "References",
         sectionClass: "vst-detail-clip-ref-section",
         open,
         items: [
@@ -13948,7 +14003,9 @@ ${slot}`;
         buildField(
           "Kind",
           buildOptionSelect(
-            CLIP_REFERENCE_KINDS.map((kind) => ({
+            CLIP_REFERENCE_KINDS.filter(
+              (kind) => authoring.mode === "all" || kind === "image" || kind === reference.kind
+            ).map((kind) => ({
               value: kind,
               label: CLIP_REFERENCE_KIND_INFO[kind].label
             })),
@@ -14821,9 +14878,18 @@ ${slot}`;
     } = bindings;
     const sourceVideo = clip.initVideo;
     const sourceVideoKind = sourceVideo?.source ?? MEDIA_SOURCE_UPLOAD;
-    const hasDecodedVideo = stageIdx > 0 || sourceVideo !== null && (sourceVideoKind === MEDIA_SOURCE_UPLOAD || sourceVideoKind === MEDIA_SOURCE_PREVIOUS_CLIP);
-    if (context.authoring().capabilities.forClip(clip).architectureId !== "minimax" || !getVideoStagesHostBridge().hasBackendFeature(
-      MINIMAX_CHARACTER_REFINE_FEATURE
+    const architecture = context.authoring().capabilities.forClip(clip);
+    const supportsAppearanceReferences = architecture.decision(
+      "characterRefineAppearanceReferences"
+    ).supported;
+    const hasDecodedVideo = clip.stages.slice(0, stageIdx).some(
+      (candidate) => stageProducesDecodedVideo(
+        candidate,
+        (feature) => architecture.decision(feature).supported
+      )
+    ) || sourceVideo !== null && (sourceVideoKind === MEDIA_SOURCE_UPLOAD || sourceVideoKind === MEDIA_SOURCE_PREVIOUS_CLIP);
+    if (!architecture.decision("characterRefine").supported || !CHARACTER_REFINE_REQUIRED_FEATURES.every(
+      (feature) => getVideoStagesHostBridge().hasBackendFeature(feature)
     ) || !hasDecodedVideo) {
       return;
     }
@@ -14847,9 +14913,9 @@ ${slot}`;
           onChange: (checked) => {
             commit((target) => {
               target.characterRefine = checked ? defaultCharacterRefine(
-                imageReferences.flatMap(
+                supportsAppearanceReferences ? imageReferences.flatMap(
                   (reference) => reference.id ? [reference.id] : []
-                )
+                ) : []
               ) : null;
               if (checked) target.upscale = 1;
             });
@@ -14892,11 +14958,7 @@ ${slot}`;
     fields.appendChild(
       buildField(
         "Subject",
-        textInput2(
-          bindings,
-          "subject",
-          MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT
-        ),
+        textInput2(bindings, "subject", CHARACTER_REFINE_SUBJECT_DEFAULT),
         void 0,
         'Describe who or what to follow, such as "person" or "dog".'
       )
@@ -14904,7 +14966,7 @@ ${slot}`;
     fields.appendChild(
       buildField(
         "Part",
-        textInput2(bindings, "part", MINIMAX_CHARACTER_REFINE_PART_DEFAULT),
+        textInput2(bindings, "part", CHARACTER_REFINE_PART_DEFAULT),
         void 0,
         'Name the area you want to repair, such as "face" or "hand".'
       )
@@ -14914,9 +14976,9 @@ ${slot}`;
         "Subject Confidence",
         "character-refine-subject-confidence",
         stage.characterRefine.subjectConfidence,
-        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
-        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
-        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
         (target, value) => {
           if (target.characterRefine) {
             target.characterRefine.subjectConfidence = value;
@@ -14932,9 +14994,9 @@ ${slot}`;
         "Part Confidence",
         "character-refine-part-confidence",
         stage.characterRefine.partConfidence,
-        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
-        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
-        MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
         (target, value) => {
           if (target.characterRefine) {
             target.characterRefine.partConfidence = value;
@@ -14962,9 +15024,9 @@ ${slot}`;
           label,
           `character-refine-${key}`,
           stage.characterRefine[key],
-          MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN,
-          MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX,
-          MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP,
+          CHARACTER_REFINE_CROP_DIMENSION_MIN,
+          CHARACTER_REFINE_CROP_DIMENSION_MAX,
+          CHARACTER_REFINE_CROP_DIMENSION_STEP,
           (target, value) => {
             if (target.characterRefine) {
               target.characterRefine[key] = value;
@@ -14979,7 +15041,9 @@ ${slot}`;
         )
       );
     }
-    fields.appendChild(pictureRows(bindings, imageReferences));
+    if (supportsAppearanceReferences) {
+      fields.appendChild(pictureRows(bindings, imageReferences));
+    }
     fields.appendChild(
       buildCheckbox(
         "Verify Identity",
@@ -15136,7 +15200,7 @@ ${slot}`;
     debouncedCommit
   }) => {
     const capabilityView = context.authoring().capabilities.forClip(clip);
-    if (clip.frameRefs.length > 0 && capabilityView.decision("stageReferenceStrengths").supported) {
+    if (stage.characterRefine === null && clip.frameRefs.length > 0 && capabilityView.decision("stageReferenceStrengths").supported) {
       appendSectionHeader(fields, "Keyframe Strengths");
       const setRefHover = (refIdx, on) => {
         context.getBoundBody()?.querySelector(
@@ -15619,7 +15683,7 @@ ${slot}`;
       buildClipLorasSection(context, clip, clipIdx, stageIdx, defaults)
     );
     appendCapabilitySection(
-      "clipReferences",
+      clipReferenceAuthoring(capabilityView).feature,
       clip.references.length > 0,
       () => buildClipReferenceSection(
         context,
@@ -15929,8 +15993,8 @@ ${slot}`;
   var STORAGE_PREFIX = "videostages";
   var currentModal3 = null;
   var buildBonitaInstallSetting = () => {
-    const installed = getVideoStagesHostBridge().hasBackendFeature(
-      MINIMAX_CHARACTER_REFINE_FEATURE
+    const installed = CHARACTER_REFINE_REQUIRED_FEATURES.every(
+      (feature) => getVideoStagesHostBridge().hasBackendFeature(feature)
     );
     const section = document.createElement("fieldset");
     section.id = "vst_bonita_install";
@@ -15942,14 +16006,14 @@ ${slot}`;
       hint.textContent = "ComfyUI-Bonita is installed.";
     } else {
       const repository = document.createElement("a");
-      repository.href = MINIMAX_CHARACTER_REFINE_REPOSITORY_URL;
+      repository.href = CHARACTER_REFINE_REPOSITORY_URL;
       repository.target = "_blank";
       repository.rel = "noopener noreferrer";
       repository.textContent = "ComfyUI-Bonita";
       hint.append(
         "Install ",
         repository,
-        " - a facefixer useful for MiniMax H3 videos"
+        " - tracked detail repair for supported video models"
       );
     }
     const install = buildDetailActionButton({
@@ -15959,7 +16023,7 @@ ${slot}`;
       disabled: installed,
       onClick: () => {
         if (!installHostFeature(
-          MINIMAX_CHARACTER_REFINE_FEATURE,
+          CHARACTER_REFINE_INSTALL_FEATURE,
           section.id
         )) {
           getVideoStagesHostBridge().showError(
@@ -16843,15 +16907,19 @@ ${slot}`;
       structuralCommit((clips) => {
         const clip = clips[clipIdx];
         const { capabilities } = captureAuthoringTransaction();
-        if (!clip?.id || !capabilities.forClip(clip).decision("clipReferences").supported) {
+        if (!clip?.id) {
           return null;
         }
+        const authoring = clipReferenceAuthoring(
+          capabilities.forClip(clip)
+        );
+        if (authoring.mode === "none") return null;
         return {
           command: {
             type: "clip-reference.add",
             clipId: clip.id,
             reference: {
-              ...buildDefaultClipReference(),
+              ...buildDefaultClipReference("image"),
               id: createEntityId("clip_reference")
             }
           },
@@ -16865,19 +16933,28 @@ ${slot}`;
     };
     const addClipReferences = (clipId, references) => {
       if (references.length === 0) {
-        return;
+        return 0;
       }
+      let added = 0;
       structuralCommit((clips) => {
         const clipIdx = clips.findIndex((clip2) => clip2.id === clipId);
         const clip = clips[clipIdx];
         const { capabilities } = captureAuthoringTransaction();
-        if (!clip || !capabilities.forClip(clip).decision("clipReferences").supported) {
+        if (!clip) {
           return null;
         }
+        const authoring = clipReferenceAuthoring(
+          capabilities.forClip(clip)
+        );
+        const accepted = references.filter(
+          (reference) => authoring.mode === "all" || authoring.mode === "identity-images" && reference.kind === "image"
+        );
+        if (accepted.length === 0) return null;
+        added = accepted.length;
         return {
           command: {
             type: "batch",
-            commands: references.map((reference) => ({
+            commands: accepted.map((reference) => ({
               type: "clip-reference.add",
               clipId,
               reference: {
@@ -16890,10 +16967,11 @@ ${slot}`;
           selection: {
             kind: "clip-ref",
             clipIdx,
-            referenceIdx: clip.references.length + references.length - 1
+            referenceIdx: clip.references.length + accepted.length - 1
           }
         };
       });
+      return added;
     };
     const deleteClipReference = (clipIdx, referenceIdx) => {
       commitRemoval(
@@ -17572,10 +17650,15 @@ ${slot}`;
           const references = results.flatMap(
             ({ media }) => media ? [media] : []
           );
-          selectionOperations.addClipReferences(
+          const added = selectionOperations.addClipReferences(
             target.clipId,
             references
           );
+          if (added < references.length) {
+            getVideoStagesHostBridge().showError(
+              "This architecture accepts only image references for identity verification."
+            );
+          }
           const skipped = results.filter(({ media }) => !media).map(({ file }) => file.name);
           if (skipped.length > 0) {
             getVideoStagesHostBridge().showError(

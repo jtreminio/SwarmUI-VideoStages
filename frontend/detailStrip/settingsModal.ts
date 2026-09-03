@@ -4,9 +4,10 @@ import {
     resetRememberedAccordionSections,
 } from "../detailWidgets";
 import {
-    MINIMAX_CHARACTER_REFINE_FEATURE,
-    MINIMAX_CHARACTER_REFINE_REPOSITORY_URL,
-} from "../generatedMiniMaxCharacterRefine";
+    CHARACTER_REFINE_INSTALL_FEATURE,
+    CHARACTER_REFINE_REPOSITORY_URL,
+    CHARACTER_REFINE_REQUIRED_FEATURES,
+} from "../generatedCharacterRefine";
 import { getVideoStagesHostBridge } from "../host";
 import { installHostFeature } from "../host/swarmUiAdapters";
 import { availableLoraFolders, ROOT_LORA_FOLDER } from "../loraFolderFilter";
@@ -26,8 +27,8 @@ const STORAGE_PREFIX = "videostages";
 let currentModal: ManagedModal | null = null;
 
 const buildBonitaInstallSetting = (): HTMLElement => {
-    const installed = getVideoStagesHostBridge().hasBackendFeature(
-        MINIMAX_CHARACTER_REFINE_FEATURE,
+    const installed = CHARACTER_REFINE_REQUIRED_FEATURES.every((feature) =>
+        getVideoStagesHostBridge().hasBackendFeature(feature),
     );
     const section = document.createElement("fieldset");
     section.id = "vst_bonita_install";
@@ -39,14 +40,14 @@ const buildBonitaInstallSetting = (): HTMLElement => {
         hint.textContent = "ComfyUI-Bonita is installed.";
     } else {
         const repository = document.createElement("a");
-        repository.href = MINIMAX_CHARACTER_REFINE_REPOSITORY_URL;
+        repository.href = CHARACTER_REFINE_REPOSITORY_URL;
         repository.target = "_blank";
         repository.rel = "noopener noreferrer";
         repository.textContent = "ComfyUI-Bonita";
         hint.append(
             "Install ",
             repository,
-            " - a facefixer useful for MiniMax H3 videos",
+            " - tracked detail repair for supported video models",
         );
     }
     const install = buildDetailActionButton({
@@ -61,7 +62,7 @@ const buildBonitaInstallSetting = (): HTMLElement => {
         onClick: () => {
             if (
                 !installHostFeature(
-                    MINIMAX_CHARACTER_REFINE_FEATURE,
+                    CHARACTER_REFINE_INSTALL_FEATURE,
                     section.id,
                 )
             ) {

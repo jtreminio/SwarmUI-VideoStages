@@ -2,7 +2,7 @@ using Newtonsoft.Json.Linq;
 
 namespace VideoStages.Authoring;
 
-public sealed record MiniMaxCharacterRefineSpec(
+public sealed record CharacterRefineSpec(
     IReadOnlyList<string> PictureReferenceIds,
     bool VerifyIdentity,
     string Finder,
@@ -27,7 +27,7 @@ public sealed record MiniMaxCharacterRefineSpec(
     public const int MaxCropDimension = 4096;
     public const int CropDimensionStep = 32;
 
-    internal static MiniMaxCharacterRefineSpec Read(JObject stage)
+    internal static CharacterRefineSpec Read(JObject stage)
     {
         JObject raw = DocumentJson.GetObject(stage, "characterRefine");
         if (raw is null)

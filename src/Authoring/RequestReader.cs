@@ -355,7 +355,7 @@ internal static class RequestReader
             IcLoraStrengths: ReadIcLoraStrengths(stage),
             FrameRefStrengths: ReadRefStrengths(stage, frameRefCount),
             ImageRefWasExplicit: DocumentJson.HasProperty(stage, "imageReference"),
-            CharacterRefine: MiniMaxCharacterRefineSpec.Read(stage));
+            CharacterRefine: CharacterRefineSpec.Read(stage));
     }
 
     private static ClipReadContext ReadContext(

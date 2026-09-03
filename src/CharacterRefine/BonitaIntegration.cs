@@ -9,7 +9,7 @@ using SwarmUI.Utils;
 using VideoStages.Authoring;
 using VideoStages.Generated;
 
-namespace VideoStages.Architectures.MiniMax;
+namespace VideoStages.CharacterRefine;
 
 internal sealed record BuffaloArchiveManifest(string FileName, string Url, string Sha256);
 
@@ -19,7 +19,7 @@ internal sealed record BuffaloModelManifest(
     BuffaloArchiveManifest Archive,
     Dictionary<string, BuffaloModelArtifact> Models);
 
-internal static class MiniMaxCharacterRefineIntegration
+internal static class BonitaIntegration
 {
     private const string BuffaloManifestResource = "VideoStages.buffalo_l_manifest.json";
     internal const string BonitaFeatureFlag = "bonita";
@@ -52,10 +52,10 @@ internal static class MiniMaxCharacterRefineIntegration
 
     internal static IReadOnlyList<(string ClassType, string Feature)> NodeRequirements { get; } =
     [
-        (BonitaSAM3FinderNode.ClassType, BonitaFeatureFlag),
-        (BonitaYOLOFinderNode.ClassType, BonitaFeatureFlag),
-        (BonitaFindAndCropNode.ClassType, BonitaFeatureFlag),
-        (BonitaApplyRepairNode.ClassType, BonitaFeatureFlag),
+        (BonitaSAM3FinderNode.ClassType, "bonita.sam3-finder"),
+        (BonitaYOLOFinderNode.ClassType, "bonita.yolo-finder"),
+        (BonitaFindAndCropNode.ClassType, "bonita.find-and-crop"),
+        (BonitaApplyRepairNode.ClassType, "bonita.apply-repair"),
     ];
 
     internal static void RegisterDependencies()
@@ -216,29 +216,33 @@ internal static class MiniMaxCharacterRefineIntegration
     }
 
     internal static string RenderGeneratedTypeScript() => $$"""
-        // Generated from MiniMaxCharacterRefineIntegration.cs. Do not edit by hand.
+        // Generated from BonitaIntegration.cs. Do not edit by hand.
 
-        export const MINIMAX_CHARACTER_REFINE_FEATURE = "{{BonitaFeatureFlag}}";
-        export const MINIMAX_CHARACTER_REFINE_REPOSITORY_URL =
+        export const CHARACTER_REFINE_INSTALL_FEATURE = "{{BonitaFeatureFlag}}";
+        export const CHARACTER_REFINE_REQUIRED_FEATURES = [
+        {{string.Join("\n", NodeRequirements.Select(requirement => $"    \"{requirement.Feature}\","))}}
+        ] as const;
+        export const CHARACTER_REFINE_REPOSITORY_URL =
             "{{BonitaNodeUrl}}";
-        export const MINIMAX_CHARACTER_REFINE_FINDER_DEFAULT = "{{MiniMaxCharacterRefineSpec.DefaultFinder}}";
-        export const MINIMAX_CHARACTER_REFINE_SUBJECT_DEFAULT = "{{MiniMaxCharacterRefineSpec.DefaultSubject}}";
-        export const MINIMAX_CHARACTER_REFINE_PART_DEFAULT = "{{MiniMaxCharacterRefineSpec.DefaultPart}}";
-        export const MINIMAX_CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT = {{MiniMaxCharacterRefineSpec.DefaultSubjectConfidence}};
-        export const MINIMAX_CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT = {{MiniMaxCharacterRefineSpec.DefaultPartConfidence}};
-        export const MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MIN = {{MiniMaxCharacterRefineSpec.MinDetectionThreshold}};
-        export const MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_MAX = {{MiniMaxCharacterRefineSpec.MaxDetectionThreshold}};
-        export const MINIMAX_CHARACTER_REFINE_DETECTION_THRESHOLD_STEP = {{MiniMaxCharacterRefineSpec.DetectionThresholdStep}};
-        export const MINIMAX_CHARACTER_REFINE_CROP_WIDTH_DEFAULT = {{MiniMaxCharacterRefineSpec.DefaultCropWidth}};
-        export const MINIMAX_CHARACTER_REFINE_CROP_HEIGHT_DEFAULT = {{MiniMaxCharacterRefineSpec.DefaultCropHeight}};
-        export const MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MIN = {{MiniMaxCharacterRefineSpec.MinCropDimension}};
-        export const MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_MAX = {{MiniMaxCharacterRefineSpec.MaxCropDimension}};
-        export const MINIMAX_CHARACTER_REFINE_CROP_DIMENSION_STEP = {{MiniMaxCharacterRefineSpec.CropDimensionStep}};
+        export const CHARACTER_REFINE_FINDER_DEFAULT = "{{CharacterRefineSpec.DefaultFinder}}";
+        export const CHARACTER_REFINE_SUBJECT_DEFAULT = "{{CharacterRefineSpec.DefaultSubject}}";
+        export const CHARACTER_REFINE_PART_DEFAULT = "{{CharacterRefineSpec.DefaultPart}}";
+        export const CHARACTER_REFINE_SUBJECT_CONFIDENCE_DEFAULT = {{CharacterRefineSpec.DefaultSubjectConfidence}};
+        export const CHARACTER_REFINE_PART_CONFIDENCE_DEFAULT = {{CharacterRefineSpec.DefaultPartConfidence}};
+        export const CHARACTER_REFINE_DETECTION_THRESHOLD_MIN = {{CharacterRefineSpec.MinDetectionThreshold}};
+        export const CHARACTER_REFINE_DETECTION_THRESHOLD_MAX = {{CharacterRefineSpec.MaxDetectionThreshold}};
+        export const CHARACTER_REFINE_DETECTION_THRESHOLD_STEP = {{CharacterRefineSpec.DetectionThresholdStep}};
+        export const CHARACTER_REFINE_CROP_WIDTH_DEFAULT = {{CharacterRefineSpec.DefaultCropWidth}};
+        export const CHARACTER_REFINE_CROP_HEIGHT_DEFAULT = {{CharacterRefineSpec.DefaultCropHeight}};
+        export const CHARACTER_REFINE_CROP_DIMENSION_MIN = {{CharacterRefineSpec.MinCropDimension}};
+        export const CHARACTER_REFINE_CROP_DIMENSION_MAX = {{CharacterRefineSpec.MaxCropDimension}};
+        export const CHARACTER_REFINE_CROP_DIMENSION_STEP = {{CharacterRefineSpec.CropDimensionStep}};
         """ + "\n";
 
     private static void RequireBonitaNodes(WorkflowGenerator generator)
     {
-        if (!generator.Features.Contains(BonitaFeatureFlag))
+        if (NodeRequirements.Any(requirement =>
+                !generator.Features.Contains(requirement.Feature)))
         {
             throw new SwarmReadableErrorException(
                 "Install ComfyUI-Bonita before downloading Make Them Bonita models.");

@@ -49,7 +49,7 @@ public sealed record StageSpec(
     IReadOnlyList<double> FrameRefStrengths = null,
     bool ImageRefWasExplicit = false,
     RetakeWindowSpec RetakeWindow = null,
-    MiniMaxCharacterRefineSpec CharacterRefine = null
+    CharacterRefineSpec CharacterRefine = null
 );
 
 public sealed record FrameRefSpec(

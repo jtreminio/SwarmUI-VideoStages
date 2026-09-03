@@ -105,11 +105,13 @@ internal sealed class LtxPostVideoChain
         {
             return null;
         }
-
         IVaeDecode decode = mediaNode as IVaeDecode
             ?? bridge.Graph.FindNearestUpstream<IVaeDecode>(mediaNode);
-        if (decode is null
-            || decode.Samples.Connection?.Node is not LTXVSeparateAVLatentNode separate
+        if (decode is null || CaptureIsExcluded(generator, bridge.Graph, mediaNode, decode))
+        {
+            return null;
+        }
+        if (decode.Samples.Connection?.Node is not LTXVSeparateAVLatentNode separate
             || separate.AvLatent.Connection is not INodeOutput avLatentSource
             || decode.Vae.Connection is not INodeOutput videoVaeSource)
         {
@@ -145,6 +147,32 @@ internal sealed class LtxPostVideoChain
             chain.audioLatentPath);
 
         return chain;
+    }
+
+    private static bool CaptureIsExcluded(
+        WorkflowGenerator generator,
+        ComfyGraph graph,
+        ComfyNode mediaNode,
+        IVaeDecode decode)
+    {
+        string prefix = LtxRuntimeKeyScope.PostChainCaptureExclusionPrefix;
+        return generator.NodeHelpers.Keys
+            .Where(key => key.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(key => key[prefix.Length..])
+            .Any(nodeId => nodeId == mediaNode.Id
+                || (graph.GetNode(nodeId) is ComfyNode excluded
+                    && graph.IsReachableUpstream(mediaNode, nodeId)
+                    && (nodeId == decode.Id
+                        || graph.IsReachableUpstream(excluded, decode.Id))));
+    }
+
+    internal static void ExcludeFromCapture(WorkflowGenerator generator, WGNodeData media)
+    {
+        if (media?.Path is JArray { Count: 2 } path)
+        {
+            generator.NodeHelpers[
+                LtxRuntimeKeyScope.PostChainCaptureExclusion($"{path[0]}")] = "excluded";
+        }
     }
 
     public WGNodeData CreateStageInput()

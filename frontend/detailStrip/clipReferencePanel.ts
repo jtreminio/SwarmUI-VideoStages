@@ -3,6 +3,7 @@ import {
     CLIP_REFERENCE_KIND_INFO,
     CLIP_REFERENCE_KINDS,
     CLIP_REFERENCE_SCALES,
+    clipReferenceAuthoring,
     clipReferenceCanDriveLength,
     clipReferenceTags,
 } from "../clipReferenceAuthoring";
@@ -235,13 +236,17 @@ export const buildClipReferenceSection = (
     const clip = clips[clipIdx];
     const references = clip.references;
     const { capabilities, defaults } = ctx.authoring();
-    const decision = capabilities.forClip(clip).decision("clipReferences");
-    const incomingBoundary = incomingReferenceContinueForClip(
-        clips,
-        fps,
-        capabilities,
-        clipIdx,
-    );
+    const authoring = clipReferenceAuthoring(capabilities.forClip(clip));
+    const decision = authoring.decision;
+    const incomingBoundary =
+        authoring.mode === "all"
+            ? incomingReferenceContinueForClip(
+                  clips,
+                  fps,
+                  capabilities,
+                  clipIdx,
+              )
+            : null;
     const incomingReference = {
         kind: "video" as const,
         includeSoundtrack: incomingBoundary
@@ -310,7 +315,10 @@ export const buildClipReferenceSection = (
     ): HTMLElement => {
         const section = buildRepeatingEditor({
             key: "clip-references",
-            label: "References",
+            label:
+                authoring.mode === "identity-images"
+                    ? "Identity References"
+                    : "References",
             sectionClass: "vst-detail-clip-ref-section",
             open,
             items: [
@@ -413,7 +421,12 @@ export const buildClipReferenceSection = (
             buildField(
                 "Kind",
                 buildOptionSelect(
-                    CLIP_REFERENCE_KINDS.map((kind) => ({
+                    CLIP_REFERENCE_KINDS.filter(
+                        (kind) =>
+                            authoring.mode === "all" ||
+                            kind === "image" ||
+                            kind === reference.kind,
+                    ).map((kind) => ({
                         value: kind,
                         label: CLIP_REFERENCE_KIND_INFO[kind].label,
                     })),

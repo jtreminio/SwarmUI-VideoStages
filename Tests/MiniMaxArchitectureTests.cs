@@ -98,6 +98,9 @@ public class MiniMaxArchitectureTests
                 "audioBoundaryCarry",
                 "audioDerivedDuration",
                 "audioReuse",
+                "characterRefine",
+                "characterRefineAppearanceReferences",
+                "characterRefineIdentityReferences",
                 "clipReferences",
                 "frameReferences",
                 "latentUpscale",
@@ -308,6 +311,68 @@ public class MiniMaxArchitectureTests
         VideoArchitectureDescriptor descriptor = MiniMaxArchitectureModule.Instance.Descriptor;
 
         Assert.False(StagePassthroughPolicy.IsPassthrough(stage, descriptor));
+    }
+
+    [Fact]
+    public void Character_refine_rejects_an_image_after_only_passthrough_predecessors()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject bonita = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: 0.5,
+            steps: 4,
+            cfgScale: 1);
+        bonita["characterRefine"] = BonitaTestModels.CharacterRefineSettings();
+        ClipSpec parsed = ParseClip(
+            MakeClip(
+                MakeStage(models.VideoModel.Name, "Generated", steps: 4, cfgScale: 1),
+                bonita),
+            models);
+        ClipSpec clip = parsed with
+        {
+            Stages = [parsed.Stages[0] with { Control = 0 }, parsed.Stages[1]],
+        };
+
+        ArchitectureClipCompilation compilation = Compile(clip, models);
+
+        Assert.Contains(
+            compilation.Diagnostics,
+            diagnostic => diagnostic.Code == "minimax.character-refine.decoded-input-required");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(0.5)]
+    public void Character_refine_compiles_without_any_keyframe_plan(double control)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject stage = MakeStage(
+            models.VideoModel.Name,
+            "PreviousStage",
+            control: control,
+            steps: 4,
+            cfgScale: 1);
+        stage["characterRefine"] = BonitaTestModels.CharacterRefineSettings();
+        JObject clipObject = MakeClip(stage);
+        clipObject["keyframes"] = new JArray(
+            MakeRef(MediaSource.Base, frame: 1),
+            UploadedReference(frame: 2),
+            MakeRef(MediaSource.Refiner, fromEnd: true));
+
+        ArchitectureClipCompilation compilation = Compile(
+            ParseClip(clipObject, models),
+            models,
+            ArchitectureEntryMode.InitVideo);
+        MiniMaxClipPayload clip = Assert.IsType<MiniMaxClipPayload>(compilation.Payload);
+        MiniMaxStagePayload compiledStage = Assert.IsType<MiniMaxStagePayload>(
+            Assert.Single(compilation.StagePayloads).Value);
+
+        Assert.Null(clip.FirstFrameReference);
+        Assert.Null(clip.LastFrameReference);
+        Assert.Empty(compiledStage.FrameReferences);
     }
 
     [Fact]

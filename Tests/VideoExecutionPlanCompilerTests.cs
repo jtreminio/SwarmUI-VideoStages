@@ -90,6 +90,37 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(24, clip.InitVideo.TargetFramesPerSecond);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(0.5)]
+    public void Compile_Ltx_BonitaStageOwnsNoFrameReferences(double control)
+    {
+        StageSpec stage = Stage(10, control: control) with
+        {
+            CharacterRefine = new(
+                [],
+                false,
+                "yolo",
+                "person",
+                "face",
+                0.3,
+                0.2,
+                384,
+                320),
+        };
+        ClipSpec clip = SpecFixtures.SourcedClip(0, [stage]) with
+        {
+            FrameRefs = [new("Upload", 2, false, "keyframe.png", "data")],
+        };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, clip));
+
+        Assert.Empty(
+            Assert.Single(Assert.Single(plan.Clips).Stages)
+                .RequireLtx2Payload()
+                .FrameReferences);
+    }
+
     [Fact]
     public void Compile_RetakeWithoutInitVideo_WarnsAndDropsRetake()
     {

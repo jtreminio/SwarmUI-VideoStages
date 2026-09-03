@@ -171,7 +171,7 @@ describe("timeline authoring settings modal", () => {
         );
         const repo = container?.querySelector<HTMLAnchorElement>("small a");
         expect(container?.querySelector("small")?.textContent).toBe(
-            "Install ComfyUI-Bonita - a facefixer useful for MiniMax H3 videos",
+            "Install ComfyUI-Bonita - tracked detail repair for supported video models",
         );
         expect(repo?.textContent).toBe("ComfyUI-Bonita");
         expect(repo?.href).toBe("https://github.com/jtreminio/ComfyUI-Bonita");
@@ -188,7 +188,12 @@ describe("timeline authoring settings modal", () => {
         closeTimelineAuthoringSettingsModal();
         (
             globalThis as { currentBackendFeatureSet?: string[] }
-        ).currentBackendFeatureSet = ["bonita"];
+        ).currentBackendFeatureSet = [
+            "bonita.sam3-finder",
+            "bonita.yolo-finder",
+            "bonita.find-and-crop",
+            "bonita.apply-repair",
+        ];
         openTimelineAuthoringSettingsModal();
         const installed = document.querySelector<HTMLButtonElement>(
             "[data-vst-install-bonita]",

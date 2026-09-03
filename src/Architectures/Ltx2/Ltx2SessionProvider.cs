@@ -44,12 +44,13 @@ internal sealed class Ltx2SessionProvider(WorkflowGenerator generator) :
         {
             return;
         }
-        (StageGuideReferenceKind guide, FrameRefSourceKind reference) = kind switch
+        (StageGuideReferenceKind guide, FrameRefSourceKind reference, string mediaSource) =
+            kind switch
         {
             StageRefStore.StageKind.Base =>
-                (StageGuideReferenceKind.Base, FrameRefSourceKind.Base),
+                (StageGuideReferenceKind.Base, FrameRefSourceKind.Base, MediaSource.Base),
             StageRefStore.StageKind.Refiner =>
-                (StageGuideReferenceKind.Refiner, FrameRefSourceKind.Refiner),
+                (StageGuideReferenceKind.Refiner, FrameRefSourceKind.Refiner, MediaSource.Refiner),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
         bool referenced = plan.Clips
@@ -59,12 +60,21 @@ internal sealed class Ltx2SessionProvider(WorkflowGenerator generator) :
             .Any(payload => payload.Guide?.Kind == guide
                 || (!payload.FrameReferences.IsDefaultOrEmpty
                     && payload.FrameReferences.Any(
-                        frameRef => frameRef.SourceKind == reference)));
+                        frameRef => frameRef.SourceKind == reference))
+                || CharacterRefineReferences(
+                    payload,
+                    mediaSource));
         if (referenced)
         {
             new StageRefStore(generator).Capture(kind);
         }
     }
+
+    private static bool CharacterRefineReferences(
+        Ltx2StagePayload payload,
+        string source) =>
+        payload.CharacterRefine?.IdentityReferences.Any(reference =>
+            StringUtils.Equals(reference.Source, source)) == true;
 
     public IVideoGenerationSession CreateSession(
         ArchitectureTimelineSessionContext context)

@@ -160,7 +160,7 @@ internal static class EffectiveVideoRequestProjection
 
         List<int> activeGrids = [];
         foreach (StageSpec stage in clip.Stages.Where(stage =>
-            (assignment.Module?.UsesResolvedTemporalGrid(clip, stage) ?? true)
+            UsesResolvedTemporalGrid(clip, stage, assignment.Architecture)
             && (!StagePassthroughPolicy.IsPassthrough(
                     stage,
                     assignment.Architecture)
@@ -247,5 +247,14 @@ internal static class EffectiveVideoRequestProjection
             Stages = Array.AsReadOnly(effectiveStages),
         };
     }
+
+    private static bool UsesResolvedTemporalGrid(
+        ClipSpec clip,
+        StageSpec stage,
+        VideoArchitectureDescriptor architecture) =>
+        !architecture.Features.HasFlag(ArchitectureFeature.CharacterRefine)
+        || stage.CharacterRefine is null
+        || StagePassthroughPolicy.IsPassthrough(stage, architecture)
+        || (clip.InitVideo is null && stage.ClipStageIndex == 0);
 
 }

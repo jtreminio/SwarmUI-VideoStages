@@ -48,6 +48,12 @@ internal static class LtxRuntimeKeyScope
     internal static string IcLoraUploadedDriveImages(int clipId, int entryIndex) =>
         $"{Prefix}.iclora.upload.{clipId}.{entryIndex}";
 
+    internal static string PostChainCaptureExclusionPrefix =>
+        $"{Prefix}.post-chain-excluded.";
+
+    internal static string PostChainCaptureExclusion(string nodeId) =>
+        PostChainCaptureExclusionPrefix + nodeId;
+
     private static string StageName(StageRefStore.StageKind kind) => kind switch
     {
         StageRefStore.StageKind.Base => "base",

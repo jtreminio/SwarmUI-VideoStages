@@ -174,15 +174,44 @@ describe("reduceDocumentCommand", () => {
         }
     });
 
-    it("selects a usable image added after Make Them Bonita is enabled", () => {
+    it("does not select an LTX identity image as an appearance reference", () => {
         const source = document();
         source.clips[0].stages[0].characterRefine = defaultCharacterRefine([]);
 
-        const result = reduceDocumentCommand(source, {
-            type: "clip-reference.add",
-            clipId: "clip-a",
-            reference: canonicalClipReference("new-picture"),
-        });
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "clip-reference.add",
+                clipId: "clip-a",
+                reference: canonicalClipReference("new-picture"),
+            },
+            { architectureCatalog: testArchitectureCatalog() },
+        );
+
+        expect(result.applied).toBe(true);
+        expect(
+            result.document.clips[0].stages[0].characterRefine
+                ?.pictureReferenceIds,
+        ).toEqual([]);
+    });
+
+    it("selects a new image when the architecture supports appearance references", () => {
+        const source = document();
+        source.clips[0].stages[0].characterRefine = defaultCharacterRefine([]);
+        const catalog = testArchitectureCatalog();
+        catalog.architectures[0].capabilities.features.push(
+            "characterRefineAppearanceReferences",
+        );
+
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "clip-reference.add",
+                clipId: "clip-a",
+                reference: canonicalClipReference("new-picture"),
+            },
+            { architectureCatalog: catalog },
+        );
 
         expect(result.applied).toBe(true);
         expect(
@@ -197,18 +226,26 @@ describe("reduceDocumentCommand", () => {
             canonicalClipReference("new-picture", { uploadedMedia: null }),
         ];
         source.clips[0].stages[0].characterRefine = defaultCharacterRefine([]);
+        const catalog = testArchitectureCatalog();
+        catalog.architectures[0].capabilities.features.push(
+            "characterRefineAppearanceReferences",
+        );
 
-        const result = reduceDocumentCommand(source, {
-            type: "clip-reference.patch",
-            clipId: "clip-a",
-            referenceId: "new-picture",
-            patch: {
-                uploadedMedia: {
-                    data: "data:image/png;base64,QQ==",
-                    fileName: "subject.png",
+        const result = reduceDocumentCommand(
+            source,
+            {
+                type: "clip-reference.patch",
+                clipId: "clip-a",
+                referenceId: "new-picture",
+                patch: {
+                    uploadedMedia: {
+                        data: "data:image/png;base64,QQ==",
+                        fileName: "subject.png",
+                    },
                 },
             },
-        });
+            { architectureCatalog: catalog },
+        );
 
         expect(result.applied).toBe(true);
         expect(

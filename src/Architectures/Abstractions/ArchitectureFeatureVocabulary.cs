@@ -22,6 +22,15 @@ internal static class ArchitectureFeatureVocabulary
             "stageReferenceStrengths",
             "Stage keyframe strengths"),
         new(ArchitectureFeature.ClipReferences, "clipReferences", "Clip references"),
+        new(ArchitectureFeature.CharacterRefine, "characterRefine", "Character refinement"),
+        new(
+            ArchitectureFeature.CharacterRefineAppearanceReferences,
+            "characterRefineAppearanceReferences",
+            "Appearance references"),
+        new(
+            ArchitectureFeature.CharacterRefineIdentityReferences,
+            "characterRefineIdentityReferences",
+            "Identity references"),
         new(ArchitectureFeature.ReferenceFraming, "referenceFraming", "Reference framing"),
         new(ArchitectureFeature.Retake, "retake", "Retake"),
         new(

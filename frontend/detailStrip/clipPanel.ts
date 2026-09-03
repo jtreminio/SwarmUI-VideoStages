@@ -1,4 +1,5 @@
 import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
+import { clipReferenceAuthoring } from "../clipReferenceAuthoring";
 import { executableBoundaryForLeftClip } from "../clipSemantics";
 import { buildStaticSection } from "../detailWidgets";
 import { H3_TEXT_ENCODER_FEATURE } from "../generatedMiniMaxTextEncoder";
@@ -132,7 +133,12 @@ export const buildClipBody = (
     }
     body.appendChild(stages);
     const appendCapabilitySection = (
-        feature: "clipReferences" | "frameReferences" | "icLora" | "retake",
+        feature:
+            | "clipReferences"
+            | "characterRefineIdentityReferences"
+            | "frameReferences"
+            | "icLora"
+            | "retake",
         persisted: boolean,
         content: () => HTMLElement | DocumentFragment,
     ): void => {
@@ -151,16 +157,20 @@ export const buildClipBody = (
     body.appendChild(
         buildClipLorasSection(context, clip, clipIdx, stageIdx, defaults),
     );
-    appendCapabilitySection("clipReferences", clip.references.length > 0, () =>
-        buildClipReferenceSection(
-            context,
-            clipIdx,
-            selection.kind === "clip-ref" ? selection.referenceIdx : null,
-            clips,
-            state.fps,
-            selection.kind === "clip-ref" || selection.kind === "boundary-ref",
-            selection.kind === "boundary-ref",
-        ),
+    appendCapabilitySection(
+        clipReferenceAuthoring(capabilityView).feature,
+        clip.references.length > 0,
+        () =>
+            buildClipReferenceSection(
+                context,
+                clipIdx,
+                selection.kind === "clip-ref" ? selection.referenceIdx : null,
+                clips,
+                state.fps,
+                selection.kind === "clip-ref" ||
+                    selection.kind === "boundary-ref",
+                selection.kind === "boundary-ref",
+            ),
     );
     appendCapabilitySection("frameReferences", clip.frameRefs.length > 0, () =>
         buildRefSection(

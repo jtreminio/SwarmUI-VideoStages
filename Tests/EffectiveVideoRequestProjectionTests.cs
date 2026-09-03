@@ -57,19 +57,72 @@ public sealed class EffectiveVideoRequestProjectionTests
                 1024,
                 1024),
         };
-        ClipSpec clip = Clip(stage) with { Frames = 27 };
+        ClipSpec clip = Clip(stage) with
+        {
+            Frames = 27,
+            InitVideo = new("data:video/mp4;base64,AA==", "source.mp4", 0),
+        };
         TimelineSpec authored = Spec(clip);
         VideoArchitectureDescriptor descriptor =
-            Ltx2ArchitectureModule.Instance.Descriptor with { FrameGrid = 8 };
+            WanArchitectureModule.Instance.Descriptor with { FrameGrid = 4 };
 
         EffectiveVideoRequest request = EffectiveVideoRequestProjection.Project(
             authored,
             TestPlanCompiler.Resolve(
                 authored,
-                _ => Ltx2ArchitectureModule.Instance,
+                _ => WanArchitectureModule.Instance,
                 _ => descriptor));
 
-        Assert.Equal(33, request.Spec.Clips[0].Frames);
+        Assert.Equal(29, request.Spec.Clips[0].Frames);
+    }
+
+    [Fact]
+    public void Character_refine_capabilities_are_validated_by_the_common_owner()
+    {
+        StageSpec stage = Stage(0, rawIndex: 0, model: "wan-model") with
+        {
+            CharacterRefine = new(
+                ["identity"],
+                true,
+                "sam3",
+                "person",
+                "face",
+                0.25,
+                0.1,
+                512,
+                512),
+        };
+        ClipSpec clip = Clip(stage) with
+        {
+            References =
+            [
+                new(
+                    ClipReferenceKind.Image,
+                    MediaSource.Upload,
+                    new("data:image/png;base64,QUJD", "identity.png"),
+                    Id: "identity"),
+            ],
+        };
+
+        IReadOnlyList<PlanDiagnostic> unsupported = ArchitectureCapabilityValidator.Validate(
+            clip,
+            WanArchitectureModule.Instance.Descriptor,
+            ArchitectureEntryMode.TextToVideo);
+        Assert.Contains(unsupported, diagnostic => diagnostic.Code
+            == "effective-request.unsupported-character-refine-ignored");
+        VideoArchitectureDescriptor refinementOnly =
+            WanArchitectureModule.Instance.Descriptor with
+            {
+                Features = ArchitectureFeature.CharacterRefine,
+            };
+        IReadOnlyList<PlanDiagnostic> partial = ArchitectureCapabilityValidator.Validate(
+            clip,
+            refinementOnly,
+            ArchitectureEntryMode.TextToVideo);
+        Assert.Contains(partial, diagnostic => diagnostic.Code
+            == "effective-request.unsupported-character-refine-appearance-references-ignored");
+        Assert.Contains(partial, diagnostic => diagnostic.Code
+            == "effective-request.unsupported-character-refine-identity-references-ignored");
     }
 
     [Fact]

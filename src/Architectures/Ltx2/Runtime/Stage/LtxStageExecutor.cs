@@ -1,10 +1,15 @@
 using ComfyTyped.Core;
 using ComfyTyped.Families;
+using ComfyTyped.SwarmUI;
+using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Ltx2.Planning;
-using VideoStages.Execution.Graph;
 using VideoStages.Architectures.Ltx2.Runtime.Chain;
 using VideoStages.Architectures.Ltx2.Runtime.Guide;
+using VideoStages.CharacterRefine;
+using VideoStages.Execution;
+using VideoStages.Execution.Graph;
+using VideoStages.Generated;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.Ltx2.Runtime.Stage;
@@ -43,13 +48,17 @@ internal sealed class LtxStageExecutor
         WGNodeData guideMedia,
         Func<WGNodeData> resolveFallbackGuide,
         IReadOnlyList<ResolvedFrameRef> frameRefs,
-        double guideMergeStrength)
+        double guideMergeStrength,
+        JArray characterIdentityImage = null)
     {
         WorkflowGenerator.ImageToVideoGenInfo genInfo = stageContext.GenInfo;
         WGNodeData sourceMedia = stageContext.SourceMedia;
         LtxPostVideoChain postVideoChain = stageContext.PostVideoChain;
+        LtxCharacterRefinePlan characterRefine =
+            stageContext.Stage.RequireLtx2Payload().CharacterRefine;
         bool incomingIcLoraMediaIncludesContinueHandle =
             stageContext.ClipContext.ContinueHandleMaterialized;
+        bool ambientImageToVideo = g.IsImageToVideo;
         g.IsImageToVideo = true;
 
         try
@@ -66,7 +75,66 @@ internal sealed class LtxStageExecutor
                 stageContext.Stage,
                 includeLatent: true,
                 includeConditioning: true);
-            WGNodeData effectiveSourceMedia = g.CurrentMedia ?? sourceMedia;
+            BonitaFindAndCropNode characterCrop = null;
+            int characterSourceFrames = 0;
+            WGNodeData effectiveSourceMedia;
+            if (characterRefine is null)
+            {
+                effectiveSourceMedia = g.CurrentMedia ?? sourceMedia;
+            }
+            else
+            {
+                genInfo.Seed = VideoSamplerSeed.FromSourceSampler(
+                    g,
+                    sourceMedia,
+                    genInfo.Seed);
+                int startStep = StageStartStepPolicy.StartStep(
+                    stageContext.Stage.Core.Steps,
+                    stageContext.Stage.Core.Control);
+                if (sourceMedia?.DataType != WGNodeData.DT_VIDEO
+                    || sourceMedia.Path is not JArray)
+                {
+                    throw Invariant.Failure(
+                        $"Make Them Bonita stage {stageContext.Stage.StageId} requires decoded video.");
+                }
+                characterSourceFrames = sourceMedia.Frames
+                    ?? throw Invariant.Failure(
+                        $"Make Them Bonita stage {stageContext.Stage.StageId} has no input frame count.");
+                if (startStep >= stageContext.Stage.Core.Steps)
+                {
+                    g.CurrentMedia = sourceMedia;
+                    return;
+                }
+                if (characterRefine.IdentityReferences.Count > 0)
+                {
+                    BonitaIntegration.EnsureBuffaloModel(g);
+                }
+                (characterCrop, effectiveSourceMedia) = BonitaGraph.Crop(
+                    g,
+                    sourceMedia,
+                    characterRefine.Settings,
+                    characterIdentityImage);
+                int samplingFrames = StaticGeneratedFrameGrid.SnapUp(
+                    characterSourceFrames,
+                    Ltx2ArchitectureModule.FrameGrid);
+                if (samplingFrames != characterSourceFrames)
+                {
+                    using WorkflowBridge bridge = BridgeSync.For(g);
+                    SwarmFrameWindowNode pad = bridge.AddNode(
+                        new SwarmFrameWindowNode().With(
+                            StartFrame: 0,
+                            FrameCount: samplingFrames));
+                    pad.ImagesInput.ConnectFromPath(bridge, effectiveSourceMedia.Path);
+                    effectiveSourceMedia = effectiveSourceMedia.WithPath(pad.Images.ToPath());
+                }
+                effectiveSourceMedia.Frames = samplingFrames;
+                effectiveSourceMedia.FPS = sourceMedia.GetRawFPS();
+                genInfo.Width = characterRefine.Settings.CropWidth;
+                genInfo.Height = characterRefine.Settings.CropHeight;
+                genInfo.Frames = samplingFrames;
+                genInfo.StartStep = startStep;
+                postVideoChain = null;
+            }
             modelPromptPreparer.Prepare(genInfo, stageContext, effectiveSourceMedia);
             if (postVideoChain is not null)
             {
@@ -94,11 +162,26 @@ internal sealed class LtxStageExecutor
                 guideMedia = resolveFallbackGuide();
             }
 
-            WGNodeData stageLatent = latentBuilder.Build(
-                genInfo,
-                stageContext,
-                effectiveSourceMedia,
-                postVideoChain);
+            WGNodeData stageLatent;
+            if (characterRefine is null)
+            {
+                stageLatent = latentBuilder.Build(
+                    genInfo,
+                    stageContext,
+                    effectiveSourceMedia,
+                    postVideoChain);
+            }
+            else
+            {
+                ApplyStageRuntimeDefaults(genInfo, effectiveSourceMedia);
+                stageLatent = effectiveSourceMedia.AsLatentImage(genInfo.Vae);
+                stageLatent.Frames = genInfo.Frames;
+                stageLatent.FPS = genInfo.VideoFPS;
+                stageLatent.AttachedAudio = null;
+                stageLatent = stageLatent.EnsureHasAudioIfNeeded(
+                    genInfo.Vae,
+                    g.CurrentAudioVae);
+            }
             if (stageLatent is null)
             {
                 genInfo.PrepFullCond(g, guideMedia);
@@ -107,7 +190,10 @@ internal sealed class LtxStageExecutor
             {
                 // Must stay below the latent build: defaulting Frames here would make the builder's
                 // "no frame count" branch — the one that lands on PrepFullCond — unreachable.
-                ApplyStageRuntimeDefaults(genInfo, effectiveSourceMedia);
+                if (characterRefine is null)
+                {
+                    ApplyStageRuntimeDefaults(genInfo, effectiveSourceMedia);
+                }
                 LtxConditioningPipeline conditioning = new(
                     g,
                     genInfo,
@@ -119,11 +205,17 @@ internal sealed class LtxStageExecutor
                             .RequireLtx2Payload()
                             .ReferenceFraming),
                     stageLatent);
-                conditioning.UpscaleLatentIfPlanned(effectiveSourceMedia);
+                if (characterRefine is null)
+                {
+                    conditioning.UpscaleLatentIfPlanned(effectiveSourceMedia);
+                }
                 conditioning.MergeOpeningFrameGuides(frameRefs);
                 conditioning.BindToCurrentMedia(guideMedia, guideMergeStrength);
-                // The continue tail merges after the other head conditioning so it wins.
-                conditioning.MergeContinuityAnchor();
+                if (characterRefine is null)
+                {
+                    // The continue tail merges after the other head conditioning so it wins.
+                    conditioning.MergeContinuityAnchor();
+                }
                 conditioning.AddLtxvConditioning();
                 conditioning.AddGuideConditioning(frameRefs);
             }
@@ -166,12 +258,45 @@ internal sealed class LtxStageExecutor
             }
 
             sampler.Execute(genInfo, stageContext);
-            outputFinalizer.Complete(genInfo, stageContext, postVideoChain,
-                stageContext.RequiresDedicatedOutput || forceDedicatedOutput);
+            if (characterRefine is null)
+            {
+                outputFinalizer.Complete(genInfo, stageContext, postVideoChain,
+                    stageContext.RequiresDedicatedOutput || forceDedicatedOutput);
+            }
+            else
+            {
+                WGNodeData decoded = VaeDecodePreference.AsRawImage(
+                    g,
+                    g.CurrentMedia,
+                    genInfo.Vae);
+                JArray repairedPath = decoded.Path;
+                if (genInfo.Frames != characterSourceFrames)
+                {
+                    using WorkflowBridge bridge = BridgeSync.For(g);
+                    SwarmFrameWindowNode trim = bridge.AddNode(
+                        new SwarmFrameWindowNode().With(
+                            StartFrame: 0,
+                            FrameCount: characterSourceFrames));
+                    trim.ImagesInput.ConnectFromPath(bridge, repairedPath);
+                    repairedPath = trim.Images.ToPath();
+                }
+                g.CurrentMedia = BonitaGraph.Apply(
+                    g,
+                    sourceMedia,
+                    characterCrop,
+                    repairedPath);
+                LtxPostVideoChain.ExcludeFromCapture(g, g.CurrentMedia);
+                g.CurrentMedia.Width = sourceMedia.Width;
+                g.CurrentMedia.Height = sourceMedia.Height;
+                g.CurrentMedia.Frames = characterSourceFrames;
+                g.CurrentMedia.FPS = sourceMedia.GetRawFPS();
+                g.CurrentMedia.AttachedAudio = sourceMedia.AttachedAudio?.Duplicate();
+                g.CurrentVae = genInfo.Vae;
+            }
         }
         finally
         {
-            g.IsImageToVideo = false;
+            g.IsImageToVideo = ambientImageToVideo;
         }
     }
 

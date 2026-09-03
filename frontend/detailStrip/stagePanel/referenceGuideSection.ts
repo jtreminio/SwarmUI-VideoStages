@@ -45,6 +45,7 @@ export const appendStageReferenceGuideSection = ({
 }: StagePanelBindings): void => {
     const capabilityView = context.authoring().capabilities.forClip(clip);
     if (
+        stage.characterRefine === null &&
         clip.frameRefs.length > 0 &&
         capabilityView.decision("stageReferenceStrengths").supported
     ) {

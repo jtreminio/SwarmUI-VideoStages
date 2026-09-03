@@ -1,6 +1,12 @@
+using ComfyTyped.Core;
+using ComfyTyped.Generated;
+using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Media;
+using SwarmUI.Utils;
 using VideoStages.Architectures.Abstractions;
+using VideoStages.Execution.Graph;
 using VideoStages.Execution.Parameters;
 using VideoStages.Execution;
 using VideoStages.Planning;
@@ -99,6 +105,20 @@ internal class StageRunner
         StagePlan stage = stageContext.Stage;
         ClipContext clipContext = stageContext.ClipContext;
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
+        if (payload.CharacterRefine is not null)
+        {
+            _stageExecutor.RunStage(
+                stageContext,
+                guideMedia: null,
+                resolveFallbackGuide: null,
+                frameRefs: [],
+                guideMergeStrength: 1,
+                characterIdentityImage: ResolveCharacterRefineIdentity(
+                    payload.CharacterRefine.IdentityReferences,
+                    refStore,
+                    postVideoChain));
+            return;
+        }
         ReferenceFramingMode referenceFraming =
             clipContext.PlannedClip.RequireLtx2Payload().ReferenceFraming;
         List<ResolvedFrameRef> frameRefs = _frameRefResolver.ResolveStageFrameRefs(
@@ -200,6 +220,99 @@ internal class StageRunner
             resolveFallbackGuide,
             frameRefs,
             primaryGuideFrameRef?.Strength ?? 1.0);
+    }
+
+    private JArray ResolveCharacterRefineIdentity(
+        IReadOnlyList<LtxCharacterRefineReferencePlan> references,
+        StageRefStore refStore,
+        LtxPostVideoChain postVideoChain)
+    {
+        if (references is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        foreach (LtxCharacterRefineReferencePlan reference in references)
+        {
+            WGNodeData image;
+            if (StringUtils.Equals(reference.Source, MediaSource.Upload))
+            {
+                ImageFile uploaded = UploadedMedia.GetRefImage(
+                    _generator.UserInput,
+                    reference.Media?.Data,
+                    reference.Media?.FileName,
+                    "Make Them Bonita identity reference");
+                image = _generator.LoadImage(
+                    uploaded,
+                    "${videostagesbonitaidentity}",
+                    false);
+            }
+            else if (MediaSource.TryParseControlNetIndex(
+                reference.Source,
+                out int controlNetIndex))
+            {
+                if (!new ControlNetCoreMediaCapture(_generator).TryGetCapturedControlVideo(
+                        controlNetIndex,
+                        out WGNodeData controlVideo))
+                {
+                    continue;
+                }
+                image = controlVideo.WithPath(controlVideo.Path, WGNodeData.DT_VIDEO);
+            }
+            else
+            {
+                StageRefStore.StageRef stageRef = ResolveIdentityStageRef(
+                    reference.Source,
+                    refStore);
+                if (stageRef is null)
+                {
+                    continue;
+                }
+                image = _guideMediaResolver.ResolveGuideMedia(stageRef, postVideoChain);
+            }
+
+            image = FirstFrameIfVideo(image);
+            if (image?.Path is JArray path)
+            {
+                return path;
+            }
+        }
+
+        throw new SwarmReadableErrorException(
+            "Make Them Bonita identity references are unavailable: "
+                + string.Join(", ", references.Select(reference => reference.Source))
+                + ". Configure one of those sources with an image or video input.");
+    }
+
+    private static StageRefStore.StageRef ResolveIdentityStageRef(
+        string source,
+        StageRefStore refStore)
+    {
+        if (StringUtils.Equals(source, MediaSource.Base))
+        {
+            return refStore.Base;
+        }
+        if (StringUtils.Equals(source, MediaSource.Refiner))
+        {
+            return refStore.Refiner;
+        }
+        return MediaSource.TryParseBase2EditIndex(source, out int editStage)
+            && refStore.TryGetBase2EditStageRef(editStage, out StageRefStore.StageRef editRef)
+                ? editRef
+                : null;
+    }
+
+    private WGNodeData FirstFrameIfVideo(WGNodeData media)
+    {
+        if (media?.DataType != WGNodeData.DT_VIDEO || media.Path is not JArray)
+        {
+            return media;
+        }
+        using WorkflowBridge bridge = BridgeSync.For(_generator);
+        ImageFromBatchNode first = bridge.AddNode(
+            new ImageFromBatchNode().With(BatchIndex: 0, Length: 1));
+        first.Image.ConnectFromPath(bridge, media.Path);
+        return media.WithPath(first.IMAGE.ToPath(), WGNodeData.DT_IMAGE);
     }
 
     private bool PrimaryGuideIsStageInput(

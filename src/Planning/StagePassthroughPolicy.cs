@@ -39,4 +39,28 @@ internal static class StagePassthroughPolicy
         bool upscales = RunsLatentUpscale(StageUpscalePlanCompiler.Mode(stage), descriptor);
         return stage.Control <= 0 && !retakes && !upscales;
     }
+
+    internal static bool HasDecodedVideoBefore(
+        ClipSpec clip,
+        StageSpec target,
+        ArchitectureEntryMode entryMode,
+        VideoArchitectureDescriptor descriptor)
+    {
+        if (entryMode == ArchitectureEntryMode.InitVideo)
+        {
+            return true;
+        }
+        foreach (StageSpec stage in clip.Stages ?? [])
+        {
+            if (stage.ClipStageRawIndex == target.ClipStageRawIndex)
+            {
+                return false;
+            }
+            if (!IsPassthrough(stage, descriptor))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 }

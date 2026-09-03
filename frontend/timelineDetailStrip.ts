@@ -256,10 +256,15 @@ export const createTimelineDetailStrip = (): TimelineDetailStrip => {
                 const references = results.flatMap(({ media }) =>
                     media ? [media] : [],
                 );
-                selectionOperations.addClipReferences(
+                const added = selectionOperations.addClipReferences(
                     target.clipId,
                     references,
                 );
+                if (added < references.length) {
+                    getVideoStagesHostBridge().showError(
+                        "This architecture accepts only image references for identity verification.",
+                    );
+                }
                 const skipped = results
                     .filter(({ media }) => !media)
                     .map(({ file }) => file.name);

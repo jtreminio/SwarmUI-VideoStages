@@ -792,6 +792,7 @@ describe("refineVideoButton", () => {
                     : { videostages: sourceVideostages }),
             },
             sui_extra_data: {
+                videostages_source_sampler_seed: "9007199254740993",
                 original_prompt:
                     "<setvar:animal=bird>" +
                     "<param[text2audio bpm]:<random:120-180>>" +

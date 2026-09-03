@@ -87,9 +87,43 @@ const persistedCapabilityIssues = (
         !supports("frameReferences") && clip.frameRefs.length > 0,
         "frameReferences",
     );
+    const identityImagesSupported =
+        supports("characterRefineIdentityReferences") &&
+        clip.stages.some(
+            (stage) => stage.characterRefine?.verifyIdentity === true,
+        );
     unsupportedFeature(
-        !supports("clipReferences") && clip.references.length > 0,
+        !supports("clipReferences") &&
+            clip.references.some(
+                (reference) =>
+                    !identityImagesSupported || reference.kind !== "image",
+            ),
         "clipReferences",
+    );
+    const characterRefineConfigured = clip.stages.some(
+        (stage) => stage.characterRefine !== null,
+    );
+    unsupportedFeature(
+        !supports("characterRefine") && characterRefineConfigured,
+        "characterRefine",
+    );
+    unsupportedFeature(
+        supports("characterRefine") &&
+            !supports("characterRefineAppearanceReferences") &&
+            clip.stages.some(
+                (stage) =>
+                    (stage.characterRefine?.pictureReferenceIds.length ?? 0) >
+                    0,
+            ),
+        "characterRefineAppearanceReferences",
+    );
+    unsupportedFeature(
+        supports("characterRefine") &&
+            !supports("characterRefineIdentityReferences") &&
+            clip.stages.some(
+                (stage) => stage.characterRefine?.verifyIdentity === true,
+            ),
+        "characterRefineIdentityReferences",
     );
     unsupportedFeature(
         !supports("referenceFraming") && clip.refFraming !== "crop",

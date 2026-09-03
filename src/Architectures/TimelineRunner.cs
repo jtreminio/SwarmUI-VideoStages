@@ -168,6 +168,11 @@ internal sealed class TimelineRunner
             List<DecodedClipArtifact> clipOutputs = [];
             for (int clipIndex = 0; clipIndex < _plan.Clips.Count; clipIndex++)
             {
+                if (clipIndex > 0)
+                {
+                    // Refine Video installs its source only on the first sliced clip.
+                    _generator.UserInput.ExtraMeta.Remove(VideoSamplerSeed.MetadataKey);
+                }
                 ClipPlan plannedClip = _plan.Clips[clipIndex];
                 bool exposesPrevious = clipIndex > 0
                     && _plan.Boundaries[clipIndex - 1].EffectiveJoin != BoundaryJoinType.Cut
@@ -199,6 +204,9 @@ internal sealed class TimelineRunner
                     _generator,
                     output,
                     plannedClip);
+                VideoSamplerSeed.RecordOutputFromMedia(
+                    _generator,
+                    output.ToHostMedia(_generator));
                 clipOutputs.Add(output);
                 previousClipOutput = output;
                 previousClip = plannedClip;

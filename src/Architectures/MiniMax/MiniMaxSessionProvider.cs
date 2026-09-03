@@ -3,6 +3,7 @@ using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 using VideoStages.Execution.StockHost;
+using VideoStages.CharacterRefine;
 using VideoStages.Planning;
 
 namespace VideoStages.Architectures.MiniMax;
@@ -117,10 +118,7 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
             clip.ClipId,
             stage.StageId,
             stage.ClipStageRawIndex));
-        string[] missingNodes = MiniMaxCharacterRefineIntegration.NodeRequirements
-            .Where(requirement => !generator.Features.Contains(requirement.Feature))
-            .Select(requirement => requirement.ClassType)
-            .ToArray();
+        string[] missingNodes = BonitaGraph.MissingNodeClassTypes(generator);
         if (missingNodes.Length > 0)
         {
             Error(
@@ -150,7 +148,7 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
     /// <summary>
     /// A capture pins the host node it names for the rest of the request, which is why an unwanted
     /// one is not free: it denies that node to anything that would otherwise take it over. Only
-    /// capture a source some clip names, whether as a keyframe or as a clip reference.
+    /// capture a source a stage will use, whether as a keyframe or as a clip reference.
     /// </summary>
     private static bool AnyClipReferences(VideoExecutionPlan plan, string source) =>
         plan.Clips
@@ -162,11 +160,10 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
                 {
                     payload.FirstFrameReference?.Source,
                     payload.LastFrameReference?.Source,
-                }
+                    }
                     .Concat(payload.References.Select(reference => reference.Source))
                     .Concat(clip.Stages.SelectMany(stage =>
-                        stage.RequireMiniMaxStagePayload()
-                            .FrameReferences
+                        stage.RequireMiniMaxStagePayload().FrameReferences
                             .Where(reference => !reference.IsEndpoint)
                             .Select(reference => reference.RawSource)));
             })

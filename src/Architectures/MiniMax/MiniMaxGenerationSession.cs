@@ -6,6 +6,7 @@ using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
+using VideoStages.CharacterRefine;
 using VideoStages.Execution.Audio;
 using VideoStages.Execution.Graph;
 using VideoStages.Execution.Parameters;
@@ -363,6 +364,10 @@ internal sealed class MiniMaxGenerationSession(
             throw Invariant.Failure(
                 $"Make Them Bonita stage {stage.StageId} requires decoded video.");
         }
+        genInfo.Seed = VideoSamplerSeed.FromSourceSampler(
+            g,
+            incoming,
+            genInfo.Seed);
         int samplerSteps = stage.Core.Steps;
         int startStep = StageStartStepPolicy.StartStep(samplerSteps, stage.Core.Control);
         if (startStep >= samplerSteps)
@@ -385,7 +390,7 @@ internal sealed class MiniMaxGenerationSession(
             JArray identityImage = null;
             if (plan.IdentityReference is not null)
             {
-                MiniMaxCharacterRefineIntegration.EnsureBuffaloModel(g);
+                BonitaIntegration.EnsureBuffaloModel(g);
                 identityImage = ReferenceImage(
                     plan.IdentityReference,
                     $"clip {clip.ClipId} Make Them Bonita identity reference",
@@ -393,50 +398,10 @@ internal sealed class MiniMaxGenerationSession(
                     ?? throw Invariant.Failure(
                         $"Make Them Bonita stage {stage.StageId} has no identity image.");
             }
-            int blur = g.UserInput.Get(T2IParamTypes.SegmentMaskBlur, 10);
-            int targetWidth = plan.CropWidth;
-            int targetHeight = plan.CropHeight;
-            using WorkflowBridge cropBridge = BridgeSync.For(g);
-            JArray finderPath;
-            if (plan.Finder == "yolo")
-            {
-                MiniMaxCharacterRefineIntegration.EnsureYoloModels(g);
-                BonitaYOLOFinderNode finder = cropBridge.AddNode(
-                    new BonitaYOLOFinderNode().With(
-                        SubjectModel: MiniMaxCharacterRefineIntegration.YoloSubjectModel,
-                        PartModel: MiniMaxCharacterRefineIntegration.YoloPartModel,
-                        SubjectConfidence: plan.SubjectConfidence,
-                        PartConfidence: plan.PartConfidence));
-                finderPath = finder.Finder.ToPath();
-            }
-            else
-            {
-                MiniMaxCharacterRefineIntegration.EnsureSamCheckpoint(g);
-                CheckpointLoaderSimpleNode samLoader = cropBridge.AddNode(
-                    new CheckpointLoaderSimpleNode().With(
-                        CkptName: MiniMaxCharacterRefineIntegration.SamCheckpointRelativePath));
-                BonitaSAM3FinderNode finder = cropBridge.AddNode(
-                    new BonitaSAM3FinderNode().With(
-                        SubjectConfidence: plan.SubjectConfidence,
-                        PartConfidence: plan.PartConfidence));
-                finder.Sam3Model.ConnectTo(samLoader.MODEL);
-                finder.Sam3Clip.ConnectTo(samLoader.CLIP);
-                finderPath = finder.Finder.ToPath();
-            }
-            BonitaFindAndCropNode crop = cropBridge.AddNode(
-                new BonitaFindAndCropNode().With(
-                    Subject: plan.Subject,
-                    Part: plan.Part,
-                    CropWidth: targetWidth,
-                    CropHeight: targetHeight,
-                    SurroundingArea: MiniMaxCharacterRefineIntegration.SurroundingArea,
-                    TrackedAreaBlur: blur));
-            crop.VideoFrames.ConnectFromPath(cropBridge, incomingPath);
-            crop.Finder.ConnectFromPath(cropBridge, finderPath);
-            if (identityImage is not null)
-            {
-                crop.CharacterReference.ConnectFromPath(cropBridge, identityImage);
-            }
+            int targetWidth = plan.Settings.CropWidth;
+            int targetHeight = plan.Settings.CropHeight;
+            (BonitaFindAndCropNode cropNode, WGNodeData cropMedia) =
+                BonitaGraph.Crop(g, incoming, plan.Settings, identityImage);
 
             genInfo.Frames = samplingFrames;
             bool identityIsFirstPicture = plan.IdentityReference is not null
@@ -453,19 +418,18 @@ internal sealed class MiniMaxGenerationSession(
                 g,
                 clip.RequireMiniMaxPayload().AttentionWindowSeconds,
                 genInfo);
-            JArray cropPath = crop.CropsToRepair.ToPath();
+            JArray cropPath = cropMedia.Path;
             if (samplingFrames != incomingFrames)
             {
+                using WorkflowBridge cropBridge = BridgeSync.For(g);
                 SwarmFrameWindowNode pad = cropBridge.AddNode(
                     new SwarmFrameWindowNode().With(
                         StartFrame: 0,
                         FrameCount: samplingFrames));
-                pad.ImagesInput.ConnectTo(crop.CropsToRepair);
+                pad.ImagesInput.ConnectFromPath(cropBridge, cropPath);
                 cropPath = pad.Images.ToPath();
             }
-            WGNodeData crops = incoming.WithPath(cropPath, WGNodeData.DT_VIDEO);
-            crops.Width = targetWidth;
-            crops.Height = targetHeight;
+            WGNodeData crops = cropMedia.WithPath(cropPath);
             WGNodeData latent = JointLatent(crops, genInfo);
 
             string sampled = g.CreateKSampler(
@@ -502,14 +466,7 @@ internal sealed class MiniMaxGenerationSession(
                 decodedPath = trim.Images.ToPath();
             }
 
-            using WorkflowBridge finishBridge = BridgeSync.For(g);
-            BonitaApplyRepairNode finish = finishBridge.AddNode(new BonitaApplyRepairNode());
-            finish.VideoFrames.ConnectFromPath(finishBridge, incomingPath);
-            finish.RepairedCrops.ConnectFromPath(finishBridge, decodedPath);
-            finish.PlacementData.ConnectTo(crop.PlacementData);
-            g.CurrentMedia = incoming.WithPath(
-                finish.RepairedVideoFrames.ToPath(),
-                WGNodeData.DT_VIDEO);
+            g.CurrentMedia = BonitaGraph.Apply(g, incoming, cropNode, decodedPath);
             genInfo.Frames = incomingFrames;
             g.CurrentVae = genInfo.Vae;
         }

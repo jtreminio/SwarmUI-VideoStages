@@ -23,6 +23,7 @@ public sealed class StageRefStoreScopeTests
             LtxRuntimeKeyScope.IcLoraAudioReference(3, 4, 5),
             LtxRuntimeKeyScope.IcLoraControlSignal(3, 4),
             LtxRuntimeKeyScope.IcLoraUploadedDriveImages(3, 4),
+            LtxRuntimeKeyScope.PostChainCaptureExclusion("6"),
         ];
         runtimeKeys.AddRange(
             from StageRefStore.StageKind kind in Enum.GetValues<StageRefStore.StageKind>()
@@ -39,9 +40,7 @@ public sealed class StageRefStoreScopeTests
 
     /// <summary>
     /// Every runtime handoff the LTX-2 path writes into <c>NodeHelpers</c> is namespaced to the
-    /// architecture, so a second architecture in the same request cannot collide with it. Generated
-    /// through the real POST path over the widest key-writing shape available: two stages, a pixel
-    /// upscale, and an IC-LoRA with an uploaded drive video and a control signal.
+    /// architecture. This workflow covers stage references, pixel upscale, and IC-LoRA media.
     /// </summary>
     [Fact]
     public async Task A_generated_ltx_workflow_writes_no_unscoped_runtime_key()
@@ -70,18 +69,52 @@ public sealed class StageRefStoreScopeTests
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
                 fixture.ImageToVideoPost(Fixtures.MakeDocument(clip)));
 
-        // Exclude the keys no architecture owns: ControlNet capture, and the execution host's
-        // record of what the root cleanup swept.
-        string[] neutralPrefixes = ["videostages.controlnet.", "videostages.host-root."];
-        string[] videoStagesKeys = [.. generator.NodeHelpers.Keys
-            .Where(key => key.StartsWith("videostages.", StringComparison.Ordinal))
-            .Where(key => !neutralPrefixes.Any(
-                prefix => key.StartsWith(prefix, StringComparison.Ordinal)))];
+        AssertLtxRuntimeKeys(generator);
+    }
 
-        Assert.NotEmpty(videoStagesKeys);
-        Assert.All(
+    [Fact]
+    public async Task A_bonita_ltx_workflow_writes_no_unscoped_runtime_key()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        JObject bonita = fixture.Stage(control: 0.5, steps: 4);
+        bonita.Remove("imageReference");
+        bonita["characterRefine"] = BonitaTestModels.CharacterRefineSettings();
+        JObject clip = Fixtures.MakeClip(
+            0.6,
+            fixture.Stage(control: 0.5, steps: 4),
+            bonita);
+        using IDisposable models = BonitaTestModels.InstallYoloModels();
+
+        (JObject _, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(Fixtures.MakeDocument(clip)),
+                extraFeatures: BonitaTestModels.Features());
+
+        string[] videoStagesKeys = AssertLtxRuntimeKeys(generator);
+        Assert.Contains(
             videoStagesKeys,
-            key => Assert.StartsWith("videostages.arch.ltx2.", key));
+            key => key.Contains(".post-chain-excluded.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_bonita_only_keyframe_does_not_reserve_the_base_reference()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
+        JObject bonita = fixture.Stage(control: 0.5, steps: 4);
+        bonita.Remove("imageReference");
+        bonita["characterRefine"] = BonitaTestModels.CharacterRefineSettings();
+        JObject clip = Fixtures.SourceClip(0.6, 0, bonita);
+        clip["keyframes"] = new JArray(Fixtures.MakeRef(MediaSource.Base));
+        using IDisposable models = BonitaTestModels.InstallYoloModels();
+
+        (JObject _, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(Fixtures.MakeDocument(clip)),
+                extraFeatures: BonitaTestModels.Features());
+
+        Assert.DoesNotContain(
+            LtxRuntimeKeyScope.StageRefMedia(StageRefStore.StageKind.Base),
+            generator.NodeHelpers.Keys);
     }
 
     [Fact]
@@ -108,6 +141,18 @@ public sealed class StageRefStoreScopeTests
         ModelFolderFormat = "/",
         Workflow = [],
     };
+
+    private static string[] AssertLtxRuntimeKeys(WorkflowGenerator generator)
+    {
+        string[] neutralPrefixes = ["videostages.controlnet.", "videostages.host-root."];
+        string[] keys = [.. generator.NodeHelpers.Keys
+            .Where(key => key.StartsWith("videostages.", StringComparison.Ordinal))
+            .Where(key => !neutralPrefixes.Any(
+                prefix => key.StartsWith(prefix, StringComparison.Ordinal)))];
+        Assert.NotEmpty(keys);
+        Assert.All(keys, key => Assert.StartsWith("videostages.arch.ltx2.", key));
+        return keys;
+    }
 
     private static (WGNodeData Media, WGNodeData Vae) AddStageData(
         WorkflowGenerator generator,

@@ -4,7 +4,7 @@ import {
 } from "../audioSource";
 import { activeStageCount } from "../clipSemantics";
 import { type FrameGridSpec, NEUTRAL_FRAME_GRID } from "../renderUtils";
-import type { Clip } from "../types";
+import type { Clip, Stage } from "../types";
 import { architectureDescriptor, modelCatalogEntry } from "./catalogQueries";
 import { effectiveClipCapabilities } from "./modelCapabilities";
 import {
@@ -96,6 +96,27 @@ type TemporalClip = Pick<Clip, "stages"> &
         >
     >;
 
+type LatentUpscaleFeature = "latentUpscale" | "latentModelUpscale";
+
+export const stageProducesDecodedVideo = (
+    stage: Pick<Stage, "control" | "upscale" | "upscaleMethod">,
+    supports: (feature: LatentUpscaleFeature) => boolean,
+): boolean => {
+    if (stage.control > 0) {
+        return true;
+    }
+    const upscaleMode = upscaleModeForMethod(stage.upscaleMethod ?? "");
+    if (
+        (stage.upscale ?? 1) === 1 ||
+        (upscaleMode !== "latent" && upscaleMode !== "latent-model")
+    ) {
+        return false;
+    }
+    return supports(
+        upscaleMode === "latent" ? "latentUpscale" : "latentModelUpscale",
+    );
+};
+
 const effectiveGridModels = (
     clip: TemporalClip,
     modelForName: (model: string) => ArchitectureModelEntry | undefined,
@@ -128,27 +149,16 @@ const effectiveGridModels = (
                 return true;
             }
             if (
-                stage.control > 0 ||
+                stageProducesDecodedVideo(stage, (feature) =>
+                    clipCapabilities === null
+                        ? true
+                        : architectureFeatureSupport(feature, clipCapabilities),
+                ) ||
                 (stageIndex === stages.length - 1 && retakeCanExecute)
             ) {
                 return true;
             }
-            const upscaleMode = upscaleModeForMethod(stage.upscaleMethod ?? "");
-            if (
-                (stage.upscale ?? 1) === 1 ||
-                (upscaleMode !== "latent" && upscaleMode !== "latent-model")
-            ) {
-                return false;
-            }
-            return (
-                clipCapabilities === null ||
-                architectureFeatureSupport(
-                    upscaleMode === "latent"
-                        ? "latentUpscale"
-                        : "latentModelUpscale",
-                    clipCapabilities,
-                )
-            );
+            return false;
         })
         .map((stage) => stage.model);
 };

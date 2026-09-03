@@ -97,9 +97,17 @@ const catalogWithWan = (): ArchitectureModelCatalog => {
 
 const catalogWithMiniMax = (): ArchitectureModelCatalog => {
     const models = catalog();
+    models.entries.push({
+        ...structuredClone(models.entries[0]),
+        value: "ltx-2.5.safetensors",
+        label: "LTX 2.5",
+        modelProfileId: "ltx-2.5",
+        modelClassId: "lightricks-ltx-video-2-5",
+    });
     const minimax = structuredClone(models.architectures[0]);
     minimax.id = "minimax";
     minimax.label = "MiniMax H3";
+    minimax.capabilities.features.push("characterRefineAppearanceReferences");
     models.architectures.push(minimax);
     models.entries.push({
         value: "minimax.safetensors",
@@ -188,7 +196,12 @@ const dispatchSpy = () =>
 beforeEach(() => {
     (
         globalThis as { currentBackendFeatureSet?: string[] }
-    ).currentBackendFeatureSet = ["bonita"];
+    ).currentBackendFeatureSet = [
+        "bonita.sam3-finder",
+        "bonita.yolo-finder",
+        "bonita.find-and-crop",
+        "bonita.apply-repair",
+    ];
 });
 
 afterEach(() => {
@@ -210,6 +223,29 @@ describe("stage reference strengths", () => {
         const clip = minimalClip({
             architectureHint: "wan22",
             modelProfileId: "wan-i2v",
+            frameRefs: [minimalRef()],
+            stages: [stage],
+        });
+
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            stage,
+            testRootDefaults(models),
+        );
+
+        expect(column.textContent).not.toContain("Keyframe Strengths");
+        expect(column.querySelector(".vst-stage-ref-slider")).toBeNull();
+    });
+
+    it("hides keyframe strengths on a Bonita repair stage", () => {
+        const models = catalog();
+        const stage = minimalStage({
+            characterRefine: defaultCharacterRefine([]),
+        });
+        const clip = minimalClip({
             frameRefs: [minimalRef()],
             stages: [stage],
         });
@@ -1507,6 +1543,48 @@ describe("stage architecture model filtering", () => {
             ),
         ).toBeNull();
         expect(bonita(renderMiniMax(1, null))).not.toBeNull();
+        const passthroughFirst = minimalStage({
+            model: "minimax.safetensors",
+            modelProfileId: "minimax-h3",
+            control: 0,
+        });
+        const bonitaSecond = minimalStage({
+            model: "minimax.safetensors",
+            modelProfileId: "minimax-h3",
+            characterRefine: defaultCharacterRefine([]),
+        });
+        const noDecodedVideo = minimalClip({
+            architectureHint: "minimax",
+            modelProfileId: "minimax-h3",
+            initVideo: null,
+            stages: [passthroughFirst, bonitaSecond],
+        });
+        expect(
+            bonita(
+                buildStageParamsColumn(
+                    context(models),
+                    noDecodedVideo,
+                    0,
+                    1,
+                    bonitaSecond,
+                    testRootDefaults(models),
+                ),
+            ),
+        ).toBeNull();
+        passthroughFirst.upscale = 1.5;
+        passthroughFirst.upscaleMethod = "latent-bislerp";
+        expect(
+            bonita(
+                buildStageParamsColumn(
+                    context(models),
+                    noDecodedVideo,
+                    0,
+                    1,
+                    bonitaSecond,
+                    testRootDefaults(models),
+                ),
+            ),
+        ).not.toBeNull();
         expect(
             bonita(
                 renderMiniMax(
@@ -1529,12 +1607,14 @@ describe("stage architecture model filtering", () => {
         ).toBe(true);
 
         const ltxStage = minimalStage({
-            model: "ltx-2.3.safetensors",
-            modelProfileId: "ltx-2.3",
+            model: "ltx-2.5.safetensors",
+            modelProfileId: "ltx-2.5",
+            characterRefine: defaultCharacterRefine([]),
         });
         const ltx = minimalClip({
             architectureHint: "ltx2",
-            modelProfileId: "ltx-2.3",
+            modelProfileId: "ltx-2.5",
+            initVideo: initVideoFixture({ source: MEDIA_SOURCE_UPLOAD }),
             stages: [ltxStage],
         });
         const ltxColumn = buildStageParamsColumn(
@@ -1545,7 +1625,53 @@ describe("stage architecture model filtering", () => {
             ltxStage,
             testRootDefaults(models),
         );
-        expect(ltxColumn.textContent).not.toContain("Make Them Bonita");
+        expect(ltxColumn.textContent).toContain("Make Them Bonita");
+        expect(ltxColumn.textContent).not.toContain("Reference Pictures");
+    });
+
+    it("drives Bonita appearance references from the declared capability", () => {
+        const models = catalogWithMiniMax();
+        const ltx = models.architectures.find(
+            (architecture) => architecture.id === "ltx2",
+        );
+        const minimax = models.architectures.find(
+            (architecture) => architecture.id === "minimax",
+        );
+        ltx?.capabilities.features.push("characterRefineAppearanceReferences");
+        if (minimax) {
+            minimax.capabilities.features =
+                minimax.capabilities.features.filter(
+                    (feature) =>
+                        feature !== "characterRefineAppearanceReferences",
+                );
+        }
+        const render = (architecture: "ltx2" | "minimax", model: string) => {
+            const stage = minimalStage({
+                model,
+                characterRefine: defaultCharacterRefine([]),
+            });
+            const clip = minimalClip({
+                architectureHint: architecture,
+                initVideo: initVideoFixture(),
+                references: [minimalClipReference({ id: "appearance" })],
+                stages: [stage],
+            });
+            return buildStageParamsColumn(
+                context(models),
+                clip,
+                0,
+                0,
+                stage,
+                testRootDefaults(models),
+            );
+        };
+
+        expect(render("ltx2", "ltx-2.5.safetensors").textContent).toContain(
+            "Reference Pictures",
+        );
+        expect(
+            render("minimax", "minimax.safetensors").textContent,
+        ).not.toContain("Reference Pictures");
     });
 
     it("updates Make Them Bonita visibility as upscale changes", () => {

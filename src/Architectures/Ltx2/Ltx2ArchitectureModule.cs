@@ -67,7 +67,9 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
             | ArchitectureFeature.LatentModelUpscale
             | ArchitectureFeature.AudioDerivedDuration
             | ArchitectureFeature.ReferenceFraming
-            | ArchitectureFeature.IcLora,
+            | ArchitectureFeature.IcLora
+            | ArchitectureFeature.CharacterRefine
+            | ArchitectureFeature.CharacterRefineIdentityReferences,
         Ltx2BoundaryPolicy.Instance)
     {
         ConsumesTimelineAudio = true,

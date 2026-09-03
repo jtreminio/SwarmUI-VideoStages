@@ -1,6 +1,7 @@
 using SwarmUI.Text2Image;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
+using VideoStages.CharacterRefine;
 using VideoStages.Execution;
 using VideoStages.Execution.StockHost;
 using VideoStages.Planning;
@@ -85,7 +86,10 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             | ArchitectureFeature.ReferenceFraming
             | ArchitectureFeature.AudioReuse
             | ArchitectureFeature.AudioBoundaryCarry
-            | ArchitectureFeature.LatentUpscale,
+            | ArchitectureFeature.LatentUpscale
+            | ArchitectureFeature.CharacterRefine
+            | ArchitectureFeature.CharacterRefineAppearanceReferences
+            | ArchitectureFeature.CharacterRefineIdentityReferences,
         BoundaryPolicy)
     {
         ConsumesTimelineAudio = true,
@@ -117,11 +121,6 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         return true;
     }
 
-    public bool UsesResolvedTemporalGrid(ClipSpec clip, StageSpec stage) =>
-        stage.CharacterRefine is null
-        || StagePassthroughPolicy.IsPassthrough(stage, Descriptor)
-        || (clip.InitVideo is null && stage.ClipStageIndex == 0);
-
     public ArchitectureClipCompilation ValidateAndCompileClip(
         ClipSpec clip,
         IReadOnlyDictionary<int, ResolvedVideoModel> stageModels,
@@ -150,10 +149,12 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             clip,
             diagnostics,
             context.HasPreviousClipOutput);
+        StageSpec[] keyframeStages =
+            [.. activeStages.Where(stage => stage.CharacterRefine is null)];
         (NativeFrameReferencePlan first, NativeFrameReferencePlan last) =
             NativeFrameReferences.Compile(
                 clip,
-                activeStages,
+                keyframeStages,
                 stageModels,
                 Descriptor,
                 diagnostics,
@@ -169,8 +170,11 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             bool passthrough = StagePassthroughPolicy.IsPassthrough(stage, Descriptor);
             bool characterRefine = stage.CharacterRefine is not null && !passthrough;
             bool decodedInput = !passthrough
-                && (context.EntryMode == ArchitectureEntryMode.InitVideo
-                    || stage.ClipStageIndex > 0);
+                && StagePassthroughPolicy.HasDecodedVideoBefore(
+                    clip,
+                    stage,
+                    context.EntryMode,
+                    Descriptor);
             if (decodedInput && !double.IsFinite(stage.Control))
             {
                 diagnostics.Add(new(
@@ -241,7 +245,9 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                     resolved.LoraTarget)
                 with
                 {
-                    FrameReferences = FrameRefPlanCompiler.Compile(clip, stage),
+                    FrameReferences = stage.CharacterRefine is not null
+                        ? []
+                        : FrameRefPlanCompiler.Compile(clip, stage),
                 };
             MiniMaxCharacterRefinePlan characterRefinePlan = characterRefine
                 ? CompileCharacterRefine(clip, stage, diagnostics)
@@ -268,7 +274,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         StageSpec stage,
         ICollection<PlanDiagnostic> diagnostics)
     {
-        MiniMaxCharacterRefineSpec settings = stage.CharacterRefine;
+        CharacterRefineSpec settings = stage.CharacterRefine;
         if (settings is null)
         {
             return null;
@@ -326,13 +332,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         return new(
             pictures,
             identity,
-            settings.Finder,
-            settings.Subject,
-            settings.Part,
-            settings.SubjectConfidence,
-            settings.PartConfidence,
-            settings.CropWidth,
-            settings.CropHeight);
+            CharacterRefineSettingsPlan.From(settings));
     }
 }
 

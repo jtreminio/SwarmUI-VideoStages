@@ -205,6 +205,25 @@ describe("createTimelineDetailStrip", () => {
         expect(h.refreshSpy).toHaveBeenCalledTimes(1);
     });
 
+    it("lets a fresh LTX clip add an identity image reference", async () => {
+        const catalog = testArchitectureCatalog();
+        resetArchitectureCatalogForTests();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(catalog),
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        h.setup([{ duration: 4, stages: [{}], references: [] }]);
+        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+
+        detailBody()
+            ?.querySelector<HTMLButtonElement>(".vst-detail-add-clip-ref")
+            ?.click();
+
+        expect(committedClips()[0].references).toHaveLength(1);
+        expect(committedClips()[0].references[0].kind).toBe("image");
+    });
+
     it("drops clip references onto the right clip from a boundary-reference view", async () => {
         const catalog = testArchitectureCatalog();
         catalog.architectures[0].capabilities = testArchitectureCapabilities({

@@ -1,9 +1,36 @@
+import type {
+    CapabilityDecision,
+    ClipCapabilityView,
+} from "./architectures/policy/types";
 import { MEDIA_SOURCE_UPLOAD } from "./generatedMediaSource";
 import {
     REFERENCE_SCALE_FULL,
     REFERENCE_SCALES,
 } from "./generatedReferenceScale";
 import type { ClipReference, ClipReferenceKind } from "./types";
+
+export type ClipReferenceAuthoringMode = "all" | "identity-images" | "none";
+
+export const clipReferenceAuthoring = (
+    capabilities: ClipCapabilityView,
+): {
+    mode: ClipReferenceAuthoringMode;
+    decision: CapabilityDecision;
+    feature: "clipReferences" | "characterRefineIdentityReferences";
+} => {
+    const general = capabilities.decision("clipReferences");
+    if (general.supported) {
+        return { mode: "all", decision: general, feature: "clipReferences" };
+    }
+    const identity = capabilities.decision("characterRefineIdentityReferences");
+    return identity.supported
+        ? {
+              mode: "identity-images",
+              decision: identity,
+              feature: "characterRefineIdentityReferences",
+          }
+        : { mode: "none", decision: general, feature: "clipReferences" };
+};
 
 /**
  * Everything that varies per reference kind. `tag` is the name the model
