@@ -1241,15 +1241,14 @@ public class Ltx2CoreVideoContractTests
     }
 
     /// <summary>
-    /// Zero strength drops the guide and the crop that undoes it, without dropping the IC-LoRA
-    /// model patch — the stage still runs the LoRA, it just gets no visual guide.
+    /// Zero strength disables the stage's IC-LoRA rather than loading an unguided model patch.
     /// </summary>
     [Theory]
     [InlineData(0.6, 1)]
     [InlineData(0.0, 0)]
-    public async Task Zero_stage_controlnet_strength_drops_the_guide_and_its_crop(
+    public async Task Zero_stage_controlnet_strength_drops_the_ic_lora(
         double strength,
-        int expectedGuides)
+        int expectedNodes)
     {
         using Ltx2WorkflowFixture fixture = WithControlNetStubs(Ltx2WorkflowFixture.Create());
         JObject stage = fixture.Stage(control: 0.5);
@@ -1261,16 +1260,20 @@ public class Ltx2CoreVideoContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         Assert.Equal(
-            expectedGuides,
+            expectedNodes,
             bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count);
-        Assert.Equal(expectedGuides, bridge.Graph.NodesOfType<LTXVCropGuidesNode>().Count);
+        Assert.Equal(expectedNodes, bridge.Graph.NodesOfType<LTXVCropGuidesNode>().Count);
 
-        LTXICLoRALoaderModelOnlyNode icLora = Assert.Single(
-            bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+        LTXICLoRALoaderModelOnlyNode[] loaders =
+            [.. bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>()];
+        Assert.Equal(expectedNodes, loaders.Length);
         SwarmKSamplerNode sampler = StageSampler(bridge, 0);
-        Assert.Same(icLora, sampler.Model.Connection?.Node);
+        if (loaders.Length > 0)
+        {
+            Assert.Same(loaders[0], sampler.Model.Connection?.Node);
+        }
 
-        live.AssertAllLive(icLora, sampler);
+        live.AssertAllLive([.. loaders, sampler]);
         AssertShippable(bridge, workflow, live);
     }
 

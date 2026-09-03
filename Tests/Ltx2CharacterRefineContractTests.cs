@@ -241,6 +241,43 @@ public class Ltx2CharacterRefineContractTests
     }
 
     [Fact]
+    public async Task Character_refine_ignores_an_ic_lora_with_zero_stage_strength()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        fixture.InstallModel("LoRA", "UnitTest_IcLoraA.safetensors");
+        JObject first = fixture.Stage(control: 0.5, steps: 4);
+        first["icLoraStrengths"] = new JArray(1.0);
+        JObject bonita = fixture.Stage(control: 0.5, steps: 4);
+        bonita.Remove("imageReference");
+        bonita["icLoraStrengths"] = new JArray(0.0);
+        bonita["characterRefine"] = BonitaTestModels.CharacterRefineSettings();
+        JObject clip = SourceClip(0.6, 0, first, bonita);
+        clip["icLoras"] = new JArray(new JObject
+        {
+            ["lora"] = "UnitTest_IcLoraA",
+            ["driveSource"] = MediaSource.Upload,
+            ["driveData"] = $"{IcLoraDriveData.Visual}",
+            ["strength"] = 1.0,
+            ["attentionStrength"] = 1.0,
+            ["controlType"] = Constants.IcLoraControlNone,
+            ["driveMedia"] = new JObject
+            {
+                ["data"] = "data:video/mp4;base64,QUJD",
+                ["fileName"] = "drive.mp4",
+            },
+        });
+
+        using IDisposable models = BonitaTestModels.InstallYoloModels();
+        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+            fixture.Post(MakeDocument(clip)),
+            extraFeatures: BonitaTestModels.Features());
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Single(bridge.Graph.NodesOfType<BonitaApplyRepairNode>());
+        Assert.Single(bridge.Graph.NodesOfType<LTXICLoRALoaderModelOnlyNode>());
+    }
+
+    [Fact]
     public async Task Bonita_stage_ignores_keyframes_after_the_full_video_pass()
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();

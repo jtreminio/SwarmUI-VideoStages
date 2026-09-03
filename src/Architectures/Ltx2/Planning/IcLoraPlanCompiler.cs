@@ -89,6 +89,15 @@ internal static class IcLoraPlanCompiler
             foreach (StageSpec stage in ApplicableStages(clip, entry))
             {
                 int reportedBefore = stageDiagnostics.Count;
+                double? guideStrength = CompileGuideStrength(
+                    index,
+                    entry,
+                    stage,
+                    authoredSource);
+                if (guideStrength is <= 0)
+                {
+                    continue;
+                }
                 if (StagePassthroughPolicy.IsPassthrough(
                         stage,
                         Ltx2ArchitectureModule.Instance.Descriptor))
@@ -122,10 +131,10 @@ internal static class IcLoraPlanCompiler
                 pendingPlans.Add((stage.ClipStageRawIndex, CompilePlan(
                     index,
                     entry,
-                    stage,
                     controlMode,
                     dimensionDownscaleFactor,
-                    drive)));
+                    drive,
+                    guideStrength)));
             }
 
             diagnostics.AddRange(entryDiagnostics);
@@ -246,29 +255,11 @@ internal static class IcLoraPlanCompiler
     private static IcLoraPlan CompilePlan(
         int entryIndex,
         IcLoraSpec entry,
-        StageSpec stage,
         IcLoraControlMode controlMode,
         int dimensionDownscaleFactor,
-        IcLoraDrivePlan drive)
+        IcLoraDrivePlan drive,
+        double? guideStrength)
     {
-        double? guideStrength = null;
-        if (drive.Stream == IcLoraDriveData.Visual)
-        {
-            if (stage.IcLoraStrengths is { } strengths
-                && entryIndex < strengths.Count)
-            {
-                guideStrength = strengths[entryIndex];
-            }
-            else if (stage.ControlNetStrength is double stageStrength)
-            {
-                guideStrength = stageStrength;
-            }
-            else if (drive.Source != IcLoraMediaSourceKind.ControlNet)
-            {
-                guideStrength = 1.0;
-            }
-        }
-
         return new(
             entryIndex,
             entry.Lora,
@@ -280,6 +271,28 @@ internal static class IcLoraPlanCompiler
             drive,
             dimensionDownscaleFactor,
             guideStrength);
+    }
+
+    private static double? CompileGuideStrength(
+        int entryIndex,
+        IcLoraSpec entry,
+        StageSpec stage,
+        IcLoraMediaSourceKind source)
+    {
+        if (entry.DriveData != IcLoraDriveData.Visual)
+        {
+            return null;
+        }
+        if (stage.IcLoraStrengths is { } strengths
+            && entryIndex < strengths.Count)
+        {
+            return strengths[entryIndex];
+        }
+        if (stage.ControlNetStrength is double stageStrength)
+        {
+            return stageStrength;
+        }
+        return source != IcLoraMediaSourceKind.ControlNet ? 1.0 : null;
     }
 
     private static IcLoraDriveMediaKind ResolveIncomingKind(
