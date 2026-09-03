@@ -34,6 +34,8 @@ describe("detail strip timeline settings panel", () => {
         if (!range || !calculated) {
             throw new Error("side-length POT slider missing");
         }
+        expect(number.min).toBe("32");
+        expect(range.min).toBe("256");
         expect(range.dataset.ispot).toBe("true");
         expect(range.step).toBe("1");
         expect(calculated.textContent).toBe("1344 × 768");
@@ -41,6 +43,12 @@ describe("detail strip timeline settings panel", () => {
 
         const potPosition = (value: number): string =>
             `${Math.round(((Math.log2(value) - 8) / 4) * 4096)}`;
+        expect(range.value).toBe(potPosition(1024));
+
+        number.value = "32";
+        number.dispatchEvent(new Event("input", { bubbles: true }));
+        expect(calculated.textContent).toBe("64 × 32");
+
         const stops = [768, 896, 1024, 1280];
         for (const stop of stops) {
             range.value = potPosition(stop);
@@ -108,6 +116,49 @@ describe("detail strip timeline settings panel", () => {
             detail()?.querySelector(".vst-settings-calculated-dims"),
         ).toBeNull();
         expect(h.refreshSpy).toHaveBeenCalled();
+    });
+
+    it("accepts manual custom dimensions below the slider floor", () => {
+        h.setup([{ duration: 4, stages: [{}] }]);
+        const ratio =
+            fieldByLabel("Aspect Ratio").querySelector<HTMLSelectElement>(
+                "select",
+            );
+        if (!ratio) {
+            throw new Error("aspect-ratio select missing");
+        }
+        ratio.value = "custom";
+        ratio.dispatchEvent(new Event("change", { bubbles: true }));
+
+        jest.useFakeTimers();
+        const width = sliderNumberByLabel("Width");
+        const widthRange = width
+            .closest(".auto-slider-box")
+            ?.querySelector<HTMLInputElement>("input.auto-slider-range");
+        expect(width.min).toBe("32");
+        expect(widthRange?.min).toBe("256");
+        width.value = "32";
+        width.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+
+        const height = sliderNumberByLabel("Height");
+        const heightRange = height
+            .closest(".auto-slider-box")
+            ?.querySelector<HTMLInputElement>("input.auto-slider-range");
+        expect(height.min).toBe("32");
+        expect(heightRange?.min).toBe("256");
+        height.value = "32";
+        height.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+
+        const stored = JSON.parse(
+            document.querySelector<HTMLTextAreaElement>("#input_videostages")
+                ?.value ?? "{}",
+        ) as Record<string, unknown>;
+        expect({ width: stored.width, height: stored.height }).toEqual({
+            width: 32,
+            height: 32,
+        });
     });
 
     it("keeps Custom selected after editing a clip and reopening settings", () => {

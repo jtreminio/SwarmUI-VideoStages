@@ -2,6 +2,7 @@ import {
     clamp,
     ROOT_DIMENSION_MAX,
     ROOT_DIMENSION_MIN,
+    ROOT_DIMENSION_SLIDER_MIN,
     ROOT_DIMENSION_STEP,
     ROOT_FPS_MAX,
     ROOT_FPS_MIN,
@@ -222,6 +223,7 @@ export const buildSettingsBody = (
                         next.height = snapped.height;
                     });
                 },
+                { sliderMin: ROOT_DIMENSION_SLIDER_MIN },
             ),
             "settings-width",
         );
@@ -244,6 +246,7 @@ export const buildSettingsBody = (
                         next.height = snapped.height;
                     });
                 },
+                { sliderMin: ROOT_DIMENSION_SLIDER_MIN },
             ),
             "settings-height",
         );
@@ -285,6 +288,7 @@ export const buildSettingsBody = (
                     hint: !ratioHasReference
                         ? "(the host has no 3:4 reference; current dimensions are retained)"
                         : undefined,
+                    sliderMin: ROOT_DIMENSION_SLIDER_MIN,
                     isPot: true,
                 },
             ),

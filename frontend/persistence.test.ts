@@ -1474,8 +1474,16 @@ describe("persistence", () => {
             expect(state.fps).toBe(24);
         });
 
+        it("accepts 32-pixel explicit dimensions", () => {
+            mountVideoStagesData({ width: 32, height: 32, clips: [] });
+            const state = getState();
+            expect(state.dimsExplicit).toBe(true);
+            expect(state.width).toBe(32);
+            expect(state.height).toBe(32);
+        });
+
         it("treats out-of-range stored values as inherit", () => {
-            mountVideoStagesData({ width: 100, height: 100, clips: [] });
+            mountVideoStagesData({ width: 31, height: 31, clips: [] });
             const state = getState();
             expect(state.dimsExplicit).toBe(false);
             expect(state.width).toBe(1024);

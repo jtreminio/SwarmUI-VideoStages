@@ -1869,7 +1869,8 @@
   var AUDIO_SPAN_VOLUME_SLIDER_MAX = 4;
   var AUDIO_SPAN_VOLUME_SLIDER_STEP = 0.1;
   var AUDIO_SPAN_VOLUME_DEFAULT = 1;
-  var ROOT_DIMENSION_MIN = 256;
+  var ROOT_DIMENSION_MIN = 32;
+  var ROOT_DIMENSION_SLIDER_MIN = 256;
   var ROOT_DIMENSION_MAX = 4096;
   var ROOT_DIMENSION_STEP = 32;
   var ROOT_FPS_MIN = 1;
@@ -16358,7 +16359,8 @@ ${slot}`;
               next.width = snapped.width;
               next.height = snapped.height;
             });
-          }
+          },
+          { sliderMin: ROOT_DIMENSION_SLIDER_MIN }
         ),
         "settings-width"
       );
@@ -16380,7 +16382,8 @@ ${slot}`;
               next.width = snapped.width;
               next.height = snapped.height;
             });
-          }
+          },
+          { sliderMin: ROOT_DIMENSION_SLIDER_MIN }
         ),
         "settings-height"
       );
@@ -16419,6 +16422,7 @@ ${slot}`;
           },
           {
             hint: !ratioHasReference ? "(the host has no 3:4 reference; current dimensions are retained)" : void 0,
+            sliderMin: ROOT_DIMENSION_SLIDER_MIN,
             isPot: true
           }
         ),
