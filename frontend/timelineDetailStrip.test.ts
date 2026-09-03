@@ -921,22 +921,27 @@ describe("createTimelineDetailStrip", () => {
         });
     });
 
-    it("commits a clip Duration edit through applyClipDurationResize", () => {
+    it("caps the Duration slider at 20 while accepting larger typed values", () => {
         h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
-        const dur =
-            fieldByLabel("Duration (s)").querySelector<HTMLInputElement>(
-                "input",
-            );
-        if (!dur) {
-            throw new Error("duration input missing");
+        const duration = sliderNumberByLabel("Duration (s)");
+        const range = duration
+            .closest(".auto-slider-box")
+            ?.querySelector<HTMLInputElement>("input.auto-slider-range");
+        if (!range) {
+            throw new Error("duration slider missing");
         }
-        dur.value = "6";
-        dur.dispatchEvent(new Event("input", { bubbles: true }));
+        expect(duration.min).toBe("1");
+        expect(duration.max).toBe("9999");
+        expect(range.min).toBe("1");
+        expect(range.max).toBe("20");
+
+        duration.value = "50";
+        duration.dispatchEvent(new Event("input", { bubbles: true }));
         jest.advanceTimersByTime(200);
         expect(h.saveSpy).toHaveBeenCalledTimes(1);
-        expect(lastSavedClips<Clip[]>(h.saveSpy)[0].duration).toBe(6);
+        expect(lastSavedClips<Clip[]>(h.saveSpy)[0].duration).toBe(50);
     });
 
     it("renders Use SeedVR below Duration and commits the clip toggle", () => {

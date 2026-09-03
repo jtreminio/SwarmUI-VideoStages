@@ -132,12 +132,12 @@ describe("detail widgets in the dock", () => {
             ).toBe("Model");
             const durInput =
                 fieldByLabel("Duration (s)").querySelector("input");
-            expect(durInput?.classList.contains("auto-number")).toBe(true);
+            expect(durInput?.classList.contains("auto-slider-number")).toBe(
+                true,
+            );
             expect(
-                fieldByLabel("Duration (s)").classList.contains(
-                    "auto-number-box",
-                ),
-            ).toBe(true);
+                fieldByLabel("Duration (s)").querySelector(".auto-slider-box"),
+            ).not.toBeNull();
             const skipRow = document.querySelector<HTMLElement>(
                 ".vst-detail .vst-detail-field-check",
             );

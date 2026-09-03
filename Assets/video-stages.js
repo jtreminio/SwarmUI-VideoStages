@@ -13451,7 +13451,9 @@ ${slot}`;
     const initVideoClip = !!clip.initVideo;
     const lengthReferenceIdx = clipLengthReferenceIndex(clip.references);
     const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || lengthReferenceIdx >= 0 || initVideoClip;
-    const durationInput = buildNumber(
+    const durationHint = !lengthDerived2 ? null : initVideoClip ? "(derived from the source video range)" : lengthReferenceIdx >= 0 ? REFERENCE_LENGTH_HINT : "(derived from audio/ControlNet source)";
+    const durationField = buildSlider(
+      "Duration (s)",
       clip.duration,
       CLIP_DURATION_MIN,
       CLIP_DURATION_MAX,
@@ -13464,18 +13466,26 @@ ${slot}`;
             applyClipDurationResize(target, value, defaults);
           }
         });
+      },
+      {
+        sliderMax: 20,
+        hint: durationHint ?? REFERENCE_LENGTH_HINT
       }
     );
-    durationInput.setAttribute("data-vst-focus-key", "duration");
-    const durationHint = !lengthDerived2 ? null : initVideoClip ? "(derived from the source video range)" : lengthReferenceIdx >= 0 ? REFERENCE_LENGTH_HINT : "(derived from audio/ControlNet source)";
-    const durationField = buildField(
-      "Duration (s)",
-      durationInput,
-      durationHint ?? REFERENCE_LENGTH_HINT
+    durationField.classList.add("vst-detail-field");
+    durationField.querySelector(".auto-input-name")?.classList.add("vst-detail-field-label");
+    const durationInput = durationField.querySelector(
+      "input.auto-slider-number"
     );
+    if (!durationInput) {
+      throw new Error("duration slider number input missing");
+    }
+    durationInput.setAttribute("data-vst-focus-key", "duration");
     durationField.querySelector(".vst-detail-field-hint")?.classList.toggle("vst-detail-field-hint-hidden", !durationHint);
     if (lengthDerived2) {
-      durationInput.disabled = true;
+      durationField.querySelectorAll("input").forEach((input2) => {
+        input2.disabled = true;
+      });
       durationField.classList.add("vst-field-disabled");
     }
     column.appendChild(durationField);

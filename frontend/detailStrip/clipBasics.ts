@@ -4,7 +4,6 @@ import { CLIP_DURATION_MAX, CLIP_DURATION_MIN } from "../constants";
 import {
     buildCheckbox,
     buildField,
-    buildNumber,
     buildOptionSelect,
     buildSlider,
     type SectionHeaderAction,
@@ -63,7 +62,15 @@ export const buildClipColumn = (
         clip.clipLengthFromControlNet === true ||
         lengthReferenceIdx >= 0 ||
         initVideoClip;
-    const durationInput = buildNumber(
+    const durationHint = !lengthDerived
+        ? null
+        : initVideoClip
+          ? "(derived from the source video range)"
+          : lengthReferenceIdx >= 0
+            ? REFERENCE_LENGTH_HINT
+            : "(derived from audio/ControlNet source)";
+    const durationField = buildSlider(
+        "Duration (s)",
         clip.duration,
         CLIP_DURATION_MIN,
         CLIP_DURATION_MAX,
@@ -77,25 +84,31 @@ export const buildClipColumn = (
                 }
             });
         },
+        {
+            sliderMax: 20,
+            hint: durationHint ?? REFERENCE_LENGTH_HINT,
+        },
     );
+    durationField.classList.add("vst-detail-field");
+    durationField
+        .querySelector(".auto-input-name")
+        ?.classList.add("vst-detail-field-label");
+    const durationInput = durationField.querySelector<HTMLInputElement>(
+        "input.auto-slider-number",
+    );
+    if (!durationInput) {
+        throw new Error("duration slider number input missing");
+    }
     durationInput.setAttribute("data-vst-focus-key", "duration");
-    const durationHint = !lengthDerived
-        ? null
-        : initVideoClip
-          ? "(derived from the source video range)"
-          : lengthReferenceIdx >= 0
-            ? REFERENCE_LENGTH_HINT
-            : "(derived from audio/ControlNet source)";
-    const durationField = buildField(
-        "Duration (s)",
-        durationInput,
-        durationHint ?? REFERENCE_LENGTH_HINT,
-    );
     durationField
         .querySelector(".vst-detail-field-hint")
         ?.classList.toggle("vst-detail-field-hint-hidden", !durationHint);
     if (lengthDerived) {
-        durationInput.disabled = true;
+        durationField
+            .querySelectorAll<HTMLInputElement>("input")
+            .forEach((input) => {
+                input.disabled = true;
+            });
         durationField.classList.add("vst-field-disabled");
     }
     column.appendChild(durationField);
