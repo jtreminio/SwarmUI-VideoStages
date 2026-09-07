@@ -1,5 +1,10 @@
 import { storeBrowserMedia } from "./browserMediaStore";
-import { clamp } from "./constants";
+import { clamp, mediaPreviewSrc } from "./constants";
+import {
+    buildSidebarMediaPreview,
+    type MediaPreviewPlayback,
+    makeMediaPreviewExpandable,
+} from "./detailStrip/sidebarMediaPreview";
 import { fileAsDataUri } from "./fileDataUri";
 import { hasDroppedFiles } from "./fileDrop";
 import { getVideoStagesHostBridge } from "./host";
@@ -9,13 +14,13 @@ import {
     isHostReusableMediaPath,
     openHostInputBrowser,
     renderHostSlider,
+    restoreHostMediaPreview,
     showHostPopover,
 } from "./host/swarmUiAdapters";
-import { getTimelineAuthoringSettings } from "./timelineAuthoringSettings";
+import { buildToggleSwitch, type ToggleSwitchOptions } from "./toggleSwitch";
 
 let sliderSeq = 0;
 let helpSeq = 0;
-let checkboxSeq = 0;
 let fieldSeq = 0;
 
 const slugify = (value: string): string =>
@@ -95,6 +100,9 @@ const wireUnboundedNumericInput = (
 };
 
 const boxClassFor = (control: HTMLElement): string | null => {
+    if (control.classList.contains("auto-checkbox")) {
+        return "auto-checkbox-box";
+    }
     if (control.classList.contains("auto-dropdown")) {
         return "auto-dropdown-box";
     }
@@ -123,7 +131,11 @@ export const buildField = (
     help?: string,
 ): HTMLElement => {
     const row = document.createElement("div");
-    row.className = "auto-input vst-detail-field";
+    row.className = "auto-input vst-detail-field vst-form-field";
+    row.dataset.fieldKind =
+        control instanceof HTMLInputElement
+            ? control.type
+            : control.tagName.toLowerCase();
     row.classList.add(
         control.classList.contains("auto-text-block")
             ? "auto-input-flex-wide"
@@ -134,9 +146,6 @@ export const buildField = (
         row.classList.add(boxClass);
     }
     const labelEl = buildFieldLabel(label);
-    if (help) {
-        appendHelp(labelEl, row, label, help);
-    }
     if (
         control instanceof HTMLInputElement ||
         control instanceof HTMLSelectElement ||
@@ -148,6 +157,9 @@ export const buildField = (
         labelEl.htmlFor = control.id;
     }
     row.append(labelEl, control);
+    if (help) {
+        appendHelp(labelEl, row, label, help);
+    }
     if (hint) {
         const small = document.createElement("small");
         small.className = "auto-input-description vst-detail-field-hint";
@@ -155,6 +167,25 @@ export const buildField = (
         row.appendChild(small);
     }
     return row;
+};
+
+export const setFieldDisabled = (
+    field: HTMLElement,
+    disabled: boolean,
+    reason = "",
+): void => {
+    field
+        .querySelectorAll<
+            | HTMLInputElement
+            | HTMLSelectElement
+            | HTMLTextAreaElement
+            | HTMLButtonElement
+        >("input, select, textarea, button")
+        .forEach((control) => {
+            control.disabled = disabled;
+        });
+    field.classList.toggle("vst-field-disabled", disabled);
+    field.title = disabled ? reason : "";
 };
 
 export interface OptionSpec {
@@ -234,7 +265,9 @@ export const buildSlider = (
     },
 ): HTMLElement => {
     const holder = document.createElement("div");
-    holder.className = "vst-stage-slider auto-input-flex-wide";
+    holder.className =
+        "vst-stage-slider auto-input-flex-wide vst-detail-field vst-form-field";
+    holder.dataset.fieldKind = "slider";
     const id = `vst_stage_slider_${++sliderSeq}`;
     holder.innerHTML = renderHostSlider({
         id,
@@ -247,10 +280,30 @@ export const buildSlider = (
         step,
         isPot: opts?.isPot,
     });
+    holder
+        .querySelector(".auto-input-name")
+        ?.classList.add("vst-detail-field-label");
     const number = holder.querySelector<HTMLInputElement>(
         "input.auto-slider-number",
     );
     if (number) {
+        const labelEl = holder.querySelector<HTMLLabelElement>("label");
+        if (labelEl) {
+            labelEl.htmlFor = number.id;
+            labelEl.addEventListener("click", (event) => {
+                if (
+                    (event.target as HTMLElement).closest(
+                        "input, .info-popover-button",
+                    )
+                )
+                    return;
+                event.preventDefault();
+                if (!number.disabled) {
+                    number.focus();
+                    number.select();
+                }
+            });
+        }
         number.step = `${opts?.numberStep ?? step}`;
         if (opts?.allowNumberOutOfRange) {
             wireUnboundedNumericInput(number, value, onChange);
@@ -282,22 +335,15 @@ export const buildCheckbox = (
     onChange: (value: boolean) => void,
     opts?: { disabled?: boolean; help?: string },
 ): HTMLElement => {
-    const row = document.createElement("div");
-    row.className =
-        "auto-input auto-checkbox-box auto-input-flex vst-detail-field vst-detail-field-check";
-    row.dataset.disabled = `${opts?.disabled === true}`;
     const input = document.createElement("input");
     input.type = "checkbox";
     input.className = "auto-checkbox";
-    input.id = `vst_checkbox_${slugify(label)}_${++checkboxSeq}`;
     input.dataset.name = label;
     input.checked = checked;
     input.addEventListener("change", () => onChange(input.checked));
-    const labelEl = buildFieldLabel(label);
-    row.append(labelEl, input);
-    if (opts?.help) {
-        appendHelp(labelEl, row, label, opts.help);
-    }
+    const row = buildField(label, input, undefined, opts?.help);
+    row.classList.add("vst-detail-field-check");
+    row.dataset.disabled = `${opts?.disabled === true}`;
     if (opts?.disabled) {
         row.classList.add("vst-audio-disabled");
         input.disabled = true;
@@ -305,11 +351,17 @@ export const buildCheckbox = (
     return row;
 };
 
+export interface TextareaLayout {
+    rows: number;
+    maxRows?: number;
+}
+
 export const buildTextarea = (
     value: string,
     placeholder: string,
     focusKey: string,
     onInput: (value: string) => void,
+    layout?: TextareaLayout,
 ): HTMLTextAreaElement => {
     const editor = document.createElement("textarea");
     editor.className =
@@ -317,6 +369,16 @@ export const buildTextarea = (
     editor.value = value;
     editor.placeholder = placeholder;
     editor.setAttribute("data-vst-focus-key", focusKey);
+    if (layout) {
+        editor.rows = layout.rows;
+        if (layout.maxRows !== undefined) {
+            editor.classList.add("vst-textarea-limited");
+            editor.style.setProperty(
+                "--vst-textarea-max-lines",
+                `${layout.maxRows}lh`,
+            );
+        }
+    }
     editor.addEventListener("input", () => onInput(editor.value));
     enhanceHostPromptEditor(editor);
     return editor;
@@ -332,11 +394,14 @@ export const buildMediaPickRow = (
     name: string | null | undefined,
     onFile: (data: string, fileName: string) => void,
     onClear: () => void,
+    previewData?: string | null,
+    playback?: MediaPreviewPlayback,
 ): HTMLElement => {
     const row = document.createElement("div");
     row.className =
-        "auto-input auto-file-box vst-detail-field vst-audio-upload";
-    const controls = document.createElement("label");
+        "auto-input auto-file-box vst-detail-field vst-form-field vst-audio-upload";
+    row.dataset.fieldKind = "file";
+    const controls = document.createElement("div");
     controls.className = "auto-file-input-label";
     const pickLabel = document.createElement("span");
     pickLabel.className = "auto-input-name vst-detail-field-label";
@@ -352,7 +417,10 @@ export const buildMediaPickRow = (
         "basic-button auto-file-input-button vst-media-pick-upload";
     uploadBtn.textContent = "Upload";
     uploadBtn.addEventListener("click", () => fileInput.click());
-    controls.append(pickLabel, uploadBtn);
+    const actions = document.createElement("span");
+    actions.className = "vst-media-pick-actions";
+    actions.appendChild(uploadBtn);
+    controls.append(pickLabel, actions);
     const fileDrop = document.createElement("label");
     fileDrop.className = "auto-file-label";
     fileDrop.htmlFor = fileInput.id;
@@ -378,14 +446,21 @@ export const buildMediaPickRow = (
             }
         });
     };
-    fileInput.addEventListener("change", () => {
+    const previewSrc = previewData ? mediaPreviewSrc(previewData) : "";
+    fileInput.addEventListener("change", (event) => {
         const file = fileInput.files?.[0];
         if (file) {
             acceptFile(file);
             return;
         }
         const picked = fileInput.dataset.filedata ?? "";
+        // Core emits change after a restored preview loads.
+        if (previewSrc && picked === previewSrc) {
+            event.stopPropagation();
+            return;
+        }
         if (!picked) {
+            if (previewSrc) onClear();
             return;
         }
         const pickedName = fileInput.dataset.filename ?? "server file";
@@ -430,10 +505,37 @@ export const buildMediaPickRow = (
         selectBtn.addEventListener("click", () =>
             openHostInputBrowser(fileInput.id, browserTypes),
         );
-        controls.appendChild(selectBtn);
+        actions.appendChild(selectBtn);
     }
-    controls.appendChild(clearBtn);
-    row.append(controls, fileDrop, preview);
+    actions.appendChild(clearBtn);
+    const details = document.createElement("div");
+    details.className = "vst-media-pick-details";
+    details.append(controls, fileDrop);
+    row.append(preview, details);
+    if (previewSrc) {
+        if (playback) {
+            fileInput.dataset.filedata = previewSrc;
+            preview.append(
+                buildSidebarMediaPreview(
+                    playback.kind,
+                    previewData ?? previewSrc,
+                    playback.range,
+                ),
+            );
+        } else {
+            restoreHostMediaPreview(fileInput, previewSrc, name || "media");
+        }
+        makeMediaPreviewExpandable(
+            preview,
+            previewData ?? previewSrc,
+            name || "media",
+            playback,
+        );
+    }
+    row.classList.toggle(
+        "vst-media-pick-has-preview",
+        Boolean(preview.firstChild),
+    );
     return row;
 };
 
@@ -495,12 +597,7 @@ export interface AccordionSectionSpec {
     flattenContent?: boolean;
     headerAction?: SectionHeaderAction;
     headerActions?: SectionHeaderAction[];
-    toggle?: {
-        checked: boolean;
-        disabled?: boolean;
-        title: string;
-        onChange: (checked: boolean) => void;
-    };
+    toggle?: ToggleSwitchOptions;
 }
 
 export interface SectionHeaderAction {
@@ -626,55 +723,15 @@ const buildSectionHeader = (
     return { header, heading, actions };
 };
 
-export interface StaticSectionSpec {
-    key: string;
-    label: string;
-    content: HTMLElement | DocumentFragment;
-    className?: string;
-    flattenContent?: boolean;
-    headerAction?: SectionHeaderAction;
-    headerActions?: SectionHeaderAction[];
-}
-
 const rememberedAccordionSections = new Set<string>();
 const seenAccordionSections = new Set<string>();
 
 export const resetRememberedAccordionSections = (): void => {
     rememberedAccordionSections.clear();
     seenAccordionSections.clear();
-    rememberedRepeaterItems.clear();
-    rememberedRepeaterOpenItems.clear();
-    forceOpenRepeaterKeys.clear();
-    persistedRepeaterState = null;
 };
 
-export const buildStaticSection = (
-    spec: StaticSectionSpec,
-): {
-    section: HTMLElement;
-    heading: HTMLElement;
-    content: HTMLElement;
-} => {
-    const section = document.createElement("div");
-    section.className =
-        `input-group input-group-open vst-detail-section vst-detail-static-section ${spec.className ?? ""}`.trim();
-    section.dataset.vstStaticKey = spec.key;
-
-    const { header, heading, actions } = buildSectionHeader({
-        label: spec.label,
-        className:
-            "input-group-header input-group-noshrink vst-detail-section-header",
-    });
-    appendSectionHeaderActions(actions, spec);
-
-    const content = document.createElement("div");
-    content.className = "input-group-content vst-detail-section-content";
-    appendSectionContent(content, spec.content, spec.flattenContent === true);
-    section.append(header, content);
-    return { section, heading, content };
-};
-
-/** Remembers open state across detail-strip rebuilds. */
+/** Remembers expansion independently of the feature's enabled state. */
 export const buildAccordionSection = (
     spec: AccordionSectionSpec,
 ): {
@@ -683,21 +740,21 @@ export const buildAccordionSection = (
     content: HTMLElement;
 } => {
     const firstBuild = !seenAccordionSections.has(spec.key);
-    const enabled = spec.toggle?.checked ?? true;
     const open =
-        enabled &&
-        (spec.open === true ||
-            (firstBuild && spec.defaultOpen === true) ||
-            rememberedAccordionSections.has(spec.key));
-    if (enabled) {
-        seenAccordionSections.add(spec.key);
-    }
+        spec.open === true ||
+        (firstBuild && spec.defaultOpen === true) ||
+        rememberedAccordionSections.has(spec.key);
+    seenAccordionSections.add(spec.key);
     if (open) {
         rememberedAccordionSections.add(spec.key);
     }
     const section = document.createElement("div");
     section.className =
         `input-group vst-detail-section ${open ? "input-group-open" : "input-group-closed"} ${spec.className ?? ""}`.trim();
+    section.classList.toggle(
+        "vst-detail-section-has-toggle",
+        spec.toggle !== undefined,
+    );
     section.dataset.vstAccordionKey = spec.key;
 
     const { header, heading, actions } = buildSectionHeader({
@@ -712,38 +769,19 @@ export const buildAccordionSection = (
     header.setAttribute("aria-expanded", `${open}`);
     appendSectionHeaderActions(actions, spec);
     if (spec.toggle) {
-        const switchWrap = document.createElement("span");
-        switchWrap.className =
-            "form-check form-switch toggle-switch display-inline-block group-toggler-switch";
-        const toggle = document.createElement("input");
-        toggle.type = "checkbox";
-        toggle.className = "auto-slider-toggle form-check-input";
-        toggle.checked = spec.toggle.checked;
-        toggle.disabled = spec.toggle.disabled === true;
-        toggle.title = spec.toggle.title;
-        toggle.setAttribute("aria-label", spec.toggle.title);
-        toggle.addEventListener("click", (event) => event.stopPropagation());
-        toggle.addEventListener("change", (event) => {
-            event.stopPropagation();
-            spec.toggle?.onChange(toggle.checked);
-        });
-        const switchContent = document.createElement("div");
-        switchContent.className = "auto-slider-toggle-content";
-        switchWrap.append(toggle, switchContent);
-        actions.appendChild(switchWrap);
+        heading.after(buildToggleSwitch(spec.toggle));
     }
 
-    const content = document.createElement("div");
+    const content = document.createElement("fieldset");
     content.className = "input-group-content vst-detail-section-content";
+    content.disabled = spec.toggle?.checked === false;
+    content.classList.toggle("vst-field-disabled", content.disabled);
     content.hidden = !open;
     appendSectionContent(content, spec.content, spec.flattenContent === true);
 
     const toggle = (event: Event): void => {
         event.preventDefault();
         event.stopPropagation();
-        if (spec.toggle?.checked === false) {
-            return;
-        }
         const opening = content.hidden === true;
         setAccordionOpen(section, opening);
         if (opening) {
@@ -754,7 +792,10 @@ export const buildAccordionSection = (
     };
     header.addEventListener("click", toggle);
     header.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (
+            event.target === header &&
+            (event.key === "Enter" || event.key === " ")
+        ) {
             toggle(event);
         }
     });
@@ -762,550 +803,11 @@ export const buildAccordionSection = (
     return { section, heading, content };
 };
 
-export interface RepeatingGroupItem {
-    label: string;
-    stateKey?: string;
-    focusKey?: string;
-    title?: string;
-    active?: boolean;
-    className?: string;
-    groupClassName?: string;
-    editor?: HTMLElement;
-    onSelect?: () => void;
-    onDelete?: () => void;
-    deleteTitle?: string;
-    deleteDisabled?: boolean;
-    headerAction?: SectionHeaderAction;
-}
-
-export interface RepeatingGroupAddAction {
-    title: string;
-    className: string;
-    label?: string;
-    disabled?: boolean;
-    onClick: () => void;
-}
-
-export interface RepeatingEditorSpec {
-    key: string;
-    label: string;
-    items: readonly RepeatingGroupItem[];
-    add: RepeatingGroupAddAction;
-    remove: {
-        title: string;
-        className: string;
-    };
-    editor?: HTMLElement;
-    editorForItem?: (index: number) => HTMLElement | undefined;
-    sectionClass?: string;
-    open?: boolean;
-    defaultActiveIndex?: number | null;
-}
-
-const rememberedRepeaterItems = new Map<string, number>();
-const rememberedRepeaterOpenItems = new Map<string, Set<number>>();
-const forceOpenRepeaterKeys = new Set<string>();
-const REPEATER_OPEN_STORAGE_KEY = "videostages.detail.openRepeaterItems";
-interface PersistedRepeaterState {
-    open: Set<string>;
-    known: Set<string>;
-}
-let persistedRepeaterState: PersistedRepeaterState | null = null;
-
-const storedRepeaterState = (): PersistedRepeaterState => {
-    if (persistedRepeaterState) {
-        return persistedRepeaterState;
-    }
-    try {
-        const parsed: unknown = JSON.parse(
-            localStorage.getItem(REPEATER_OPEN_STORAGE_KEY) ?? "[]",
-        );
-        const strings = (value: unknown): string[] =>
-            Array.isArray(value)
-                ? value.filter(
-                      (entry): entry is string => typeof entry === "string",
-                  )
-                : [];
-        const open = strings(
-            Array.isArray(parsed)
-                ? parsed
-                : typeof parsed === "object" && parsed !== null
-                  ? Reflect.get(parsed, "open")
-                  : [],
-        );
-        const known = Array.isArray(parsed)
-            ? open
-            : strings(
-                  typeof parsed === "object" && parsed !== null
-                      ? Reflect.get(parsed, "known")
-                      : [],
-              );
-        persistedRepeaterState = {
-            open: new Set(open),
-            known: new Set(known),
-        };
-    } catch {
-        persistedRepeaterState = { open: new Set(), known: new Set() };
-    }
-    return persistedRepeaterState;
-};
-
-const writeRepeaterState = (stored: PersistedRepeaterState): void => {
-    try {
-        localStorage.setItem(
-            REPEATER_OPEN_STORAGE_KEY,
-            JSON.stringify({
-                open: [...stored.open].sort(),
-                known: [...stored.known].sort(),
-            }),
-        );
-    } catch {}
-};
-
-const persistRepeaterOpenItems = (
-    items: readonly RepeatingGroupItem[],
-    openItems: ReadonlySet<number>,
-): void => {
-    const stored = storedRepeaterState();
-    let changed = false;
-    items.forEach((item, index) => {
-        if (!item.stateKey) {
-            return;
-        }
-        if (!stored.known.has(item.stateKey)) {
-            stored.known.add(item.stateKey);
-            changed = true;
-        }
-        const open = openItems.has(index);
-        if (open !== stored.open.has(item.stateKey)) {
-            changed = true;
-            if (open) {
-                stored.open.add(item.stateKey);
-            } else {
-                stored.open.delete(item.stateKey);
-            }
-        }
-    });
-    if (!changed) {
-        return;
-    }
-    writeRepeaterState(stored);
-};
-
-const forgetRepeaterItem = (item: RepeatingGroupItem): void => {
-    if (!item.stateKey) {
-        return;
-    }
-    const stored = storedRepeaterState();
-    const removedOpen = stored.open.delete(item.stateKey);
-    const removedKnown = stored.known.delete(item.stateKey);
-    if (!removedOpen && !removedKnown) {
-        return;
-    }
-    writeRepeaterState(stored);
-};
-
-const runRepeaterStructuralAction = (
-    source: HTMLElement,
-    action: () => void,
-): void => {
-    const previousBody = source.closest<HTMLElement>(".vst-detail-body");
-    const detail = previousBody?.closest<HTMLElement>(".vst-detail");
-    const scrollTop = previousBody?.scrollTop;
-    const repeaterKey = source.closest<HTMLElement>("[data-vst-repeater-key]")
-        ?.dataset.vstRepeaterKey;
-    const anchorTop = source.classList.contains("vst-detail-repeating-add")
-        ? source.getBoundingClientRect().top
-        : null;
-    action();
-    if (scrollTop === undefined) {
-        return;
-    }
-    const currentBody = (): HTMLElement | null =>
-        detail?.querySelector<HTMLElement>(".vst-detail-body") ??
-        (previousBody?.isConnected ? previousBody : null);
-    const restore = (): void => {
-        const body = currentBody();
-        if (!body) {
-            return;
-        }
-        if (anchorTop !== null && repeaterKey) {
-            const section = Array.from(
-                body.querySelectorAll<HTMLElement>("[data-vst-repeater-key]"),
-            ).find(
-                (candidate) => candidate.dataset.vstRepeaterKey === repeaterKey,
-            );
-            const nextAdd = section?.querySelector<HTMLElement>(
-                ":scope > .input-group-content > .vst-detail-repeating-add",
-            );
-            if (nextAdd) {
-                const nextTop = nextAdd.getBoundingClientRect().top;
-                body.scrollTop =
-                    anchorTop === 0 && nextTop === 0
-                        ? scrollTop
-                        : body.scrollTop + nextTop - anchorTop;
-                return;
-            }
-        }
-        body.scrollTop = scrollTop;
-    };
-    if (anchorTop !== null && typeof requestAnimationFrame === "function") {
-        requestAnimationFrame(restore);
-        return;
-    }
-    restore();
-    if (typeof requestAnimationFrame === "function") {
-        requestAnimationFrame(() => {
-            const body = currentBody();
-            if (body) {
-                body.scrollTop = scrollTop;
-            }
-        });
-    }
-};
-
-export const buildRepeatingEditor = (
-    spec: RepeatingEditorSpec,
-): {
-    section: HTMLElement;
-    heading: HTMLElement;
-    content: HTMLElement;
-    editor: HTMLElement | null;
-} => {
-    const explicitActiveIndex = spec.items.findIndex(
-        (item) => item.active === true,
-    );
-    const isValidIndex = (index: number | null | undefined): index is number =>
-        index !== null &&
-        index !== undefined &&
-        index >= 0 &&
-        index < spec.items.length;
-    const rememberedIndex = rememberedRepeaterItems.get(spec.key);
-    const validRememberedIndex = isValidIndex(rememberedIndex)
-        ? rememberedIndex
-        : null;
-    const selectionChanged =
-        rememberedIndex !== undefined &&
-        explicitActiveIndex >= 0 &&
-        explicitActiveIndex !== validRememberedIndex;
-    if (rememberedIndex !== undefined && validRememberedIndex === null) {
-        rememberedRepeaterItems.delete(spec.key);
-        forceOpenRepeaterKeys.delete(spec.key);
-    }
-    const forceOpen =
-        forceOpenRepeaterKeys.has(spec.key) && validRememberedIndex !== null;
-    const defaultActiveIndex = isValidIndex(spec.defaultActiveIndex)
-        ? spec.defaultActiveIndex
-        : null;
-    const activeIndex = forceOpen
-        ? validRememberedIndex
-        : explicitActiveIndex >= 0
-          ? explicitActiveIndex
-          : (validRememberedIndex ?? defaultActiveIndex);
-    if (explicitActiveIndex >= 0 && !forceOpen) {
-        rememberedRepeaterItems.set(spec.key, explicitActiveIndex);
-    } else if (activeIndex !== null) {
-        rememberedRepeaterItems.set(spec.key, activeIndex);
-    }
-    if (forceOpen) {
-        forceOpenRepeaterKeys.delete(spec.key);
-    }
-    const autoCollapse = getTimelineAuthoringSettings().autoCollapse;
-    const rememberedOpenItems = rememberedRepeaterOpenItems.get(spec.key);
-    const storedState = storedRepeaterState();
-    const hasStoredItemState = spec.items.some(
-        (item) => item.stateKey && storedState.known.has(item.stateKey),
-    );
-    const newlyPopulated =
-        spec.items.length > 0 &&
-        rememberedOpenItems !== undefined &&
-        rememberedIndex === undefined;
-    const openItems = new Set(
-        rememberedOpenItems ??
-            spec.items.flatMap((item, index) =>
-                item.stateKey && storedState.open.has(item.stateKey)
-                    ? [index]
-                    : [],
-            ),
-    );
-    for (const index of openItems) {
-        if (index < 0 || index >= spec.items.length) {
-            openItems.delete(index);
-        }
-    }
-    if (
-        activeIndex !== null &&
-        (forceOpen ||
-            selectionChanged ||
-            newlyPopulated ||
-            (rememberedOpenItems === undefined && !hasStoredItemState))
-    ) {
-        if (autoCollapse) {
-            openItems.clear();
-        }
-        openItems.add(activeIndex);
-    }
-    rememberedRepeaterOpenItems.set(spec.key, openItems);
-    persistRepeaterOpenItems(spec.items, openItems);
-    const children = document.createDocumentFragment();
-    spec.items.forEach((item, index) => {
-        const active = index === activeIndex;
-        const open = openItems.has(index);
-        const group = document.createElement("div");
-        group.className = `input-group vst-detail-repeating-group ${
-            open ? "input-group-open" : "input-group-closed"
-        } ${item.groupClassName ?? ""}`.trim();
-        const { header, actions } = buildSectionHeader({
-            label: item.label,
-            className:
-                `input-group-header input-group-shrinkable vst-detail-repeating-group-header ${item.className ?? ""}`.trim(),
-            open,
-        });
-        header.tabIndex = 0;
-        header.setAttribute("role", "button");
-        header.setAttribute("aria-expanded", `${open}`);
-        header.setAttribute("aria-pressed", `${active}`);
-        if (item.focusKey) {
-            header.dataset.vstFocusKey = item.focusKey;
-        }
-        if (item.title) {
-            header.title = item.title;
-        }
-        if (item.headerAction) {
-            appendSectionHeaderAction(actions, item.headerAction);
-        }
-        const onDelete = item.onDelete;
-        if (onDelete) {
-            const remove = buildDetailActionButton({
-                label: "×",
-                title:
-                    item.deleteTitle ??
-                    (active ? spec.remove.title : `Delete ${item.label}`),
-                className:
-                    `vst-btn-tiny vst-detail-delete vst-detail-repeating-group-delete ${spec.remove.className}`.trim(),
-                variant: "interrupt",
-                disabled: item.deleteDisabled,
-                stopPropagation: true,
-                onClick: (button) => {
-                    forgetRepeaterItem(item);
-                    runRepeaterStructuralAction(button, onDelete);
-                },
-            });
-            actions.appendChild(remove);
-        }
-        const content = document.createElement("div");
-        content.className =
-            "input-group-content vst-detail-repeating-group-content";
-        let editor = open
-            ? (item.editor ??
-              spec.editorForItem?.(index) ??
-              (active ? spec.editor : undefined))
-            : undefined;
-        if (editor) {
-            appendSectionContent(content, editor, true);
-        }
-        content.hidden = !open;
-        content.classList.toggle(
-            "vst-detail-repeating-editor-active",
-            open && editor !== undefined,
-        );
-        const activateOrToggle = (event: Event): void => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (!active && item.onSelect) {
-                if (getTimelineAuthoringSettings().autoCollapse) {
-                    rememberedRepeaterOpenItems.set(spec.key, new Set([index]));
-                } else {
-                    const remembered =
-                        rememberedRepeaterOpenItems.get(spec.key) ??
-                        new Set<number>();
-                    for (const sibling of Array.from(
-                        group.parentElement?.children ?? [],
-                    )) {
-                        if (
-                            sibling instanceof HTMLElement &&
-                            sibling.classList.contains(
-                                "vst-detail-repeating-group",
-                            ) &&
-                            sibling.classList.contains("input-group-open")
-                        ) {
-                            const siblingIndex = Number(
-                                sibling.dataset.vstRepeaterItem,
-                            );
-                            if (Number.isInteger(siblingIndex)) {
-                                remembered.add(siblingIndex);
-                            }
-                        }
-                    }
-                    remembered.add(index);
-                    rememberedRepeaterOpenItems.set(spec.key, remembered);
-                }
-                persistRepeaterOpenItems(
-                    spec.items,
-                    rememberedRepeaterOpenItems.get(spec.key) ?? new Set(),
-                );
-                rememberedRepeaterItems.set(spec.key, index);
-                item.onSelect();
-                return;
-            }
-            const opening = content.hidden === true;
-            const collapseItems = getTimelineAuthoringSettings().autoCollapse;
-            if (opening && collapseItems) {
-                for (const sibling of Array.from(
-                    group.parentElement?.children ?? [],
-                )) {
-                    if (
-                        sibling instanceof HTMLElement &&
-                        sibling !== group &&
-                        sibling.classList.contains("vst-detail-repeating-group")
-                    ) {
-                        setAccordionOpen(sibling, false);
-                    }
-                }
-            }
-            if (opening && !editor) {
-                editor =
-                    item.editor ??
-                    spec.editorForItem?.(index) ??
-                    (active ? spec.editor : undefined);
-                if (editor) {
-                    appendSectionContent(content, editor, true);
-                    getVideoStagesHostBridge().enableSliders(content);
-                }
-            }
-            setAccordionOpen(group, opening);
-            if (opening) {
-                rememberedRepeaterItems.set(spec.key, index);
-                if (collapseItems) {
-                    rememberedRepeaterOpenItems.set(spec.key, new Set([index]));
-                } else {
-                    const remembered =
-                        rememberedRepeaterOpenItems.get(spec.key) ??
-                        new Set<number>();
-                    remembered.add(index);
-                    rememberedRepeaterOpenItems.set(spec.key, remembered);
-                }
-            } else {
-                rememberedRepeaterOpenItems.get(spec.key)?.delete(index);
-            }
-            persistRepeaterOpenItems(
-                spec.items,
-                rememberedRepeaterOpenItems.get(spec.key) ?? new Set(),
-            );
-        };
-        header.addEventListener("click", activateOrToggle);
-        header.addEventListener("keydown", (event) => {
-            if (event.key === "Enter" || event.key === " ") {
-                activateOrToggle(event);
-            }
-        });
-        group.append(header, content);
-        children.appendChild(group);
-        group.dataset.vstRepeaterItem = `${index}`;
-    });
-    const add = buildDetailActionButton({
-        label: spec.add.label ?? "+ Add",
-        title: spec.add.title,
-        className:
-            `small-button vst-detail-repeating-add ${spec.add.className}`.trim(),
-        disabled: spec.add.disabled,
-        onClick: (button) => {
-            const nextIndex = spec.items.length;
-            if (getTimelineAuthoringSettings().autoCollapse) {
-                rememberedRepeaterOpenItems.set(spec.key, new Set([nextIndex]));
-            } else {
-                const remembered =
-                    rememberedRepeaterOpenItems.get(spec.key) ??
-                    new Set<number>();
-                for (const sibling of Array.from(
-                    button.parentElement?.children ?? [],
-                )) {
-                    if (
-                        sibling instanceof HTMLElement &&
-                        sibling.classList.contains(
-                            "vst-detail-repeating-group",
-                        ) &&
-                        sibling.classList.contains("input-group-open")
-                    ) {
-                        const siblingIndex = Number(
-                            sibling.dataset.vstRepeaterItem,
-                        );
-                        if (Number.isInteger(siblingIndex)) {
-                            remembered.add(siblingIndex);
-                        }
-                    }
-                }
-                remembered.add(nextIndex);
-                rememberedRepeaterOpenItems.set(spec.key, remembered);
-            }
-            rememberedRepeaterItems.set(spec.key, spec.items.length);
-            forceOpenRepeaterKeys.add(spec.key);
-            runRepeaterStructuralAction(button, spec.add.onClick);
-        },
-    });
-    children.appendChild(add);
-    const built = buildAccordionSection({
-        key: spec.key,
-        label: spec.label,
-        content: children,
-        counter: spec.items.length,
-        // Keep empty repeaters open so Add remains reachable.
-        open: forceOpen || spec.items.length === 0 || spec.open,
-        defaultOpen: spec.items.length > 0,
-        className:
-            `vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim(),
-    });
-    built.section.dataset.vstRepeaterKey = spec.key;
-    return {
-        section: built.section,
-        heading: built.heading,
-        content: built.content,
-        editor: spec.editor ?? null,
-    };
-};
-
-export const wrapForm = (
-    key: string,
-    label: string,
-    content: HTMLElement,
-): HTMLElement => {
-    const body = document.createElement("div");
-    body.className = "vst-detail-body";
-    body.appendChild(
-        buildAccordionSection({
-            key,
-            label,
-            content,
-            open: true,
-            flattenContent: true,
-        }).section,
-    );
-    return body;
-};
-
-export const tagFocus = (field: HTMLElement, key: string): HTMLElement => {
+export const tagFocus = <T extends HTMLElement>(field: T, key: string): T => {
     const control =
         field.querySelector<HTMLElement>("input.auto-slider-number") ??
         field.querySelector<HTMLElement>("input, select") ??
         (field.matches("input, select") ? field : null);
     control?.setAttribute("data-vst-focus-key", key);
     return field;
-};
-
-export const buildStackSection = (
-    key: string,
-    label: string,
-    colClass: string,
-    open = false,
-): { wrap: HTMLElement; col: HTMLElement } => {
-    const col = document.createElement("div");
-    col.className = `vst-detail-col ${colClass}`;
-    const built = buildAccordionSection({
-        key,
-        label,
-        content: col,
-        open,
-        flattenContent: true,
-    });
-    return { wrap: built.section, col: built.content };
 };

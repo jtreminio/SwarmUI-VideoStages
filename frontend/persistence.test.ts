@@ -313,6 +313,18 @@ describe("persistence", () => {
             expect(decoded?.audioTracks).toEqual([]);
         });
 
+        it("overrides Clip 1 base audio when Clip 0 is audio-only", () => {
+            const decoded = decode({
+                schemaVersion: 9,
+                clips: [
+                    { audioOnly: true, stages: [{}] },
+                    { audioSource: "Upload", stages: [{}] },
+                ],
+            });
+
+            expect(decoded?.clips[1].audioSource).toBe("Previous Clip");
+        });
+
         it("canonicalizes every clip and stage after the first skip marker", () => {
             const decoded = decode({
                 schemaVersion: 9,
@@ -430,6 +442,7 @@ describe("persistence", () => {
                     boundaryOutOverlap: 8,
                     duration: 3,
                     useSeedVr: false,
+                    audioOnly: false,
                     refFraming: "crop",
                     h3AttentionWindowSeconds: 2.5,
                     h3TextEncoder: "8b",

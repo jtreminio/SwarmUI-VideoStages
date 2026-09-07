@@ -1,10 +1,6 @@
 import { afterEach, describe, expect, it } from "@jest/globals";
-import { minimalClip } from "./__test_helpers__/clipFixtures";
 import { normalizePromptWindows } from "./normalizationMedia";
 import { readGlobalPrompt } from "./swarmInputs";
-import { computeRegionLayout } from "./timelineView/layout";
-import { renderPromptTrackRow } from "./timelineView/trackRows";
-import type { Clip } from "./types";
 
 describe("normalizePromptWindows", () => {
     it("parses canonical camelCase, sorts by start, and drops non-positive durations", () => {
@@ -42,50 +38,6 @@ describe("normalizePromptWindows", () => {
                 promptWindows: [{ prompt: "x", start: 0, seconds: 2 }],
             }),
         ).toEqual([]);
-    });
-});
-
-describe("renderPromptTrackRow", () => {
-    const build = (clips: Clip[], globalPrompt = ""): string =>
-        renderPromptTrackRow(
-            clips,
-            computeRegionLayout(clips, { pxPerSecond: 44 }),
-            44,
-            globalPrompt,
-        );
-
-    it("shows the clip's own prompt as the MAJOR text", () => {
-        const html = build([minimalClip({ duration: 4, prompt: "a red fox" })]);
-        expect(html).toContain('data-vst-prompt="major"');
-        expect(html).toContain("a red fox");
-    });
-
-    it("falls back to the global prompt when the clip has none", () => {
-        const html = build([minimalClip({ duration: 4 })], "global words");
-        expect(html).toContain("global words");
-        expect(html).toContain("vst-major-inherited");
-    });
-
-    it("renders one minor segment per window and a disabled overlay for active windows", () => {
-        const html = build([
-            minimalClip({
-                duration: 4,
-                prompt: "major",
-                promptWindows: [
-                    { prompt: "loud", start: 1, duration: 1 },
-                    { prompt: "", start: 2, duration: 1 },
-                ],
-            }),
-        ]);
-        expect((html.match(/data-vst-prompt="minor"/g) ?? []).length).toBe(2);
-        // Only a window that carries a prompt disables the MAJOR prompt.
-        expect((html.match(/vst-major-off/g) ?? []).length).toBe(1);
-    });
-
-    it("exposes a per-clip add lane", () => {
-        const html = build([minimalClip({ duration: 4 })]);
-        expect(html).toContain("data-vst-prompt-add");
-        expect(html).toContain('data-clip-idx="0"');
     });
 });
 

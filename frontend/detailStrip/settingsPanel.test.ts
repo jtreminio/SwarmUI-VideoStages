@@ -1,16 +1,19 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
-    detail,
-    detailStripHarness,
-    fieldByLabel,
-    sliderNumberByLabel,
-} from "../__test_helpers__/detailStrip";
+    editorFieldContainer,
+    editorHarness,
+} from "../__test_helpers__/editor";
 import { dimensionsFor } from "../dimensionPresets";
 import { snapDimensions } from "../dimensionSnap";
 import { setSelection } from "../selection";
 
-describe("detail strip timeline settings panel", () => {
-    const h = detailStripHarness();
+describe("production editor output settings panel", () => {
+    const h = editorHarness();
+    const fieldByLabel = (label: string): HTMLElement =>
+        editorFieldContainer("output", label);
+    const detail = (): HTMLElement => h.section("output");
+    const sliderNumberByLabel = (label: string): HTMLInputElement =>
+        h.field("output", label, "input.auto-slider-number");
 
     it("uses SwarmUI POT stops and updates side-length dimensions live", () => {
         h.setup([{ duration: 4, stages: [{}] }]);
@@ -80,7 +83,7 @@ describe("detail strip timeline settings panel", () => {
         expect(
             Array.from(
                 document.querySelectorAll<HTMLElement>(
-                    ".vst-detail .vst-detail-field-label",
+                    ".vst-clip-editor .vst-detail-field-label",
                 ),
             ).map((element) => element.textContent),
         ).not.toEqual(expect.arrayContaining(["Width", "Height"]));
@@ -109,7 +112,7 @@ describe("detail strip timeline settings panel", () => {
         ).toHaveLength(2);
         expect(
             document.querySelector(
-                'input[data-vst-focus-key="settings-side-length"]',
+                'input[data-vst-focus-key$="settings-side-length"]',
             ),
         ).toBeNull();
         expect(

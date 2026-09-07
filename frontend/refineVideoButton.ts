@@ -144,7 +144,7 @@ const defaultRefinementTarget = (
     if (!clip0 || clip0.skipped) {
         return null;
     }
-    if (clip0.stages.length > REFINE_STAGE_INDEX) {
+    if (!clip0.audioOnly && clip0.stages.length > REFINE_STAGE_INDEX) {
         return {
             clipIndex: 0,
             stageIndex: REFINE_STAGE_INDEX,
@@ -171,7 +171,10 @@ const refinementTarget = (
         throw new Error(refineSourceMismatchMessage());
     }
     const nextStageIndex = completed.stageIndex + 1;
-    if (state.clips[completed.clipIndex].stages.length > nextStageIndex) {
+    const completedClip = state.clips[completed.clipIndex];
+    const laterStagesCanRefine =
+        completed.clipIndex !== 0 || completedClip.audioOnly !== true;
+    if (laterStagesCanRefine && completedClip.stages.length > nextStageIndex) {
         return {
             clipIndex: completed.clipIndex,
             stageIndex: nextStageIndex,
@@ -199,6 +202,7 @@ const installRefineSource = (
     data: string,
     probe: InitVideoProbe | null,
 ): void => {
+    clip.audioOnly = false;
     clip.initVideo = initVideoFromProbe(
         probe,
         data,

@@ -1,5 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Families;
+using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -136,6 +137,11 @@ internal sealed class LtxStageExecutor
                 postVideoChain = null;
             }
             modelPromptPreparer.Prepare(genInfo, stageContext, effectiveSourceMedia);
+            if (stageContext.ClipContext.PlannedClip.AudioOnly)
+            {
+                ExecuteAudioOnly(genInfo, stageContext);
+                return;
+            }
             if (postVideoChain is not null)
             {
                 if (!postVideoChain.MatchesLoadedVaes(
@@ -314,6 +320,70 @@ internal sealed class LtxStageExecutor
         genInfo.HadSpecialCond = true;
         genInfo.DefaultSampler = LtxStageRuntimeSettings.DefaultSampler;
         genInfo.DefaultScheduler = LtxStageRuntimeSettings.DefaultScheduler;
+    }
+
+    private void ExecuteAudioOnly(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        StageContext stageContext)
+    {
+        ApplyStageRuntimeDefaults(genInfo, null);
+        genInfo.Width = Constants.AudioOnlyDimension;
+        genInfo.Height = Constants.AudioOnlyDimension;
+        if (g.CurrentAudioVae?.Path is not JArray)
+        {
+            throw Invariant.Failure("LTX audio-only generation loaded no audio VAE.");
+        }
+        genInfo.PrepFullCond(g, null);
+        using (WorkflowBridge bridge = BridgeSync.For(g))
+        {
+            LTXVAudioOnlyModelNode audioOnlyModel = bridge.AddNode(
+                new LTXVAudioOnlyModelNode());
+            audioOnlyModel.ModelInput.ConnectFromPath(bridge, genInfo.Model.Path);
+            genInfo.Model = genInfo.Model.WithPath(audioOnlyModel.Model.ToPath());
+
+            LTXVEmptyLatentAudioNode audio = bridge.AddNode(
+                new LTXVEmptyLatentAudioNode().With(
+                    FramesNumber: genInfo.Frames.Value,
+                    BatchSize: 1));
+            audio.FrameRate.Set(genInfo.VideoFPS.Value);
+            audio.AudioVae.ConnectFromPath(bridge, g.CurrentAudioVae.Path);
+            EmptyLTXVLatentVideoNode video = bridge.Graph
+                .NodesOfType<EmptyLTXVLatentVideoNode>()
+                .Single(node =>
+                    node.Width.LiteralAsInt() == Constants.AudioOnlyDimension
+                    && node.Height.LiteralAsInt() == Constants.AudioOnlyDimension);
+            video.Length.Set(1);
+            LTXVConcatAVLatentNode joint = bridge.AddNode(
+                new LTXVConcatAVLatentNode().With(
+                    VideoLatent: video.LATENT,
+                    AudioLatent: audio.Latent));
+            g.CurrentMedia = new(
+                joint.Latent.ToPath(),
+                g,
+                WGNodeData.DT_LATENT_AUDIOVIDEO,
+                genInfo.Model.Compat)
+            {
+                Width = Constants.AudioOnlyDimension,
+                Height = Constants.AudioOnlyDimension,
+                Frames = genInfo.Frames,
+                FPS = genInfo.VideoFPS,
+            };
+        }
+        sampler.Execute(genInfo, stageContext);
+
+        using WorkflowBridge decodeBridge = BridgeSync.For(g);
+        LTXVSeparateAVLatentNode separate = decodeBridge.AddNode(
+            new LTXVSeparateAVLatentNode());
+        separate.AvLatent.ConnectFromPath(decodeBridge, g.CurrentMedia.Path);
+        LTXVAudioVAEDecodeNode decode = decodeBridge.AddNode(
+            new LTXVAudioVAEDecodeNode().With(Samples: separate.AudioLatent));
+        decode.AudioVae.ConnectFromPath(decodeBridge, g.CurrentAudioVae.Path);
+        g.CurrentMedia = new(
+            decode.Audio.ToPath(),
+            g,
+            WGNodeData.DT_AUDIO,
+            g.CurrentAudioVae.Compat);
+        g.CurrentVae = null;
     }
 
     private WGNodeData ResolveIcLoraStageInput(StageContext stageContext)

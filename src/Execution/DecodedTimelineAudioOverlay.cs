@@ -16,13 +16,16 @@ internal static class DecodedTimelineAudioOverlay
     internal static DecodedClipArtifact Apply(
         WorkflowGenerator g,
         DecodedClipArtifact artifact,
-        ClipPlan clip)
+        ClipPlan clip,
+        WGNodeData previousClipAudio)
     {
         ArgumentNullException.ThrowIfNull(g);
         ArgumentNullException.ThrowIfNull(artifact);
         ArgumentNullException.ThrowIfNull(clip);
-        if (clip.Architecture?.ConsumesTimelineAudio != false
-            || clip.Audio.Spans.IsDefaultOrEmpty)
+        bool consumesTimelineAudio =
+            clip.Architecture?.ConsumesTimelineAudio == true;
+        var spans = clip.Audio.PostDecodeSpans(consumesTimelineAudio);
+        if (spans.IsDefaultOrEmpty)
         {
             return artifact;
         }
@@ -31,10 +34,11 @@ internal static class DecodedTimelineAudioOverlay
             : new WGNodeData(artifact.Audio.ToPath(), g, WGNodeData.DT_AUDIO, null);
         WGNodeData combined = new AudioSpanCombiner(g).Combine(
             clip.ClipId,
-            clip.Audio.Spans,
+            spans,
             baseAudio,
             ClipAudioBedDuration.Seconds(clip, artifact.FramesPerSecond, null),
-            out _);
+            out _,
+            previousClipAudio);
         return combined?.Path is JArray path
             ? artifact with { Audio = DecodedOutputHandle.FromPath(path) }
             : artifact;

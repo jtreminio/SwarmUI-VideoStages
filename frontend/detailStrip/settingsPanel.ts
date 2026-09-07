@@ -14,7 +14,6 @@ import {
     buildSlider,
     type OptionSpec,
     tagFocus,
-    wrapForm,
 } from "../detailWidgets";
 import {
     ASPECT_RATIOS,
@@ -88,10 +87,15 @@ const scheduleCoreFpsWrite = (value: number): void => {
     }, FPS_WRITE_DEBOUNCE_MS);
 };
 
-export const buildSettingsBody = (
+type SettingsSelection = Extract<
+    TimelineSelection,
+    { kind: "none" | "audio-track" }
+>;
+
+export const buildSettingsFields = (
     ctx: DetailStripContext,
     state: AuthoringDocument,
-    _selection: Extract<TimelineSelection, { kind: "none" | "audio-track" }> = {
+    _selection: SettingsSelection = {
         kind: "none",
     },
 ): HTMLElement => {
@@ -328,5 +332,5 @@ export const buildSettingsBody = (
         ),
     );
 
-    return wrapForm("timeline-settings", "Timeline", body);
+    return body;
 };

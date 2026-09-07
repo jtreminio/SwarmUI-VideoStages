@@ -20,9 +20,9 @@ import {
     getState,
 } from "../persistence/repository";
 import type { DetailStripContext } from "./context";
-import { buildRefSection } from "./refPanel";
+import { buildKeyframeFields } from "./refPanel";
 
-describe("buildRefSection", () => {
+describe("buildKeyframeFields", () => {
     beforeEach(() => {
         __resetPersistenceForTests();
         document.body.innerHTML = "";
@@ -52,17 +52,18 @@ describe("buildRefSection", () => {
             referencePositions: ["any"],
         };
         const body = document.createElement("div");
-        body.className = "vst-detail-body";
+        body.className = "vst-editor-fields";
         const state = { ...getState(), clips: getClips() };
         body.appendChild(
-            buildRefSection(
+            buildKeyframeFields(
                 {
                     authoring: () => testAuthoringTransactionSnapshot(catalog),
                     buildClampedNumber: () => document.createElement("input"),
                 } as unknown as DetailStripContext,
+                state.clips[0],
                 0,
+                state.clips[0].frameRefs[0],
                 0,
-                state.clips,
                 state.fps,
             ),
         );
@@ -109,17 +110,18 @@ describe("buildRefSection", () => {
         });
 
         const body = document.createElement("div");
-        body.className = "vst-detail-body";
+        body.className = "vst-editor-fields";
         const state = { ...getState(), clips: getClips() };
         body.appendChild(
-            buildRefSection(
+            buildKeyframeFields(
                 {
                     authoring: () => testAuthoringTransactionSnapshot(catalog),
                     buildClampedNumber: () => document.createElement("input"),
                 } as unknown as DetailStripContext,
+                state.clips[0],
                 0,
+                state.clips[0].frameRefs[0],
                 0,
-                state.clips,
                 state.fps,
             ),
         );
@@ -168,17 +170,18 @@ describe("buildRefSection", () => {
         });
 
         const body = document.createElement("div");
-        body.className = "vst-detail-body";
+        body.className = "vst-editor-fields";
         const state = { ...getState(), clips: getClips() };
         body.appendChild(
-            buildRefSection(
+            buildKeyframeFields(
                 {
                     authoring: () => testAuthoringTransactionSnapshot(catalog),
                     buildClampedNumber: () => document.createElement("input"),
                 } as unknown as DetailStripContext,
+                state.clips[0],
                 0,
+                state.clips[0].frameRefs[0],
                 0,
-                state.clips,
                 state.fps,
             ),
         );

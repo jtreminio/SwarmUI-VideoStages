@@ -30,7 +30,7 @@ export const testArchitectureCapabilities = (
         "icLora",
     ],
     entryModes: ["text-to-video", "image-to-video", "init-video"],
-    audioSourceKinds: ["Native", "Upload"],
+    audioSourceKinds: ["Native", "Upload", "Previous Clip"],
     ...overrides,
 });
 

@@ -199,14 +199,31 @@ internal sealed class TimelineRunner
                         $"Architecture '{session.ArchitectureId}' returned no decoded clip "
                             + "artifact.");
                 ValidateOutput(output, session, runtimeContext);
-                output = RestoreWithSeedVr(output, plannedClip);
-                output = DecodedTimelineAudioOverlay.Apply(
-                    _generator,
-                    output,
-                    plannedClip);
-                VideoSamplerSeed.RecordOutputFromMedia(
-                    _generator,
-                    output.ToHostMedia(_generator));
+                if (output.Video is not null)
+                {
+                    output = RestoreWithSeedVr(output, plannedClip);
+                    output = DecodedTimelineAudioOverlay.Apply(
+                        _generator,
+                        output,
+                        plannedClip,
+                        previousClipOutput?.ToAudioHostMedia(_generator));
+                    VideoSamplerSeed.RecordOutputFromMedia(
+                        _generator,
+                        output.ToVideoHostMedia(_generator));
+                }
+                else if (clipIndex + 1 < _plan.Clips.Count
+                    && _plan.Clips[clipIndex + 1].Audio.Base.Kind
+                        != AudioSourceKind.PreviousClip
+                    && !_plan.Clips[clipIndex + 1].Audio.Spans.Any(span =>
+                        span.PostDecodeOnly))
+                {
+                    output.ToAudioHostMedia(_generator).SaveOutput(
+                        null,
+                        _generator.CurrentAudioVae,
+                        _generator.GetStableDynamicID(
+                            StableNodeIds.AudioOnlyClipSave,
+                            plannedClip.ClipId));
+                }
                 clipOutputs.Add(output);
                 previousClipOutput = output;
                 previousClip = plannedClip;
@@ -228,10 +245,13 @@ internal sealed class TimelineRunner
                 }
             }
         }
-        finalArtifact = new Timeline.GlobalVideoFrameTrimmer(_generator).Apply(finalArtifact);
-        finalArtifact = new Timeline.FrameInterpolator(_generator).Apply(
-            finalArtifact,
-            _plan);
+        if (finalArtifact.Media?.DataType == WGNodeData.DT_VIDEO)
+        {
+            finalArtifact = new Timeline.GlobalVideoFrameTrimmer(_generator).Apply(finalArtifact);
+            finalArtifact = new Timeline.FrameInterpolator(_generator).Apply(
+                finalArtifact,
+                _plan);
+        }
         if (finalArtifact.Media is not null)
         {
             finalArtifact.Media.Compat = null;
@@ -265,7 +285,7 @@ internal sealed class TimelineRunner
         {
             return output;
         }
-        _generator.CurrentMedia = output.ToHostMedia(_generator);
+        _generator.CurrentMedia = output.ToVideoHostMedia(_generator);
         WGNodeData vae = _generator.CurrentVae;
         _generator.SaveOptionalIntermediate();
         long seed = _generator.UserInput.Get(T2IParamTypes.Seed) + 500;

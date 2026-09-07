@@ -142,6 +142,7 @@ public class AuthoringDocumentContractTests
         Assert.Equal(MediaSource.Native, clip.AudioSource);
         Assert.True(clip.SaveAudioTrack);
         Assert.True(clip.ReuseAudio);
+        Assert.True(clip.AudioOnly);
         Assert.False(clip.ClipLengthFromAudio);
         Assert.Equal(1, clip.UploadedAudioStartSeconds);
         Assert.Equal(3, clip.UploadedAudioLengthSeconds);

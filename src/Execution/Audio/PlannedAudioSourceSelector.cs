@@ -22,6 +22,7 @@ internal static class PlannedAudioSourceSelector
                 ForClip(sources.UploadedAudios, clipId) ?? nativeAudio,
             AudioSourceKind.AceStepFun or AudioSourceKind.ControlNet =>
                 ForClip(sources.ClipAudios, clipId) ?? nativeAudio,
+            AudioSourceKind.PreviousClip => sources.PreviousClipAudio ?? nativeAudio,
             _ => null,
         };
     }

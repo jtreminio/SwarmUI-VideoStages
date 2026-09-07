@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+nvm_root="${NVM_DIR:-${HOME}/.nvm}"
+
+source "$nvm_root/nvm.sh"
+cd "$repo_root"
+
+export XDG_CACHE_HOME="$repo_root/test-results/playwright-cli/cache"
+export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-${HOME}/.cache/ms-playwright}"
+
+exec playwright-cli -s=videostages "$@"

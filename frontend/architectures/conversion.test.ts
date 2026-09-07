@@ -12,7 +12,7 @@ import { createTimelineHistory } from "../timelineHistory";
 import { planArchitectureConversion } from "./conversion/plan";
 
 describe("architecture conversion policy", () => {
-    it("preserves architecture-owned settings as dormant data", () => {
+    it("discards architecture-owned settings the target cannot use", () => {
         const fake = fakeArchitectureCatalog();
         const target = {
             architectureId: "test-video",
@@ -33,10 +33,10 @@ describe("architecture conversion policy", () => {
         expect(conversion).not.toBeNull();
 
         expect(conversion).toMatchObject({
-            frameRefs: clip.frameRefs,
-            refFraming: "fit-green",
+            frameRefs: [],
+            refFraming: "crop",
             loras: clip.loras,
-            promptWindows: clip.promptWindows,
+            promptWindows: [],
         });
     });
 

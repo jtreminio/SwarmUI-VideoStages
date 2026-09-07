@@ -12,7 +12,7 @@ import {
     ensureClipEntityIdentities,
 } from "../identity";
 import { normalizeAudioTracks } from "../normalizationAudio";
-import { normalizeClip } from "../normalizationClip";
+import { applyAudioOnlyLeadBase, normalizeClip } from "../normalizationClip";
 import { optionalNonNegativeNumber } from "../normalizationShared";
 import type { StoredClip } from "../storageTypes";
 import {
@@ -93,6 +93,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
             boundaryOutOverlap: clip.boundaryOutOverlap,
             duration: clip.duration,
             useSeedVr: clip.useSeedVr,
+            audioOnly: clip.audioOnly,
             refFraming: clip.refFraming,
             h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
             h3TextEncoder: clip.h3TextEncoder,
@@ -275,6 +276,7 @@ export const serializeStateForStorage = (state: AuthoringDocument): string => {
     out.clips = serializeClipsForStorage(state.clips);
     out.audioTracks = canonical.audioTracks.map((track) => ({
         id: track.id,
+        disabled: track.disabled === true,
         ...(track.volume === undefined ? {} : { volume: track.volume }),
         source: {
             kind: track.source.kind,
@@ -689,6 +691,7 @@ export const decodeStoredDocument = (
         const clips = current.clips.map((entry) =>
             normalizeClip(entry, defaults, defaultStageModel, dims.fps),
         );
+        applyAudioOnlyLeadBase(clips);
         sealSkipSuffix(clips);
         return {
             dims,

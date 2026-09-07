@@ -1,14 +1,13 @@
 import type { Clip } from "./types";
 
+export const clipDurationOf = (clip: Clip | undefined): number =>
+    clip ? Math.max(0, clip.duration || 0) : 0;
+
 interface Skippable {
     skipped?: boolean;
 }
 
-/**
- * Skip is a suffix: everything from the first skipped item onward is skipped.
- * This file is the only place that rule is written down — read it with
- * `activePrefix`, write it with `applySkipSuffix` or `sealSkipSuffix`.
- */
+/** Skip applies to the suffix starting at the first skipped item. */
 export const activePrefix = <T extends Skippable>(items: readonly T[]): T[] => {
     const firstSkipped = items.findIndex((item) => item.skipped === true);
     return firstSkipped < 0 ? [...items] : items.slice(0, firstSkipped);
@@ -53,13 +52,7 @@ export const executableClipIndexes = (clips: readonly Clip[]): number[] =>
         isExecutableClip(clip) ? [index] : [],
     );
 
-/**
- * One join the backend actually compiles: the pair of adjacent EXECUTABLE clips,
- * after the first skip marker truncated and earlier non-executable clips
- * compacted away. Every consumer — seam chips, click selection, labels,
- * overlap previews, diagnostics — reads its neighbours from here so the UI can
- * never show a seam execution does not have.
- */
+/** A join between adjacent executable clips after skip and empty-clip filtering. */
 export interface ExecutableBoundary {
     /** Position in the compacted executable list; indexes the compiled boundary plan. */
     position: number;
@@ -88,7 +81,6 @@ export const executableBoundaries = (
     return boundaries;
 };
 
-/** The executable join leaving `leftClipIdx`, or null when that clip has none. */
 export const executableBoundaryForLeftClip = (
     clips: readonly Clip[],
     leftClipIdx: number,

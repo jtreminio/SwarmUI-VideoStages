@@ -1,5 +1,10 @@
 import type { AuthoringTransactionSnapshot } from "../authoringSnapshot";
-import type { AuthoringDocument, Clip } from "../types";
+import type {
+    AuthoringDocument,
+    Clip,
+    ClipReference,
+    UploadedMedia,
+} from "../types";
 import type { StructuralOutcome } from "./draftQueue";
 
 export interface ClampedNumberOpts {
@@ -12,12 +17,6 @@ export interface ClampedNumberOpts {
     mutate: (clips: Clip[], value: number) => void;
 }
 
-/**
- * The detail strip's command, draft, selection, focus, and render services.
- * Panel builders receive the current document separately and use `authoring`
- * for the matching catalog/defaults projection, so this contract does not
- * expose ambient repository readers.
- */
 export interface DetailStripContext {
     commit(mutate: (clips: Clip[]) => void): void;
     commitState(mutate: (state: AuthoringDocument) => void): void;
@@ -35,6 +34,14 @@ export interface DetailStripContext {
     authoring(): AuthoringTransactionSnapshot;
 
     addRefEntry(clipIdx: number): void;
+    addRefEntries?(clipId: string, uploads: readonly UploadedMedia[]): number;
+    addClipReferences?(
+        clipId: string,
+        references: readonly Pick<
+            ClipReference,
+            "kind" | "uploadedMedia" | "mediaDurationSeconds"
+        >[],
+    ): number;
     deleteRefEntry(clipIdx: number, refIdx: number): void;
     addClipReference(clipIdx: number): void;
     deleteClipReference(clipIdx: number, referenceIdx: number): void;

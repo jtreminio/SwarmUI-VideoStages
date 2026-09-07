@@ -12,7 +12,6 @@ const CFG_SCALE_SLIDER_MAX = 10;
 
 export const appendStageDenoisingSection = (
     bindings: StagePanelBindings,
-    isRefine: boolean,
 ): void => {
     const { stage, defaults, fields, slider } = bindings;
     fields.appendChild(
@@ -43,29 +42,34 @@ export const appendStageDenoisingSection = (
             { sliderMax: Math.min(CFG_SCALE_SLIDER_MAX, defaults.cfgScaleMax) },
         ),
     );
-    if (isRefine) {
-        fields.appendChild(
-            slider(
-                "Control",
-                "control",
-                stage.control,
-                defaults.controlMin,
-                defaults.controlMax,
-                defaults.controlStep,
-                (target, value) => {
-                    target.control = value;
-                },
-                {
-                    title: "Regen strength — higher = more of the stage is re-generated",
-                    help:
-                        "Regeneration strength for this refine stage. Higher " +
-                        "re-generates more of the incoming frames (starting " +
-                        "step = floor(Steps × (1 − Control))); at 0 the frames " +
-                        "pass through untouched.",
-                },
-            ),
-        );
-    }
+};
+
+export const appendStageRefinementControls = (
+    bindings: StagePanelBindings,
+): void => {
+    const { stage, defaults, fields, slider } = bindings;
+
+    fields.appendChild(
+        slider(
+            "Control",
+            "control",
+            stage.control,
+            defaults.controlMin,
+            defaults.controlMax,
+            defaults.controlStep,
+            (target, value) => {
+                target.control = value;
+            },
+            {
+                title: "Regen strength — higher = more of the stage is re-generated",
+                help:
+                    "Regeneration strength for this refine stage. Higher " +
+                    "re-generates more of the incoming frames (starting " +
+                    "step = floor(Steps × (1 − Control))); at 0 the frames " +
+                    "pass through untouched.",
+            },
+        ),
+    );
 };
 
 export const appendStageSamplerSchedulerSection = ({

@@ -6,6 +6,7 @@ import {
     buildCheckbox,
     buildField,
     buildOptionSelect,
+    setFieldDisabled,
 } from "../../detailWidgets";
 import {
     CHARACTER_REFINE_CROP_DIMENSION_MAX,
@@ -26,6 +27,17 @@ import { getVideoStagesHostBridge } from "../../host";
 import { defaultCharacterRefine } from "../../normalizationStage";
 import type { CharacterRefine, ClipReference } from "../../types";
 import type { StagePanelBindings } from "./types";
+
+export const updateCharacterRefineAvailability = (
+    section: HTMLElement,
+    upscale: number,
+): void => {
+    setFieldDisabled(
+        section,
+        upscale !== 1,
+        "Set Upscale to 1× to use Make Them Bonita",
+    );
+};
 
 const referenceLabel = (reference: ClipReference): string =>
     reference.uploadedMedia?.fileName?.trim() ||
@@ -180,7 +192,8 @@ export const appendCharacterRefineSection = (
                 },
             },
         });
-        built.section.hidden = stage.upscale !== 1;
+        if (stage.upscale !== 1)
+            updateCharacterRefineAvailability(built.section, stage.upscale);
         appendHelp(
             built.heading,
             built.section,
@@ -189,10 +202,7 @@ export const appendCharacterRefineSection = (
         );
         stageFields.appendChild(built.section);
     };
-    if (!stage.characterRefine) {
-        appendGroup();
-        return;
-    }
+    const settings = stage.characterRefine ?? defaultCharacterRefine([]);
 
     fields.appendChild(
         buildField(
@@ -202,7 +212,7 @@ export const appendCharacterRefineSection = (
                     { value: "sam3", label: "SAM3" },
                     { value: "yolo", label: "YOLO" },
                 ],
-                stage.characterRefine.finder,
+                settings.finder,
                 (value) =>
                     commit((target) => {
                         if (target.characterRefine) {
@@ -235,7 +245,7 @@ export const appendCharacterRefineSection = (
         slider(
             "Subject Confidence",
             "character-refine-subject-confidence",
-            stage.characterRefine.subjectConfidence,
+            settings.subjectConfidence,
             CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
             CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
             CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
@@ -253,7 +263,7 @@ export const appendCharacterRefineSection = (
         slider(
             "Part Confidence",
             "character-refine-part-confidence",
-            stage.characterRefine.partConfidence,
+            settings.partConfidence,
             CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
             CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
             CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
@@ -283,7 +293,7 @@ export const appendCharacterRefineSection = (
             slider(
                 label,
                 `character-refine-${key}`,
-                stage.characterRefine[key],
+                settings[key],
                 CHARACTER_REFINE_CROP_DIMENSION_MIN,
                 CHARACTER_REFINE_CROP_DIMENSION_MAX,
                 CHARACTER_REFINE_CROP_DIMENSION_STEP,
@@ -301,13 +311,10 @@ export const appendCharacterRefineSection = (
             ),
         );
     }
-    if (supportsAppearanceReferences) {
-        fields.appendChild(pictureRows(bindings, imageReferences));
-    }
     fields.appendChild(
         buildCheckbox(
             "Verify Identity",
-            stage.characterRefine.verifyIdentity,
+            settings.verifyIdentity,
             (enabled) =>
                 commit((target) => {
                     if (target.characterRefine) {
@@ -320,5 +327,8 @@ export const appendCharacterRefineSection = (
             },
         ),
     );
+    if (supportsAppearanceReferences) {
+        fields.appendChild(pictureRows(bindings, imageReferences));
+    }
     appendGroup();
 };

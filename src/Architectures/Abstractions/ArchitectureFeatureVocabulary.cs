@@ -108,6 +108,7 @@ internal static class ArchitectureFeatureVocabulary
         AudioSourceKind.Upload => MediaSource.Upload,
         AudioSourceKind.ControlNet => MediaSource.ControlNet,
         AudioSourceKind.AceStepFun => MediaSource.AceStepFun,
+        AudioSourceKind.PreviousClip => MediaSource.PreviousClip,
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

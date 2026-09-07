@@ -1,16 +1,14 @@
-import { injectTimelineTab } from "./bottomTimelineTab";
+import { createClipEditor } from "./clipEditor/clipEditor";
+import { mountClipEditor } from "./clipEditor/tab";
 import { materializeGenerationMedia } from "./generationMedia";
 import { getVideoStagesHostBridge } from "./host";
 import { installHostGenerationInputProjector } from "./host/swarmUiAdapters";
 import { refineVideoButton } from "./refineVideoButton";
 import { DATA_INPUT_ID } from "./swarmInputs";
-import { videoStagesTimeline } from "./videoStagesTimeline";
+import { createVideoStagesApplication } from "./videoStagesApplication";
 
-const timeline = videoStagesTimeline();
+const application = createVideoStagesApplication(createClipEditor());
 
-// One-shot diagnostic for the case where the Data input never gets built at
-// all (backend extension failed to load): the init gate below skips silently,
-// so without this a broken install would produce no signal.
 let dataInputWatchdog: ReturnType<typeof setTimeout> | null = null;
 const warnIfDataInputNeverAppears = (): void => {
     if (dataInputWatchdog) {
@@ -29,11 +27,11 @@ const warnIfDataInputNeverAppears = (): void => {
 const registerVideoStagesPromptPrefix = (): void => {
     getVideoStagesHostBridge().registerPromptPrefix(
         "videoclip",
-        "Per-clip prompt sections and prompt windows for the VideoStages timeline.",
+        "Per-clip prompt sections and prompt windows for VideoStages.",
         () => [
             "\n<videoclip[0]>the first clip's prompt text — everything until the next <videoclip...> tag.",
             "\n<videoclip[0]:1.5-4>a prompt window on the first clip from 1.5s to 4s.",
-            "\nThe timeline owns these; structured config (stages, references, keyframes, audio) rides in the hidden Data param.",
+            "\nVideoStages owns these; structured config (stages, references, keyframes, audio) rides in the hidden Data param.",
         ],
         true,
     );
@@ -42,31 +40,27 @@ const registerVideoStagesPromptPrefix = (): void => {
 const DATA_INPUT_RETRY_MS = 250;
 let dataInputRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
-const initTimeline = (): void => {
-    // The Data input is built by genpage's async param build, which can land
-    // after (or without re-running) the postParamBuildSteps pass that calls
-    // us. Initializing against a paramless DOM would parse an empty carrier
-    // and silently no-op every save, so keep retrying until the input exists;
-    // init is re-runnable by design, so a later host-triggered call is fine.
+const initVideoStages = (): void => {
+    // Host parameter creation is asynchronous; persistence needs the Data carrier.
     if (!getVideoStagesHostBridge().hasElement(DATA_INPUT_ID)) {
         warnIfDataInputNeverAppears();
         if (!dataInputRetryTimer) {
             dataInputRetryTimer = setTimeout(() => {
                 dataInputRetryTimer = null;
-                initTimeline();
+                initVideoStages();
             }, DATA_INPUT_RETRY_MS);
         }
         return;
     }
     try {
-        timeline.init();
+        application.init();
         installHostGenerationInputProjector(materializeGenerationMedia);
     } catch (error) {
-        console.warn("VideoStages: failed to init timeline", error);
+        console.warn("VideoStages: failed to initialize editor", error);
     }
 };
 
-getVideoStagesHostBridge().addPostParamBuildStep(initTimeline);
+getVideoStagesHostBridge().addPostParamBuildStep(initVideoStages);
 registerVideoStagesPromptPrefix();
 refineVideoButton();
-injectTimelineTab();
+mountClipEditor();

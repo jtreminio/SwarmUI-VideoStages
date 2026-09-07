@@ -37,7 +37,7 @@ internal sealed class Ltx2GenerationSession(
         WGNodeData initVideoMedia = InstallSourceIfPlanned(context);
         clipContext.IcLoraEntryIncomingMedia =
             initVideoMedia
-            ?? context.PreviousTimelineClipOutput?.ToHostMedia(g)
+            ?? context.PreviousTimelineClipOutput?.ToVideoHostMedia(g)
             ?? rootSources.SourceMedia;
         LtxBoundaryAudioCarry boundaryAudioCarry =
             PrepareCrossClipInput(context, initVideoMedia, clipContext);
@@ -53,7 +53,10 @@ internal sealed class Ltx2GenerationSession(
             rootSources.AudioSources,
             boundaryAudioCarry);
         RuntimeArtifact output = CaptureRuntimeArtifact();
-        foreach (StagePlan stage in clip.Stages)
+        IEnumerable<StagePlan> stages = clip.AudioOnly
+            ? clip.Stages.Where(stage => !stage.IsPassthrough).Take(1)
+            : clip.Stages;
+        foreach (StagePlan stage in stages)
         {
             _stageScope.PublishStageInput(output);
             ExecuteStage(context, stage, clipContext);
@@ -79,7 +82,7 @@ internal sealed class Ltx2GenerationSession(
         }
         WGNodeData initVideoMedia = _initVideoClipInstaller.TryInstall(
             clip,
-            context.PreviousTimelineClipOutput?.ToHostMedia(g));
+            context.PreviousTimelineClipOutput?.ToVideoHostMedia(g));
         if (initVideoMedia is null)
         {
             throw Invariant.Failure(
@@ -120,7 +123,7 @@ internal sealed class Ltx2GenerationSession(
         return boundaryHandoffResolver.Resolve(
             session.Boundaries,
             context.PreviousClip,
-            context.PreviousClipOutput?.ToHostMedia(g),
+            context.PreviousClipOutput?.ToVideoHostMedia(g),
             context.Clip,
             clipContext);
     }

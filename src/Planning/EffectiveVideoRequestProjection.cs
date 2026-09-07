@@ -26,7 +26,7 @@ internal static class EffectiveVideoRequestProjection
         ArgumentNullException.ThrowIfNull(authored);
         ArgumentNullException.ThrowIfNull(architecturePlanning);
 
-        ClipSpec[] clips = (authored.Clips ?? []).ToArray();
+        ClipSpec[] clips = ProjectExclusiveMediaModes(authored.Clips ?? []);
         int rootTimelineIndex = Array.FindIndex(
             clips,
             clip => clip.InitVideo is null
@@ -61,6 +61,26 @@ internal static class EffectiveVideoRequestProjection
                 Clips = Array.AsReadOnly(clips),
             },
             Array.AsReadOnly(diagnostics.ToArray()));
+    }
+
+    private static ClipSpec[] ProjectExclusiveMediaModes(
+        IReadOnlyList<ClipSpec> authoredClips)
+    {
+        bool leadIsAudioOnly = authoredClips.Count > 0
+            && authoredClips[0].AudioOnly;
+        return authoredClips
+            .Select((clip, index) => clip with
+            {
+                AudioOnly = index == 0 && clip.AudioOnly,
+                Stages = index == 0 && clip.AudioOnly
+                    ? clip.Stages?.Take(1).ToArray()
+                    : clip.Stages,
+                InitVideo = (index == 0 && clip.AudioOnly)
+                    || (index == 1 && leadIsAudioOnly)
+                        ? null
+                        : clip.InitVideo,
+            })
+            .ToArray();
     }
 
     private static void WarnAboutStaleIdentityHints(

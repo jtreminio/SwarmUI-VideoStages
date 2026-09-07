@@ -212,6 +212,96 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
+    [Fact]
+    public async Task Audio_only_samples_a_32_pixel_joint_latent_and_publishes_only_audio()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["audioOnly"] = true;
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(clip)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmEmptyMiniMaxH3LatentAVNode latent = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
+        Assert.Equal(32, latent.Width.LiteralAsInt());
+        Assert.Equal(32, latent.Height.LiteralAsInt());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        Assert.Single(bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>());
+        Assert.Single(bridge.Graph.NodesOfType<VAEDecodeAudioNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.DoesNotContain(workflow.Properties(), property =>
+            property.Value["class_type"]?.Value<string>() is string type
+            && type.Contains("VAEDecode", StringComparison.Ordinal)
+            && !type.Contains("Audio", StringComparison.Ordinal));
+        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.DataType);
+    }
+
+    [Fact]
+    public async Task A_later_video_clip_can_consume_the_audio_only_clip_output()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject audio = MakeClip(fixture.Stage());
+        audio["duration"] = 1.0;
+        audio["audioOnly"] = true;
+        JObject video = MakeClip(fixture.Stage());
+        video["duration"] = 1.0;
+        video["audioSource"] = MediaSource.PreviousClip;
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(audio, video));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        SwarmKSamplerNode audioSampler = StageSampler(bridge, 0);
+        SwarmKSamplerNode videoSampler = StageSampler(bridge, 1);
+        VAEDecodeAudioNode audioDecode = Assert.Single(
+            bridge.Graph.NodesOfType<VAEDecodeAudioNode>(),
+            decode => decode.Samples.Connection?.Node is LTXVSeparateAVLatentNode separate
+                && ReferenceEquals(separate.AvLatent.Connection?.Node, audioSampler));
+        LTXVConcatAVLatentNode videoInput = Assert.IsType<LTXVConcatAVLatentNode>(
+            videoSampler.LatentImage.Connection?.Node);
+
+        Assert.True(ReachesUpstream(
+            bridge,
+            videoInput.AudioLatent.Connection?.Node,
+            audioDecode.Id));
+        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+    }
+
+    [Fact]
+    public async Task Audio_only_lead_overrides_the_next_clips_native_audio()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject audio = MakeClip(fixture.Stage());
+        audio["duration"] = 1.0;
+        audio["audioOnly"] = true;
+        JObject video = MakeClip(fixture.Stage());
+        video["duration"] = 1.0;
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(audio, video));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmKSamplerNode audioSampler = StageSampler(bridge, 0);
+        SwarmKSamplerNode videoSampler = StageSampler(bridge, 1);
+        VAEDecodeAudioNode audioDecode = Assert.Single(
+            bridge.Graph.NodesOfType<VAEDecodeAudioNode>(),
+            decode => decode.Samples.Connection?.Node is LTXVSeparateAVLatentNode separate
+                && ReferenceEquals(separate.AvLatent.Connection?.Node, audioSampler));
+        LTXVConcatAVLatentNode videoInput = Assert.IsType<LTXVConcatAVLatentNode>(
+            videoSampler.LatentImage.Connection?.Node);
+
+        Assert.Empty(bridge.Graph.NodesOfType<AudioMergeNode>());
+        Assert.True(ReachesUpstream(
+            bridge,
+            videoInput.AudioLatent.Connection?.Node,
+            audioDecode.Id));
+        Assert.Empty(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+    }
+
     /// <summary>
     /// A refine stage re-encodes the decoded video, which collapses back onto the sampler's own
     /// latent and leaves stage 0's decode unused for core's cleanup to prune — the audio half must

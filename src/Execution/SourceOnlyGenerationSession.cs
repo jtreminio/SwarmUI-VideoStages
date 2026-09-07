@@ -39,11 +39,11 @@ internal sealed class SourceOnlyGenerationSession(
         }
         WGNodeData initVideoMedia = _sourceInstaller.TryInstall(
             context.Clip,
-            context.PreviousTimelineClipOutput?.ToHostMedia(generator))
+            context.PreviousTimelineClipOutput?.ToVideoHostMedia(generator))
             ?? throw Invariant.Failure(
                 $"clip {context.Clip.ClipId} source video could not be installed.");
         generator.CurrentMedia = initVideoMedia;
-        PrepareAudio(context.Clip, initVideoMedia);
+        PrepareAudio(context, initVideoMedia);
         using WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow);
         RuntimeArtifact output = RuntimeArtifact.Capture(
             generator,
@@ -51,11 +51,19 @@ internal sealed class SourceOnlyGenerationSession(
         return DecodedClipArtifact.FromRuntime(output, context.Clip);
     }
 
-    private void PrepareAudio(ClipPlan clip, WGNodeData initVideoMedia)
+    private void PrepareAudio(
+        ArchitectureClipRuntimeContext context,
+        WGNodeData initVideoMedia)
     {
+        ClipPlan clip = context.Clip;
         AudioRuntimeSources sources = initVideoMedia.AttachedAudio is WGNodeData nativeAudio
             ? audioSources with { NativeAudio = nativeAudio }
             : audioSources;
+        sources = sources with
+        {
+            PreviousClipAudio = context.PreviousTimelineClipOutput
+                ?.ToAudioHostMedia(generator),
+        };
         WGNodeData baseAudio = PlannedAudioSourceSelector.Select(
             clip.ClipId,
             clip.Audio.Base,
@@ -67,7 +75,7 @@ internal sealed class SourceOnlyGenerationSession(
             initVideoMedia);
         WGNodeData combinedAudio = new AudioSpanCombiner(generator).Combine(
             clip.ClipId,
-            clip.Audio.Spans,
+            clip.Audio.ConditioningSpans,
             baseAudio,
             duration,
             out _);

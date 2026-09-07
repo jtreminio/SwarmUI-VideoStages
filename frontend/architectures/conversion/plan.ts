@@ -1,17 +1,109 @@
+import {
+    defaultAuthoringAudioSource,
+    isAllowedAudioSource,
+} from "../../audioSource";
 import type { Clip } from "../../types";
 import { architectureDescriptor, modelCatalogEntry } from "../catalogQueries";
+import type { GeneratedArchitectureFeature } from "../generatedFeatures";
+import {
+    architectureFeatureSupport,
+    upscaleModeForMethod,
+} from "../policy/featureValues";
 import type {
+    ArchitectureCapabilities,
     ArchitectureModelCatalog,
     ArchitectureRetargetPlan,
 } from "../types";
 
 type ResolvedArchitectureRetarget = ArchitectureRetargetPlan;
 
-/**
- * Resolves a caller-supplied target against model and architecture facts. The
- * profile id is a migration hint; caller-supplied capability arrays never
- * self-authorize.
- */
+const discardUnsupportedFeatures = (
+    clip: Clip,
+    capabilities: ArchitectureCapabilities,
+): void => {
+    const supports = (feature: GeneratedArchitectureFeature): boolean =>
+        architectureFeatureSupport(feature, capabilities);
+
+    if (!supports("frameReferences")) {
+        clip.frameRefs = [];
+    }
+    if (!supports("promptRelay")) {
+        clip.promptWindows = [];
+    }
+    if (!supports("retake")) {
+        clip.retake = null;
+    }
+    if (!supports("referenceFraming")) {
+        clip.refFraming = "crop";
+    }
+    if (!supports("icLora")) {
+        clip.icLoras = [];
+        clip.clipLengthFromControlNet = false;
+    }
+    if (!supports("audioReuse")) {
+        clip.reuseAudio = false;
+    }
+    if (!supports("audioDerivedDuration")) {
+        clip.clipLengthFromAudio = false;
+    }
+    if (!supports("audioBoundaryCarry")) {
+        clip.boundaryOutCarryAudio = false;
+    }
+    if (
+        !isAllowedAudioSource(capabilities.audioSourceKinds, clip.audioSource)
+    ) {
+        clip.audioSource = defaultAuthoringAudioSource(
+            capabilities.audioSourceKinds,
+        );
+        clip.uploadedAudio = null;
+        clip.uploadedAudioDurationSeconds = 0;
+        clip.uploadedAudioStartSeconds = 0;
+        clip.uploadedAudioLengthSeconds = 0;
+        clip.saveAudioTrack = false;
+    }
+    if (!capabilities.entryModes.includes("init-video")) {
+        clip.initVideo = null;
+    }
+
+    const keepCharacterReferences =
+        supports("characterRefineAppearanceReferences") ||
+        supports("characterRefineIdentityReferences");
+    if (!supports("clipReferences") && !keepCharacterReferences) {
+        clip.references = [];
+    }
+
+    for (const stage of clip.stages) {
+        if (
+            !supports("frameReferences") ||
+            !supports("stageReferenceStrengths")
+        ) {
+            stage.frameRefStrengths = [];
+        }
+        if (!supports("icLora")) {
+            stage.icLoraStrengths = [];
+        }
+        if (!supports("characterRefine")) {
+            stage.characterRefine = null;
+        } else if (stage.characterRefine) {
+            if (!supports("characterRefineAppearanceReferences")) {
+                stage.characterRefine.pictureReferenceIds = [];
+            }
+            if (!supports("characterRefineIdentityReferences")) {
+                stage.characterRefine.verifyIdentity = false;
+            }
+        }
+        const upscaleMode = upscaleModeForMethod(stage.upscaleMethod);
+        if (
+            upscaleMode === "unsupported" ||
+            (upscaleMode === "latent" && !supports("latentUpscale")) ||
+            (upscaleMode === "latent-model" && !supports("latentModelUpscale"))
+        ) {
+            stage.upscale = 1;
+        }
+    }
+};
+
+/** Caller-supplied capability data never overrides the catalog. */
 export const resolveArchitectureRetarget = (
     requested: Pick<
         ArchitectureRetargetPlan,
@@ -41,7 +133,6 @@ export const resolveArchitectureRetarget = (
     };
 };
 
-/** Retargets every stage onto the resolved model, on a private clone. */
 export const planArchitectureConversion = (
     source: Clip,
     requested: ArchitectureRetargetPlan,
@@ -59,5 +150,12 @@ export const planArchitectureConversion = (
         stage.model = target.model;
         stage.modelProfileId = target.modelProfileId;
     }
+    const capabilities =
+        modelCatalogEntry(catalog, target.model)?.capabilities ??
+        architectureDescriptor(catalog, target.architectureId)?.capabilities;
+    if (!capabilities) {
+        return null;
+    }
+    discardUnsupportedFeatures(clip, capabilities);
     return clip;
 };

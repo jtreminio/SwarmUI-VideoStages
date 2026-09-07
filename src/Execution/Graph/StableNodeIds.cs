@@ -13,6 +13,9 @@ internal static class StableNodeIds
     /// <summary>The one merged-timeline save emitted before frame interpolation.</summary>
     internal const int PreInterpolationSave = 52900;
 
+    /// <summary>Per-clip audio-only saves when the next clip does not consume the result.</summary>
+    internal const int AudioOnlyClipSave = 53000;
+
     /// <summary>
     /// Root and clip audio injection. Fixed sub-slots plus a per-clip preserve-window block
     /// starting at slot 400.

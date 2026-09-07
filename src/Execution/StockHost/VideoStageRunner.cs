@@ -58,6 +58,20 @@ internal sealed class VideoStageRunner : IDisposable
         return DecodedClipArtifact.FromRuntime(output, clip);
     }
 
+    internal DecodedClipArtifact ExecuteAudioOnly(
+        ClipPlan clip,
+        Action<ClipPlan, StagePlan, int> execute)
+    {
+        StagePlan stage = clip.Stages.FirstOrDefault(candidate => !candidate.IsPassthrough)
+            ?? throw Invariant.Failure(
+                $"audio-only clip {clip.ClipId} has no generating stage.");
+        int sectionId = _stageScope.ApplyStageOverrides(clip, stage);
+        execute(clip, stage, sectionId);
+        RuntimeArtifact output = CaptureRuntimeArtifact();
+        _stageScope.PublishIntermediate(stage, _generator.CurrentMedia, _generator.CurrentVae);
+        return DecodedClipArtifact.FromRuntime(output, clip);
+    }
+
     private RuntimeArtifact ExecuteStages(
         ClipPlan clip,
         Func<StagePlan, StagePlan, bool> executeStage)

@@ -191,6 +191,7 @@ export interface Clip {
     boundaryOutOverlap: number;
     duration: number;
     useSeedVr: boolean;
+    audioOnly?: boolean;
     refFraming: ReferenceFraming;
     h3AttentionWindowSeconds: number;
     h3TextEncoder: H3TextEncoder;
@@ -235,6 +236,7 @@ export interface AudioTrack {
     source: AudioTrackSource;
     spans: AudioTrackSpan[];
     volume?: number;
+    disabled?: boolean;
 }
 
 type WithRequiredId<T extends { id?: string }> = Omit<T, "id"> & {

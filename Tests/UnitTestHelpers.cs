@@ -183,6 +183,8 @@ internal static class UnitTestStubs
         Ensure(ref ComfyUIBackendExtension.IPAdapterWeight, "IP-Adapter Weight", "1");
         Ensure(ref ComfyUIBackendExtension.IPAdapterWeightType, "IP-Adapter Weight Type", "standard");
         Ensure(ref ComfyUIBackendExtension.UseIPAdapterForRevision, "Use IP-Adapter", "None");
+        Ensure(ref ComfyUIBackendExtension.EnableReferenceLatents, "Enable Reference Latents", "none");
+        Ensure(ref ComfyUIBackendExtension.TextEncodedImage, "Text Encoded Image", "auto");
         Ensure(ref ComfyUIBackendExtension.UseStyleModel, "Use Style Model", "None");
         Ensure(ref ComfyUIBackendExtension.StyleModelApplyStart, "Style Model Apply Start", "0");
         Ensure(ref ComfyUIBackendExtension.StyleModelMergeStrength, "Style Model Merge Strength", "1");

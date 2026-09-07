@@ -59,6 +59,7 @@ public class AudioPlanCompilerTests
     [InlineData(MediaSource.Native, (int)AudioSourceKind.Native)]
     [InlineData(MediaSource.Upload, (int)AudioSourceKind.Upload)]
     [InlineData(MediaSource.ControlNet, (int)AudioSourceKind.ControlNet)]
+    [InlineData(MediaSource.PreviousClip, (int)AudioSourceKind.PreviousClip)]
     [InlineData("audio7", (int)AudioSourceKind.AceStepFun)]
     public void Compile_maps_lockable_base_source_kinds(string source, int expectedValue)
     {
@@ -80,6 +81,7 @@ public class AudioPlanCompilerTests
     [InlineData((int)AudioSourceKind.Upload, true)]
     [InlineData((int)AudioSourceKind.ControlNet, true)]
     [InlineData((int)AudioSourceKind.AceStepFun, true)]
+    [InlineData((int)AudioSourceKind.PreviousClip, true)]
     [InlineData((int)AudioSourceKind.Native, false)]
     [InlineData((int)AudioSourceKind.Disabled, false)]
     [InlineData((int)AudioSourceKind.Unknown, false)]

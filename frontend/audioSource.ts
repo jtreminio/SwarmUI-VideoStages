@@ -7,6 +7,8 @@ export type AudioSourceOption = Pick<SelectOption, "value" | "label">;
 
 export interface AudioSourceContext {
     controlNetEnabled?: boolean;
+    previousClipEnabled?: boolean;
+    previousClipLabel?: string;
     allowedKinds?: readonly string[];
 }
 
@@ -16,6 +18,7 @@ const [
     AUDIO_SOURCE_UPLOAD,
     AUDIO_SOURCE_CONTROLNET,
     AUDIO_SOURCE_ACE_STEP_FUN,
+    AUDIO_SOURCE_PREVIOUS_CLIP,
 ] = AUDIO_SOURCE_KINDS;
 
 export {
@@ -23,6 +26,7 @@ export {
     AUDIO_SOURCE_CONTROLNET,
     AUDIO_SOURCE_DISABLED_KIND,
     AUDIO_SOURCE_NATIVE,
+    AUDIO_SOURCE_PREVIOUS_CLIP,
     AUDIO_SOURCE_UPLOAD,
 };
 
@@ -34,6 +38,7 @@ const LITERAL_AUDIO_SOURCES = [
     AUDIO_SOURCE_NATIVE,
     AUDIO_SOURCE_UPLOAD,
     AUDIO_SOURCE_CONTROLNET,
+    AUDIO_SOURCE_PREVIOUS_CLIP,
 ];
 
 /**
@@ -88,6 +93,7 @@ export const canUseClipLengthFromAudio = (source: string): boolean => {
     const kind = audioSourceKind(source);
     return (
         kind === AUDIO_SOURCE_UPLOAD ||
+        kind === AUDIO_SOURCE_PREVIOUS_CLIP ||
         kind === AUDIO_SOURCE_CONTROLNET ||
         kind === AUDIO_SOURCE_ACE_STEP_FUN
     );
@@ -156,6 +162,12 @@ export const buildAudioSourceOptions = (
         options.push({
             value: AUDIO_SOURCE_CONTROLNET,
             label: AUDIO_SOURCE_CONTROLNET,
+        });
+    }
+    if (context.previousClipEnabled) {
+        options.push({
+            value: AUDIO_SOURCE_PREVIOUS_CLIP,
+            label: context.previousClipLabel ?? "Previous Clip Output",
         });
     }
     if (context.allowedKinds) {

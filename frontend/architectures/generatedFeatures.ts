@@ -54,6 +54,7 @@ export const AUDIO_SOURCE_KINDS = [
     "Upload",
     "ControlNet",
     "AceStepFun",
+    "Previous Clip",
 ] as const;
 
 /** Every reference framing a clip can carry, in declaration order. */

@@ -1,6 +1,6 @@
+import { clipDurationOf } from "./clipSemantics";
 import { clamp, PROMPT_WINDOW_MIN_DURATION } from "./constants";
 import { freeIntervalAt, type Span } from "./intervals";
-import { clipDurationOf } from "./trackDomUtils";
 import type { Clip, PromptWindow } from "./types";
 import { roundToTenth } from "./utils";
 
@@ -20,14 +20,7 @@ export const otherSpans = (
         .sort((a, b) => a.start - b.start)
         .map((s) => ({ start: s.start, end: s.end }));
 
-/**
- * Move a prompt window's BEGIN edge to `desiredBegin` (seconds), keeping its end
- * fixed — the exact rule the timeline's left-edge resize gesture applies
- * (see the track config's `resizeTarget`, edge "left"): clamp the new start into
- * the free interval ending at this window's end (so it can't cross an adjacent
- * window or leave the clip) with a minimum-duration floor, then recompute
- * duration. Mutates in place.
- */
+/** Keep the end fixed; clamp the start against neighbors and the minimum length. */
 export const applyPromptWindowBegin = (
     clip: Clip,
     windowIdx: number,
@@ -46,13 +39,7 @@ export const applyPromptWindowBegin = (
     window.duration = roundToTenth(end - start);
 };
 
-/**
- * Move a prompt window's END edge to `desiredEnd` (seconds), keeping its start
- * fixed — the exact rule the timeline's right-edge resize gesture applies
- * (see the track config's `resizeTarget`, edge "right"): clamp the new end into
- * the free interval starting at this window's start with a minimum-duration
- * floor, then recompute duration. Mutates in place.
- */
+/** Keep the start fixed; clamp the end against neighbors and the clip end. */
 export const applyPromptWindowEnd = (
     clip: Clip,
     windowIdx: number,
@@ -74,16 +61,7 @@ export const applyPromptWindowEnd = (
     window.duration = roundToTenth(end - window.start);
 };
 
-/**
- * NEIGHBOUR bounds for a window's begin/end edges — the same interval walls
- * applyPromptWindowBegin/End clamp against. The dock's begin/end number inputs
- * use these as min (begin) / max (end) so spinner arrows stop AT a
- * neighbouring window instead of marching past it and snapping back on commit.
- * Only the neighbour walls belong in static input attributes: neighbours move
- * via gestures/deletes that rebuild the panel (fresh attrs), whereas the
- * window's OWN begin↔end coupling changes on value-only edits that don't
- * rebuild — that coupling stays with the commit clamp + display write-back.
- */
+/** Static input limits follow neighboring windows; live begin/end coupling stays in commit clamps. */
 export const promptWindowNeighborBounds = (
     clip: Clip,
     windowIdx: number,

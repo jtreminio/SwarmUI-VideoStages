@@ -52,6 +52,82 @@ public class Ltx2GeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
+    [Fact]
+    public async Task Audio_only_uses_the_LTX_audio_model_and_publishes_only_audio()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        JObject clip = MakeClip(1.0, fixture.Stage());
+        clip["audioOnly"] = true;
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(clip)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Single(bridge.Graph.NodesOfType<LTXVAudioOnlyModelNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<LTXVAudioOnlyEmptyVideoLatentNode>());
+        EmptyLTXVLatentVideoNode video = Assert.Single(
+            bridge.Graph.NodesOfType<EmptyLTXVLatentVideoNode>());
+        Assert.Equal(Constants.AudioOnlyDimension, video.Width.LiteralAsInt());
+        Assert.Equal(Constants.AudioOnlyDimension, video.Height.LiteralAsInt());
+        Assert.Equal(1, video.Length.LiteralAsInt());
+        LTXVEmptyLatentAudioNode audio = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVEmptyLatentAudioNode>());
+        JToken frameRate = workflow[audio.Id]!["inputs"]!["frame_rate"]!;
+        Assert.NotEqual(JTokenType.String, frameRate.Type);
+        Assert.Equal(VideoStagesWorkflowFixture.Fps, frameRate.Value<double>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        Assert.Single(bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>());
+        Assert.Single(bridge.Graph.NodesOfType<LTXVAudioVAEDecodeNode>());
+        Assert.Single(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.DoesNotContain(workflow.Properties(), property =>
+            property.Value["class_type"]?.Value<string>() is string type
+            && type.Contains("VAEDecode", StringComparison.Ordinal)
+            && !type.Contains("Audio", StringComparison.Ordinal));
+        Assert.Equal(WGNodeData.DT_AUDIO, generator.CurrentMedia.DataType);
+    }
+
+    [Fact]
+    public async Task Audio_only_lead_overrides_the_next_clips_native_audio()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        JObject audio = MakeClip(1.0, fixture.Stage());
+        audio["audioOnly"] = true;
+        JObject video = MakeClip(1.0, fixture.Stage());
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(audio, video));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        SwarmKSamplerNode audioSampler = StageSampler(bridge, 0);
+        SwarmKSamplerNode videoSampler = StageSampler(bridge, 1);
+        Assert.Empty(bridge.Graph.NodesOfType<AudioMergeNode>());
+        Assert.True(ReachesUpstream(bridge, videoSampler, audioSampler.Id));
+        Assert.Empty(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+    }
+
+    [Fact]
+    public async Task Audio_only_lead_makes_the_next_clips_source_video_dormant()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        JObject audio = MakeClip(1.0, fixture.Stage());
+        audio["audioOnly"] = true;
+        JObject video = MakeClip(1.0, fixture.Stage());
+        video["initVideo"] = SourceVideo();
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(audio, video));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmLoadVideoB64Node>());
+        SwarmKSamplerNode audioSampler = StageSampler(bridge, 0);
+        SwarmKSamplerNode videoSampler = StageSampler(bridge, 1);
+        Assert.Empty(bridge.Graph.NodesOfType<AudioMergeNode>());
+        Assert.True(ReachesUpstream(bridge, videoSampler, audioSampler.Id));
+        Assert.Empty(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+    }
+
     /// <summary>
     /// The text-to-video shape is what makes this observable: core's own encoders are in
     /// <c>AutoCleanupNodeTypes</c> and get pruned, so the encoder feeding the stage sampler is the

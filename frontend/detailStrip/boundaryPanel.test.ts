@@ -4,22 +4,25 @@ import {
     testArchitectureCatalog,
     testArchitectureCatalogDto,
 } from "../__test_helpers__/architectureFixtures";
-import {
-    crumbText,
-    detailBody,
-    detailStripHarness,
-    fieldByLabel,
-} from "../__test_helpers__/detailStrip";
 import { lastSavedClips } from "../__test_helpers__/dom";
+import {
+    editorFieldContainer,
+    editorHarness,
+} from "../__test_helpers__/editor";
 import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
+import { AUDIO_SOURCE_PREVIOUS_CLIP } from "../audioSource";
+import { MEDIA_SOURCE_PREVIOUS_CLIP } from "../generatedMediaSource";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
 import * as persistence from "../persistence/repository";
-import { getSelection, setSelection } from "../selection";
+import { setSelection } from "../selection";
 import type { Clip } from "../types";
 
-describe("detail strip boundary panel", () => {
-    const h = detailStripHarness();
+describe("production editor boundary panel", () => {
+    const h = editorHarness();
+    const fieldByLabel = (label: string): HTMLElement =>
+        editorFieldContainer("join", label);
+    const detailBody = (): HTMLElement => h.section("join");
 
     const boundarySelect = (): HTMLSelectElement => {
         const select = detailBody()?.querySelector<HTMLSelectElement>("select");
@@ -60,25 +63,24 @@ describe("detail strip boundary panel", () => {
         );
     };
 
-    it("renders a breadcrumb and join select for the seam", () => {
+    it("renders the join section and available join modes", () => {
         h.setup([
             { duration: 4, stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
         setSelection({ kind: "boundary", leftClipIdx: 0 });
-        expect(crumbText()).toBe("Boundary · Clip 0 → 1");
+        expect(h.section("join").querySelector("h3")?.textContent).toBe(
+            "Join from previous clip",
+        );
         expect(boundarySelect().value).toBe("cut");
         expect(
-            detailBody()?.querySelector(".vst-detail-boundary"),
-        ).not.toBeNull();
-        expect(
-            detailBody()?.querySelector('[data-vst-static-key="boundary"]'),
-        ).not.toBeNull();
-        expect(
-            detailBody()?.querySelector(
-                '[data-vst-static-key="boundary"] > .input-group-header.input-group-shrinkable',
+            Array.from(
+                boundarySelect().options,
+                (option) => option.textContent,
             ),
-        ).toBeNull();
+        ).toEqual(
+            expect.arrayContaining(["Cut │", "Continue →", "Crossfade ⤬"]),
+        );
     });
 
     it("live-applies the join mode through saveClips", () => {
@@ -94,6 +96,54 @@ describe("detail strip boundary panel", () => {
         expect(lastSavedClips<Clip[]>(h.saveSpy)[0].boundaryOut).toBe(
             "crossfade",
         );
+    });
+
+    it("switches the pair between join and consumed source relationships", () => {
+        h.setup([
+            { duration: 4, stages: [{}, {}] },
+            { duration: 6, stages: [{}], audioSource: "Native" },
+        ]);
+        setSelection({ kind: "boundary", leftClipIdx: 0 });
+        expect(
+            Array.from(
+                boundarySelect().options,
+                (option) => option.textContent,
+            ),
+        ).toEqual(
+            expect.arrayContaining(["As source video", "As source audio"]),
+        );
+
+        let select = boundarySelect();
+        select.value = "source-video";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        expect(persistence.getState().clips[1].initVideo).toMatchObject({
+            source: MEDIA_SOURCE_PREVIOUS_CLIP,
+            lengthSeconds: 4,
+        });
+        expect(boundarySelect().value).toBe("source-video");
+
+        select = boundarySelect();
+        select.value = "source-audio";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        const clips = persistence.getState().clips;
+        expect(clips[0].audioOnly).toBe(true);
+        expect(clips[0].stages.map((stage) => stage.skipped)).toEqual([
+            false,
+            true,
+        ]);
+        expect(clips[1].audioSource).toBe(AUDIO_SOURCE_PREVIOUS_CLIP);
+        expect(clips[1].initVideo).toBeNull();
+        expect(boundarySelect().value).toBe("source-audio");
+    });
+
+    it("selects source audio when Clip 0 is already audio-only", () => {
+        h.setup([
+            { duration: 4, stages: [{}], audioOnly: true },
+            { duration: 4, stages: [{}] },
+        ]);
+        setSelection({ kind: "boundary", leftClipIdx: 0 });
+
+        expect(boundarySelect().value).toBe("source-audio");
     });
 
     it("shows an Overlap selector and plan-aware info for a continue boundary", () => {
@@ -206,6 +256,7 @@ describe("detail strip boundary panel", () => {
         if (!constraints) {
             throw new Error("continue constraints missing");
         }
+        catalog.architectures[0].capabilities.features.push("clipReferences");
         constraints.continueMode = "reference";
         constraints.continuityExtraFrames = 0;
         resetArchitectureCatalogForTests();
@@ -221,6 +272,8 @@ describe("detail strip boundary panel", () => {
         ]);
         setSelection({ kind: "boundary", leftClipIdx: 0 });
 
+        setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
+        h.editor.refresh();
         expect(fieldByLabel("Reference window")).not.toBeNull();
         expect(overlapSelect()).toBeNull();
         expect(carryAudioCheckbox()).toBeNull();
@@ -252,6 +305,45 @@ describe("detail strip boundary panel", () => {
         expect(carryAudioCheckbox()).toBeNull();
     });
 
+    it("does not offer source audio when Clip 0 cannot generate audio", async () => {
+        const catalog = testArchitectureCatalog();
+        catalog.architectures[0].capabilities.audioSourceKinds = ["Disabled"];
+        resetArchitectureCatalogForTests();
+        setVideoStagesHostBridgeForTests({
+            ...createDefaultVideoStagesHostBridge(),
+            requestJson: async () => testArchitectureCatalogDto(catalog),
+        });
+        await loadAuthoritativeArchitectureCatalog();
+        h.setup([
+            { duration: 4, stages: [{}] },
+            { duration: 4, stages: [{}] },
+        ]);
+        setSelection({ kind: "boundary", leftClipIdx: 0 });
+
+        expect(
+            Array.from(
+                boundarySelect().options,
+                (option) => option.textContent,
+            ),
+        ).not.toContain("As source audio");
+    });
+
+    it("offers source audio only for the Clip 0 boundary", () => {
+        h.setup([
+            { duration: 4, stages: [{}] },
+            { duration: 4, stages: [{}] },
+            { duration: 4, stages: [{}] },
+        ]);
+        setSelection({ kind: "boundary", leftClipIdx: 1 });
+
+        expect(
+            Array.from(
+                boundarySelect().options,
+                (option) => option.textContent,
+            ),
+        ).not.toContain("As source audio");
+    });
+
     it("disables audio continuation when the next clip has no generation stage", () => {
         h.setup([
             { duration: 4, boundaryOut: "crossfade", stages: [{}] },
@@ -259,6 +351,7 @@ describe("detail strip boundary panel", () => {
         ]);
         setSelection({ kind: "boundary", leftClipIdx: 0 });
 
+        setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
         expect(carryAudioCheckbox()?.disabled).toBe(true);
     });
 
@@ -285,19 +378,22 @@ describe("detail strip boundary panel", () => {
         expect(detailBody()?.querySelector(".vst-boundary-note")).toBeNull();
     });
 
-    it("clamps a boundary selection to none when its right clip is deleted", () => {
+    it("returns to the remaining clip when a join loses its right clip", () => {
         h.setup([
             { duration: 4, stages: [{}] },
             { duration: 4, stages: [{}] },
         ]);
         setSelection({ kind: "boundary", leftClipIdx: 0 });
-        expect(crumbText()).toBe("Boundary · Clip 0 → 1");
-        // Drop the second clip: boundary 0 no longer has a follower.
+        expect(h.section("join").querySelector("h3")?.textContent).toBe(
+            "Join from previous clip",
+        );
         const clips = persistence.getClips();
         clips.splice(1, 1);
         persistence.saveClips(clips);
-        // A re-render re-clamps the now-invalid selection to none.
-        h.strip.render();
-        expect(getSelection()).toEqual({ kind: "none" });
+        h.editor.refresh();
+        expect(h.section("prompt").querySelector("textarea")?.value).toBe("");
+        expect(h.root.querySelectorAll("[data-testid=clip-card]")).toHaveLength(
+            1,
+        );
     });
 });

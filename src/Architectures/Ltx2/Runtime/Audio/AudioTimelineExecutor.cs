@@ -78,6 +78,11 @@ internal sealed class AudioTimelineExecutor
             initVideoMedia?.AttachedAudio is WGNodeData initVideoAudio
                 ? rootSources with { NativeAudio = initVideoAudio }
                 : rootSources;
+        sources = sources with
+        {
+            PreviousClipAudio = runtimeContext.PreviousTimelineClipOutput
+                ?.ToAudioHostMedia(_generator),
+        };
         if (_generator.CurrentMedia is null)
         {
             return;
@@ -110,10 +115,12 @@ internal sealed class AudioTimelineExecutor
         double generationDuration = authoredDuration + handleDuration;
         AudioSpanCombiner combiner = new(_generator);
         baseAudio = combiner.DelayBy(baseAudio, handleDuration, authoredDuration);
+        ImmutableArray<AudioSpanPlan> conditioningSpans =
+            clip.Audio.ConditioningSpans;
         ImmutableArray<AudioSpanPlan> spans = handleDuration > 0
-            ? [.. clip.Audio.Spans.Select(span =>
+            ? [.. conditioningSpans.Select(span =>
                 span with { StartSeconds = span.StartSeconds + handleDuration })]
-            : clip.Audio.Spans;
+            : conditioningSpans;
 
         if (baseAudio is null
             && spans.IsDefaultOrEmpty

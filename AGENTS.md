@@ -6,6 +6,10 @@ This extension is in a subdirectory that is gitignored by the SwarmUI project. T
 
 `Assets/video-stages.js` (and its `.js.map`) is COMPILED BUILD OUTPUT — never read it and never modify it. Reading it wastes context and tells you nothing the sources don't. All Javascript modifications should be applied to the Typescript files in the frontend directory (or scripts), then rebuilt with `npm run build`. It is OK to modify the CSS file(s) within this project directly.
 
+# Node.js
+
+Use `nvm` for all `node`, `npm`, and `npx` commands. Non-interactive shells do not load it automatically, so source `~/.nvm/nvm.sh` before running them.
+
 # Run Tests
 
 You are explicitly required to run unit tests for this extension when your changes affect this extension’s code or tests.

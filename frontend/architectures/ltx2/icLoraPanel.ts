@@ -1,10 +1,8 @@
 import type { DetailStripContext } from "../../detailStrip/context";
 import {
-    appendHelp,
     buildField,
     buildMediaPickRow,
     buildOptionSelect,
-    buildRepeatingEditor,
 } from "../../detailWidgets";
 import {
     MEDIA_SOURCE_INCOMING,
@@ -20,13 +18,8 @@ import {
     IC_LORA_STRENGTH_STEP,
 } from "../../icLoraAuthoring";
 import { defaultLoraWeight } from "../../loraAuthoring";
-import {
-    appendIcLoraStrengthToClip,
-    normalizeStageControlNetStrengthValue,
-    removeIcLoraStrengthAt,
-} from "../../normalizationStage";
+import { normalizeStageControlNetStrengthValue } from "../../normalizationStage";
 import { getClips } from "../../persistence/repository";
-import { setSelection } from "../../selection";
 import { preserveSelectedOption } from "../../selectOption";
 import type {
     Clip,
@@ -43,13 +36,11 @@ import {
 import { canUseIncomingIcLoraDrive } from "./icLoraDriveAvailability";
 import {
     canonicalizeIcLoraFields,
-    defaultIcLora,
     isAcceptedIcLoraDriveMedia,
 } from "./icLoraNormalization";
 import {
     findIcLoraPreset,
     IC_LORA_AUTO,
-    IC_LORA_DEFAULT_PRESET_ID,
     IC_LORA_PRESET_CUSTOM_ID,
     IC_LORA_PRESETS,
     icLoraDriveMediaContract,
@@ -58,140 +49,13 @@ import {
     icLoraTriggerHint,
 } from "./icLoraPresets";
 
-export const buildIcLorasSection = (
+const createIcLoraEditor = (
     context: DetailStripContext,
     clip: Clip,
     clipIdx: number,
     defaults: RootDefaults,
-    selectedEntryIdx: number | null = null,
-    open = selectedEntryIdx !== null,
-): HTMLElement => {
+) => {
     const authoring = context.authoring();
-    const clipCapabilities = authoring.capabilities.forClip(clip);
-    const icLoraDecision = clipCapabilities.decision("icLora");
-    const entryIdx =
-        clip.icLoras.length === 0
-            ? null
-            : Math.max(
-                  0,
-                  Math.min(selectedEntryIdx ?? 0, clip.icLoras.length - 1),
-              );
-    const buildSection = (
-        editorForItem?: (index: number) => HTMLElement | undefined,
-    ): HTMLElement => {
-        const built = buildRepeatingEditor({
-            key: "ic-loras",
-            label: "IC-LoRAs",
-            sectionClass: "vst-detail-iclora-section",
-            open,
-            items: clip.icLoras.map((entry, index) => ({
-                label: `IC${index}`,
-                stateKey: entry.id ? `ic-lora:${entry.id}` : undefined,
-                focusKey: `ic-lora-tab-${index}`,
-                title: `Edit IC-LoRA ${index}`,
-                active: index === entryIdx,
-                className: "vst-iclora-tab",
-                onSelect: () =>
-                    setSelection({
-                        kind: "ic-lora",
-                        clipIdx,
-                        entryIdx: index,
-                    }),
-                onDelete: () => {
-                    context.structuralCommit(
-                        (clips) => {
-                            const target = clips[clipIdx];
-                            if (!target?.icLoras[index]) {
-                                return null;
-                            }
-                            target.icLoras.splice(index, 1);
-                            removeIcLoraStrengthAt(target, index);
-                            return target.icLoras.length > 0
-                                ? {
-                                      kind: "ic-lora",
-                                      clipIdx,
-                                      entryIdx: Math.min(
-                                          index,
-                                          target.icLoras.length - 1,
-                                      ),
-                                  }
-                                : { kind: "clip", clipIdx, stageIdx: 0 };
-                        },
-                        { rebuildAfterSelect: true },
-                    );
-                },
-            })),
-            add: {
-                title: icLoraDecision.supported
-                    ? "Add an IC-LoRA"
-                    : icLoraDecision.reason,
-                label: "+ Add IC-LoRA",
-                className: "vst-detail-add-iclora",
-                disabled: !icLoraDecision.supported,
-                onClick: () => {
-                    context.structuralCommit((clips) => {
-                        const target = clips[clipIdx];
-                        const defaultPreset = findIcLoraPreset(
-                            IC_LORA_DEFAULT_PRESET_ID,
-                        );
-                        if (
-                            !target ||
-                            !defaultPreset ||
-                            !authoring.capabilities
-                                .forClip(target)
-                                .decision("icLora").supported
-                        ) {
-                            return null;
-                        }
-                        const defaultContract =
-                            icLoraDriveMediaContract(defaultPreset);
-                        target.icLoras.push(
-                            defaultIcLora({
-                                lora: IC_LORA_AUTO,
-                                preset: defaultPreset.id,
-                                strength: defaultPreset.strength,
-                                controlType: defaultPreset.controlType,
-                                driveData: defaultContract.driveData,
-                                driveMediaKinds: [
-                                    ...defaultContract.acceptedKinds,
-                                ],
-                            }),
-                        );
-                        appendIcLoraStrengthToClip(
-                            target,
-                            defaultLoraWeight(defaults, IC_LORA_AUTO),
-                        );
-                        return {
-                            kind: "ic-lora",
-                            clipIdx,
-                            entryIdx: target.icLoras.length - 1,
-                        };
-                    });
-                },
-            },
-            remove: {
-                title:
-                    entryIdx === null
-                        ? "No IC-LoRA to delete"
-                        : `Delete IC-LoRA ${entryIdx}`,
-                className: "vst-detail-delete-iclora",
-            },
-            editorForItem,
-        });
-        appendHelp(
-            built.heading,
-            built.section,
-            "IC-LoRAs",
-            "In-context LoRAs use uploaded or incoming media for pose, depth, " +
-                "motion, style, audio, or other preset-specific conditioning. " +
-                "Add one per guide you want to apply.",
-        );
-        return built.section;
-    };
-    if (entryIdx === null) {
-        return buildSection();
-    }
-
     const buildEditor = (editorEntryIdx: number): HTMLElement | undefined => {
         const entry = clip.icLoras[editorEntryIdx];
         if (!entry) {
@@ -200,7 +64,7 @@ export const buildIcLorasSection = (
         const entryIdx = editorEntryIdx;
         const col = document.createElement("div");
         col.className =
-            "vst-detail-col vst-detail-instance-fields vst-detail-iclora vst-detail-iclora-col";
+            "vst-detail-fields vst-detail-col vst-detail-instance-fields vst-detail-iclora vst-detail-iclora-col";
         col.setAttribute("data-vst-iclora-idx", `${entryIdx}`);
         const entryAt = (clips: Clip[], index: number): IcLora | undefined =>
             clips[clipIdx]?.icLoras[index];
@@ -658,6 +522,13 @@ export const buildIcLorasSection = (
                             });
                             context.render();
                         },
+                        entry.driveMedia?.data,
+                        audioDriveMedia
+                            ? {
+                                  kind: "audio",
+                                  range: { startSeconds: 0, lengthSeconds: 0 },
+                              }
+                            : undefined,
                     ),
                 );
                 if (audioDriveMedia) {
@@ -718,5 +589,24 @@ export const buildIcLorasSection = (
         return col;
     };
 
-    return buildSection(buildEditor);
+    return { buildEditor };
+};
+
+export const buildIcLoraFields = (
+    context: DetailStripContext,
+    clip: Clip,
+    clipIdx: number,
+    defaults: RootDefaults,
+    entryIdx: number,
+): HTMLElement => {
+    const fields = createIcLoraEditor(
+        context,
+        clip,
+        clipIdx,
+        defaults,
+    ).buildEditor(entryIdx);
+    if (!fields) {
+        throw new Error(`IC-LoRA ${entryIdx} does not exist`);
+    }
+    return fields;
 };

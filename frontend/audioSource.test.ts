@@ -131,5 +131,18 @@ describe("audioSource", () => {
 
             expect(values).toEqual(["Native", "Upload"]);
         });
+
+        it("can name the immediately preceding clip's audio", () => {
+            const options = buildAudioSourceOptions("", {
+                previousClipEnabled: true,
+                previousClipLabel: "Clip 0 audio",
+                allowedKinds: ["Native", "Upload", "Previous Clip"],
+            });
+
+            expect(options).toContainEqual({
+                value: "Previous Clip",
+                label: "Clip 0 audio",
+            });
+        });
     });
 });

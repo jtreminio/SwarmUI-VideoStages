@@ -9,6 +9,13 @@ declare const mainGenHandler: {
 declare function showError(message: string): void;
 declare function copyText(text: string): void;
 declare function triggerChangeFor(element: HTMLElement): void;
+declare function getMediaType(src: string): "image" | "audio" | "video";
+declare function setMediaFileDirect(
+    input: HTMLInputElement,
+    src: string,
+    type: "image" | "audio" | "video",
+    name: string,
+): void;
 declare function textPromptAddKeydownHandler(element: HTMLElement): void;
 declare function getParamById(
     id: string,
@@ -51,6 +58,18 @@ declare const inputBrowserHelper:
     | undefined;
 
 declare function doPopover(id: string, e?: Event): void;
+declare class AdvancedPopover {
+    constructor(
+        id: string,
+        buttons: { key: string; action(): void }[],
+        canSearch: boolean,
+        x: number,
+        y: number,
+        root: HTMLElement,
+        preSelect?: string | null,
+        flipYHeight?: number | null,
+    );
+}
 
 declare let currentMetadataVal: string | null;
 

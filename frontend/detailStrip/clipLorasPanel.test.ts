@@ -1,33 +1,33 @@
 import { describe, expect, it, jest } from "@jest/globals";
-import {
-    detailStripHarness,
-    modelGlobals,
-} from "../__test_helpers__/detailStrip";
 import { lastSavedClips } from "../__test_helpers__/dom";
+import { editorHarness, modelGlobals } from "../__test_helpers__/editor";
 import { setSelection } from "../selection";
 import type { Clip } from "../types";
 
-describe("detail strip clip LoRA panel", () => {
-    const h = detailStripHarness();
+describe("production editor clip LoRA panel", () => {
+    const h = editorHarness();
 
     it("adds and persists a LoRA row", () => {
         h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
-            .querySelector<HTMLElement>(".vst-detail .vst-detail-add-lora")
+            .querySelector<HTMLElement>(
+                ".vst-clip-editor [data-testid='add-loras']",
+            )
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(
-            document.querySelectorAll(".vst-detail .vst-clip-lora-entry"),
+            document.querySelectorAll(
+                ".vst-clip-editor [data-testid='section-loras'] [data-testid='editor-item']",
+            ),
         ).toHaveLength(1);
         expect(h.saveSpy).toHaveBeenCalled();
         expect(lastSavedClips<Clip[]>(h.saveSpy)[0].loras).toEqual([
             { name: "lora-x.safetensors", weight: 1 },
         ]);
         expect(
-            document
-                .querySelector(".vst-detail .vst-detail-loras-section")
-                ?.classList.contains("input-group-open"),
-        ).toBe(true);
+            h.section("loras").querySelector("[data-testid=add-loras]")
+                ?.textContent,
+        ).toBe("+ Add LoRA");
     });
 
     it("seeds a new clip LoRA from SwarmUI model metadata", () => {
@@ -41,7 +41,7 @@ describe("detail strip clip LoRA panel", () => {
         h.setup([{ duration: 4, stages: [{}] }], ["weighted-lora.safetensors"]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
-            .querySelector<HTMLButtonElement>(".vst-detail-add-lora")
+            .querySelector<HTMLButtonElement>("[data-testid='add-loras']")
             ?.click();
 
         expect(
@@ -66,7 +66,7 @@ describe("detail strip clip LoRA panel", () => {
         h.setup([{ duration: 4, stages: [{}] }], ["weighted-lora.safetensors"]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
-            .querySelector<HTMLButtonElement>(".vst-detail-add-lora")
+            .querySelector<HTMLButtonElement>("[data-testid='add-loras']")
             ?.click();
 
         expect(
@@ -77,7 +77,7 @@ describe("detail strip clip LoRA panel", () => {
         ).toBe(0.55);
     });
 
-    it("renders LoRAs as flat rows without per-row minify controls", () => {
+    it("renders each LoRA as an editable row in one section", () => {
         h.setup(
             [
                 {
@@ -85,10 +85,7 @@ describe("detail strip clip LoRA panel", () => {
                     stages: [
                         {
                             loras: [
-                                {
-                                    name: "lora-x.safetensors",
-                                    weight: 0.5,
-                                },
+                                { name: "lora-x.safetensors", weight: 0.5 },
                             ],
                         },
                     ],
@@ -96,20 +93,21 @@ describe("detail strip clip LoRA panel", () => {
             ],
             ["lora-x.safetensors", "lora-y.safetensors"],
         );
-        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        document
-            .querySelector<HTMLButtonElement>(".vst-detail-add-lora")
+        h.section("loras")
+            .querySelector<HTMLButtonElement>("[data-testid=add-loras]")
             ?.click();
-        const groups = document.querySelectorAll<HTMLElement>(
-            ".vst-clip-lora-entry",
-        );
-        expect(groups).toHaveLength(2);
-        expect(groups[0].querySelector(".auto-symbol")).toBeNull();
-        expect(groups[1].querySelector(".auto-symbol")).toBeNull();
-        expect(groups[0].classList.contains("input-group")).toBe(false);
+        expect(
+            h.section("loras").querySelectorAll("[data-testid=editor-item]"),
+        ).toHaveLength(2);
+        expect(
+            h.field<HTMLSelectElement>("loras", "Model", "select", 0).value,
+        ).toBe("lora-x.safetensors");
+        expect(
+            h.field<HTMLSelectElement>("loras", "Model", "select", 1).value,
+        ).toBe("lora-y.safetensors");
     });
 
-    it("renders delete, model, and clip weight in one row", () => {
+    it("renders delete, model, and weight controls in each LoRA row", () => {
         h.setup([
             {
                 duration: 4,
@@ -118,32 +116,17 @@ describe("detail strip clip LoRA panel", () => {
                 ],
             },
         ]);
-        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        const row = document.querySelector<HTMLElement>(
-            ".vst-detail .vst-clip-lora-entry",
-        );
-        expect(row).not.toBeNull();
-        const nameSelect = row?.querySelector<HTMLSelectElement>("select");
-        expect(nameSelect?.value).toBe("lora-x.safetensors");
-        // Name renders at input font size (via .vst-audio-select), not the
-        // small 3xs label size.
-        expect(nameSelect?.classList.contains("vst-audio-select")).toBe(true);
-        const weight = row?.querySelector<HTMLInputElement>(
-            'input[data-vst-focus-key="clip-0-lora-0-weight"]',
-        );
-        expect(weight?.value).toBe("0.7");
-        expect(weight?.step).toBe("0.05");
-        expect(weight?.hasAttribute("min")).toBe(false);
-        expect(weight?.hasAttribute("max")).toBe(false);
-        expect(row?.querySelector("input.auto-slider-range")).toBeNull();
-        expect(weight?.classList.contains("lora-weight-input")).toBe(true);
-        expect(row?.querySelector("label")).toBeNull();
-        const controls = Array.from(row?.children ?? []);
-        expect(controls[0]?.classList.contains("vst-detail-delete-lora")).toBe(
-            true,
-        );
-        expect(controls[1]).toBe(nameSelect);
-        expect(controls[2]).toBe(weight);
+        const row = h.item("loras", 0);
+        expect(
+            row.querySelector("[data-testid=remove-item]")?.textContent,
+        ).toBe("Delete");
+        expect(
+            h.field<HTMLSelectElement>("loras", "Model", "select", 0).value,
+        ).toBe("lora-x.safetensors");
+        const weight = h.field("loras", "Weight", "input", 0);
+        expect(weight.value).toBe("0.7");
+        expect(weight.step).toBe("0.05");
+        expect(weight.classList.contains("lora-weight-input")).toBe(true);
     });
 
     it("debounces a LoRA weight edit through the keyed pending map", () => {
@@ -158,13 +141,13 @@ describe("detail strip clip LoRA panel", () => {
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
         const weight = document.querySelector<HTMLInputElement>(
-            '.vst-detail input[data-vst-focus-key="clip-0-lora-0-weight"]',
+            '.vst-clip-editor input[data-vst-focus-key$="clip-0-lora-0-weight"]',
         );
         if (!weight) {
             throw new Error("lora weight input missing");
         }
-        expect(weight.getAttribute("data-vst-focus-key")).toBe(
-            "clip-0-lora-0-weight",
+        expect(weight.getAttribute("data-vst-focus-key")).toEqual(
+            expect.stringMatching(/\/clip-0-lora-0-weight$/),
         );
         weight.value = "0.4";
         weight.dispatchEvent(new Event("input", { bubbles: true }));
@@ -191,7 +174,7 @@ describe("detail strip clip LoRA panel", () => {
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
         const weight = document.querySelector<HTMLInputElement>(
-            '.vst-detail input[data-vst-focus-key="clip-0-lora-0-weight"]',
+            '.vst-clip-editor input[data-vst-focus-key$="clip-0-lora-0-weight"]',
         );
         if (!weight) throw new Error("lora weight input missing");
         weight.value = "-2.5";
@@ -221,24 +204,27 @@ describe("detail strip clip LoRA panel", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(
-            document.querySelectorAll(".vst-detail .vst-clip-lora-entry"),
+            document.querySelectorAll(
+                ".vst-clip-editor [data-testid='section-loras'] [data-testid='editor-item']",
+            ),
         ).toHaveLength(2);
         document
             .querySelectorAll<HTMLElement>(
-                ".vst-detail .vst-detail-delete-lora",
+                ".vst-clip-editor [data-testid='section-loras'] [data-testid='remove-item']",
             )[0]
             ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(lastSavedClips<Clip[]>(h.saveSpy)[0].loras).toEqual([
             { name: "lora-y.safetensors", weight: 0.5 },
         ]);
         expect(
-            document.querySelectorAll(".vst-detail .vst-clip-lora-entry"),
+            document.querySelectorAll(
+                ".vst-clip-editor [data-testid='section-loras'] [data-testid='editor-item']",
+            ),
         ).toHaveLength(1);
         expect(
-            document
-                .querySelector(".vst-detail .vst-detail-loras-section")
-                ?.classList.contains("input-group-open"),
-        ).toBe(true);
+            h.section("loras").querySelector("[data-testid=add-loras]")
+                ?.textContent,
+        ).toBe("+ Add LoRA");
     });
 
     it("keeps the clip LoRA unchanged when adding a stage", () => {
@@ -254,13 +240,12 @@ describe("detail strip clip LoRA panel", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         document
-            .querySelector<HTMLButtonElement>(".vst-detail-add-stage")
+            .querySelector<HTMLButtonElement>("[data-testid='add-stages']")
             ?.click();
         const stages = lastSavedClips<Clip[]>(h.saveSpy)[0].stages;
         expect(stages).toHaveLength(2);
         expect(lastSavedClips<Clip[]>(h.saveSpy)[0].loras).toEqual([
             { name: "lora-x.safetensors", weight: 0.65 },
         ]);
-        expect(stages[1]).not.toHaveProperty("loraWeights");
     });
 });

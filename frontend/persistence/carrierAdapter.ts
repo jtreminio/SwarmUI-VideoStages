@@ -50,6 +50,24 @@ let protectOverriddenBootCarrier = false;
 let bootCarrierProtectionDeadline = 0;
 let externalizedCarrierValue: string | null = null;
 
+const withoutFrontendAudioTracks = (serialized: string): string => {
+    try {
+        const parsed: unknown = JSON.parse(serialized);
+        if (typeof parsed !== "object" || parsed === null) {
+            return serialized;
+        }
+        const record = parsed as Record<string, unknown>;
+        const audioTracks = record.audioTracks;
+        if (!Array.isArray(audioTracks) || audioTracks.length === 0) {
+            return serialized;
+        }
+        record.audioTracks = [];
+        return JSON.stringify(parsed);
+    } catch {
+        return serialized;
+    }
+};
+
 const overlayPromptAndUiState = (clips: Clip[]): void => {
     ensureClipEntityIdentities(clips);
     const { sections, windows } = parseClipPrompts(
@@ -148,11 +166,12 @@ const externalizeHostDataParam = (): string => {
         return serialized;
     }
     const externalized = externalizeSerializedBrowserMedia(serialized);
-    if (externalized.changed) {
-        writeDataParam(externalized.serialized);
+    const frontendState = withoutFrontendAudioTracks(externalized.serialized);
+    if (frontendState !== serialized) {
+        writeDataParam(frontendState);
     }
-    externalizedCarrierValue = externalized.serialized;
-    return externalized.serialized;
+    externalizedCarrierValue = frontendState;
+    return frontendState;
 };
 
 const ensureHydratedCarrier = (): void => {

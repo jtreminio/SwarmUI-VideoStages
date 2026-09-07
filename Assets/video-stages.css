@@ -1,52 +1,15 @@
-.vst-timeline {
+.vst-clip-editor,
+.vst-trim-modal,
+.vst-media-preview-modal {
     --vst-panel: var(--background-panel, var(--background-gray));
-    --vst-panel-2: color-mix(in srgb, var(--text) 7%, var(--vst-panel));
     --vst-bed: color-mix(in srgb, var(--background) 55%, var(--vst-panel));
     --vst-hairline: color-mix(in srgb, var(--light-border) 60%, transparent);
-    --vst-border-strong: var(--border-color, var(--light-border));
-    --vst-header-w: 168px;
-    --vst-ruler-h: 26px;
-    /* Clip regions + a retake mini-lane beneath them (prompt-track idiom).
-       --vst-retake-band is what a region leaves clear below itself. */
-    --vst-lane-video-h: 118px;
-    --vst-retake-lane-h: 20px;
-    --vst-retake-band: calc(var(--vst-retake-lane-h) + 12px);
-    /* Audio track: a clip mini-row on top, then one lane per timeline audio
-       track plus a blank add-lane — the row height scales with
-       --vst-audio-lane-count (set inline by the renderer). */
-    --vst-audio-cliprow-h: 36px;
-    /* Timeline audio lanes stand as tall as the clip mini-row: same band, same
-       bar height, so A0 and A1+ read as one stack. */
-    --vst-audio-track-lane-h: 36px;
-    --vst-lane-audio-h: 72px;
-    --vst-lane-prompt-h: 72px;
-    /* Major prompt segment: the top half, or the whole row under .vst-no-relay. */
-    --vst-major-seg-h: calc(50% - 10px);
-    --vst-lane-refs-h: 40px;
-    --vst-refs-band: 8px;
     --vst-radius: 5px;
     --vst-radius-sm: 3px;
-    --vst-ease: 150ms ease;
-    --vst-font-md: 0.929em;
     --vst-font-sm: 0.857em;
     --vst-font-xs: 0.786em;
-    --vst-font-2xs: 0.714em;
     --vst-font-3xs: 0.7em;
     --vst-mono: var(--font-monospace, ui-monospace, Menlo, Consolas, monospace);
-    /* Cross-component stacking scale for the tracks canvas. Values 0-4 inside
-       a single positioned widget stay literal (local stacking contexts); only
-       layers that interleave ACROSS components live here. */
-    --vst-z-overlay: 6; /* in-region controls, edge-resize handles */
-    --vst-z-boundary-chip: 7; /* boundary chips */
-    --vst-z-track-header: 8; /* sticky track-header column */
-    --vst-z-ruler: 9; /* sticky time ruler */
-    --vst-z-corner: 10; /* sticky corner (header ∩ ruler) */
-    display: flex;
-    flex-direction: row;
-    align-items: stretch;
-    height: 100%;
-    max-height: calc(100dvh - 7.5rem);
-    min-height: min(240px, calc(100dvh - 7.5rem));
 }
 
 .vst-catalog-status {
@@ -81,1094 +44,11 @@
 .vst-catalog-notice-stale {
     color: #ffd27a;
 }
-/* Green enable check on the bottom-bar "Timeline" tab selector. Lives outside
-   .vst-timeline, so only host theme vars are available here. */
+/* The tab lives outside the editor and inherits only host theme variables. */
 .vst-tab-check {
     margin-left: 5px;
     color: var(--green);
     font-weight: 700;
-}
-/* Tracks column: the topbar + scrolling track plane. renderTimeline wipes this
-   element's innerHTML; the detail dock is a sibling, so it is never touched. */
-.vst-right {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-}
-
-.vst-topbar {
-    display: flex;
-    align-items: center;
-    gap: 6px 12px;
-    flex-wrap: wrap;
-    min-height: 2.5rem;
-    padding: 4px 12px;
-    border-bottom: 1px solid var(--vst-hairline);
-    background: var(--vst-panel);
-    flex: 0 0 auto;
-}
-.vst-topbar-main {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    min-width: 0;
-}
-.vst-title {
-    font-weight: 700;
-    font-size: var(--vst-font-sm);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text);
-}
-.vst-sub {
-    color: var(--text-soft);
-    font-size: var(--vst-font-xs);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    min-width: 4.5em;
-}
-.vst-stat-num {
-    color: var(--text);
-    font-weight: 600;
-}
-.vst-dot {
-    margin: 0 5px;
-    opacity: 0.55;
-}
-.vst-enable {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin: 0;
-    padding: 0;
-    cursor: pointer;
-    user-select: none;
-    align-self: center;
-}
-/* The switch itself is the host's .toggle-switch composite (site.css) —
-   only the focus ring and label styling are ours. */
-.vst-enable-input:focus-visible + .auto-slider-toggle-content {
-    outline: 2px solid var(--emphasis);
-    outline-offset: 2px;
-}
-.vst-enable-label {
-    font-size: var(--vst-font-xs);
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-soft);
-}
-.vst-enable:has(.vst-enable-input:checked) .vst-enable-label {
-    color: var(--emphasis);
-}
-.vst-topbar-disabled .vst-title {
-    opacity: 0.6;
-}
-
-.vst-topbar-tools {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-}
-.vst-tool-sep {
-    width: 1px;
-    height: 18px;
-    background: var(--vst-hairline);
-    margin: 0 2px;
-}
-.vst-readout {
-    margin-left: auto;
-    font-family: var(--vst-mono);
-    font-size: var(--vst-font-xs);
-    font-variant-numeric: tabular-nums;
-    color: var(--text-soft);
-    white-space: nowrap;
-}
-.vst-readout-output {
-    color: var(--text);
-    font-weight: 600;
-}
-.vst-readout-detail {
-    margin-left: 8px;
-    color: var(--text-soft);
-}
-.vst-readout-sel {
-    color: var(--emphasis);
-    font-weight: 500;
-}
-.vst-toggle-unit {
-    font-weight: 600;
-    display: inline-grid;
-    justify-items: center;
-}
-.vst-toggle-unit::after {
-    content: "Show seconds";
-    height: 0;
-    visibility: hidden;
-    overflow: hidden;
-}
-.vst-hist-btn {
-    min-width: 26px;
-    padding-left: 0.45em;
-    padding-right: 0.45em;
-    text-align: center;
-}
-.vst-zoom {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-}
-.vst-zoom-pct {
-    font-family: var(--vst-mono);
-    font-size: var(--vst-font-2xs);
-    font-variant-numeric: tabular-nums;
-    color: var(--text-soft);
-    min-width: 3.2em;
-    text-align: center;
-}
-/* The host styles every input[type=range] (site.css); only the width is ours. */
-.vst-zoom-slider {
-    width: 7rem;
-}
-
-.vst-scroll {
-    flex: 1 1 auto;
-    /* Floor so the detail strip below can never crush the tracks to zero
-       (ruler 26px + prompt lane 72px + ~100px of video lane). */
-    min-height: 200px;
-    overflow: auto;
-    background: var(--vst-bed);
-    scrollbar-width: thin;
-    scrollbar-color: var(--vst-panel-2) transparent;
-}
-.vst-plane {
-    position: relative;
-    min-width: 100%;
-}
-
-.vst-ruler-row {
-    position: sticky;
-    top: 0;
-    z-index: var(--vst-z-ruler);
-    display: flex;
-    height: var(--vst-ruler-h);
-    background: var(--vst-panel);
-    border-bottom: 1px solid var(--vst-hairline);
-}
-.vst-corner {
-    position: sticky;
-    left: 0;
-    z-index: var(--vst-z-corner);
-    width: var(--vst-header-w);
-    flex: none;
-    display: flex;
-    align-items: center;
-    padding-left: 10px;
-    background: var(--vst-panel);
-    border-right: 1px solid var(--vst-hairline);
-    font-size: var(--vst-font-3xs);
-    font-weight: 500;
-    color: var(--text-soft);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-}
-.vst-ruler {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
-}
-.vst-tick {
-    position: absolute;
-    bottom: 0;
-    width: 1px;
-    background: var(--vst-hairline);
-}
-.vst-tick-minor {
-    height: 5px;
-}
-.vst-tick-grid {
-    height: 11px;
-    background: var(--vst-border-strong);
-}
-.vst-tick-seam {
-    height: 14px;
-    background: color-mix(in srgb, var(--emphasis) 45%, var(--vst-hairline));
-}
-.vst-tick-output {
-    height: 18px;
-    border-left: 1px dashed var(--emphasis);
-    background: transparent;
-}
-.vst-tick-output .vst-tick-label {
-    color: var(--emphasis);
-    font-weight: 700;
-}
-.vst-tick-end {
-    height: 14px;
-    background: color-mix(in srgb, var(--emphasis) 55%, var(--vst-hairline));
-}
-.vst-tick-label {
-    position: absolute;
-    bottom: 11px;
-    left: 4px;
-    font-family: var(--vst-mono);
-    font-size: var(--vst-font-3xs);
-    font-variant-numeric: tabular-nums;
-    color: var(--text-soft);
-    white-space: nowrap;
-}
-.vst-tick-end .vst-tick-label {
-    left: auto;
-    right: 4px;
-    color: var(--text);
-}
-
-.vst-track-row {
-    display: flex;
-    border-bottom: 1px solid var(--vst-hairline);
-    background: var(--vst-bed);
-}
-/* Head: icon + title anchored top-left in normal flow; lane tags live in an
-   absolutely-positioned overlay (sticky = positioned, so it is the containing
-   block) so each tag can align to the mini-lane it names. */
-.vst-track-head {
-    width: var(--vst-header-w);
-    flex: none;
-    position: sticky;
-    left: 0;
-    z-index: var(--vst-z-track-header);
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    padding: 7px 8px 7px 12px;
-    background: var(--vst-panel);
-    border-right: 1px solid var(--vst-hairline);
-}
-.vst-head-top {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    position: relative;
-    /* Stay above tag ticks near the top edge. */
-    z-index: 1;
-}
-.vst-track-icon {
-    width: 22px;
-    height: 22px;
-    flex: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-    background: var(--vst-panel-2);
-    border: 1px solid var(--vst-hairline);
-    font-size: var(--vst-font-xs);
-}
-.vst-track-icon-video {
-    color: var(--emphasis);
-    border-color: color-mix(in srgb, var(--emphasis) 35%, transparent);
-}
-.vst-track-icon-audio {
-    color: color-mix(in srgb, var(--green) 45%, var(--text));
-    border-color: color-mix(in srgb, var(--green) 35%, transparent);
-}
-.vst-track-label {
-    flex: 1;
-    min-width: 0;
-}
-.vst-track-label strong {
-    display: block;
-    font-size: var(--vst-font-xs);
-    font-weight: 600;
-    color: var(--text);
-    letter-spacing: 0.02em;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-/* Lane tags: uppercase pills hugging the head's right edge, one per
-   mini-lane, each with a hairline tick pointing at the lane it names. Pure
-   annotation — pointer-events:none, no new hit targets. Per-track vertical
-   placement rules below copy the lane's own top/bottom/height math. */
-.vst-head-tags {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-}
-.vst-head-tag {
-    position: absolute;
-    right: 7px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 4px;
-    max-width: calc(100% - 14px);
-    min-width: 0;
-}
-.vst-head-tag-pill {
-    font-size: var(--vst-font-3xs);
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-soft);
-    background: color-mix(in srgb, var(--text) 6%, var(--vst-panel));
-    border: 1px solid var(--vst-hairline);
-    border-radius: var(--vst-radius-sm);
-    padding: 1px 5px;
-    line-height: 1.4;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.vst-head-tag-tick {
-    flex: none;
-    width: 6px;
-    height: 1px;
-    background: var(--vst-hairline);
-}
-/* A tag whose lane currently carries content gets a faint emphasis tint. */
-.vst-head-tag-active .vst-head-tag-pill {
-    color: color-mix(in srgb, var(--emphasis) 70%, var(--text));
-    border-color: color-mix(in srgb, var(--emphasis) 38%, var(--vst-hairline));
-    background: color-mix(in srgb, var(--emphasis) 11%, var(--vst-panel));
-}
-.vst-head-tag-active .vst-head-tag-tick {
-    background: color-mix(in srgb, var(--emphasis) 45%, var(--vst-hairline));
-}
-/* The blank add-lane (Audio "+") reads quieter. */
-.vst-head-tag-muted .vst-head-tag-pill {
-    opacity: 0.55;
-}
-/* The one interactive tag (Audio "+"): .vst-head-tags is pointer-transparent,
-   so the button re-enables hits on itself. */
-.vst-head-tag-action {
-    pointer-events: auto;
-    cursor: pointer;
-}
-.vst-head-tag-action:hover .vst-head-tag-pill,
-.vst-head-tag-action:focus-visible .vst-head-tag-pill {
-    opacity: 1;
-    color: color-mix(in srgb, var(--emphasis) 80%, var(--text));
-    border-color: color-mix(in srgb, var(--emphasis) 55%, var(--vst-hairline));
-    background: color-mix(in srgb, var(--emphasis) 16%, var(--vst-panel));
-}
-.vst-head-tag-action:focus-visible {
-    outline: none;
-}
-
-/* Prompt: major top half / relay bottom half (mirrors .vst-major-seg and
-   .vst-minor-lane). */
-.vst-track-prompt .vst-head-tag-major {
-    top: 6px;
-    height: var(--vst-major-seg-h);
-}
-.vst-track-prompt .vst-head-tag-relay {
-    bottom: 6px;
-    height: calc(50% - 10px);
-}
-/* Video: clip region span / retake mini-lane (mirrors .vst-region and
-   .vst-retake-lane). */
-.vst-track-video .vst-head-tag-clip {
-    top: var(--vst-refs-band);
-    bottom: var(--vst-retake-band);
-}
-.vst-track-video .vst-head-tag-retake {
-    bottom: 6px;
-    height: var(--vst-retake-lane-h);
-}
-/* Audio: source mini-row on top, then one tag per track-lane index via the
-   same --vst-audio-lane-idx idiom .vst-audio-track-lane uses. */
-.vst-track-audio .vst-head-tag-src {
-    top: 0;
-    height: var(--vst-audio-cliprow-h);
-}
-.vst-track-audio .vst-head-tag-track {
-    top: calc(
-        var(--vst-audio-cliprow-h) + var(--vst-audio-lane-idx, 0) *
-            var(--vst-audio-track-lane-h)
-    );
-    height: var(--vst-audio-track-lane-h);
-}
-.vst-track-cell {
-    flex: 1;
-    position: relative;
-}
-.vst-track-video .vst-track-cell {
-    height: var(--vst-lane-video-h);
-}
-.vst-track-audio .vst-track-cell {
-    height: calc(
-        var(--vst-audio-cliprow-h) + var(--vst-audio-lane-count, 1) *
-            var(--vst-audio-track-lane-h) + 6px
-    );
-}
-.vst-track-cell::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background-image: linear-gradient(
-        90deg,
-        color-mix(in srgb, var(--text) 2.5%, transparent) 1px,
-        transparent 1px
-    );
-    background-size: 40px 100%;
-    pointer-events: none;
-}
-
-.vst-region {
-    position: absolute;
-    top: var(--vst-refs-band);
-    bottom: var(--vst-retake-band);
-    user-select: none;
-    border-radius: var(--vst-radius);
-    border: 1.5px solid
-        color-mix(in srgb, var(--clip-hue, var(--emphasis)) 45%, var(--light-border));
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--clip-hue, var(--emphasis)) 34%, var(--vst-panel)) 0%,
-        color-mix(in srgb, var(--clip-hue, var(--emphasis)) 16%, var(--vst-panel)) 100%
-    );
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 12%, transparent),
-        0 1px 2px color-mix(in srgb, var(--shadow) 35%, transparent);
-    cursor: pointer;
-    overflow: visible;
-    transition: box-shadow var(--vst-ease), border-color var(--vst-ease);
-}
-.vst-region::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: calc(var(--vst-radius) - 1px);
-    background: repeating-linear-gradient(
-        90deg,
-        transparent 0 12px,
-        color-mix(in srgb, var(--text) 7%, transparent) 12px 13px
-    );
-    pointer-events: none;
-    z-index: 1;
-}
-.vst-region-thumb {
-    position: absolute;
-    inset: 0;
-    border-radius: calc(var(--vst-radius) - 1px);
-    overflow: hidden;
-    opacity: 0.28;
-    z-index: 0;
-    pointer-events: none;
-}
-/* Darkening veil so region chrome (chips, labels) stays legible over footage. */
-.vst-region-thumb::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--vst-panel) 30%, transparent) 0%,
-        color-mix(in srgb, var(--vst-panel) 55%, transparent) 100%
-    );
-}
-.vst-region-thumb-cell {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    background-size: cover;
-    background-position: center;
-}
-.vst-region-thumb-start {
-    left: 0;
-    right: 0;
-}
-.vst-region-thumb[data-cells="2"] .vst-region-thumb-start {
-    right: 50%;
-}
-.vst-region-thumb-end {
-    left: 50%;
-    right: 0;
-    border-left: 1px solid
-        color-mix(in srgb, var(--text) 18%, transparent);
-}
-.vst-region:hover {
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 12%, transparent),
-        0 0 0 1px color-mix(in srgb, var(--text) 35%, transparent),
-        0 4px 14px color-mix(in srgb, var(--shadow) 40%, transparent);
-}
-.vst-region-selected,
-.vst-region-selected:hover {
-    border-color: color-mix(
-        in srgb,
-        var(--box-selected-border, var(--emphasis)) 80%,
-        var(--light-border)
-    );
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 14%, transparent),
-        0 0 0 2px var(--box-selected-border, var(--emphasis)),
-        0 6px 22px color-mix(in srgb, var(--emphasis) 42%, transparent);
-}
-.vst-region[data-clip-idx] {
-    cursor: pointer;
-}
-.vst-region-dragging {
-    opacity: 0.45;
-}
-.vst-region-skipped {
-    opacity: 0.55;
-    filter: grayscale(0.6);
-    border-style: dashed;
-    box-shadow: none;
-}
-.vst-region-tiny .vst-region-head,
-.vst-region-tiny .vst-badges,
-.vst-region-tiny .vst-region-controls,
-.vst-region-tiny .vst-region-resize {
-    display: none;
-}
-
-.vst-region-head {
-    position: relative;
-    z-index: 6;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    /* Constant right padding clears the always-visible corner controls, so
-       the duration label never shifts on hover. */
-    padding: 5px 36px 0 8px;
-    overflow: hidden;
-    white-space: nowrap;
-}
-.vst-region-name {
-    font-size: var(--vst-font-xs);
-    font-weight: 600;
-    color: var(--text);
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--background) 60%, transparent);
-    min-width: 0;
-    flex: 0 1 auto;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.vst-chip {
-    flex: none;
-    font-size: var(--vst-font-3xs);
-    padding: 0 5px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid color-mix(in srgb, var(--text) 28%, transparent);
-    color: color-mix(in srgb, var(--text) 92%, transparent);
-    background: color-mix(in srgb, var(--background) 40%, transparent);
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-}
-.vst-chip-skip {
-    color: var(--text);
-    border-color: color-mix(in srgb, var(--yellow) 50%, var(--light-border));
-    background: color-mix(in srgb, var(--yellow) 18%, var(--background));
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-weight: 600;
-}
-.vst-stage-chip {
-    cursor: pointer;
-    transition: border-color var(--vst-ease), background var(--vst-ease),
-        filter var(--vst-ease);
-}
-.vst-stage-chip:hover,
-.vst-stage-chip:focus-visible {
-    outline: none;
-    border-color: var(--emphasis);
-    background: color-mix(in srgb, var(--emphasis) 16%, var(--background));
-    filter: brightness(1.05);
-}
-.vst-stage-chip-skipped {
-    opacity: 0.4;
-    filter: grayscale(1);
-    text-decoration: line-through;
-    border-style: dashed;
-}
-.vst-region-dur {
-    margin-left: auto;
-    flex: none;
-    font-family: var(--vst-mono);
-    font-size: var(--vst-font-3xs);
-    font-variant-numeric: tabular-nums;
-    color: color-mix(in srgb, var(--text) 90%, transparent);
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--background) 60%, transparent);
-    transition: opacity var(--vst-ease);
-}
-
-.vst-badges {
-    position: relative;
-    z-index: 6;
-    display: flex;
-    gap: 4px;
-    flex-wrap: nowrap;
-    overflow: hidden;
-    padding: 4px 8px 0;
-}
-.vst-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    font-size: var(--vst-font-3xs);
-    line-height: 1.5;
-    padding: 0 6px;
-    border-radius: 4px;
-    border: 1px solid color-mix(in srgb, var(--text) 15%, transparent);
-    color: var(--text);
-    background: color-mix(in srgb, var(--background) 45%, transparent);
-    white-space: nowrap;
-    max-width: 100%;
-    overflow: hidden;
-}
-.vst-badge::before {
-    font-size: var(--vst-font-3xs);
-    line-height: 1;
-    opacity: 0.9;
-}
-.vst-badge-model {
-    cursor: pointer;
-    max-width: 100%;
-    border-color: color-mix(in srgb, var(--emphasis) 40%, var(--light-border));
-    transition: border-color var(--vst-ease), filter var(--vst-ease);
-}
-.vst-badge-model::before {
-    content: "♦";
-    color: color-mix(in srgb, var(--emphasis) 75%, var(--text));
-}
-.vst-badge-model:hover,
-.vst-badge-model:focus-visible {
-    outline: none;
-    border-color: var(--emphasis);
-    filter: brightness(1.08);
-}
-.vst-badge-iclora {
-    border-color: color-mix(in srgb, var(--emphasis) 55%, var(--light-border));
-}
-.vst-badge-iclora::before {
-    content: "◇";
-    color: var(--emphasis);
-}
-
-/* Always visible (not hover-revealed): a stable corner control means the
-   region head never reflows when the pointer enters that corner. */
-.vst-region-controls {
-    position: absolute;
-    top: 4px;
-    right: 10px;
-    display: flex;
-    z-index: var(--vst-z-overlay);
-}
-/* Rides the host's `basic-button small-button`; `.vst-btn-skip-active` is the
-   pressed state. The host's side margins would shift it off the `right: 10px`
-   anchor. */
-.vst-region-btn {
-    position: relative;
-    width: 20px;
-    height: 20px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0;
-    line-height: 1;
-}
-.vst-region-btn::before {
-    content: "";
-    position: absolute;
-    inset: 50% auto auto 50%;
-    width: 24px;
-    height: 24px;
-    transform: translate(-50%, -50%);
-}
-/* The host stylesheet carries no :focus-visible rule to inherit. */
-.vst-region-btn:focus-visible {
-    outline: 2px solid var(--emphasis);
-    outline-offset: 1px;
-}
-/* Shared edge-resize handle chrome; widgets override offsets/stacking below. */
-.vst-region-resize,
-.vst-minor-resize,
-.vst-retake-resize,
-.vst-audio-span-resize {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 7px;
-    cursor: ew-resize;
-    z-index: 2;
-}
-.vst-region-resize {
-    bottom: 12px;
-    z-index: var(--vst-z-overlay);
-    transition: background var(--vst-ease);
-    right: 0;
-    border-radius: 0 var(--vst-radius) var(--vst-radius) 0;
-}
-.vst-region-resize:hover {
-    background: color-mix(in srgb, var(--text) 18%, transparent);
-}
-.vst-resizing,
-.vst-resizing .vst-region {
-    cursor: ew-resize;
-}
-.vst-resizing,
-.vst-dragging {
-    user-select: none;
-}
-.vst-dragging,
-.vst-dragging .vst-region {
-    cursor: grabbing;
-}
-
-.vst-keys {
-    position: absolute;
-    top: auto;
-    bottom: -6px;
-    left: -1.5px;
-    right: -1.5px;
-    height: 16px;
-    pointer-events: none;
-    z-index: 3;
-}
-/* Purely visual markers (editing lives on the References track): no pointer
-   events, no grab cursor, no hover affordance. */
-.vst-key {
-    position: absolute;
-    top: 0;
-    width: 16px;
-    height: 16px;
-    transform: translateX(-50%);
-    pointer-events: none;
-}
-.vst-key-dot {
-    position: absolute;
-    top: 3px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 8px solid var(--emphasis);
-    filter: drop-shadow(
-        0 1px 1px color-mix(in srgb, var(--background) 60%, transparent)
-    );
-    pointer-events: none;
-}
-.vst-key-end .vst-key-dot {
-    border-top-color: color-mix(in srgb, var(--emphasis) 45%, var(--vst-panel));
-}
-.vst-key-primary .vst-key-dot {
-    border-left-width: 6px;
-    border-right-width: 6px;
-    border-top-width: 10px;
-    border-top-color: var(--emphasis);
-}
-.vst-drop-indicator {
-    position: absolute;
-    top: var(--vst-refs-band);
-    bottom: 10px;
-    width: 3px;
-    margin-left: -1px;
-    border-radius: 2px;
-    background: var(--emphasis);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--emphasis) 60%, transparent);
-    pointer-events: none;
-    z-index: var(--vst-z-overlay);
-}
-
-/* Top mini-row of the audio track; the per-track lanes sit beneath it. The tint
-   is re-set per source kind by .vst-audio-kind-*. */
-.vst-audio-clip {
-    --vst-audio-tint: var(--green);
-    position: absolute;
-    top: 6px;
-    height: calc(var(--vst-audio-cliprow-h) - 10px);
-    border-radius: 4px;
-    background: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--vst-audio-tint) 16%, var(--vst-panel)) 0%,
-        color-mix(in srgb, var(--vst-audio-tint) 34%, var(--vst-panel)) 50%,
-        color-mix(in srgb, var(--vst-audio-tint) 16%, var(--vst-panel)) 100%
-    );
-    border: 1px solid
-        color-mix(in srgb, var(--vst-audio-tint) 40%, var(--light-border));
-    overflow: hidden;
-    cursor: pointer;
-    transition: outline-color var(--vst-ease), filter var(--vst-ease);
-}
-.vst-audio-kind-native {
-    --vst-audio-tint: var(--green);
-}
-.vst-audio-kind-upload {
-    --vst-audio-tint: hsl(207 65% 52%);
-}
-.vst-audio-kind-ace {
-    --vst-audio-tint: hsl(275 55% 58%);
-}
-.vst-audio-wave {
-    position: absolute;
-    inset: 4px 8px;
-    display: flex;
-    align-items: center;
-    gap: 1.5px;
-    overflow: hidden;
-}
-.vst-audio-wave span {
-    /* Grow to fill: the bar count is density, not coverage — the waveform
-       always spans the clip's full width. */
-    flex: 1 1 2px;
-    min-width: 2px;
-    min-height: 2px;
-    border-radius: 1px;
-    background: color-mix(in srgb, var(--vst-audio-tint, var(--green)) 45%, var(--text));
-    opacity: 0.7;
-}
-.vst-audio-label {
-    /* Opaque tinted pill: the full-width waveform runs underneath, so a bare
-       text-shadow is not enough contrast. */
-    position: absolute;
-    top: 3px;
-    left: 6px;
-    z-index: 1;
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-size: var(--vst-font-2xs);
-    font-weight: 500;
-    color: var(--text);
-    background: color-mix(
-        in srgb,
-        var(--vst-panel) 86%,
-        var(--vst-audio-tint, var(--green))
-    );
-    border: 1px solid
-        color-mix(in srgb, var(--vst-audio-tint, var(--green)) 35%, transparent);
-    pointer-events: none;
-}
-
-.vst-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    margin: 32px auto;
-    padding: 26px 28px;
-    border: 1px dashed var(--light-border);
-    border-radius: var(--vst-radius);
-    background: color-mix(in srgb, var(--vst-panel) 55%, transparent);
-    color: var(--text-soft);
-    text-align: center;
-    max-width: 30rem;
-}
-.vst-empty-icon {
-    font-size: 26px;
-    line-height: 1;
-    opacity: 0.85;
-}
-.vst-empty-title {
-    font-weight: 600;
-    font-size: var(--vst-font-md);
-    color: var(--text);
-}
-.vst-empty-hint {
-    font-size: var(--vst-font-xs);
-    line-height: 1.5;
-}
-.vst-empty-add {
-    margin-top: 12px;
-    padding: 6px 14px;
-}
-
-/* ── Prompt track (MAJOR top half · MINOR relay bottom half) ── */
-.vst-track-icon-prompt {
-    color: color-mix(in srgb, var(--emphasis) 60%, var(--text));
-    border-color: color-mix(in srgb, var(--emphasis) 35%, transparent);
-}
-.vst-track-prompt .vst-track-cell {
-    height: var(--vst-lane-prompt-h);
-}
-.vst-prompt-cell::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    border-top: 1px dashed var(--vst-hairline);
-    pointer-events: none;
-}
-
-.vst-major-seg {
-    position: absolute;
-    top: 6px;
-    height: var(--vst-major-seg-h);
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid var(--vst-hairline);
-    background: var(--vst-panel-2);
-    display: flex;
-    align-items: center;
-    padding: 0 8px;
-    overflow: hidden;
-    cursor: text;
-    transition: border-color var(--vst-ease), background var(--vst-ease);
-}
-.vst-major-seg:hover {
-    border-color: color-mix(in srgb, var(--emphasis) 45%, var(--vst-hairline));
-}
-.vst-major-text {
-    font-size: var(--vst-font-2xs);
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    position: relative;
-    z-index: 1;
-}
-.vst-major-empty .vst-major-text,
-.vst-major-inherited .vst-major-text {
-    color: var(--text-soft);
-    font-style: italic;
-}
-.vst-major-off,
-.vst-region-off {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    background-image: repeating-linear-gradient(
-        45deg,
-        color-mix(in srgb, var(--text) 16%, transparent) 0,
-        color-mix(in srgb, var(--text) 16%, transparent) 3px,
-        transparent 3px,
-        transparent 7px
-    );
-    border-left: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
-    border-right: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
-    pointer-events: none;
-    z-index: 0;
-}
-
-/* Empty add-lanes share the radius + tint + inset hairline chrome. */
-.vst-minor-lane,
-.vst-retake-lane,
-.vst-audio-track-lane,
-.vst-refs-lane {
-    border-radius: var(--vst-radius-sm);
-    background: color-mix(in srgb, var(--emphasis) 5%, transparent);
-    box-shadow: inset 0 0 0 1px var(--vst-hairline);
-}
-.vst-minor-lane {
-    position: absolute;
-    bottom: 6px;
-    height: calc(50% - 10px);
-    cursor: copy;
-}
-/* No clip in this timeline has a relay lane: the major segment takes the row,
-   so the half-way divider goes with the lane. */
-.vst-no-relay {
-    --vst-major-seg-h: calc(100% - 12px);
-}
-.vst-no-relay .vst-prompt-cell::after {
-    display: none;
-}
-.vst-minor-seg {
-    position: absolute;
-    top: 2px;
-    bottom: 2px;
-    user-select: none;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid
-        color-mix(in srgb, var(--emphasis) 55%, var(--light-border));
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--emphasis) 40%, var(--vst-panel)) 0%,
-        color-mix(in srgb, var(--emphasis) 22%, var(--vst-panel)) 100%
-    );
-    display: flex;
-    align-items: center;
-    padding: 0 4px;
-    overflow: hidden;
-    cursor: grab;
-    min-width: 8px;
-}
-.vst-prompt-dragging .vst-minor-seg {
-    cursor: grabbing;
-}
-.vst-minor-text {
-    flex: 1;
-    font-size: var(--vst-font-3xs);
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    pointer-events: none;
-}
-.vst-minor-resize-l {
-    left: -1px;
-}
-.vst-minor-resize-r {
-    right: -1px;
-}
-/* Retake mini-lane under each clip region — same idiom as the relay lane:
-   click empty space to add, drag the window to move/resize. */
-.vst-retake-lane {
-    position: absolute;
-    bottom: 6px;
-    height: var(--vst-retake-lane-h);
-}
-.vst-retake-lane[data-vst-retake-add] {
-    cursor: copy;
-}
-/* No clip in this timeline has a retake lane: the regions take the row. */
-.vst-no-retake {
-    --vst-retake-band: 6px;
-}
-/* Retake range: hatched window inside its lane. */
-.vst-retake {
-    position: absolute;
-    left: 0;
-    top: 1px;
-    bottom: 1px;
-    z-index: 3;
-    display: flex;
-    align-items: center;
-    padding: 0 7px;
-    user-select: none;
-    cursor: grab;
-    overflow: hidden;
-    min-width: 10px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px dashed
-        color-mix(in srgb, var(--emphasis) 75%, var(--light-border));
-    background-color: color-mix(in srgb, var(--emphasis) 14%, transparent);
-    background-image: repeating-linear-gradient(
-        45deg,
-        color-mix(in srgb, var(--emphasis) 40%, transparent) 0,
-        color-mix(in srgb, var(--emphasis) 40%, transparent) 2px,
-        transparent 2px,
-        transparent 7px
-    );
-}
-.vst-retake-dragging .vst-retake {
-    cursor: grabbing;
-}
-.vst-retake-label {
-    flex: 1;
-    font-size: var(--vst-font-3xs);
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    color: color-mix(in srgb, var(--emphasis) 80%, var(--text));
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    pointer-events: none;
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--vst-panel) 70%, transparent);
-}
-.vst-retake-resize-l {
-    left: -1px;
-}
-.vst-retake-resize-r {
-    right: -1px;
 }
 .vst-detail-note {
     margin: 2px 0 0;
@@ -1177,177 +57,6 @@
     color: var(--text-soft);
 }
 
-/* The audio track's per-track mini lanes: the array index IS the lane
-   (--vst-audio-lane-idx), stacked under the clip mini-row; the last, blank
-   lane adds a span on click/drag. */
-.vst-audio-cell::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: var(--vst-audio-cliprow-h);
-    border-top: 1px dashed var(--vst-hairline);
-    pointer-events: none;
-}
-/* No clip in this timeline can carry its own audio (no native-audio model):
-   the clip mini-row collapses and the timeline-wide lanes take the row. */
-.vst-no-clip-audio {
-    --vst-audio-cliprow-h: 0px;
-}
-.vst-no-clip-audio .vst-audio-cell::after {
-    display: none;
-}
-/* Only the blank add-lane is left: the lane offset that the clip row used to
-   provide becomes an even top gap (the cell already reserves 6px below), so the
-   lone lane and its tag sit centred in the row. */
-.vst-audio-solo-lane {
-    --vst-audio-cliprow-h: 6px;
-}
-/* The collapsed clip row puts the first lane tag level with the track title,
-   whose block sits a layer up (.vst-head-top). The tags take that layer back so
-   the pill is not painted over — and so the add button keeps its whole hit area. */
-.vst-no-clip-audio .vst-head-tag-track {
-    z-index: 2;
-}
-.vst-audio-track-lane {
-    position: absolute;
-    top: calc(
-        var(--vst-audio-cliprow-h) + var(--vst-audio-lane-idx, 0) *
-            var(--vst-audio-track-lane-h) + 3px
-    );
-    height: calc(var(--vst-audio-track-lane-h) - 6px);
-}
-.vst-audio-track-lane-blank {
-    cursor: copy;
-    background: transparent;
-    box-shadow: inset 0 0 0 1px
-        color-mix(in srgb, var(--vst-hairline) 60%, transparent);
-    border: 1px dashed color-mix(in srgb, var(--emphasis) 25%, transparent);
-}
-/* Drag-to-create ghosts share one look across every window track. */
-.vst-minor-ghost,
-.vst-retake-ghost,
-.vst-audio-span-ghost {
-    position: absolute;
-    top: 2px;
-    bottom: 2px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px dashed color-mix(in srgb, var(--emphasis) 65%, transparent);
-    background: color-mix(in srgb, var(--emphasis) 18%, transparent);
-    pointer-events: none;
-    z-index: 4;
-}
-.vst-audio-span {
-    --vst-audio-span-tint: hsl(198 72% 51%);
-    --vst-audio-tint: var(--vst-audio-span-tint);
-    position: absolute;
-    top: 2px;
-    bottom: 2px;
-    display: flex;
-    align-items: center;
-    padding: 0 6px;
-    user-select: none;
-    cursor: grab;
-    overflow: hidden;
-    min-width: 8px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px solid
-        color-mix(in srgb, var(--vst-audio-span-tint) 70%, var(--light-border));
-    background: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--vst-audio-span-tint) 17%, var(--vst-panel)) 0%,
-        color-mix(in srgb, var(--vst-audio-span-tint) 38%, var(--vst-panel)) 50%,
-        color-mix(in srgb, var(--vst-audio-span-tint) 17%, var(--vst-panel)) 100%
-    );
-}
-.vst-audio-span-tone-0 {
-    --vst-audio-span-tint: hsl(198 72% 51%);
-}
-.vst-audio-span-tone-1 {
-    --vst-audio-span-tint: hsl(278 62% 60%);
-}
-.vst-audio-span-tone-2 {
-    --vst-audio-span-tint: hsl(24 78% 55%);
-}
-.vst-audio-span-tone-3 {
-    --vst-audio-span-tint: hsl(146 55% 44%);
-}
-.vst-audio-span-tone-4 {
-    --vst-audio-span-tint: hsl(342 70% 59%);
-}
-.vst-audio-span-wave {
-    position: absolute;
-    inset: 3px 5px;
-    display: flex;
-    align-items: center;
-    gap: 1px;
-    overflow: hidden;
-    pointer-events: none;
-    opacity: 0.72;
-}
-.vst-audio-span-wave span {
-    flex: 1 1 1px;
-    min-width: 1px;
-    min-height: 2px;
-    border-radius: 1px;
-    background: color-mix(in srgb, var(--vst-audio-span-tint) 46%, var(--text));
-}
-.vst-audio-span .vst-audio-label {
-    top: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    box-sizing: border-box;
-    max-width: calc(100% - 12px);
-    padding-block: 0;
-    font-size: var(--vst-font-3xs);
-    line-height: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.vst-audio-span-dragging .vst-audio-span {
-    cursor: grabbing;
-}
-.vst-audio-span-resize-l {
-    left: 0;
-}
-.vst-audio-span-resize-r {
-    right: 0;
-}
-
-/* Track elements bound to the detail strip (non-clip selection kinds) share
-   one selection affordance. */
-.vst-retake.vst-selected,
-.vst-audio-span.vst-selected,
-.vst-major-seg.vst-selected,
-.vst-minor-seg.vst-selected,
-.vst-audio-clip.vst-selected,
-.vst-audio-clip:focus-visible {
-    /* NOT emphasis: these elements' resting borders are already emphasis-mixed,
-       so an emphasis outline read as "same color, just bolder". Text color
-       contrasts in both themes (the NLE-style selection ring). */
-    outline: 2px solid var(--text);
-    outline-offset: 1px;
-}
-
-.vst-stage-tab {
-    cursor: pointer;
-    padding: 1px 8px;
-    line-height: 1.6;
-    transition: border-color var(--vst-ease), background var(--vst-ease),
-        filter var(--vst-ease);
-}
-.vst-stage-tab:hover,
-.vst-stage-tab:focus-visible {
-    outline: none;
-    border-color: var(--emphasis);
-}
-.vst-stage-tab-skipped {
-    opacity: 0.4;
-    filter: grayscale(1);
-    text-decoration: line-through;
-}
 .vst-stage-fields-muted {
     opacity: 0.45;
     pointer-events: none;
@@ -1363,216 +72,29 @@
     visibility: hidden;
 }
 
-.vst-audio-clip:hover {
-    filter: brightness(1.06);
-}
-.vst-audio-native .vst-audio-label {
-    color: var(--text-soft);
-}
-.vst-audio-hint {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: var(--vst-font-3xs);
-    color: var(--text-soft);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--vst-ease);
-}
-.vst-audio-native:hover .vst-audio-hint,
-.vst-audio-native:focus-visible .vst-audio-hint {
-    opacity: 0.85;
-}
-.vst-audio-flags {
-    position: absolute;
-    top: 2px;
-    right: 6px;
-    z-index: 2;
-    display: flex;
-    gap: 3px;
-    pointer-events: none;
-}
-.vst-audio-flag {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 14px;
-    height: 14px;
-    padding: 0 3px;
-    border-radius: 3px;
-    font-size: var(--vst-font-3xs);
-    font-weight: 600;
-    line-height: 1;
-    color: var(--text);
-    background: color-mix(in srgb, var(--green) 28%, var(--vst-panel));
-    border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);
-}
+.vst-audio-upload.auto-input { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: center; }
+.vst-audio-upload.vst-media-pick-has-preview { grid-template-columns: 112px minmax(0, 1fr); }
+.vst-media-pick-details { min-width: 0; }
+.vst-audio-upload .auto-file-input-label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.vst-media-pick-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.vst-audio-upload .auto-file-label { display: block; margin: 6px 0 0; }
+.vst-audio-upload .auto-file-input { padding: 0; }
+.vst-audio-upload .auto-file-input-filename { white-space: normal; overflow-wrap: anywhere; }
+.vst-audio-upload .auto-input-preview { margin: 0; width: 112px; }
+.vst-audio-upload .auto-input-preview:empty { display: none; }
+.vst-audio-upload .vst-media-thumbnail { position: relative; display: block; width: 112px; height: 84px; padding: 0; overflow: hidden; background: var(--background-soft); border: 1px solid var(--border-color); border-radius: 5px; }
+.vst-audio-upload .vst-media-thumbnail:is(:hover, :focus-visible) { border-color: var(--emphasis); }
+.vst-media-thumbnail [hidden] { display: none !important; }
+.vst-media-thumbnail[data-media-kind="audio"]::before { content: "♪"; color: var(--text-soft); font-size: 28px; }
+.vst-audio-upload .vst-media-thumbnail :is(img, video) { display: block; width: 100%; height: 100%; max-height: none; max-width: none; object-fit: contain; border: 0; border-radius: 0; }
+.vst-media-thumbnail-hint { position: absolute; bottom: 4px; right: 4px; padding: 1px 5px; background: var(--background-panel); color: var(--text); border-radius: 3px; font-size: 12px; }
+.vst-media-preview-modal .modal-dialog { width: min(900px, calc(100vw - 32px)); max-width: none; }
+.vst-media-preview-modal .modal-title { overflow-wrap: anywhere; min-width: 0; }
+.vst-media-preview-modal .modal-header { gap: 16px; }
+.vst-media-preview-modal .modal-body { display: grid; place-items: center; }
+.vst-media-preview-modal .modal-body > img { max-width: 100%; max-height: 70vh; object-fit: contain; }
+.vst-media-preview-modal .vst-sidebar-video-preview { max-height: 65vh; }
 
-/* Field ROWS (label + control) are now SwarmUI-native `.auto-input` widgets;
-   their layout, label typography and control sizing come from host site.css +
-   the dock override block near the end of this file. The `.vst-audio-*` classes
-   below are hooks/selectors only for genuinely dock-specific chrome. */
-.vst-audio-disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-}
-
-/* Persisted feature data remains selectable/removable when the resolved model
-   cannot execute it. Disabled lanes must not retain their normal add/drag
-   affordance, while their existing items still read as repair targets. */
-.vst-capability-disabled {
-    opacity: 0.56;
-    filter: saturate(0.35);
-}
-.vst-minor-lane.vst-capability-disabled,
-.vst-retake-lane.vst-capability-disabled,
-.vst-refs-lane.vst-capability-disabled {
-    cursor: not-allowed;
-    background-image: repeating-linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--text-soft) 10%, transparent) 0 5px,
-        transparent 5px 10px
-    );
-}
-.vst-capability-disabled .vst-minor-seg,
-.vst-capability-disabled .vst-retake,
-.vst-capability-disabled .vst-refs-mark,
-.vst-major-seg.vst-capability-disabled,
-.vst-audio-clip.vst-capability-disabled {
-    cursor: pointer;
-}
-.vst-capability-disabled :is(
-        .vst-minor-resize,
-        .vst-retake-resize
-    ) {
-    display: none;
-}
-
-/* ── References track (image refs, below the video clip) ── */
-.vst-track-icon-refs {
-    color: color-mix(in srgb, var(--emphasis) 60%, var(--text));
-    border-color: color-mix(in srgb, var(--emphasis) 35%, transparent);
-}
-.vst-track-refs .vst-track-cell {
-    height: var(--vst-lane-refs-h);
-}
-.vst-refs-lane {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    cursor: copy;
-    transition: background var(--vst-ease);
-}
-.vst-refs-lane:hover {
-    background: color-mix(in srgb, var(--emphasis) 9%, transparent);
-}
-.vst-refs-mark {
-    position: absolute;
-    top: 3px;
-    bottom: 3px;
-    width: 40px;
-    transform: translateX(-50%);
-    display: flex;
-    cursor: grab;
-    user-select: none;
-    z-index: 2;
-}
-.vst-refs-align-start {
-    transform: none;
-}
-.vst-refs-align-end {
-    transform: translateX(-100%);
-}
-.vst-refs-dragging .vst-refs-mark {
-    cursor: grabbing;
-}
-.vst-refs-thumb {
-    width: 100%;
-    height: 100%;
-    border-radius: 4px;
-    border: 1.5px solid
-        color-mix(in srgb, var(--emphasis) 65%, var(--light-border));
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--emphasis) 28%, var(--vst-panel)) 0%,
-        color-mix(in srgb, var(--emphasis) 12%, var(--vst-panel)) 100%
-    );
-    background-size: cover;
-    background-position: center;
-    box-shadow: 0 1px 3px color-mix(in srgb, var(--background) 70%, transparent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    position: relative;
-}
-.vst-refs-ph {
-    font-family: var(--vst-mono);
-    font-size: var(--vst-font-2xs);
-    font-weight: 700;
-    color: color-mix(in srgb, var(--text) 88%, transparent);
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--background) 55%, transparent);
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-    pointer-events: none;
-}
-.vst-refs-has-image .vst-refs-ph {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    padding: 1px 0;
-    font-size: var(--vst-font-3xs);
-    text-align: center;
-    color: var(--text);
-    background: color-mix(in srgb, var(--background) 62%, transparent);
-    text-shadow: none;
-}
-.vst-refs-mark:hover .vst-refs-thumb,
-.vst-refs-mark:focus-visible .vst-refs-thumb {
-    outline: none;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--emphasis) 45%, transparent);
-}
-/* Mirrored highlight while hovering the ref's strength row in the dock: must
-   read clearly even on the primary ref, whose resting border is already the
-   emphasis color — so brighten the thumb and use a full-strength ring. */
-.vst-refs-mark.vst-ref-hover .vst-refs-thumb {
-    outline: none;
-    box-shadow: 0 0 0 3px var(--emphasis);
-    filter: brightness(1.35);
-}
-.vst-refs-mark.vst-selected .vst-refs-thumb {
-    /* Same text-color ring as the shared .vst-selected rule — the primary
-       ref's resting border is already emphasis-colored. */
-    box-shadow: 0 0 0 2px var(--text);
-}
-.vst-refs-primary .vst-refs-thumb {
-    border-color: var(--emphasis);
-    border-width: 2px;
-}
-.vst-refs-fromend .vst-refs-thumb {
-    border-style: dashed;
-}
-
-.vst-refs-thumb-preview {
-    width: 100%;
-    height: 108px;
-    border-radius: var(--vst-radius-sm);
-    border: 1px dashed var(--vst-hairline);
-    background-color: color-mix(in srgb, var(--background) 55%, var(--vst-panel));
-    background-size: contain;
-    background-position: center;
-    background-repeat: no-repeat;
-}
-.vst-refs-thumb-preview.vst-refs-thumb-preview-set {
-    border-style: solid;
-    border-color: color-mix(in srgb, var(--emphasis) 40%, var(--vst-hairline));
-}
-/* --- shared button idioms (match the main-branch / Base2Edit editors) ------
-   Delete buttons are the host's native `.interrupt-button` (danger chrome);
-   `.vst-btn-tiny` only compacts whatever host button class it rides on. */
 .vst-btn-tiny {
     height: 22px;
     min-width: 24px;
@@ -1595,50 +117,6 @@
     background: color-mix(in srgb, var(--bs-warning) 34%, var(--background-panel) 66%);
 }
 
-/* --- Settings chip (topbar) + popover --- */
-.vst-settings-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 0.1em 0.55em;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-}
-.vst-settings-chip .vst-settings-dims {
-    min-width: 9ch;
-    text-align: center;
-}
-.vst-settings-chip .vst-settings-fps {
-    min-width: 6ch;
-    text-align: center;
-}
-.vst-settings-chip-sep {
-    opacity: 0.55;
-}
-
-.vst-settings-dims {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-}
-.vst-settings-dims .auto-number {
-    flex: 1 1 0;
-    min-width: 0;
-}
-.vst-settings-dims-sep {
-    flex: none;
-    color: var(--text-soft);
-}
-.vst-settings-badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-}
-.vst-settings-badges .controlnet-friendly {
-    color: var(--emphasis);
-    font-weight: 700;
-}
 .vst-settings-calculated-dims {
     margin-left: 0.45em;
     color: var(--text-soft);
@@ -1646,64 +124,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .vst-timeline * {
+    :is(.vst-clip-editor, .vst-trim-modal, .vst-media-preview-modal) * {
         transition-duration: 0.01ms !important;
         animation-duration: 0.01ms !important;
     }
 }
 
-/* ============================================================
-   Detail dock — selection-driven editor docked on the LEFT of
-   the tracks (clip/stage, ref, audio, prompt, settings). Chrome
-   follows SwarmUI's native `.input-group` idiom (headerless).
-   ============================================================ */
-.vst-detail {
-    flex: 0 0 352px;
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    min-height: 0;
-    border-right: 1px solid var(--shadow, var(--vst-border-strong));
-    background: var(--vst-panel);
-    overflow: hidden;
-    /* The dock is a reading/editing surface, not track chrome: scale the
-       shared font tokens up for everything inside it. */
-    --vst-font-3xs: 0.82em;
-    --vst-font-2xs: 0.86em;
-    --vst-font-xs: 0.92em;
-    --vst-font-sm: 0.97em;
-    --vst-detail-guide: color-mix(
-        in srgb,
-        var(--emphasis) 38%,
-        var(--vst-border-strong)
-    );
-    --vst-detail-guide-soft: color-mix(
-        in srgb,
-        var(--emphasis) 22%,
-        var(--vst-hairline)
-    );
-    --vst-detail-row: color-mix(in srgb, var(--text) 4%, transparent);
-    --vst-detail-row-open: color-mix(
-        in srgb,
-        var(--emphasis) 10%,
-        var(--vst-panel)
-    );
-    --vst-detail-row-active: color-mix(
-        in srgb,
-        var(--emphasis) 16%,
-        var(--vst-panel)
-    );
-}
-.vst-detail-head {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 32px;
-    padding: 0 8px 0 12px;
-    background: var(--vst-panel);
-    border-bottom: 1px solid var(--vst-hairline);
-}
 .vst-detail-crumb {
     flex: 1 1 auto;
     min-width: 0;
@@ -1715,29 +141,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-.vst-detail .vst-detail-subsection-crumb {
-    box-sizing: border-box;
-    flex: none;
-    width: 100%;
-    margin: 9px 0 3px;
-    padding: 4px 0 3px;
-    border-bottom-width: 1px;
-    border-bottom-style: solid;
-    border-bottom-color: var(--vst-hairline);
-}
-.vst-detail-settings-button {
-    flex: none;
-    padding: 0 6px;
-    line-height: 1.2;
-}
-.vst-timeline-settings-modal .modal-dialog {
-    max-width: 420px;
-}
-.vst-timeline-settings-modal .modal-body {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
 }
 .vst-lora-folder-setting,
 .vst-bonita-install-setting {
@@ -1758,206 +161,130 @@
     margin-bottom: 6px;
     color: var(--text-soft);
 }
-.vst-lora-folder-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 6px;
-    margin-bottom: 6px;
-}
-.vst-lora-folder-options {
-    max-height: 240px;
-    overflow-y: auto;
-}
-.vst-detail-body {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    margin-bottom: 6px;
-    padding: 0 8px 8px;
-}
-
-/* Native outline: retain SwarmUI's input-group DOM and controls, but tighten
-   its page-form spacing for the 352px dock. The two min-width declarations
-   below look redundant and are not. This one clears flex's `min-width: auto`
-   min-content floor so a group can shrink to the dock; it loses outright to a
-   theme's own floor. The `!important` one is the only declaration that beats
-   Punked's `.input-group-open { min-width: 280px !important }`. Deleting
-   either regresses a different case. */
-.vst-detail .input-group {
+.vst-multi-select {
+    position: relative;
     min-width: 0;
-    max-width: 100%;
-    margin-top: 10px;
-    margin-bottom: 8px;
-}
-.vst-detail .input-group.input-group-open {
-    min-width: 0 !important;
-}
-.vst-detail .input-group.input-group-closed {
-    margin-top: 8px;
-    margin-bottom: 4px;
-}
-.vst-detail .input-group > .input-group-content {
-    box-sizing: border-box;
-    max-width: 100%;
-    margin-top: 5px;
-}
-.vst-detail-clip-skipped > * {
-    opacity: 0.45;
-}
-.vst-detail-section-content .input-group-open {
-    margin-bottom: 0;
 }
 
-/* Make editable boxes legible against nested transparent outline surfaces.
-   Checkbox, radio, and range controls retain the active SwarmUI theme's
-   specialized rendering. */
-.vst-detail
-    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
-    background-color: var(--background);
-}
-
-/* All form geometry below the breadcrumb is SwarmUI's native `.input-group`
-   and `.auto-input` layout. VideoStages only wires progressive disclosure and
-   keeps its repeatable-item actions. */
-.vst-detail [hidden] {
-    display: none !important;
-}
-.vst-detail-repeating-group-actions {
+.vst-multi-select-trigger {
     display: flex;
     align-items: center;
-    gap: 3px;
+    gap: 5px;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 32px;
+    padding: 3px 8px;
+    background-color: var(--background);
+    border: 1px solid var(--shadow);
+    border-radius: var(--vst-radius-sm);
+    cursor: pointer;
 }
-.vst-detail-repeating-group-actions > button {
-    margin: 0;
-    white-space: nowrap;
+
+.vst-multi-select-trigger:focus-visible {
+    outline: 1px solid var(--emphasis);
 }
-.vst-detail .vst-detail-repeating-add {
-    align-self: stretch;
+
+.vst-multi-select-pills {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+}
+
+.vst-multi-select-placeholder,
+.vst-multi-select-caret,
+.vst-multi-select-count {
+    color: var(--text-soft);
+}
+
+.vst-multi-select-caret {
+    flex: none;
+}
+
+.vst-multi-select-pill {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    gap: 6px;
-    width: calc(100% - 20px);
-    height: 36px;
-    margin: 10px;
-    padding: 0 10px;
-    border: 1px dashed var(--light-border);
-    background: transparent;
+    gap: 3px;
+    padding: 1px 3px 1px 7px;
+    background-color: var(--box-selected-background);
+    border: 1px solid var(--box-selected-border);
+    border-radius: 16px;
+    font-size: 0.85em;
+    white-space: nowrap;
+}
+
+.vst-multi-select-pill-remove {
+    padding: 0 3px;
     color: var(--text-soft);
-    border-radius: 6px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    font: inherit;
+    line-height: 1;
+    background: none;
+    border: 0;
     cursor: pointer;
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
-.vst-detail .vst-detail-repeating-add:hover,
-.vst-detail .vst-detail-repeating-add.vst-file-drop-hover {
-    border-color: var(--emphasis);
-    color: var(--emphasis);
-    background: color-mix(in srgb, var(--emphasis) 8%, transparent);
+.vst-multi-select-pill-remove:hover {
+    color: var(--text);
 }
 
-/* Repeating sections share one outline rail. */
-.vst-detail
-    .vst-detail-section.input-group-open
-    > .vst-detail-section-content {
-    border-radius: 0 !important;
-    background: transparent;
-}
-.vst-detail
-    .vst-detail-section
-    > .vst-detail-section-content
-    > .vst-detail-repeating-group {
+.vst-multi-select-panel {
+    position: fixed;
+    z-index: 100;
+    inset: auto;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     box-sizing: border-box;
-    padding: 2px 0 2px 8px;
-    border: 0;
-    border-left-width: 2px;
-    border-left-style: solid;
-    border-left-color: var(--vst-detail-guide);
-    border-radius: 0;
-    background: transparent;
+    overflow: auto;
+    padding: 8px;
+    color: var(--text);
+    background-color: var(--background);
+    border: 1px solid var(--shadow);
+    border-radius: var(--vst-radius-sm);
+    box-shadow: 0 8px 24px var(--shadow);
 }
-.vst-detail
-    .vst-detail-section
-    > .vst-detail-section-content
-    > .vst-detail-repeating-group
-    > .vst-detail-repeating-group-header
-    > .header-label-wrap {
+
+.vst-multi-select-panel[hidden] {
+    display: none;
+}
+
+.vst-multi-select-filter {
     box-sizing: border-box;
-    min-height: 26px;
-    padding: 3px 6px;
-    border-radius: 5px;
-}
-.vst-detail
-    .vst-detail-section
-    > .vst-detail-section-content
-    > .vst-detail-repeating-group
-    > .vst-detail-repeating-group-header[aria-pressed="true"]
-    .header-label {
-    color: var(--emphasis);
-}
-.vst-detail
-    .vst-detail-section
-    > .vst-detail-section-content
-    > .vst-detail-repeating-group
-    > .vst-detail-repeating-group-content {
-    box-sizing: border-box;
-    padding: 2px 0 2px 7px;
-    border-left: 1px solid var(--vst-hairline);
-    border-radius: 0 !important;
-    background: transparent;
-}
-.vst-detail
-    .vst-detail-stage-groups
-    > .vst-detail-section-content
-    > .vst-detail-repeating-group
-    > .vst-detail-repeating-group-content
-    > .vst-detail-params {
     width: 100%;
-    padding: 2px 4px 4px 0;
 }
 
-/* Nested section containers form the next outline depth regardless of which
-   VideoStages sidebar owns them. */
-.vst-detail
-    .vst-detail-repeating-group-content
-    > .input-group.vst-detail-section,
-.vst-detail
-    .vst-detail-section-content
-    > .input-group.vst-detail-section,
-.vst-detail .vst-detail-params > .input-group.vst-detail-section {
-    box-sizing: border-box;
-    padding-left: 7px;
-    border: 0;
-    border-left-width: 2px;
-    border-left-style: solid;
-    border-left-color: var(--vst-detail-guide-soft);
-    border-radius: 0;
-    background: transparent;
-}
-.vst-detail
-    .vst-detail-repeating-group-content
-    > .vst-detail-section
-    > .vst-detail-section-header
-    > .header-label-wrap,
-.vst-detail
-    .vst-detail-params
-    > .vst-detail-section
-    > .vst-detail-section-header
-    > .header-label-wrap {
-    min-height: 25px;
-    color: var(--emphasis);
+.vst-multi-select-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 224px;
+    min-height: 0;
+    overflow-y: auto;
 }
 
-.vst-detail .vst-stage-iclora-strength-row > label {
-    flex: 1 1 0;
-    min-width: 0;
-    overflow: hidden;
+.vst-multi-select-option {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0;
+    padding: 3px 4px;
+    border-radius: var(--vst-radius-sm);
+    cursor: pointer;
+}
+
+.vst-multi-select-option:hover {
+    background-color: var(--background-soft);
+}
+
+.vst-multi-select-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.vst-multi-select-count {
+    font-size: 0.85em;
 }
 .vst-stage-iclora-strength-row .vst-detail-field-label {
     display: block;
@@ -1967,37 +294,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.vst-detail .vst-stage-iclora-strength-row {
-    flex-wrap: nowrap;
-}
-.vst-detail .vst-stage-iclora-strength {
-    flex: none;
-    width: 3rem;
-}
-
-.vst-detail-loras-section > .vst-detail-section-content > .vst-clip-lora-entry {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    box-sizing: border-box;
-    min-width: 0;
-    padding: 4px 8px;
-    border-left-width: 2px;
-    border-left-style: solid;
-    border-left-color: var(--vst-detail-guide);
-}
-.vst-clip-lora-entry > .vst-detail-delete-lora {
-    flex: none;
-}
-.vst-clip-lora-entry > .vst-audio-select {
-    flex: 1 1 auto;
-    min-width: 0;
-}
-.vst-clip-lora-entry > .vst-clip-lora-weight {
-    flex: none;
-    width: 3rem;
-}
-
 .vst-character-refine-pictures {
     display: grid;
     gap: 4px;
@@ -2013,7 +309,7 @@
     gap: 8px;
     min-width: 0;
     padding: 4px 8px;
-    border-left: 2px solid var(--vst-detail-guide);
+    border-left: 2px solid var(--vst-hairline);
 }
 .vst-character-refine-picture > span {
     overflow: hidden;
@@ -2021,165 +317,6 @@
     white-space: nowrap;
 }
 
-/* --- boundary (seam) chips ------------------------------------------------ */
-.vst-boundary-overlap {
-    position: absolute;
-    top: var(--vst-refs-band);
-    bottom: var(--vst-retake-band);
-    z-index: 5;
-    min-width: 2px;
-    overflow: hidden;
-    pointer-events: none;
-    border-inline: 1px solid
-        color-mix(in srgb, var(--emphasis) 65%, var(--light-border));
-    background: repeating-linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--emphasis) 32%, transparent) 0 5px,
-        color-mix(in srgb, var(--emphasis) 13%, transparent) 5px 10px
-    );
-    box-shadow: inset 0 0 0 1px
-        color-mix(in srgb, var(--background) 28%, transparent);
-}
-.vst-boundary-overlap-crossfade {
-    background: linear-gradient(
-        90deg,
-        color-mix(in srgb, var(--emphasis) 10%, transparent),
-        color-mix(in srgb, var(--emphasis) 38%, transparent),
-        color-mix(in srgb, var(--emphasis) 10%, transparent)
-    );
-    border-inline-style: dashed;
-}
-.vst-boundary-chip {
-    position: absolute;
-    top: 60%;
-    transform: translate(-50%, -50%);
-    z-index: var(--vst-z-boundary-chip);
-    width: max-content;
-    min-width: 22px;
-    height: 22px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    padding: 0 6px;
-    /* The host's side margins would shift the translate(-50%) centering. */
-    margin: 0;
-    box-sizing: border-box;
-    font-size: var(--vst-font-xs);
-    line-height: 1;
-    white-space: nowrap;
-    border-radius: 999px;
-    opacity: 0.85;
-    transition: opacity var(--vst-ease);
-}
-.vst-boundary-chip-compact {
-    padding-inline: 5px;
-}
-.vst-boundary-chip-icon {
-    width: 22px;
-    padding: 0;
-    gap: 0;
-    border-radius: var(--vst-radius-sm);
-}
-.vst-boundary-chip-compact .vst-boundary-kind,
-.vst-boundary-chip-compact .vst-boundary-divider,
-.vst-boundary-chip-icon .vst-boundary-kind,
-.vst-boundary-chip-icon .vst-boundary-divider,
-.vst-boundary-chip-icon .vst-boundary-duration {
-    display: none;
-}
-.vst-boundary-chip:hover {
-    opacity: 1;
-}
-.vst-boundary-chip.vst-boundary-fallback {
-    opacity: 1;
-    color: var(--text);
-    border-color: color-mix(in srgb, var(--yellow) 72%, var(--light-border));
-    border-style: dashed;
-    background: color-mix(in srgb, var(--yellow) 18%, var(--background));
-    box-shadow: 0 0 0 1px
-        color-mix(in srgb, var(--yellow) 24%, transparent);
-}
-.vst-boundary-chip.vst-boundary-fallback:hover,
-.vst-boundary-chip.vst-boundary-fallback:focus-visible {
-    background: color-mix(in srgb, var(--yellow) 27%, var(--background));
-}
-.vst-boundary-continue,
-.vst-boundary-crossfade {
-    opacity: 1;
-    color: var(--text);
-    border-color: color-mix(in srgb, var(--emphasis) 55%, transparent);
-    background: color-mix(in srgb, var(--emphasis) 18%, var(--background));
-}
-.vst-boundary-crossfade {
-    background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--emphasis) 30%, var(--background)) 0%,
-        color-mix(in srgb, var(--emphasis) 8%, var(--background)) 100%
-    );
-    border-style: dashed;
-}
-#Text2Image .vst-timeline .vst-boundary-chip.vst-selected {
-    opacity: 1;
-    box-shadow: 0 0 0 2px var(--text);
-}
-.vst-boundary-chip[data-vst-boundary-has-duration="true"]:is(
-        :hover,
-        :focus-visible,
-        .vst-selected
-    ) {
-    width: max-content;
-    height: 22px;
-    gap: 4px;
-    padding-inline: 6px;
-    border-radius: 999px;
-}
-.vst-boundary-chip[data-vst-boundary-has-duration="true"]:is(
-        :hover,
-        :focus-visible,
-        .vst-selected
-    )
-    .vst-boundary-kind,
-.vst-boundary-chip[data-vst-boundary-has-duration="true"]:is(
-        :hover,
-        :focus-visible,
-        .vst-selected
-    )
-    .vst-boundary-duration {
-    display: inline;
-}
-.vst-boundary-chip[data-vst-boundary-has-duration="true"]:is(
-        :hover,
-        :focus-visible,
-        .vst-selected
-    )
-    .vst-boundary-divider {
-    display: block;
-}
-.vst-boundary-glyph {
-    pointer-events: none;
-    font-weight: 800;
-    color: currentColor;
-    text-shadow: 0 1px 1px color-mix(in srgb, var(--background) 72%, transparent);
-}
-.vst-boundary-kind,
-.vst-boundary-duration {
-    pointer-events: none;
-    font-weight: 700;
-}
-.vst-boundary-duration {
-    font-family: var(--vst-mono);
-    font-variant-numeric: tabular-nums;
-}
-.vst-boundary-divider {
-    flex: none;
-    width: 1px;
-    height: 10px;
-    pointer-events: none;
-    background: color-mix(in srgb, currentColor 34%, transparent);
-}
-
-/* --- boundary detail-strip editor ---------------------------------------- */
 .vst-boundary-info {
     font-size: var(--vst-font-sm);
     color: var(--text-soft);
@@ -2192,6 +329,8 @@
 .vst-boundary-impact {
     display: grid;
     gap: 6px;
+    width: 100%;
+    max-width: 520px;
     margin-top: 4px;
 }
 .vst-boundary-impact-title {
@@ -2302,7 +441,7 @@
     padding: 5px 0;
 }
 .vst-trim-launcher-summary {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     color: var(--text-soft);
     font-size: var(--vst-font-xs);
@@ -2467,3 +606,387 @@ audio.vst-trim-modal-player {
         grid-template-columns: 1fr;
     }
 }
+
+.vst-clip-editor {
+    --vst-editor-rail-width: 300px;
+    --vst-editor-field-gap: 16px;
+    height: 100%;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: var(--vst-editor-rail-width) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
+    background: var(--background-gray);
+    color: var(--text);
+    font-family: "Inter", var(--bs-font-sans-serif);
+}
+
+.vst-clip-editor:has(> .vst-catalog-notice) {
+    grid-template-rows: auto minmax(0, 1fr);
+}
+.vst-clip-editor > .vst-catalog-notice,
+.vst-clip-editor > .vst-catalog-status {
+    grid-column: 1 / -1;
+    min-width: 0;
+}
+.vst-clip-editor > .vst-catalog-notice { flex-wrap: wrap; }
+.vst-clip-editor > .vst-catalog-status {
+    min-height: 0;
+    overflow: auto;
+    justify-content: safe center;
+}
+.vst-clip-editor * { box-sizing: border-box; }
+.vst-clip-editor [hidden] { display: none !important; }
+.vst-clip-editor .basic-button { margin: 0; }
+.vst-clip-editor.vst-editor-map-collapsed { --vst-editor-rail-width: 90px; }
+.vst-editor-strip {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--border-color);
+    background: var(--background-panel);
+}
+.vst-editor-output {
+    padding: 9px 12px;
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--border-color);
+}
+.vst-editor-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 7px;
+    text-transform: uppercase;
+    color: var(--emphasis);
+    font-size: 12px;
+}
+.vst-editor-status > label { margin: 0; cursor: pointer; }
+.vst-editor-status .toggle-switch {
+    --toggle-width: 32px;
+    --toggle-height: 18px;
+    --toggle-thumb-size: 18px;
+    padding: 0;
+    margin: 0;
+    min-height: 18px;
+}
+.vst-editor-status .vst-editor-collapse {
+    margin-left: auto;
+    border: 0;
+    background: transparent;
+    color: var(--text-soft);
+    padding: 0 3px;
+    font-size: 19px;
+    line-height: 20px;
+}
+.vst-detail-section-has-toggle .header-label + .toggle-switch { margin-inline-start: 0.6rem; }
+.vst-editor-status .auto-slider-toggle:focus-visible + .auto-slider-toggle-content {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 2px;
+}
+#videostages-editor.vst-clip-editor .vst-editor-output .vst-editor-dimensions {
+    width: 100%;
+    border-radius: 7px;
+    text-align: center;
+    padding: 6px 4px;
+    font-size: 14px;
+    line-height: 20px;
+}
+.vst-editor-dimensions-compact, .vst-editor-clip-media { display: none; }
+.vst-editor-dimensions-compact > span { display: block; }
+.vst-editor-sequence {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    gap: 0;
+    padding: 10px;
+    overflow: hidden auto;
+    overscroll-behavior: contain;
+}
+.vst-editor-sequence > * { flex-shrink: 0; }
+.vst-editor-strip[data-enabled="false"]::after {
+    content: "";
+    position: absolute;
+    inset: 82px 0 44px;
+    pointer-events: none;
+    opacity: 0.35;
+    background: var(--bs-danger);
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='88'%3E%3Cg transform='rotate(-12 140 44)' font-family='sans-serif'%3E%3Ctext x='12' y='35' font-size='12' font-weight='bold'%3EVIDEOSTAGES DISABLED%3C/text%3E%3Ctext x='12' y='53' font-size='11'%3EUse the switch above to enable%3C/text%3E%3C/g%3E%3C/svg%3E");
+}
+.vst-editor-strip[data-enabled="false"] .vst-editor-sequence > * { filter: saturate(0.65) brightness(0.85); }
+.vst-editor-strip[data-enabled="false"] .vst-editor-dimensions { filter: saturate(0.3); opacity: 0.6; }
+.vst-editor-strip[data-enabled="false"] .vst-editor-sequence > :is(:hover, :focus-within) { filter: none; }
+.vst-editor-clip {
+    position: relative;
+    display: grid;
+    grid-template-columns: 25px minmax(0, 1fr);
+    column-gap: 9px;
+    width: 100%;
+    cursor: pointer;
+    padding: 9px 10px;
+    background: var(--background-soft);
+    border: 1px solid var(--border-color);
+    border-left-width: 3px;
+    border-radius: 7px;
+}
+.vst-editor-clip:hover { border-color: var(--emphasis); }
+.vst-editor-clip.selected { border-color: var(--emphasis); background: color-mix(in srgb, var(--emphasis) 7%, var(--background-gray)); }
+#videostages-editor.vst-clip-editor .vst-editor-sequence > [data-media-kind="audio"] {
+    border-left-color: var(--bs-success);
+    box-shadow: inset 1px 0 var(--bs-success);
+}
+#videostages-editor.vst-clip-editor .vst-editor-sequence > [data-source-usage="video"] {
+    border-left-color: var(--bs-info);
+    box-shadow: inset 1px 0 var(--bs-info);
+}
+.vst-editor-clip-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 9px; }
+.vst-editor-clip-heading { padding-right: 24px; }
+.vst-editor-clip:has(.vst-editor-delete-clip) .vst-editor-clip-heading { padding-right: 54px; }
+.vst-editor-clip .basic-button { border: 0; padding: 0; font-size: 12px; background: transparent; color: var(--text); }
+.vst-editor-clip [data-testid="select-clip"] { grid-column: 1; grid-row: 1 / span 2; align-self: center; text-align: center; font-size: 25px; font-weight: 500; color: var(--text-soft); }
+.vst-editor-clip-heading, .vst-editor-clip .vst-editor-prompt-link { grid-column: 2; min-width: 0; }
+.vst-editor-clip-label { font-size: 12px; font-weight: 600; }
+.vst-editor-clip [data-testid="clip-stages"] { color: var(--text-soft); font-size: 11px; }
+.vst-editor-clip .vst-editor-prompt-link {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    text-align: left;
+    color: var(--text-soft);
+    margin-top: 7px;
+}
+.vst-editor-clip .basic-button:hover { color: var(--emphasis); }
+.vst-editor-duration { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
+.vst-editor-clip .vst-editor-delete-clip { position: absolute; top: 9px; right: 8px; font-size: 17px; line-height: 20px; width: 20px; color: var(--text-soft); }
+.vst-editor-clip .vst-editor-clip-actions { display: block; position: absolute; top: 2px; right: 32px; width: 24px; height: 24px; font-size: 19px; line-height: 20px; }
+.vst-editor-clip .vst-editor-delete-clip:hover { color: var(--bs-danger); }
+.vst-editor-sequence .vst-editor-join {
+    align-self: flex-start;
+    margin: 7px 0 7px 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    padding: 3px 9px;
+    font-size: 11px;
+    color: var(--text);
+    background: var(--background-soft);
+}
+.vst-editor-join:not([data-source-usage=""]) { display: flex; align-items: center; justify-content: space-between; gap: 8px; align-self: stretch; }
+.vst-editor-join-hint { color: var(--text-soft); font-size: 10px; white-space: nowrap; }
+.vst-editor-sequence > [data-testid="add-clip"] { width: 100%; margin-top: 12px; padding: 6px; border: 1px dashed var(--border-color); background: transparent; color: var(--emphasis); }
+.vst-editor-result { flex: 0 0 auto; padding: 8px 12px; border-top: 1px solid var(--border-color); font-size: 11px; background: var(--background-soft); }
+.vst-editor-output-duration { display: block; color: var(--emphasis); font-weight: 600; }
+.vst-editor-result-clips { display: block; margin-top: 3px; color: var(--text-soft); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.vst-editor-workspace { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; container: vst-workspace / inline-size; }
+.vst-editor-diagnostics {
+    flex: 0 0 auto;
+    max-height: 35%;
+    overflow: auto;
+    padding: 6px 20px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 12px;
+}
+.vst-editor-diagnostics > summary { cursor: pointer; color: var(--text-soft); }
+.vst-editor-diagnostic-list { display: grid; gap: 6px; margin: 8px 0 2px; padding-left: 20px; }
+.vst-editor-diagnostic-list li { overflow-wrap: anywhere; }
+.vst-editor-diagnostic-list .basic-button { margin: 0 6px; }
+.vst-editor-diagnostic-error > strong { color: var(--bs-danger); }
+.vst-editor-diagnostic-warning > strong { color: var(--bs-warning); }
+.vst-editor-navigation { display: flex; flex: 0 0 auto; gap: 3px; padding: 6px 12px; overflow: auto hidden; border-bottom: 1px solid var(--border-color); }
+.vst-editor-navigation .basic-button { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-height: 30px; padding: 4px 8px; border: 0; background: transparent; color: var(--text-soft); font-size: 12px; white-space: nowrap; }
+.vst-editor-navigation .active { background: color-mix(in srgb, var(--emphasis) 12%, transparent); color: var(--emphasis); }
+.vst-editor-navigation span { font-size: 10px; }
+.vst-editor-scroll { flex: 1; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 20px 20px; }
+.vst-clip-editor .vst-editor-section.input-group { display: block; width: 100%; min-width: 0 !important; max-width: none; margin: 0 0 18px; padding: 0; border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.vst-editor-section:last-child { min-height: 100%; }
+.vst-clip-editor .vst-editor-section-heading.input-group-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; min-height: 42px; margin: 0; padding: 5px 0; border: 0; border-radius: 0; background: var(--background-gray); }
+.vst-editor-section-heading h3 { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: 18px; line-height: 24px; font-weight: 650; color: var(--text); }
+.vst-editor-actions { display: flex; gap: 6px; margin-left: auto; }
+.vst-editor-section-heading > .vst-editor-actions { margin-left: 0; flex-shrink: 0; }
+#videostages-editor .vst-editor-card.input-group-content {
+    display: block;
+    margin: 0 0 16px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    background: var(--background-panel);
+}
+.vst-editor-item-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.vst-editor-item-state { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-soft); }
+.vst-editor-item-state .toggle-switch { margin: 0; }
+.vst-editor-item-state label { display: flex; align-items: center; min-height: 32px; margin: 0; cursor: pointer; }
+.vst-editor-item[data-enabled="false"] > .vst-editor-fields { opacity: .55; }
+.vst-editor-item-heading h4 { margin: 0; font-size: 17px; font-weight: 650; color: var(--text); }
+#videostages-editor .vst-editor-item > :is(.vst-editor-fields, .vst-editor-item-heading) { padding: 0; }
+.vst-editor-row {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 16px;
+    padding: 16px 0;
+}
+.vst-editor-section[data-section="references"] .vst-editor-row { grid-template-columns: minmax(0, 1fr) auto; }
+.vst-editor-section[data-section="references"] .vst-editor-row > .vst-editor-item-heading { grid-column: 1; grid-row: 1; }
+.vst-editor-section[data-section="references"] .vst-editor-row > .vst-editor-actions { grid-column: 2; grid-row: 1; }
+.vst-editor-section[data-section="references"] .vst-editor-row > .vst-editor-fields { grid-column: 1 / -1; }
+.vst-editor-row:first-child { padding-top: 0; }
+.vst-editor-row:last-child { padding-bottom: 0; }
+.vst-editor-row + .vst-editor-row { border-top: 1px solid var(--border-color); }
+.vst-editor-row > .vst-editor-item-heading { margin: 0; }
+.vst-editor-row > .vst-editor-item-heading h4 { font-size: 13px; font-weight: 500; color: var(--text-soft); line-height: 28px; }
+.vst-editor-row > .vst-editor-actions { margin: 0; }
+#videostages-editor .vst-editor-actions .basic-button {
+    --button-text: var(--text);
+    padding: 5px 10px;
+    min-height: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background: transparent;
+    box-shadow: none;
+    font-size: 13px;
+}
+#videostages-editor .vst-editor-actions .basic-button:hover {
+    border-color: var(--emphasis);
+    background: var(--background-soft);
+}
+#videostages-editor .vst-editor-actions [data-action="add"] {
+    color: var(--emphasis);
+    border-color: color-mix(in srgb, var(--emphasis) 45%, var(--border-color));
+    background: color-mix(in srgb, var(--emphasis) 12%, transparent);
+}
+#videostages-editor .vst-editor-actions [data-action="add"]:not(:disabled).vst-file-drop-hover {
+    border-color: var(--emphasis);
+    color: var(--emphasis);
+    background: color-mix(in srgb, var(--emphasis) 24%, transparent);
+}
+#videostages-editor .vst-editor-actions [data-action="delete"] { display: inline-flex; align-items: center; gap: 5px; }
+.vst-editor-actions [data-action="delete"] svg { width: 14px; height: 14px; }
+#videostages-editor .vst-editor-actions [data-action="delete"]:is(:hover, :focus-visible) {
+    color: var(--bs-danger);
+    border-color: var(--bs-danger);
+    background: color-mix(in srgb, var(--bs-danger) 10%, transparent);
+}
+.vst-editor-empty, .vst-editor-start { padding: 14px 16px; margin: 0; color: var(--text-soft); font-size: 13px; }
+.vst-editor-map-collapsed .vst-editor-output { padding: 8px; }
+.vst-editor-map-collapsed .vst-editor-status { justify-content: center; gap: 6px; }
+.vst-editor-map-collapsed .vst-editor-collapse { margin-left: 0; }
+.vst-editor-map-collapsed .vst-editor-status > label,
+.vst-editor-map-collapsed .vst-editor-dimensions-label,
+.vst-editor-map-collapsed .vst-editor-clip-label,
+.vst-editor-map-collapsed .vst-editor-clip-heading,
+.vst-editor-map-collapsed .vst-editor-join-hint,
+.vst-editor-map-collapsed .vst-editor-clip [data-testid="clip-stages"],
+.vst-editor-map-collapsed .vst-editor-prompt-link,
+.vst-editor-map-collapsed .vst-editor-duration,
+.vst-editor-map-collapsed .vst-editor-result-clips { display: none; }
+.vst-editor-map-collapsed .vst-editor-dimensions-compact,
+.vst-editor-map-collapsed .vst-editor-clip-index,
+.vst-editor-map-collapsed .vst-editor-clip-media { display: block; }
+.vst-editor-clip[data-clip-index="0"] .vst-editor-clip-actions { right: 4px; }
+.vst-editor-map-collapsed .vst-editor-clip .vst-editor-clip-actions { right: 4px; }
+#videostages-editor.vst-clip-editor.vst-editor-map-collapsed .vst-editor-dimensions { font-size: 10px; line-height: 16px; padding: 4px 0; }
+.vst-editor-map-collapsed .vst-editor-clip { display: block; padding: 8px 5px; text-align: center; }
+.vst-editor-map-collapsed .vst-editor-clip [data-testid="select-clip"] { width: 100%; text-align: center; font-size: 20px; }
+.vst-editor-map-collapsed .vst-editor-clip-media { font-size: 10px; color: var(--text-soft); margin-top: 4px; }
+.vst-editor-map-collapsed .vst-editor-join { align-self: stretch; margin: 6px 0; padding: 3px 1px; font-size: 10px; white-space: normal; }
+.vst-editor-map-collapsed .vst-editor-join-label { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.vst-editor-map-collapsed .vst-editor-join-arrow { line-height: 13px; }
+.vst-editor-map-collapsed .vst-editor-result { text-align: center; padding: 8px 3px; }
+
+.vst-editor-fields, .vst-clip-editor .vst-detail-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px var(--vst-editor-field-gap);
+    align-items: flex-start;
+}
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > *,
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > .vst-form-field {
+    --vst-field-width: 200px;
+    flex: 0 1 var(--vst-field-width);
+    min-width: 0;
+}
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > [data-field-kind="number"] { --vst-field-width: 160px; }
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > :has(input:is([data-field="steps"], [data-field="cfg"])) { --vst-field-width: 160px; }
+/* Core's .auto-input-flex-wide forces sliders to a full row with !important. */
+.vst-clip-editor .vst-stage-slider { flex-basis: var(--vst-field-width) !important; }
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > :has(select:is([data-field="model"], [data-field$="-model"])) { --vst-field-width: 320px; }
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > [data-field-kind="file"] { --vst-field-width: 440px; }
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > :is(.vst-trim-launcher, .vst-detail-field-hint) { --vst-field-width: 440px; }
+#videostages-editor .vst-editor-fields .input-group-content { padding: 10px 12px; }
+.vst-clip-editor .vst-detail-fields > .vst-detail-span-full,
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > :is(.input-group, p, .vst-detail-note, .vst-detail-span-full, .vst-boundary-description, [data-field-kind="textarea"]) {
+    flex-basis: 100%;
+    width: 100%;
+}
+.vst-clip-editor .vst-editor-fields .input-group {
+    width: 100%;
+    max-width: 100%;
+}
+.vst-clip-editor .auto-input {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+}
+#videostages-editor.vst-clip-editor .vst-form-field {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+#videostages-editor.vst-clip-editor .vst-form-field:not([data-field-kind="slider"]):not([data-field-kind="file"]):not([data-field-kind="checkbox"]) {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+}
+#videostages-editor.vst-clip-editor .vst-form-field > :is(select, textarea, .auto-text, .auto-textarea, input:not([type="checkbox"]):not([type="range"]):not([type="file"])) {
+    box-sizing: border-box;
+    max-width: 100%;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+}
+#videostages-editor.vst-clip-editor .vst-form-field > label {
+    width: auto;
+    max-width: none;
+    margin: 0;
+}
+.vst-clip-editor .vst-form-field textarea {
+    min-height: 76px;
+    resize: vertical;
+}
+#videostages-editor .vst-detail-subsection-crumb {
+    margin: 6px 0 0;
+    padding: 12px 0 0;
+    border-top: 1px solid var(--border-color);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+@container vst-workspace (max-width: 520px) {
+    .vst-editor-scroll { padding-inline: 12px; }
+    .vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > .vst-form-field { --vst-field-width: 100%; flex-basis: 100%; }
+}
+.vst-clip-editor .auto-checkbox-box {
+    align-self: center;
+}
+.vst-clip-editor .input-group.input-group-open {
+    min-width: 0 !important;
+}
+.vst-clip-editor :focus-visible:not(input, select, textarea) {
+    outline: 2px solid var(--emphasis);
+    outline-offset: 2px;
+}
+.vst-clip-editor .vst-form-field :is(input, select, textarea):focus { outline: none; }
+
+.vst-editor-current-item { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8em; font-weight: 500; color: var(--emphasis); }

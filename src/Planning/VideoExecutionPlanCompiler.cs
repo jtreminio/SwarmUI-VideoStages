@@ -6,9 +6,6 @@ using VideoStages.Architectures;
 using VideoStages.Architectures.Abstractions;
 using VideoStages.Authoring;
 
-/// <summary>
-/// Compiles a spec into a deterministic plan without inspecting or mutating the host workflow.
-/// </summary>
 internal static class VideoExecutionPlanCompiler
 {
     internal static VideoExecutionPlan Compile(
@@ -43,13 +40,24 @@ internal static class VideoExecutionPlanCompiler
                     + "The authored values remain in request metadata. Create separate timeline "
                     + "stages instead."));
         }
-        IReadOnlyList<ClipSpec> activeClips = (effective.Clips ?? []).Where(IsExecutableClip).ToArray();
+        IReadOnlyList<ClipSpec> activeClips = (effective.Clips ?? [])
+            .Where(IsExecutableClip)
+            .ToArray();
         if (activeClips.Count != (effective.Clips?.Count ?? 0))
         {
             diagnostics.Add(new PlanDiagnostic(
                 PlanDiagnosticSeverity.Warning,
                 "inactive-clips-ignored",
                 "Clips without a source video or active stages were ignored by the execution plan."));
+        }
+        if (activeClips.Count > 1 && activeClips[0].AudioOnly)
+        {
+            ClipSpec[] normalized = activeClips.ToArray();
+            normalized[1] = normalized[1] with
+            {
+                AudioSource = MediaSource.PreviousClip,
+            };
+            activeClips = normalized;
         }
 
         RootPlan root = RootPlanCompiler.Compile(rootEnvironment, activeClips);
@@ -191,7 +199,9 @@ internal static class VideoExecutionPlanCompiler
     private static ArchitectureEntryMode ResolveEntryMode(
         TimelineSpec spec,
         ClipSpec clip) =>
-        clip.InitVideo is not null
+        clip.AudioOnly
+            ? ArchitectureEntryMode.TextToVideo
+            : clip.InitVideo is not null
             ? ArchitectureEntryMode.InitVideo
             : spec.IsTextToVideo
                 ? ArchitectureEntryMode.TextToVideo

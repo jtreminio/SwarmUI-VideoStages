@@ -6,7 +6,6 @@ import {
     it,
     jest,
 } from "@jest/globals";
-import { stubRect } from "./__test_helpers__/dom";
 import {
     resetBrowserMediaStoreForTests,
     resolveBrowserMedia,
@@ -16,14 +15,12 @@ import {
     buildCheckbox,
     buildField,
     buildMediaPickRow,
-    buildRepeatingEditor,
-    buildStaticSection,
-    type RepeatingGroupItem,
+    buildTextarea,
     resetRememberedAccordionSections,
+    setFieldDisabled,
 } from "./detailWidgets";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
-import { setTimelineAuthoringSetting } from "./timelineAuthoringSettings";
 
 type MutableGlobal = typeof globalThis & {
     doPopover?: (id: string, e?: Event) => void;
@@ -32,7 +29,32 @@ type MutableGlobal = typeof globalThis & {
 
 const glob = globalThis as MutableGlobal;
 
+describe("textarea layout", () => {
+    it("applies reusable initial and maximum row sizing", () => {
+        const editor = buildTextarea("", "Prompt", "prompt", jest.fn(), {
+            rows: 3,
+            maxRows: 8,
+        });
+
+        expect(editor.rows).toBe(3);
+        expect(editor.classList).toContain("vst-textarea-limited");
+        expect(editor.style.getPropertyValue("--vst-textarea-max-lines")).toBe(
+            "8lh",
+        );
+    });
+});
+
 describe("buildField help popovers", () => {
+    it("uses the shared field label to activate a checkbox exactly once", () => {
+        const changed = jest.fn();
+        const row = buildCheckbox("Audio Only", false, changed);
+        document.body.append(row);
+        row.querySelector("label")?.click();
+        expect(row.querySelector("input")?.checked).toBe(true);
+        expect(changed).toHaveBeenCalledTimes(1);
+        expect(changed).toHaveBeenCalledWith(true);
+        row.remove();
+    });
     afterEach(() => {
         Reflect.deleteProperty(glob, "doPopover");
     });
@@ -63,11 +85,9 @@ describe("buildField help popovers", () => {
         expect(button?.textContent).toBe("?");
         expect(popover).not.toBeNull();
         expect(popover?.id).toMatch(/^popover_vst_control_\d+$/);
-        // The label name stays clean so label-based lookups keep working.
         expect(field.querySelector(".auto-input-name")?.textContent).toBe(
             "Control",
         );
-        // Bold field name + the help text (text only, no markup injection).
         expect(popover?.querySelector("b")?.textContent).toBe("Control");
         expect(popover?.textContent).toContain("Regeneration strength.");
         expect(button?.parentElement?.firstElementChild).toBe(button);
@@ -124,7 +144,6 @@ describe("buildField help popovers", () => {
         expect(check.querySelector(".sui-popover")?.id).toMatch(
             /^popover_vst_reuse-audio_\d+$/,
         );
-        // Checkbox fields use the same label geometry as every other field.
         expect(
             check.querySelector(".auto-input-name")?.firstChild?.textContent,
         ).toBe("Reuse Audio");
@@ -143,10 +162,60 @@ describe("buildField help popovers", () => {
 });
 
 describe("buildMediaPickRow", () => {
+    it("opens a saved image from the thumbnail and restores focus on close", () => {
+        const previous = {
+            setMediaFileDirect: globalThis.setMediaFileDirect,
+            getMediaType: globalThis.getMediaType,
+        };
+        Object.assign(globalThis, {
+            getMediaType: () => "image",
+            setMediaFileDirect: (input: HTMLInputElement, src: string) => {
+                const preview = input
+                    .closest(".auto-input")
+                    ?.querySelector(".auto-input-preview");
+                const image = document.createElement("img");
+                image.src = src;
+                preview?.append(image);
+            },
+        });
+        try {
+            const row = buildMediaPickRow(
+                "Image",
+                "image/*",
+                ["image"],
+                "sample.png",
+                jest.fn(),
+                jest.fn(),
+                "data:image/png;base64,AAAA",
+            );
+            document.body.append(row);
+            const thumbnail = row.querySelector<HTMLButtonElement>(
+                '[data-testid="media-preview"]',
+            );
+            expect(thumbnail).not.toBeNull();
+            thumbnail?.focus();
+            thumbnail?.click();
+            expect(
+                document
+                    .querySelector(".vst-media-preview-modal img")
+                    ?.getAttribute("src"),
+            ).toBe("data:image/png;base64,AAAA");
+            document.dispatchEvent(
+                new KeyboardEvent("keydown", { key: "Escape" }),
+            );
+            expect(
+                document.querySelector(".vst-media-preview-modal"),
+            ).toBeNull();
+            expect(document.activeElement).toBe(thumbnail);
+            row.remove();
+        } finally {
+            Object.assign(globalThis, previous);
+        }
+    });
     afterEach(() => {
         resetBrowserMediaStoreForTests();
         setVideoStagesHostBridgeForTests(null);
-        // Restore whatever the jest setup seeded (site.js creates a real one).
+        // Restore the host browser seeded by the test setup.
         if (savedBrowser !== undefined) {
             glob.inputBrowserHelper = savedBrowser;
         }
@@ -175,9 +244,13 @@ describe("buildMediaPickRow", () => {
                 ?.textContent,
         ).toBe("Audio Upload");
         expect(
+            row.querySelector(
+                ".auto-file-input-label > .vst-media-pick-actions",
+            ),
+        ).not.toBeNull();
+        expect(
             row.querySelector(".auto-file-label .auto-file-input-filename"),
         ).not.toBeNull();
-        // The browser upload path is always present too.
         const input = row.querySelector<HTMLInputElement>('input[type="file"]');
         expect(input?.accept).toBe("audio/*");
         expect(input?.classList.contains("auto-file")).toBe(true);
@@ -302,503 +375,82 @@ describe("buildMediaPickRow", () => {
     });
 });
 
-describe("native detail groups", () => {
+describe("native accordion groups", () => {
     beforeEach(() => {
         localStorage.clear();
         resetRememberedAccordionSections();
     });
 
-    it("builds an always-open input group without accordion behavior", () => {
-        const content = document.createElement("div");
-        content.textContent = "Permanent fields";
-        const built = buildStaticSection({
-            key: "static-test",
-            label: "Clip",
-            content,
-            headerAction: {
-                label: "⏭︎",
-                title: "Skip clip",
-                onClick: () => {},
-            },
-        });
-        expect(built.section.classList.contains("input-group")).toBe(true);
-        expect(built.section.classList.contains("input-group-open")).toBe(true);
-        expect(built.section.dataset.vstStaticKey).toBe("static-test");
-        expect(
-            built.section.querySelector(".input-group-shrinkable"),
-        ).toBeNull();
-        expect(
-            built.section
-                .querySelector(":scope > .input-group-header")
-                ?.classList.contains("input-group-noshrink"),
-        ).toBe(true);
-        expect(built.section.querySelector(".auto-symbol")).toBeNull();
-        expect(built.content.hidden).toBe(false);
-        expect(
-            built.section.querySelector(".vst-detail-repeating-group-action"),
-        ).not.toBeNull();
-    });
-
-    it("uses the same label chrome order for every section header", () => {
-        const parts = (root: HTMLElement): string[] =>
-            Array.from(
-                root.querySelector<HTMLElement>(
-                    ":scope > .input-group-header > .header-label-wrap",
-                )?.children ?? [],
-            ).map((element) => element.className);
-        const staticSection = buildStaticSection({
-            key: "static-chrome",
-            label: "Clip",
-            content: document.createDocumentFragment(),
-        }).section;
-        const accordion = buildAccordionSection({
-            key: "accordion-chrome",
-            label: "References",
-            counter: 2,
-            content: document.createDocumentFragment(),
-        }).section;
-        const repeating = buildRepeatingEditor({
-            key: "repeating-chrome",
-            label: "Stages",
-            items: [{ label: "Stage 0" }],
-            add: {
-                title: "Add stage",
-                className: "test-add",
-                onClick: () => {},
-            },
-            remove: {
-                title: "Delete stage",
-                className: "test-delete",
-            },
-        }).section.querySelector<HTMLElement>(
-            ":scope > .input-group-content > .vst-detail-repeating-group",
-        );
-
-        expect(parts(staticSection)).toEqual([
-            "header-label",
-            "header-label-spacer",
-            "vst-detail-repeating-group-actions",
-        ]);
-        expect(parts(accordion)).toEqual([
-            "auto-symbol",
-            "header-label",
-            "header-label-spacer",
-            "header-label-counter",
-            "vst-detail-repeating-group-actions",
-        ]);
-        expect(repeating && parts(repeating)).toEqual([
-            "auto-symbol",
-            "header-label",
-            "header-label-spacer",
-            "vst-detail-repeating-group-actions",
-        ]);
-    });
-
-    it("opens the newly appended child through the shared repeater pattern", () => {
-        const host = document.createElement("div");
-        const items = ["LoRA 0"];
-        const render = (): void => {
-            host.replaceChildren(
-                buildRepeatingEditor({
-                    key: "shared-add-test",
-                    label: "LoRAs",
-                    open: true,
-                    defaultActiveIndex: 0,
-                    items: items.map((label) => {
-                        const editor = document.createElement("div");
-                        editor.textContent = `${label} editor`;
-                        return { label, editor };
-                    }),
-                    add: {
-                        title: "Add LoRA",
-                        className: "test-add",
-                        onClick: () => {
-                            items.push(`LoRA ${items.length}`);
-                            render();
-                        },
-                    },
-                    remove: {
-                        title: "Delete LoRA",
-                        className: "test-remove",
-                    },
-                }).section,
+    it("expands and remembers sections independently of their enable switch", () => {
+        const changed = jest.fn();
+        const build = (checked: boolean) => {
+            const input = document.createElement("input");
+            input.value = "Saved value";
+            return buildAccordionSection({
+                key: "independent-expansion",
+                label: "Optional feature",
+                content: input,
+                toggle: { checked, title: "Enable feature", onChange: changed },
+            });
+        };
+        for (const checked of [false, true, false]) {
+            const built = build(checked);
+            const header = built.section.querySelector<HTMLElement>(
+                ".input-group-header",
             );
-        };
-        render();
-        host.querySelector<HTMLButtonElement>(".test-add")?.click();
-        const children = host.querySelectorAll<HTMLElement>(
-            ".vst-detail-repeating-group",
-        );
-        expect(children).toHaveLength(2);
-        expect(children[0].classList.contains("input-group-closed")).toBe(true);
-        expect(children[1].classList.contains("input-group-open")).toBe(true);
-        expect(children[1].querySelector(".header-label")?.textContent).toBe(
-            "LoRA 1",
-        );
-        expect(
-            children[1].querySelector<HTMLElement>(
-                ".vst-detail-repeating-group-content",
-            )?.hidden,
-        ).toBe(false);
-    });
-
-    it("restores sidebar scroll after a repeating-item structural action settles", () => {
-        const frames: FrameRequestCallback[] = [];
-        const original = window.requestAnimationFrame;
-        window.requestAnimationFrame = (callback: FrameRequestCallback) => {
-            frames.push(callback);
-            return frames.length;
-        };
-        const body = document.createElement("div");
-        body.className = "vst-detail-body";
-        const host = document.createElement("div");
-        body.appendChild(host);
-        document.body.appendChild(body);
-        const items = ["LoRA 0"];
-        const render = (): void => {
-            host.replaceChildren(
-                buildRepeatingEditor({
-                    key: "scroll-preservation-test",
-                    label: "LoRAs",
-                    open: true,
-                    defaultActiveIndex: 0,
-                    items: items.map((label) => ({ label })),
-                    add: {
-                        title: "Add LoRA",
-                        className: "test-add",
-                        onClick: () => {
-                            items.push(`LoRA ${items.length}`);
-                            render();
-                        },
-                    },
-                    remove: {
-                        title: "Delete LoRA",
-                        className: "test-remove",
-                    },
-                }).section,
+            if (!header) throw new Error("Section header missing");
+            header.click();
+            expect(header.getAttribute("aria-expanded")).toBe("true");
+            expect(built.content.hidden).toBe(false);
+            expect(
+                built.section.querySelector<HTMLInputElement>(
+                    ".group-toggler-switch input",
+                )?.checked,
+            ).toBe(checked);
+            const field =
+                built.content.querySelector<HTMLInputElement>("input");
+            if (!field) throw new Error("Section field missing");
+            expect(field.value).toBe("Saved value");
+            expect(field.matches(":disabled")).toBe(!checked);
+            const rebuilt = build(!checked);
+            expect(rebuilt.content.hidden).toBe(false);
+            setFieldDisabled(rebuilt.section, true, "Unavailable");
+            const rebuiltHeader = rebuilt.section.querySelector<HTMLElement>(
+                ".input-group-header",
             );
-        };
-
-        try {
-            render();
-            body.scrollTop = 140;
-            host.querySelector<HTMLButtonElement>(".test-add")?.click();
-            expect(frames).toHaveLength(1);
-            body.scrollTop = 0;
-            frames[0](0);
-            expect(body.scrollTop).toBe(140);
-        } finally {
-            if (original) {
-                window.requestAnimationFrame = original;
-            } else {
-                Reflect.deleteProperty(window, "requestAnimationFrame");
-            }
+            if (!rebuiltHeader) throw new Error("Rebuilt header missing");
+            rebuiltHeader.dispatchEvent(
+                new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+            );
+            expect(rebuilt.content.hidden).toBe(true);
+            rebuiltHeader.dispatchEvent(
+                new KeyboardEvent("keydown", { key: " ", bubbles: true }),
+            );
+            expect(rebuilt.content.hidden).toBe(false);
+            expect(
+                rebuilt.content.querySelector("input")?.matches(":disabled"),
+            ).toBe(true);
+            rebuiltHeader.click();
         }
     });
 
-    it("keeps the Add action anchored when a structural edit grows content above it", () => {
-        const frames: FrameRequestCallback[] = [];
-        const original = window.requestAnimationFrame;
-        window.requestAnimationFrame = (callback: FrameRequestCallback) => {
-            frames.push(callback);
-            return frames.length;
-        };
-        const body = document.createElement("div");
-        body.className = "vst-detail-body";
-        const host = document.createElement("div");
-        body.appendChild(host);
-        document.body.appendChild(body);
-        const items = ["LoRA 0"];
-        const render = (): void => {
-            host.replaceChildren(
-                buildRepeatingEditor({
-                    key: "add-anchor-test",
-                    label: "LoRAs",
-                    items: items.map((label) => ({ label })),
-                    add: {
-                        title: "Add LoRA",
-                        className: "test-add",
-                        onClick: () => {
-                            items.push(`LoRA ${items.length}`);
-                            render();
-                        },
-                    },
-                    remove: {
-                        title: "Delete LoRA",
-                        className: "test-remove",
-                    },
-                }).section,
-            );
-            const add = host.querySelector<HTMLElement>(".test-add");
-            if (!add) {
-                throw new Error("Add LoRA missing");
-            }
-            stubRect(add, 0, 0, items.length === 1 ? 300 : 420);
-        };
-
-        try {
-            render();
-            body.scrollTop = 100;
-            host.querySelector<HTMLButtonElement>(".test-add")?.click();
-            frames[0](0);
-            expect(body.scrollTop).toBe(220);
-        } finally {
-            if (original) {
-                window.requestAnimationFrame = original;
-            } else {
-                Reflect.deleteProperty(window, "requestAnimationFrame");
-            }
-        }
-    });
-
-    it("keeps an active repeating item minimized through a rebuild", () => {
-        const host = document.createElement("div");
-        const render = (): void => {
-            host.replaceChildren(
-                buildRepeatingEditor({
-                    key: "minimized-rebuild-test",
-                    label: "Stages",
-                    open: true,
-                    items: [{ label: "Stage 0", active: true }],
-                    editorForItem: () => document.createElement("div"),
-                    add: {
-                        title: "Add stage",
-                        className: "test-add",
-                        onClick: () => {},
-                    },
-                    remove: {
-                        title: "Delete stage",
-                        className: "test-remove",
-                    },
-                }).section,
-            );
-        };
-
-        render();
-        host.querySelector<HTMLElement>(
-            ".vst-detail-repeating-group-header",
-        )?.click();
-        render();
-
-        expect(
-            host
-                .querySelector(".vst-detail-repeating-group")
-                ?.classList.contains("input-group-closed"),
-        ).toBe(true);
-    });
-
-    it("opens an empty repeater so its Add action is visible by default", () => {
-        const built = buildRepeatingEditor({
-            key: "empty-add-test",
-            label: "References",
-            items: [],
-            add: {
-                title: "Add reference",
-                label: "+ Add Reference Image",
-                className: "test-add",
-                onClick: () => {},
-            },
-            remove: {
-                title: "Delete reference",
-                className: "test-remove",
+    it("marks every accordion with an enable switch for shared placement", () => {
+        const built = buildAccordionSection({
+            key: "switch-placement",
+            label: "Nested feature",
+            content: document.createDocumentFragment(),
+            toggle: {
+                checked: true,
+                title: "Toggle nested feature",
+                onChange: () => {},
             },
         });
 
-        expect(built.section.classList.contains("input-group-open")).toBe(true);
-        expect(built.content.hidden).toBe(false);
-        const add = built.content.querySelector<HTMLButtonElement>(".test-add");
-        expect(add).not.toBeNull();
-        expect(add?.textContent).toBe("+ Add Reference Image");
-    });
-
-    it("opens a repeating parent by default when it has children", () => {
-        const built = buildRepeatingEditor({
-            key: "populated-parent-test",
-            label: "References",
-            items: [{ label: "Reference 0" }],
-            add: {
-                title: "Add reference",
-                className: "test-add",
-                onClick: () => {},
-            },
-            remove: {
-                title: "Delete reference",
-                className: "test-remove",
-            },
-        });
-
-        expect(built.section.classList.contains("input-group-open")).toBe(true);
-        expect(built.content.hidden).toBe(false);
-    });
-
-    it("restores expanded children after an in-memory reload", () => {
-        const item = {
-            label: "Reference 0",
-            stateKey: "reference-id-0",
-        } as unknown as RepeatingGroupItem;
-        const build = (): HTMLElement =>
-            buildRepeatingEditor({
-                key: "child-reload-test",
-                label: "References",
-                items: [item],
-                add: {
-                    title: "Add reference",
-                    className: "test-add",
-                    onClick: () => {},
-                },
-                remove: {
-                    title: "Delete reference",
-                    className: "test-remove",
-                },
-            }).section;
-
-        const beforeReload = build();
-        beforeReload
-            .querySelector<HTMLElement>(".vst-detail-repeating-group-header")
-            ?.click();
-        resetRememberedAccordionSections();
-        const afterReload = build();
-
-        expect(
-            afterReload
-                .querySelector(".vst-detail-repeating-group")
-                ?.classList.contains("input-group-open"),
-        ).toBe(true);
-
-        const activeItem = {
-            label: "Reference 1",
-            stateKey: "reference-id-1",
-            active: true,
-        } as unknown as RepeatingGroupItem;
-        const buildActive = (): HTMLElement =>
-            buildRepeatingEditor({
-                key: "child-closed-reload-test",
-                label: "References",
-                items: [activeItem],
-                add: {
-                    title: "Add reference",
-                    className: "test-add",
-                    onClick: () => {},
-                },
-                remove: {
-                    title: "Delete reference",
-                    className: "test-remove",
-                },
-            }).section;
-        buildActive()
-            .querySelector<HTMLElement>(".vst-detail-repeating-group-header")
-            ?.click();
-        resetRememberedAccordionSections();
-
-        expect(
-            buildActive()
-                .querySelector(".vst-detail-repeating-group")
-                ?.classList.contains("input-group-closed"),
-        ).toBe(true);
-    });
-
-    it("builds a closed child's editor when the child is expanded", () => {
-        const editor = document.createElement("div");
-        editor.className = "test-editor";
-        const built = buildRepeatingEditor({
-            key: "closed-editor-test",
-            label: "Keyframes",
-            items: [{ label: "Keyframe 0" }],
-            editorForItem: () => editor,
-            add: {
-                title: "Add keyframe",
-                className: "test-add",
-                onClick: () => {},
-            },
-            remove: {
-                title: "Delete keyframe",
-                className: "test-remove",
-            },
-        });
-
-        expect(built.section.querySelector(".test-editor")).toBeNull();
-        built.section
-            .querySelector<HTMLElement>(".vst-detail-repeating-group-header")
-            ?.click();
-        expect(built.section.querySelector(".test-editor")).not.toBeNull();
-    });
-
-    it("puts each item's title on its header", () => {
-        const section = buildRepeatingEditor({
-            key: "item-title-test",
-            label: "References",
-            items: [
-                { label: "R0", title: "Edit reference image 0" },
-                { label: "R1" },
-            ],
-            add: {
-                title: "Add reference",
-                className: "test-add",
-                onClick: () => {},
-            },
-            remove: { title: "Delete reference", className: "test-remove" },
-        }).section;
-
-        const headers = section.querySelectorAll<HTMLElement>(
-            ".vst-detail-repeating-group-header",
+        expect(built.section.classList).toContain(
+            "vst-detail-section-has-toggle",
         );
-        expect(headers[0].title).toBe("Edit reference image 0");
-        expect(headers[1].title).toBe("");
-    });
-
-    it("keeps selected repeater editors open when Auto-collapse is disabled", () => {
-        setTimelineAuthoringSetting("autoCollapse", false);
-        const host = document.createElement("div");
-        let selectedIndex = 0;
-        const render = (): void => {
-            host.replaceChildren(
-                buildRepeatingEditor({
-                    key: "multi-open-selection-test",
-                    label: "Stages",
-                    open: true,
-                    items: ["Stage 0", "Stage 1"].map((label, index) => ({
-                        label,
-                        active: index === selectedIndex,
-                        onSelect: () => {
-                            selectedIndex = index;
-                            render();
-                        },
-                    })),
-                    editorForItem: (index) => {
-                        const editor = document.createElement("div");
-                        editor.className = "test-editor";
-                        editor.textContent = `Editor ${index}`;
-                        return editor;
-                    },
-                    add: {
-                        title: "Add stage",
-                        className: "test-add",
-                        onClick: () => {},
-                    },
-                    remove: {
-                        title: "Delete stage",
-                        className: "test-remove",
-                    },
-                }).section,
-            );
-        };
-
-        render();
-        host.querySelectorAll<HTMLElement>(
-            ".vst-detail-repeating-group .input-group-header",
-        )[1]?.click();
-
-        const children = host.querySelectorAll<HTMLElement>(
-            ".vst-detail-repeating-group",
+        expect(built.heading.nextElementSibling?.classList).toContain(
+            "toggle-switch",
         );
-        expect(children).toHaveLength(2);
-        expect(
-            Array.from(children).every((child) =>
-                child.classList.contains("input-group-open"),
-            ),
-        ).toBe(true);
-        expect(host.querySelectorAll(".test-editor")).toHaveLength(2);
-        expect(children[0].textContent).toContain("Editor 0");
-        expect(children[1].textContent).toContain("Editor 1");
     });
 });

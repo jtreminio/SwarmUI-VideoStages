@@ -1,5 +1,21 @@
 import { isRecord } from "../utils";
 
+export const restoreHostMediaPreview = (
+    input: HTMLInputElement,
+    src: string,
+    name: string,
+): void => {
+    if (typeof setMediaFileDirect !== "function") return;
+    setMediaFileDirect(input, src, getMediaType(src), name);
+    const player = input.closest(".auto-input")?.querySelector("video, audio");
+    if (player instanceof HTMLMediaElement) {
+        player.classList.add("vst-sidebar-media-preview");
+        player.autoplay = false;
+        player.controls = true;
+        player.preload = "metadata";
+    }
+};
+
 export interface HostBottomTabMount {
     nav: HTMLElement;
     content: HTMLElement;
@@ -51,6 +67,24 @@ export const showHostPopover = (id: string, event?: Event): void => {
     if (typeof doPopover === "function") {
         doPopover(id, event);
     }
+};
+
+export const showHostActionMenu = (
+    anchor: HTMLElement,
+    actions: { key: string; action(): void }[],
+): void => {
+    if (typeof AdvancedPopover !== "function") return;
+    const rect = anchor.getBoundingClientRect();
+    new AdvancedPopover(
+        "videostages-actions",
+        actions,
+        false,
+        rect.left,
+        rect.bottom,
+        document.body,
+        null,
+        rect.height,
+    );
 };
 
 export const installHostFeature = (

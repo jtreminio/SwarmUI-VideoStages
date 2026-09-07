@@ -5,19 +5,13 @@ import {
     testArchitectureCatalog,
     testArchitectureCatalogDto,
 } from "../__test_helpers__/architectureFixtures";
+import { lastSavedClips, mountPromptBox } from "../__test_helpers__/dom";
 import {
     type ClipFixture,
     commitNumber,
-    crumbText,
-    detailStripHarness,
-    fieldByLabel,
-    minorRows,
+    editorHarness,
     RETAKE_SOURCE,
-    refRow,
-    retakeFieldByLabel,
-    sliderNumberByLabel,
-} from "../__test_helpers__/detailStrip";
-import { lastSavedClips, mountPromptBox } from "../__test_helpers__/dom";
+} from "../__test_helpers__/editor";
 import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
@@ -25,22 +19,13 @@ import * as persistence from "../persistence/repository";
 import { getSelection, setSelection } from "../selection";
 import type { Clip } from "../types";
 
-describe("detail strip draft queue", () => {
-    const h = detailStripHarness();
-
-    // Emulate the prod render trigger a save produces: a rebuild WOULD be
-    // visible here if the value-only hint leaked, because the node would swap.
-    const wireLiveRenders = (): void => {
-        persistence
-            .getTimelineStore()
-            .subscribe((_state, meta) => h.strip.render(meta));
-    };
+describe("editor draft queue", () => {
+    const h = editorHarness();
 
     it("live-applies a discrete model command through the document store", () => {
         h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        const select =
-            fieldByLabel("Model").querySelector<HTMLSelectElement>("select");
+        const select = h.field<HTMLSelectElement>("stages", "Model", "select");
         if (!select) {
             throw new Error("model select missing");
         }
@@ -55,7 +40,7 @@ describe("detail strip draft queue", () => {
         h.setup([{ duration: 4, stages: [{ steps: 8 }] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
-        const steps = sliderNumberByLabel("Steps");
+        const steps = h.field("stages", "Steps", "input.auto-slider-number", 0);
         steps.value = "14";
         steps.dispatchEvent(new Event("input", { bubbles: true }));
         expect(h.saveSpy).not.toHaveBeenCalled();
@@ -67,25 +52,18 @@ describe("detail strip draft queue", () => {
     it("drops a pending change when the carrier went stale", () => {
         h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        const select =
-            fieldByLabel("Model").querySelector<HTMLSelectElement>("select");
+        const select = h.field<HTMLSelectElement>("stages", "Model", "select");
         if (!select) {
             throw new Error("model select missing");
         }
-        // Something else mutates the carrier: the token is now stale.
         mountPromptBox("changed by someone else");
         select.value = "ltx-2.3-alt.safetensors";
         select.dispatchEvent(new Event("change", { bubbles: true }));
         expect(h.saveSpy).not.toHaveBeenCalled();
     });
 
-    // In production a value save commits through the store, whose notification
-    // drives videoStagesTimeline.renderAll(meta) → detailStrip.render(meta)
-    // SYNCHRONOUSLY. A rebuild there would innerHTML-wipe the dock and drop the
-    // caret; the value primitives mark their saves valueOnly, which arrives as
-    // meta.hint === "value-only" and holds the dock DOM.
-    describe("value-only commits keep the dock DOM", () => {
-        it("keeps focus and the same node on a first Begin/End change, and repaints", () => {
+    describe("value-only commits keep the editor DOM", () => {
+        it("keeps the relay input focused while saving its edited end", () => {
             h.setup([
                 {
                     duration: 12,
@@ -96,59 +74,61 @@ describe("detail strip draft queue", () => {
                     ],
                 },
             ]);
-            wireLiveRenders();
             setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
-            const end = minorRows()[0].querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="minor-0-end"]',
-            );
+            const end = h
+                .item("relay-prompts", 0)
+                .querySelector<HTMLInputElement>(
+                    'input[data-vst-focus-key$="/minor-0-end"]',
+                );
             if (!end) {
                 throw new Error("end input missing");
             }
             commitNumber(end, "4");
-            // The exact same input node is still in the DOM and still focused —
-            // never rebuilt out from under the caret.
             expect(
-                minorRows()[0].querySelector(
-                    'input[data-vst-focus-key="minor-0-end"]',
-                ),
+                h
+                    .item("relay-prompts", 0)
+                    .querySelector('input[data-vst-focus-key$="/minor-0-end"]'),
             ).toBe(end);
             expect(document.activeElement).toBe(end);
-            // The data was written and the commit notification fired (the
-            // timeline repaint driver).
             expect(
                 lastSavedClips<Clip[]>(h.saveSpy)[0].promptWindows[0].duration,
             ).toBe(3);
             expect(h.refreshSpy).toHaveBeenCalled();
-            // The value-derived breadcrumb was synced WITHOUT a rebuild.
-            expect(crumbText()).toBe("Relay 1–4s · Clip 0");
+            expect(end.value).toBe("4");
         });
 
         it("keeps focus and the same node on a first Duration change", () => {
             h.setup([{ duration: 4, stages: [{}] }]);
-            wireLiveRenders();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            const dur =
-                fieldByLabel("Duration (s)").querySelector<HTMLInputElement>(
-                    "input",
-                );
+            const dur = h.field(
+                "prompt",
+                "Duration (s)",
+                'input[type="number"]',
+            );
             if (!dur) {
                 throw new Error("duration input missing");
             }
             commitNumber(dur, "6");
-            expect(fieldByLabel("Duration (s)").querySelector("input")).toBe(
-                dur,
-            );
+            expect(
+                h.field("prompt", "Duration (s)", 'input[type="number"]'),
+            ).toBe(dur);
             expect(document.activeElement).toBe(dur);
             expect(lastSavedClips<Clip[]>(h.saveSpy)[0].duration).toBe(6);
         });
 
         it("keeps focus and the same node on a first Steps change", () => {
             h.setup([{ duration: 4, stages: [{ steps: 8 }] }]);
-            wireLiveRenders();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            const steps = sliderNumberByLabel("Steps");
+            const steps = h.field(
+                "stages",
+                "Steps",
+                "input.auto-slider-number",
+                0,
+            );
             commitNumber(steps, "14");
-            expect(sliderNumberByLabel("Steps")).toBe(steps);
+            expect(
+                h.field("stages", "Steps", "input.auto-slider-number", 0),
+            ).toBe(steps);
             expect(document.activeElement).toBe(steps);
             expect(lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].steps).toBe(
                 14,
@@ -189,41 +169,54 @@ describe("detail strip draft queue", () => {
                     references: [{ kind: "video", mediaScale: 1 }],
                 },
             ]);
-            wireLiveRenders();
             setSelection({ kind: "clip-ref", clipIdx: 1, referenceIdx: 0 });
-            expect(crumbText()).toBe("<Video 2> · Clip 1");
-            const scale =
-                fieldByLabel(
-                    "Reference scale",
-                ).querySelector<HTMLSelectElement>("select");
+            expect(
+                Array.from(h.section("references").querySelectorAll("h4")).map(
+                    (node) => node.textContent,
+                ),
+            ).toContain("<Video 2>");
+            const scale = h.field<HTMLSelectElement>(
+                "references",
+                "Reference scale",
+                "select",
+                1,
+            );
             if (!scale) {
                 throw new Error("reference scale missing");
             }
             scale.value = "0.5";
             scale.dispatchEvent(new Event("change", { bubbles: true }));
 
-            expect(crumbText()).toBe("<Video 2> · Clip 1");
+            expect(
+                Array.from(h.section("references").querySelectorAll("h4")).map(
+                    (node) => node.textContent,
+                ),
+            ).toContain("<Video 2>");
             expect(
                 lastSavedClips<Clip[]>(h.saveSpy)[1].references[0].mediaScale,
             ).toBe(0.5);
 
-            document
-                .querySelector<HTMLElement>(".vst-clip-ref-join-tab")
-                ?.click();
+            setSelection({ kind: "boundary-ref", leftClipIdx: 0 });
             expect(getSelection()).toEqual({
                 kind: "boundary-ref",
                 leftClipIdx: 0,
             });
-            expect(crumbText()).toBe(
-                "<Video 1> (from Join with Clip 0) · Clip 1",
+            expect(
+                Array.from(h.section("references").querySelectorAll("h4")).map(
+                    (node) => node.textContent,
+                ),
+            ).toContain("<Video 1> · From Clip 0");
+            const joinScale = h.field<HTMLSelectElement>(
+                "references",
+                "Reference scale",
+                "select",
+                0,
             );
-            const joinScale =
-                fieldByLabel(
-                    "Reference scale",
-                ).querySelector<HTMLSelectElement>("select");
-            const soundtrack = fieldByLabel(
+            const soundtrack = h.field(
+                "references",
                 "Include soundtrack",
-            ).querySelector<HTMLInputElement>('input[type="checkbox"]');
+                'input[type="checkbox"]',
+            );
             if (!joinScale || !soundtrack) {
                 throw new Error("incoming reference controls missing");
             }
@@ -236,9 +229,11 @@ describe("detail strip draft queue", () => {
                 kind: "boundary-ref",
                 leftClipIdx: 0,
             });
-            expect(crumbText()).toBe(
-                "<Video 1> (from Join with Clip 0) · Clip 1",
-            );
+            expect(
+                Array.from(h.section("references").querySelectorAll("h4")).map(
+                    (node) => node.textContent,
+                ),
+            ).toContain("<Video 1> · From Clip 0");
             expect(lastSavedClips<Clip[]>(h.saveSpy)[0]).toMatchObject({
                 boundaryOutReferenceScale: 0.25,
                 boundaryOutReferenceIncludeSoundtrack: false,
@@ -259,30 +254,40 @@ describe("detail strip draft queue", () => {
             });
             expect(
                 document.querySelector(
-                    ".vst-detail-join-ref-editor .vst-detail-field-label",
+                    '[data-testid="section-references"] .vst-detail-field-label',
                 ),
             ).not.toBeNull();
         });
 
         it("syncs the upscale-method gate live without rebuilding the method select", () => {
             h.setup([{ duration: 4, stages: [{}, { upscale: 2 }] }]);
-            wireLiveRenders();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
-            const method =
-                fieldByLabel("Upscale Method").querySelector<HTMLSelectElement>(
-                    "select",
-                );
-            const upscale = sliderNumberByLabel("Upscale");
+            const method = h.field<HTMLSelectElement>(
+                "stages",
+                "Upscale Method",
+                "select",
+                1,
+            );
+            const upscale = h.field(
+                "stages",
+                "Upscale",
+                "input.auto-slider-number",
+                1,
+            );
             expect(method?.disabled).toBe(false);
             commitNumber(upscale, "1");
-            // Same select node (no rebuild) but now disabled by the live gate.
-            expect(fieldByLabel("Upscale Method").querySelector("select")).toBe(
-                method,
-            );
+            expect(
+                h.field<HTMLSelectElement>(
+                    "stages",
+                    "Upscale Method",
+                    "select",
+                    1,
+                ),
+            ).toBe(method);
             expect(method?.disabled).toBe(true);
         });
 
-        it("still REBUILDS on a structure-affecting commit (ref source → Upload)", () => {
+        it("renders upload controls after changing a keyframe source", () => {
             h.setup([
                 {
                     duration: 4,
@@ -290,41 +295,44 @@ describe("detail strip draft queue", () => {
                     frameRefs: [{ source: "", frame: 1 }],
                 },
             ]);
-            wireLiveRenders();
             setSelection({ kind: "ref", clipIdx: 0, refIdx: 0 });
-            const before = refRow(0).querySelector<HTMLSelectElement>("select");
-            expect(refRow(0).querySelector(".vst-audio-upload")).toBeNull();
-            const select = refRow(0).querySelector<HTMLSelectElement>("select");
+            const before = h
+                .item("keyframes", 0)
+                .querySelector<HTMLSelectElement>("select");
+            expect(
+                h.item("keyframes", 0).querySelector(".vst-audio-upload"),
+            ).toBeNull();
+            const select = h
+                .item("keyframes", 0)
+                .querySelector<HTMLSelectElement>("select");
             if (!select) {
                 throw new Error("ref source select missing");
             }
             select.value = "Upload";
             select.dispatchEvent(new Event("change", { bubbles: true }));
-            // Structure changed: the upload row appeared and the panel rebuilt
-            // (the select is a fresh node).
-            expect(refRow(0).querySelector(".vst-audio-upload")).not.toBeNull();
-            expect(refRow(0).querySelector("select")).not.toBe(before);
+            expect(
+                h.item("keyframes", 0).querySelector(".vst-audio-upload"),
+            ).not.toBeNull();
+            expect(h.item("keyframes", 0).querySelector("select")).not.toBe(
+                before,
+            );
         });
 
-        it("fully rebuilds on an external (non-flush) render — the handshake never leaks", () => {
+        it("refreshes controls after an external render", () => {
             h.setup([{ duration: 4, stages: [{}] }]);
-            wireLiveRenders();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            const before = fieldByLabel("Duration (s)").querySelector("input");
-            // An external carrier change arriving as a plain render (no flush in
-            // flight) must rebuild the dock, replacing the node.
-            h.strip.render();
+            const before = h.field(
+                "prompt",
+                "Duration (s)",
+                'input[type="number"]',
+            );
+            h.editor.refresh();
             expect(
-                fieldByLabel("Duration (s)").querySelector("input"),
+                h.field("prompt", "Duration (s)", 'input[type="number"]'),
             ).not.toBe(before);
         });
     });
 
-    // A value-only commit skips the dock rebuild, so for a field whose commit
-    // mutator applies a clamp its static min/max can't express (a relay
-    // window's neighbour bound; a segment/retake length capped by its start),
-    // buildClampedNumber's readBack corrects the DISPLAYED value in place after
-    // the flush — same node, focus intact, no rebuild.
     describe("contextual-clamp write-back", () => {
         it("re-displays a relay Begin clamped by the neighbouring window", () => {
             h.setup([
@@ -337,27 +345,28 @@ describe("detail strip draft queue", () => {
                     ],
                 },
             ]);
-            wireLiveRenders();
             setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 1 });
-            const begin = minorRows()[0].querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="minor-1-begin"]',
-            );
+            const begin = h
+                .item("relay-prompts", 1)
+                .querySelector<HTMLInputElement>(
+                    'input[data-vst-focus-key$="/minor-1-begin"]',
+                );
             if (!begin) {
                 throw new Error("begin input missing");
             }
             commitNumber(begin, "1");
-            // Stored begin clamped to the neighbour bound (W0 ends at 3); the
-            // input is corrected to the stored value, not the typed 1.
             expect(
                 lastSavedClips<Clip[]>(h.saveSpy)[0].promptWindows[1].start,
             ).toBe(3);
-            const after = minorRows()[0].querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="minor-1-begin"]',
-            );
-            expect(after).toBe(begin); // same node — no rebuild
-            expect(after?.value).toBe("3"); // shows the clamped stored value
-            expect(document.activeElement).toBe(begin); // focus intact
-            expect(crumbText()).toBe("Relay 3–8s · Clip 0");
+            const after = h
+                .item("relay-prompts", 1)
+                .querySelector<HTMLInputElement>(
+                    'input[data-vst-focus-key$="/minor-1-begin"]',
+                );
+            expect(after).toBe(begin);
+            expect(after?.value).toBe("3");
+            expect(document.activeElement).toBe(begin);
+            expect(begin.value).toBe("3");
         });
 
         it("re-displays a relay End clamped to the minimum duration", () => {
@@ -368,24 +377,24 @@ describe("detail strip draft queue", () => {
                     windows: [{ start: 5, duration: 3, prompt: "w0" }],
                 },
             ]);
-            wireLiveRenders();
             setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
-            const end = minorRows()[0].querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="minor-0-end"]',
-            );
+            const end = h
+                .item("relay-prompts", 0)
+                .querySelector<HTMLInputElement>(
+                    'input[data-vst-focus-key$="/minor-0-end"]',
+                );
             if (!end) {
                 throw new Error("end input missing");
             }
             commitNumber(end, "0.3");
-            // End can't come inside start + min-duration (5 + 0.25 = 5.25); the
-            // gesture rounds seconds to 0.1 (roundSeconds: Math.round(2.5)=3), so
-            // the stored end is 5.3 — either way, NOT the typed 0.3.
             const w = lastSavedClips<Clip[]>(h.saveSpy)[0].promptWindows[0];
             expect(w.start).toBe(5);
             expect(w.duration).toBe(0.3);
-            const after = minorRows()[0].querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="minor-0-end"]',
-            );
+            const after = h
+                .item("relay-prompts", 0)
+                .querySelector<HTMLInputElement>(
+                    'input[data-vst-focus-key$="/minor-0-end"]',
+                );
             expect(after).toBe(end);
             expect(after?.value).toBe("5.3");
             expect(document.activeElement).toBe(end);
@@ -404,12 +413,11 @@ describe("detail strip draft queue", () => {
                     initVideo: RETAKE_SOURCE,
                 },
             ]);
-            wireLiveRenders();
             setSelection({ kind: "retake", clipIdx: 0 });
-            const len = retakeFieldByLabel(
+            const len = h.field(
+                "retake",
                 "Length (s)",
-            ).querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="retake-length"]',
+                'input[data-vst-focus-key$="/retake-length"]',
             );
             if (!len) {
                 throw new Error("retake length input missing");
@@ -418,17 +426,17 @@ describe("detail strip draft queue", () => {
             expect(
                 lastSavedClips<Clip[]>(h.saveSpy)[0].retake?.lengthSeconds,
             ).toBe(2);
-            const after = retakeFieldByLabel(
+            const after = h.field(
+                "retake",
                 "Length (s)",
-            ).querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="retake-length"]',
+                'input[data-vst-focus-key$="/retake-length"]',
             );
             expect(after).toBe(len);
             expect(after?.value).toBe("2");
             expect(document.activeElement).toBe(len);
         });
 
-        it("does NOT write back mid-typing (no flush, no clamp, keeps typed text)", () => {
+        it("holds typed text until the retake length is committed", () => {
             h.setup([
                 {
                     duration: 10,
@@ -441,40 +449,39 @@ describe("detail strip draft queue", () => {
                     initVideo: RETAKE_SOURCE,
                 },
             ]);
-            wireLiveRenders();
             setSelection({ kind: "retake", clipIdx: 0 });
             jest.useFakeTimers();
-            const len = retakeFieldByLabel(
+            const len = h.field(
+                "retake",
                 "Length (s)",
-            ).querySelector<HTMLInputElement>(
-                'input[data-vst-focus-key="retake-length"]',
+                'input[data-vst-focus-key$="/retake-length"]',
             );
             if (!len) {
                 throw new Error("retake length input missing");
             }
             len.focus();
             len.value = "5";
-            // Only an `input` event (still typing): the flush is HELD while the
-            // number field owns focus, so no save and no write-back fire.
             len.dispatchEvent(new Event("input", { bubbles: true }));
             expect(h.saveSpy).not.toHaveBeenCalled();
-            expect(len.value).toBe("5"); // typed text untouched
+            expect(len.value).toBe("5");
             jest.advanceTimersByTime(200);
-            // The debounce timer was never armed (typing deferral), so still no
-            // save until a blur/change flush.
             expect(h.saveSpy).not.toHaveBeenCalled();
             expect(len.value).toBe("5");
         });
 
-        it("does NOT rewrite a non-clamped field (Steps) that was already valid", () => {
+        it("preserves valid step text and focus through the commit", () => {
             h.setup([{ duration: 4, stages: [{ steps: 8 }] }]);
-            wireLiveRenders();
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-            const steps = sliderNumberByLabel("Steps");
+            const steps = h.field(
+                "stages",
+                "Steps",
+                "input.auto-slider-number",
+                0,
+            );
             commitNumber(steps, "14");
-            // Steps has no readBack, so nothing forces its display — it keeps the
-            // value the user committed (in range), same node, focus intact.
-            expect(sliderNumberByLabel("Steps")).toBe(steps);
+            expect(
+                h.field("stages", "Steps", "input.auto-slider-number", 0),
+            ).toBe(steps);
             expect(steps.value).toBe("14");
             expect(lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].steps).toBe(
                 14,
@@ -487,15 +494,19 @@ describe("detail strip draft queue", () => {
         h.setup([{ duration: 4, stages: [{ steps: 8 }] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
-        const steps = sliderNumberByLabel("Steps");
+        const steps = h.field("stages", "Steps", "input.auto-slider-number", 0);
         steps.value = "14";
         steps.dispatchEvent(new Event("input", { bubbles: true }));
-        const cfg = sliderNumberByLabel("CFG Scale");
+        const cfg = h.field(
+            "stages",
+            "CFG Scale",
+            "input.auto-slider-number",
+            0,
+        );
         cfg.value = "9";
         cfg.dispatchEvent(new Event("input", { bubbles: true }));
         expect(h.saveSpy).not.toHaveBeenCalled();
         jest.advanceTimersByTime(200);
-        // A single coalesced write carries BOTH edits — no silent revert.
         const stage = lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0];
         expect(stage.steps).toBe(14);
         expect(stage.cfgScale).toBe(9);
@@ -508,53 +519,30 @@ describe("detail strip draft queue", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
-        const steps = sliderNumberByLabel("Steps");
+        const steps = h.field("stages", "Steps", "input.auto-slider-number", 0);
         steps.value = "14";
         steps.dispatchEvent(new Event("input", { bubbles: true }));
 
-        // Switching clips before the debounce elapses must flush the edit.
         setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
         expect(h.saveSpy).toHaveBeenCalledTimes(1);
         expect(lastSavedClips<Clip[]>(h.saveSpy)[0].stages[0].steps).toBe(14);
 
-        // The re-render's synthetic slider input must not schedule a spurious
-        // write that fires later.
         jest.advanceTimersByTime(200);
         expect(h.saveSpy).toHaveBeenCalledTimes(1);
     });
 
-    it("does not write when a selection change merely re-renders the strip", () => {
+    it("keeps selection-only rendering free of document writes", () => {
         h.setup([{ duration: 4, stages: [{ steps: 8 }] }]);
         jest.useFakeTimers();
-        // Selecting a clip builds native sliders; enableSlidersIn fires
-        // synthetic input events which must NOT schedule a commit.
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.advanceTimersByTime(200);
         expect(h.saveSpy).not.toHaveBeenCalled();
     });
 
     describe("slider drag", () => {
-        const rangeByLabel = (label: string): HTMLInputElement => {
-            const box = Array.from(
-                document.querySelectorAll<HTMLElement>(
-                    ".vst-detail .vst-stage-slider",
-                ),
-            ).find(
-                (el) =>
-                    el.querySelector(".auto-input-name")?.textContent === label,
-            );
-            const input = box?.querySelector<HTMLInputElement>(
-                "input.auto-slider-range",
-            );
-            if (!input) {
-                throw new Error(`range not found: ${label}`);
-            }
-            return input;
-        };
+        const rangeByLabel = (label: string): HTMLInputElement =>
+            h.field("stages", label, "input.auto-slider-range", 0);
 
-        // jsdom has no PointerEvent constructor; a bubbling generic Event with
-        // the pointer type name reaches the document-level capture listeners and
-        // carries the range as its target, which is all the latch reads.
         const pointer = (el: Element, type: string): void => {
             el.dispatchEvent(new Event(type, { bubbles: true }));
         };
@@ -570,15 +558,11 @@ describe("detail strip draft queue", () => {
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
             const range = rangeByLabel("Keyframe 0");
-            // pointerdown latches the drag; streamed inputs sync range → number
-            // → our onChange (host enableSliderForBox wiring is live in tests).
             pointer(range, "pointerdown");
             for (const v of ["0.8", "0.6", "0.4"]) {
                 range.value = v;
                 range.dispatchEvent(new Event("input", { bubbles: true }));
             }
-            // Well past the 200ms window: nothing is written and the range node
-            // is NOT rebuilt out from under the drag gesture.
             jest.advanceTimersByTime(1000);
             expect(h.saveSpy).not.toHaveBeenCalled();
             expect(rangeByLabel("Keyframe 0")).toBe(range);
@@ -595,7 +579,6 @@ describe("detail strip draft queue", () => {
             range.dispatchEvent(new Event("input", { bubbles: true }));
             jest.advanceTimersByTime(1000);
             expect(h.saveSpy).not.toHaveBeenCalled();
-            // Release flushes the held edit exactly once (one save, one repaint).
             pointer(range, "pointerup");
             expect(h.saveSpy).toHaveBeenCalledTimes(1);
             expect(
@@ -615,14 +598,14 @@ describe("detail strip draft queue", () => {
             pointer(range, "pointerdown");
             range.value = "0.4";
             range.dispatchEvent(new Event("input", { bubbles: true }));
-            // Cancel clears the latch and flushes the queued edit.
             pointer(range, "pointercancel");
             expect(h.saveSpy).toHaveBeenCalledTimes(1);
-            // With the latch cleared, a subsequent unfocused (non-gesture) slider
-            // edit resumes its normal debounced flush — proving the latch is not
-            // stuck set (an input while nothing in the dock has focus arms the
-            // timer, which would stay held if sliderDragActive were still true).
-            const steps = sliderNumberByLabel("Steps");
+            const steps = h.field(
+                "stages",
+                "Steps",
+                "input.auto-slider-number",
+                0,
+            );
             steps.value = "12";
             steps.dispatchEvent(new Event("input", { bubbles: true }));
             jest.advanceTimersByTime(200);
@@ -634,7 +617,7 @@ describe("detail strip draft queue", () => {
             h.setup([refClip()]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             const removeSpy = jest.spyOn(document, "removeEventListener");
-            h.disposeStrip();
+            h.disposeEditor();
             const removed = removeSpy.mock.calls
                 .filter((c) => c[2] === true)
                 .map((c) => c[0]);
@@ -645,7 +628,7 @@ describe("detail strip draft queue", () => {
     });
 
     describe("defer-while-typing", () => {
-        const blurOutOfDock = (el: HTMLElement): void => {
+        const blurOutOfEditor = (el: HTMLElement): void => {
             el.dispatchEvent(
                 new FocusEvent("focusout", {
                     bubbles: true,
@@ -670,7 +653,7 @@ describe("detail strip draft queue", () => {
             editor.dispatchEvent(new Event("input", { bubbles: true }));
             jest.advanceTimersByTime(1000);
             expect(h.saveSpy).not.toHaveBeenCalled();
-            blurOutOfDock(editor);
+            blurOutOfEditor(editor);
             expect(h.saveSpy).toHaveBeenCalledTimes(1);
             expect(lastSavedClips<Clip[]>(h.saveSpy)[0].prompt).toBe(
                 "typed while focused",
@@ -695,14 +678,14 @@ describe("detail strip draft queue", () => {
             jest.advanceTimersByTime(1000);
             expect(h.saveSpy).not.toHaveBeenCalled();
 
-            h.disposeStrip();
+            h.disposeEditor();
             expect(lastSavedClips<Clip[]>(h.saveSpy)[0].prompt).toBe(
                 "typed then torn down",
             );
             jest.useRealTimers();
         });
 
-        it("keeps holding when focus moves to another dock field, not out", () => {
+        it("keeps holding when focus moves to another editor field, not out", () => {
             h.setup([{ duration: 5, stages: [{}] }]);
             setSelection({ kind: "prompt-major", clipIdx: 0 });
             jest.useFakeTimers();
@@ -711,16 +694,14 @@ describe("detail strip draft queue", () => {
                     ".vst-detail-prompt",
                 );
             const sibling = document.querySelector<HTMLElement>(
-                ".vst-detail-settings-button",
+                '[data-testid="nav-stages"]',
             );
             if (!editor || !sibling) {
-                throw new Error("dock nodes missing");
+                throw new Error("editor nodes missing");
             }
             editor.focus();
             editor.value = "held";
             editor.dispatchEvent(new Event("input", { bubbles: true }));
-            // Focus moving to another element still INSIDE the dock keeps the
-            // edit held (relatedTarget is in the dock).
             editor.dispatchEvent(
                 new FocusEvent("focusout", {
                     bubbles: true,
@@ -735,27 +716,26 @@ describe("detail strip draft queue", () => {
             h.setup([{ duration: 5, stages: [{}] }]);
             setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
             jest.useFakeTimers();
-            const dur =
-                fieldByLabel("Duration (s)").querySelector<HTMLInputElement>(
-                    "input",
-                );
+            const dur = h.field(
+                "prompt",
+                "Duration (s)",
+                'input[type="number"]',
+            );
             if (!dur) {
                 throw new Error("duration input missing");
             }
             dur.focus();
-            // Typing is held (no timer) while focused...
             dur.value = "7";
             dur.dispatchEvent(new Event("input", { bubbles: true }));
             jest.advanceTimersByTime(1000);
             expect(h.saveSpy).not.toHaveBeenCalled();
-            // ...but a `change` while still focused (spinner/Enter) commits live.
             dur.dispatchEvent(new Event("change", { bubbles: true }));
             expect(h.saveSpy).toHaveBeenCalled();
             expect(lastSavedClips<Clip[]>(h.saveSpy)[0].duration).toBe(7);
             jest.useRealTimers();
         });
 
-        it("does NOT force focus back into a textarea the user tabbed away from", () => {
+        it("preserves outside focus after a prompt edit and refresh", () => {
             h.setup([{ duration: 5, stages: [{}], prompt: "existing" }]);
             setSelection({ kind: "prompt-major", clipIdx: 0 });
             const editor =
@@ -768,18 +748,17 @@ describe("detail strip draft queue", () => {
             editor.focus();
             editor.value = "edited then left";
             editor.dispatchEvent(new Event("input", { bubbles: true }));
-            blurOutOfDock(editor);
-            // A later refresh/render must NOT yank focus back into the prompt.
-            h.strip.render();
-            const after =
-                document.querySelector<HTMLTextAreaElement>(
-                    ".vst-detail-prompt",
-                );
-            expect(document.activeElement).not.toBe(editor); // old node gone
-            expect(document.activeElement).not.toBe(after); // not re-grabbed
+            const outside = document.createElement("button");
+            document.body.append(outside);
+            outside.focus();
+            h.editor.refresh();
+            expect(document.activeElement).toBe(outside);
+            expect(lastSavedClips<Clip[]>(h.saveSpy)[0].prompt).toBe(
+                "edited then left",
+            );
         });
 
-        it("flushes the active relay before switching editors within the dock", () => {
+        it("persists independent drafts when moving between visible relay editors", () => {
             h.setup([
                 {
                     duration: 12,
@@ -792,7 +771,7 @@ describe("detail strip draft queue", () => {
             ]);
             setSelection({ kind: "prompt-minor", clipIdx: 0, windowIdx: 0 });
             const e0 = document.querySelector<HTMLTextAreaElement>(
-                'textarea[data-vst-focus-key="minor-0"]',
+                'textarea[data-vst-focus-key$="/minor-0"]',
             );
             if (!e0) {
                 throw new Error("relay editor missing");
@@ -800,14 +779,22 @@ describe("detail strip draft queue", () => {
             e0.focus();
             e0.value = "typing in zero";
             e0.dispatchEvent(new Event("input", { bubbles: true }));
-            document
-                .querySelectorAll<HTMLButtonElement>(".vst-relay-tab")[1]
-                ?.click();
+            const next = document.querySelector<HTMLTextAreaElement>(
+                'textarea[data-vst-focus-key$="/minor-1"]',
+            );
+            if (!next) throw new Error("second relay editor missing");
+            next.focus();
+            next.value = "typing in one";
+            next.dispatchEvent(new Event("input", { bubbles: true }));
+            h.editor.flushPending();
             expect(
                 lastSavedClips<Clip[]>(h.saveSpy)[0].promptWindows[0].prompt,
             ).toBe("typing in zero");
+            expect(
+                lastSavedClips<Clip[]>(h.saveSpy)[0].promptWindows[1].prompt,
+            ).toBe("typing in one");
             const e1After = document.querySelector<HTMLTextAreaElement>(
-                'textarea[data-vst-focus-key="minor-1"]',
+                'textarea[data-vst-focus-key$="/minor-1"]',
             );
             expect(document.activeElement).toBe(e1After);
         });
@@ -825,15 +812,13 @@ describe("detail strip draft queue", () => {
             editor.focus();
             editor.value = "landscape at dusk";
             editor.dispatchEvent(new Event("input", { bubbles: true }));
-            // Simulate the exact ordering a Generate click produces: focus leaves
-            // the dock (focusout) BEFORE anything reads the carrier.
             let promptAtReadTime: string | null = null;
             const readCarrier = (): void => {
                 promptAtReadTime =
                     document.querySelector<HTMLInputElement>("#input_prompt")
                         ?.value ?? null;
             };
-            blurOutOfDock(editor);
+            blurOutOfEditor(editor);
             readCarrier();
             expect(h.saveSpy).toHaveBeenCalledTimes(1);
             expect(promptAtReadTime).toContain("landscape at dusk");

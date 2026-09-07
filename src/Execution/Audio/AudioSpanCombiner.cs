@@ -25,7 +25,8 @@ internal sealed class AudioSpanCombiner(WorkflowGenerator g)
         ImmutableArray<AudioSpanPlan> spans,
         WGNodeData baseAudio,
         double clipDurationSeconds,
-        out IReadOnlyList<(double Start, double End)> loadedWindows)
+        out IReadOnlyList<(double Start, double End)> loadedWindows,
+        WGNodeData previousClipAudio = null)
     {
         loadedWindows = [];
         if (spans.IsDefaultOrEmpty)
@@ -41,6 +42,21 @@ internal sealed class AudioSpanCombiner(WorkflowGenerator g)
         List<(AudioSpanPlan Plan, JArray Path)> loaded = [];
         foreach (AudioSpanPlan span in spans)
         {
+            if (span.SourceKind == AudioSourceKind.PreviousClip)
+            {
+                if (previousClipAudio?.Path is JArray previousPath)
+                {
+                    loaded.Add((span, previousPath));
+                }
+                else
+                {
+                    RequestWarnings.Track(
+                        g.UserInput,
+                        $"VideoStages: clip {clipId} expects the preceding audio-only clip's "
+                            + "track, but that audio is unavailable; skipping the span.");
+                }
+                continue;
+            }
             if (span.SourceKind == AudioSourceKind.AceStepFun)
             {
                 detectBridge ??= WorkflowBridge.Create(g.Workflow);

@@ -19,7 +19,10 @@ internal static class Ltx2AudioInjectionPlanCompiler
         Compile(ClipSpec clip, int? controlNetSourceIndex)
     {
         bool external = AudioSource.Parse(clip.AudioSource).Kind
-            is AudioSourceKind.Upload or AudioSourceKind.AceStepFun or AudioSourceKind.ControlNet;
+            is AudioSourceKind.Upload
+                or AudioSourceKind.AceStepFun
+                or AudioSourceKind.ControlNet
+                or AudioSourceKind.PreviousClip;
         Ltx2AudioInjectionPlan injection = new(
             !external || clip.ClipLengthFromAudio,
             external && clip.ClipLengthFromAudio);

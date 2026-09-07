@@ -217,6 +217,29 @@ public sealed class ArchitectureContractGraphTests
         AssertShippable(bridge, workflow, live);
     }
 
+    [Fact]
+    public async Task Audio_only_lead_is_not_mixed_over_a_stock_host_video()
+    {
+        using LtxAndWanFixture fixture = new();
+        JObject audio = FamilyClip(fixture.Model, "ltx2", steps: 7);
+        audio["audioOnly"] = true;
+        JObject video = FamilyClip(fixture.SecondModel, "wan22", steps: 9);
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.ImageToVideoPost(
+                    MakeDocument(audio, video),
+                    post => post["videomodel"] = fixture.Model.Name));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        Assert.Empty(bridge.Graph.NodesOfType<AudioMergeNode>());
+        Assert.Null(live.PublishedAudio());
+        Assert.Empty(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
+        Assert.Null(generator.CurrentMedia.AttachedAudio);
+    }
+
     /// <summary>
     /// The same claim across the two families that generate native audio, so the join reconciles two
     /// audio tracks as well as two video tracks. Their frame grids disagree (8k+1 against 17k+5), so

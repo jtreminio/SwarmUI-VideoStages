@@ -27,7 +27,8 @@
         "Native",
         "Upload",
         "ControlNet",
-        "AceStepFun"
+        "AceStepFun",
+        "Previous Clip"
       ]
     },
     "boundaryRules": {
@@ -106,7 +107,8 @@
         "Native",
         "Upload",
         "ControlNet",
-        "AceStepFun"
+        "AceStepFun",
+        "Previous Clip"
       ]
     },
     "enhancements": {

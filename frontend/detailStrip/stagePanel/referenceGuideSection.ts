@@ -8,6 +8,7 @@ import {
     buildField,
     buildNumber,
     buildSlider,
+    setFieldDisabled,
     tagFocus,
 } from "../../detailWidgets";
 import {
@@ -16,7 +17,6 @@ import {
     STAGE_CONTROLNET_STRENGTH_STEP,
 } from "../../icLoraAuthoring";
 import { refSourceLabel } from "../../timelineDetail";
-import { disableCapabilityControls } from "../capabilityUi";
 import type { StagePanelBindings } from "./types";
 
 const appendSectionHeader = (fields: HTMLElement, label: string): void => {
@@ -45,11 +45,18 @@ export const appendStageReferenceGuideSection = ({
 }: StagePanelBindings): void => {
     const capabilityView = context.authoring().capabilities.forClip(clip);
     if (
-        stage.characterRefine === null &&
         clip.frameRefs.length > 0 &&
         capabilityView.decision("stageReferenceStrengths").supported
     ) {
         appendSectionHeader(fields, "Keyframe Strengths");
+        const inactiveReason =
+            "Keyframe strengths are inactive while Make Them Bonita is enabled.";
+        if (stage.characterRefine !== null) {
+            const note = document.createElement("p");
+            note.className = "vst-detail-note vst-detail-span-full";
+            note.textContent = inactiveReason;
+            fields.append(note);
+        }
         const setRefHover = (refIdx: number, on: boolean): void => {
             context
                 .getBoundBody()
@@ -81,6 +88,8 @@ export const appendStageReferenceGuideSection = ({
                 },
             );
             refSlider.classList.add("vst-stage-ref-slider");
+            if (stage.characterRefine !== null)
+                setFieldDisabled(refSlider, true, inactiveReason);
             tagFocus(refSlider, `ref-${refIdx}`);
             refSlider.addEventListener("mouseenter", () =>
                 setRefHover(refIdx, true),
@@ -95,10 +104,10 @@ export const appendStageReferenceGuideSection = ({
     const applicableIcLoras = clip.icLoras
         .map((entry, entryIdx) => ({ entry, entryIdx }))
         .filter(({ entry }) => entry.stage < 0 || entry.stage === stageIdx);
-    if (applicableIcLoras.length === 0) return;
+    const icDecision = capabilityView.decision("icLora");
+    if (applicableIcLoras.length === 0 || !icDecision.supported) return;
 
     appendSectionHeader(fields, "IC-LoRA Guide Strengths");
-    const icDecision = capabilityView.decision("icLora");
     const icGroup = document.createDocumentFragment();
     applicableIcLoras.forEach(({ entry, entryIdx }) => {
         const displayName = architectureIcLoraDisplayName(
@@ -131,8 +140,5 @@ export const appendStageReferenceGuideSection = ({
         row.title = displayName;
         icGroup.appendChild(row);
     });
-    if (!icDecision.supported) {
-        disableCapabilityControls(icGroup, icDecision);
-    }
     fields.appendChild(icGroup);
 };

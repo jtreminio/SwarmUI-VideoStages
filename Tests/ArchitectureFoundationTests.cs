@@ -1328,7 +1328,7 @@ public class ArchitectureFoundationTests
             ["init-video"],
             none["capabilities"]["entryModes"].Values<string>());
         Assert.Equal(
-            ["Disabled", "Upload"],
+            ["Disabled", "Upload", "Previous Clip"],
             none["capabilities"]["audioSourceKinds"].Values<string>());
         JObject noneCrossfade = (JObject)none["boundaryRules"]["crossfade"];
         Assert.Equal("unsupported", noneCrossfade["support"]);
@@ -1360,7 +1360,7 @@ public class ArchitectureFoundationTests
             ["text-to-video", "image-to-video", "init-video"],
             capabilities["entryModes"].Values<string>());
         Assert.Equal(
-            ["Native", "Upload", "ControlNet", "AceStepFun"],
+            ["Native", "Upload", "ControlNet", "AceStepFun", "Previous Clip"],
             capabilities["audioSourceKinds"].Values<string>());
         JObject crossfadeRule = (JObject)ltx["boundaryRules"]["crossfade"];
         Assert.Equal("conditional", crossfadeRule["support"]);

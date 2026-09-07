@@ -61,6 +61,10 @@ internal sealed class MiniMaxGenerationSession(
         MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
         _reusedAudio = null;
         _previousTimelineClipOutput = context.PreviousTimelineClipOutput;
+        if (clip.AudioOnly)
+        {
+            return stageRunner.ExecuteAudioOnly(clip, ExecuteAudioOnly);
+        }
         _boundaryReference = _boundaryReferenceBuilder.TryBuild(
             context,
             ResolveFrames(context.Clip));
@@ -106,6 +110,76 @@ internal sealed class MiniMaxGenerationSession(
     }
 
     public void Dispose() => stageRunner.Dispose();
+
+    private void ExecuteAudioOnly(ClipPlan clip, StagePlan stage, int sectionId)
+    {
+        (string positive, string negative) = _prompts.Resolve(clip, stage);
+        MiniMaxStagePayload payload = stage.RequireMiniMaxStagePayload();
+        using StageModelLoadScope modelScope = new(
+            g,
+            clip,
+            stage,
+            sectionId,
+            payload.LoraTarget);
+        using ParamSnapshot ignoredAudioReference = ParamSnapshot.Of(
+            g.UserInput,
+            T2IParamTypes.PromptAudios.Type);
+        g.UserInput.InternalSet.ValuesInput.Remove(T2IParamTypes.PromptAudios.Type.ID);
+        WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
+            clip,
+            stage,
+            sectionId,
+            positive,
+            negative);
+        genInfo.Width = Constants.AudioOnlyDimension;
+        genInfo.Height = Constants.AudioOnlyDimension;
+        PrepModelAndPrompt(clip, genInfo, []);
+        MiniMaxAttentionWindowGraph.Apply(
+            g,
+            clip.RequireMiniMaxPayload().AttentionWindowSeconds,
+            genInfo);
+        int frames = genInfo.Frames
+            ?? throw Invariant.Failure(
+                $"MiniMax H3 audio-only clip {clip.ClipId} has no resolved frame count.");
+        HostRootClaim claim = rootAdoption.ClaimTextRoot(
+            clip,
+            stage,
+            includeLatent: true);
+        WGNodeData joint = EmptyJointLatent(genInfo, frames, claim.Latent);
+        string sampled = g.CreateKSampler(
+            genInfo.Model.Path,
+            genInfo.PosCond,
+            genInfo.NegCond,
+            joint.Path,
+            genInfo.VideoCFG.Value,
+            genInfo.Steps,
+            startStep: 0,
+            endStep: 10000,
+            seed: genInfo.Seed,
+            returnWithLeftoverNoise: false,
+            addNoise: true,
+            sigmin: 0.002,
+            sigmax: 1000,
+            previews: g.UserInput.Get(
+                ComfyUIBackendExtension.VideoPreviewType,
+                "animate"),
+            id: claim.Sampler,
+            hadSpecialCond: true,
+            explicitSampler: genInfo.DefaultSampler,
+            explicitScheduler: genInfo.DefaultScheduler,
+            sectionId: genInfo.ContextID);
+        WGNodeData separated = joint.WithPath([sampled, 0]).AsLatentImage(genInfo.Vae);
+        WGNodeData audio = separated.AttachedAudio
+            ?? throw Invariant.Failure(
+                $"MiniMax H3 audio-only clip {clip.ClipId} produced no audio latent.");
+        if (g.CurrentAudioVae is null)
+        {
+            throw Invariant.Failure(
+                "MiniMax H3 audio-only generation loaded no audio VAE.");
+        }
+        g.CurrentMedia = audio.DecodeLatents(g.CurrentAudioVae, true);
+        g.CurrentVae = null;
+    }
 
     private void ExecutePassthroughStage(ClipPlan clip, StagePlan stage) =>
         stageInput.ConfigurePassthrough(
@@ -738,6 +812,10 @@ internal sealed class MiniMaxGenerationSession(
         AudioRuntimeSources sources = nativeAudio is null
             ? audioSources
             : audioSources with { NativeAudio = nativeAudio };
+        sources = sources with
+        {
+            PreviousClipAudio = _previousTimelineClipOutput?.ToAudioHostMedia(g),
+        };
         selectedAudio = PlannedAudioSourceSelector.Select(
             clip.ClipId,
             clip.Audio.Base,
@@ -755,7 +833,7 @@ internal sealed class MiniMaxGenerationSession(
         AudioSpanCombiner combiner = new(g);
         WGNodeData combinedAudio = combiner.Combine(
             clip.ClipId,
-            clip.Audio.Spans,
+            clip.Audio.ConditioningSpans,
             selectedAudio,
             duration,
             out IReadOnlyList<(double Start, double End)> spanWindows);
@@ -1113,7 +1191,7 @@ internal sealed class MiniMaxGenerationSession(
         if (StringUtils.Equals(reference.Source, MediaSource.PreviousClip)
             && _previousTimelineClipOutput is not null)
         {
-            return _previousTimelineClipOutput.ToHostMedia(g);
+            return _previousTimelineClipOutput.ToVideoHostMedia(g);
         }
         if (StringUtils.Equals(reference.Source, MediaSource.Upload))
         {

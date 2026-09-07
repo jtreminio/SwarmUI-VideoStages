@@ -25,6 +25,7 @@ internal static class NoneArchitecture
         [
             AudioSourceKind.Disabled,
             AudioSourceKind.Upload,
+            AudioSourceKind.PreviousClip,
         ],
         [ArchitectureEntryMode.InitVideo],
         ArchitectureFeature.None,

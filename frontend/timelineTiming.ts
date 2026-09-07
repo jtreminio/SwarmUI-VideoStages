@@ -1,8 +1,11 @@
 import type { CapabilityViewResolver } from "./architectures/policy";
 import { boundaryPlanForClips } from "./boundaryPlan";
-import { executableBoundaries, executableClipIndexes } from "./clipSemantics";
 import { framesForClip, NEUTRAL_FRAME_GRID } from "./renderUtils";
 import { safeFps } from "./timelineDetail";
+import {
+    resolveTimelinePublication,
+    type TimelineDependency,
+} from "./timelinePublication";
 import type { BoundaryOut, Clip } from "./types";
 
 export interface TimelineBoundaryImpact {
@@ -24,6 +27,9 @@ export interface TimelineBoundaryImpact {
 export interface TimelineTiming {
     fps: number;
     executableClipIndexes: number[];
+    outputClipIndexes: number[];
+    consumedClipIndexes: number[];
+    dependencies: TimelineDependency[];
     clipFrames: number[];
     boundaries: TimelineBoundaryImpact[];
     authoredSeconds: number;
@@ -32,26 +38,20 @@ export interface TimelineTiming {
     joinSeconds: number;
     outputFrames: number;
     outputSeconds: number;
-    /** True when every authored card can live directly on the compacted output ruler. */
+    /** True when published cards can use compacted output geometry. */
     outputGeometryAvailable: boolean;
 }
 
-/**
- * Mirrors the compiled timeline's frame accounting:
- *
- * output = generated clip frames - resolved pixel overlaps.
- *
- * Capability views are required for architecture-specific details such as
- * LTX Continue's extra continuity frame and unsupported-mode fallbacks.
- */
+/** Mirrors the runtime's published clips, then applies their resolved joins. */
 export const resolveTimelineTiming = (
     clips: readonly Clip[],
     rawFps: number,
     capabilities?: CapabilityViewResolver,
 ): TimelineTiming => {
     const fps = safeFps(rawFps);
-    const indexes = executableClipIndexes(clips);
-    const executable = new Set(indexes);
+    const publication = resolveTimelinePublication(clips);
+    const executable = new Set(publication.executableClipIndexes);
+    const indexes = publication.outputClipIndexes;
     const compacted = indexes.map((clipIdx, position) => {
         const clip = clips[clipIdx];
         const requested = clip.boundaryOut ?? "cut";
@@ -82,7 +82,13 @@ export const resolveTimelineTiming = (
               (clip) => capabilities.forClip(clip).frameGrid,
           )
         : boundaryPlanForClips(compacted, fps);
-    const seams = executableBoundaries(clips);
+    const seams = indexes.slice(0, -1).map((leftIdx, position) => ({
+        position,
+        leftIdx,
+        rightIdx: indexes[position + 1],
+        leftId: clips[leftIdx]?.id,
+        rightId: clips[indexes[position + 1]]?.id,
+    }));
     const boundaries = seams.map((seam) => {
         const requestedMode = clips[seam.leftIdx].boundaryOut ?? "cut";
         const policyEffective = compacted[seam.position].boundaryOut ?? "cut";
@@ -134,19 +140,28 @@ export const resolveTimelineTiming = (
             : 0,
     );
     const generatedFrames =
+        publication.executableClipIndexes.reduce(
+            (sum, clipIdx) => sum + clipFrames[clipIdx],
+            0,
+        ) +
+        boundaries.reduce((sum, boundary) => sum + boundary.handleFrames, 0);
+    const outputGeneratedFrames =
         indexes.reduce((sum, clipIdx) => sum + clipFrames[clipIdx], 0) +
         boundaries.reduce((sum, boundary) => sum + boundary.handleFrames, 0);
     const joinFrames = boundaries.reduce(
         (sum, boundary) => sum + boundary.overlapFrames,
         0,
     );
-    const outputFrames = Math.max(0, generatedFrames - joinFrames);
+    const outputFrames = Math.max(0, outputGeneratedFrames - joinFrames);
     return {
         fps,
-        executableClipIndexes: indexes,
+        executableClipIndexes: publication.executableClipIndexes,
+        outputClipIndexes: publication.outputClipIndexes,
+        consumedClipIndexes: publication.consumedClipIndexes,
+        dependencies: publication.dependencies,
         clipFrames,
         boundaries,
-        authoredSeconds: indexes.reduce(
+        authoredSeconds: publication.executableClipIndexes.reduce(
             (sum, clipIdx) => sum + Math.max(0, clips[clipIdx].duration || 0),
             0,
         ),
@@ -155,7 +170,9 @@ export const resolveTimelineTiming = (
         joinSeconds: joinFrames / fps,
         outputFrames,
         outputSeconds: outputFrames / fps,
-        outputGeometryAvailable: indexes.length === clips.length,
+        outputGeometryAvailable:
+            publication.consumedClipIndexes.length > 0 ||
+            publication.executableClipIndexes.length === clips.length,
     };
 };
 
@@ -181,15 +198,23 @@ export const incomingReferenceContinueForClip = (
                 .windowConstraints("continue").continueMode === "reference",
     ) ?? null;
 
-/**
- * The editable ruler keeps dormant cards reachable. When every card executes,
- * it is the compacted output ruler; otherwise it preserves authored card
- * geometry and marks the earlier output endpoint separately.
- */
+/** Dormant cards keep the authored ruler; dependency flows use published time. */
 export const timelineDisplaySeconds = (
     clips: readonly Clip[],
     timing: TimelineTiming,
-): number =>
-    timing.outputGeometryAvailable
+): number => {
+    if (timing.consumedClipIndexes.length > 0) {
+        const executable = new Set(timing.executableClipIndexes);
+        const dormantSeconds = clips.reduce(
+            (sum, clip, index) =>
+                executable.has(index)
+                    ? sum
+                    : sum + Math.max(0, clip.duration || 0),
+            0,
+        );
+        return timing.outputSeconds + dormantSeconds;
+    }
+    return timing.outputGeometryAvailable
         ? timing.outputSeconds
         : clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
+};

@@ -24,7 +24,7 @@ internal sealed class ClipEntryMedia(
         }
         return _installer.TryInstall(
             clip,
-            context.PreviousTimelineClipOutput?.ToHostMedia(g),
+            context.PreviousTimelineClipOutput?.ToVideoHostMedia(g),
             includeSourceAudio)
             ?? throw Invariant.Failure(
                 $"clip {clip.ClipId} source video could not be installed.");

@@ -65,6 +65,8 @@ internal sealed record ClipPlan(
     public IArchitectureClipPayload ArchitecturePayload { get; init; }
 
     public bool UseSeedVr { get; init; }
+
+    public bool AudioOnly { get; init; }
 }
 
 internal sealed record InitVideoPlan(

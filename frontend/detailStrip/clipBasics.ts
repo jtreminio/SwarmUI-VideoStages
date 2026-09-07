@@ -1,12 +1,12 @@
 import type { AuthoringState } from "../architectures/policy";
 import { clipLengthReferenceIndex } from "../clipReferenceAuthoring";
+import { setAudioOnlyLead } from "../clipRelationships";
 import { CLIP_DURATION_MAX, CLIP_DURATION_MIN } from "../constants";
 import {
     buildCheckbox,
     buildField,
     buildOptionSelect,
     buildSlider,
-    type SectionHeaderAction,
 } from "../detailWidgets";
 import {
     H3_TEXT_ENCODER_FEATURE,
@@ -20,7 +20,6 @@ import {
 import { normalizeH3TextEncoder } from "../h3TextEncoder";
 import { getVideoStagesHostBridge } from "../host";
 import { installHostFeature } from "../host/swarmUiAdapters";
-import { skipGlyph, skipTitle } from "../skipVocabulary";
 import { applyClipDurationResize } from "../timelineEdit";
 import type { Clip, ReferenceFraming } from "../types";
 import { applyPersistedCapabilityRepair } from "./capabilityUi";
@@ -50,10 +49,12 @@ export const buildClipColumn = (
     referenceFramingState?: AuthoringState,
     showH3AttentionWindow = false,
     h3TextEncoderState: "hidden" | "install" | "ready" = "hidden",
+    supportsAudioOnly = false,
 ): HTMLElement => {
     const column = document.createElement("div");
     column.className =
         "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
+    const audioOnly = clipIdx === 0 && clip.audioOnly === true;
 
     const initVideoClip = !!clip.initVideo;
     const lengthReferenceIdx = clipLengthReferenceIndex(clip.references);
@@ -89,10 +90,6 @@ export const buildClipColumn = (
             hint: durationHint ?? REFERENCE_LENGTH_HINT,
         },
     );
-    durationField.classList.add("vst-detail-field");
-    durationField
-        .querySelector(".auto-input-name")
-        ?.classList.add("vst-detail-field-label");
     const durationInput = durationField.querySelector<HTMLInputElement>(
         "input.auto-slider-number",
     );
@@ -113,14 +110,19 @@ export const buildClipColumn = (
     }
     column.appendChild(durationField);
     column.appendChild(
-        buildCheckbox("Use SeedVR", clip.useSeedVr, (value) => {
-            context.commit((clips) => {
-                const target = clips[clipIdx];
-                if (target) {
-                    target.useSeedVr = value;
-                }
-            });
-        }),
+        buildCheckbox(
+            "Use SeedVR",
+            clip.useSeedVr,
+            (value) => {
+                context.commit((clips) => {
+                    const target = clips[clipIdx];
+                    if (target) {
+                        target.useSeedVr = value;
+                    }
+                });
+            },
+            { disabled: audioOnly },
+        ),
     );
     if (referenceFramingState?.visible) {
         const framing = buildOptionSelect(
@@ -164,6 +166,28 @@ export const buildClipColumn = (
             });
         }
         column.appendChild(field);
+    }
+    if (supportsAudioOnly && clipIdx === 0) {
+        column.appendChild(
+            buildCheckbox(
+                "Audio Only",
+                clip.audioOnly === true,
+                (value) => {
+                    context.structuralCommit((clips) => {
+                        const transaction = context.authoring();
+                        return setAudioOnlyLead(
+                            clips,
+                            value,
+                            transaction,
+                            transaction.defaults.fps,
+                        )
+                            ? "render"
+                            : null;
+                    });
+                },
+                { disabled: clip.initVideo !== null },
+            ),
+        );
     }
     if (showH3AttentionWindow) {
         const attentionWindow = buildSlider(
@@ -235,15 +259,3 @@ export const buildClipColumn = (
     }
     return column;
 };
-
-export const buildClipSkipAction = (
-    context: DetailStripContext,
-    clip: Clip,
-    clipIdx: number,
-): SectionHeaderAction => ({
-    label: skipGlyph(clip.skipped === true),
-    title: skipTitle("clip", clip.skipped === true),
-    className: "vst-detail-skip-clip",
-    active: clip.skipped === true,
-    onClick: () => context.toggleClipSkip(clipIdx),
-});

@@ -82,6 +82,7 @@ const saveRequestedState = (
     const transaction = captureAuthoringTransactionSnapshot();
     const commandContext = commandContextFor(transaction);
     const requested = structuredClone(requestedInput);
+    requested.audioTracks = [];
     ensureAuthoringDocumentIdentity(requested);
     assignMissingHues(requested.clips);
     const dimensionSnap = snapExplicitDocumentDimensions(

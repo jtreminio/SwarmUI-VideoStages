@@ -226,6 +226,8 @@ public sealed record ClipSpec(
     public IReadOnlyList<AuthoredStageModelSpec> AuthoredStages { get; init; } = [];
 
     public bool UseSeedVr { get; init; }
+
+    public bool AudioOnly { get; init; }
 }
 
 public sealed record TimelineSpec(

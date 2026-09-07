@@ -7,8 +7,8 @@ import {
 } from "../__test_helpers__/clipFixtures";
 import { planArchitectureConversion } from "./conversion/plan";
 
-describe("nondestructive architecture conversion", () => {
-    it("retargets models while preserving unsupported authored extras as dormant data", () => {
+describe("architecture conversion feature ownership", () => {
+    it("retargets models and discards features the target cannot use", () => {
         const catalog = fakeArchitectureCatalog();
         const clip = minimalClip({
             frameRefs: [minimalRef()],
@@ -50,18 +50,18 @@ describe("nondestructive architecture conversion", () => {
 
         expect(conversion).not.toBeNull();
         expect(conversion).toMatchObject({
-            frameRefs: before.frameRefs,
-            promptWindows: before.promptWindows,
-            reuseAudio: true,
-            clipLengthFromAudio: true,
+            frameRefs: [],
+            promptWindows: [],
+            reuseAudio: false,
+            clipLengthFromAudio: false,
             loras: before.loras,
-            icLoras: before.icLoras,
+            icLoras: [],
         });
         expect(conversion?.stages[0]).toMatchObject({
             model: "test-video.safetensors",
             modelProfileId: "test-profile",
-            icLoraStrengths: [0.4],
-            upscale: 2,
+            icLoraStrengths: [],
+            upscale: 1,
         });
         expect(clip).toEqual(before);
     });

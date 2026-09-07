@@ -565,16 +565,11 @@ export const createDetailSelectionDomainOperations = (
                     transaction.generatedEntryMode,
                     transaction.capabilities.catalog,
                 );
-                return selectionAfterRemoval(
-                    clipIdx,
-                    clips.length,
-                    (index) => ({
-                        kind: "clip",
-                        clipIdx: index,
-                        stageIdx: 0,
-                    }),
-                    { kind: "none" },
-                );
+                return {
+                    kind: "clip",
+                    clipIdx: clipIdx - 1,
+                    stageIdx: 0,
+                };
             },
             { rebuildAfterSelect: true },
         );

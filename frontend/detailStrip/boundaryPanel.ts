@@ -2,12 +2,20 @@ import {
     boundaryWindowChoices,
     normalizeBoundaryWindow,
 } from "../architectures/boundaryConstraints";
+import { AUDIO_SOURCE_NATIVE } from "../audioSource";
+import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "../boundaryVocabulary";
+import {
+    clipRelationship,
+    SOURCE_AUDIO_RELATIONSHIP,
+    SOURCE_VIDEO_RELATIONSHIP,
+    setAudioOnlyLead,
+    setPreviousClipVideoSource,
+} from "../clipRelationships";
 import { executableBoundaryForLeftClip } from "../clipSemantics";
 import {
     buildCheckbox,
     buildField,
     buildOptionSelect,
-    buildStaticSection,
     type OptionSpec,
 } from "../detailWidgets";
 import {
@@ -19,7 +27,6 @@ import {
     boundaryImpactForLeftClip,
     resolveTimelineTiming,
 } from "../timelineTiming";
-import { BOUNDARY_GLYPH, BOUNDARY_LABEL } from "../timelineView/regionRenderer";
 import type {
     AuthoringDocument,
     BoundaryOut,
@@ -28,22 +35,22 @@ import type {
 import { buildCapabilityNotice } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
-export const buildBoundaryBody = (
+export const buildBoundaryFields = (
     ctx: DetailStripContext,
     sel: Extract<TimelineSelection, { kind: "boundary" }>,
     state: AuthoringDocument,
 ): HTMLElement => {
     const clips = state.clips;
     const { leftClipIdx } = sel;
-    const body = document.createElement("div");
-    body.className = "vst-detail-body";
     const fields = document.createElement("div");
     fields.className = "vst-detail-form-body vst-detail-boundary";
     const clip = clips[leftClipIdx];
+    const rightClip = clips[leftClipIdx + 1];
     const value: BoundaryOut = clip?.boundaryOut ?? "cut";
     const capabilities = ctx.authoring().capabilities;
     const capability = capabilities.forBoundaryIndex(clips, leftClipIdx);
     const seam = executableBoundaryForLeftClip(clips, leftClipIdx);
+    const adjacent = !seam || seam.rightIdx === leftClipIdx + 1;
     const fps = Math.round(safeFps(state.fps));
     const overlapPolicy = capability.windowConstraints(value);
     const isReferenceContinue =
@@ -63,6 +70,24 @@ export const buildBoundaryBody = (
         !isReferenceContinue &&
         clip?.boundaryOutCarryAudio === true &&
         carryTargetHasStage;
+    const sourceAudioAllowed =
+        adjacent &&
+        leftClipIdx === 0 &&
+        rightClip !== undefined &&
+        clip !== undefined &&
+        capabilities.forClip(clip).hasGenerationStage &&
+        capabilities
+            .forClip(clip)
+            .audioSourceKinds.includes(AUDIO_SOURCE_NATIVE);
+    const detectedRelationship = clipRelationship(clips, leftClipIdx);
+    const selectedRelationship =
+        detectedRelationship === SOURCE_AUDIO_RELATIONSHIP &&
+        !sourceAudioAllowed
+            ? value
+            : detectedRelationship;
+    const isJoin =
+        selectedRelationship !== SOURCE_VIDEO_RELATIONSHIP &&
+        selectedRelationship !== SOURCE_AUDIO_RELATIONSHIP;
 
     const joinSpecs: OptionSpec[] = capability.modes.map((mode) => ({
         value: mode,
@@ -75,15 +100,84 @@ export const buildBoundaryBody = (
             disabled: true,
         });
     }
-    const select = buildOptionSelect(joinSpecs, value, (next) => {
-        ctx.commit((cs) => {
-            const c = cs[leftClipIdx];
-            if (c) {
-                c.boundaryOut = (next as BoundaryOut) ?? "cut";
-            }
+    if (adjacent && rightClip) {
+        joinSpecs.push({
+            value: SOURCE_VIDEO_RELATIONSHIP,
+            label: "As source video",
         });
-        ctx.render();
-    });
+    }
+    if (sourceAudioAllowed) {
+        joinSpecs.push({
+            value: SOURCE_AUDIO_RELATIONSHIP,
+            label: "As source audio",
+        });
+    }
+    const select = buildOptionSelect(
+        joinSpecs,
+        selectedRelationship,
+        (next) => {
+            ctx.structuralCommit((nextClips) => {
+                const left = nextClips[leftClipIdx];
+                if (!left || !nextClips[leftClipIdx + 1]) {
+                    return null;
+                }
+                const transaction = ctx.authoring();
+                const current = clipRelationship(nextClips, leftClipIdx);
+                if (next === SOURCE_VIDEO_RELATIONSHIP) {
+                    if (leftClipIdx === 0) {
+                        setAudioOnlyLead(
+                            nextClips,
+                            false,
+                            transaction,
+                            state.fps,
+                        );
+                    }
+                    setPreviousClipVideoSource(
+                        nextClips,
+                        leftClipIdx + 1,
+                        true,
+                        transaction,
+                        state.fps,
+                    );
+                } else if (
+                    next === SOURCE_AUDIO_RELATIONSHIP &&
+                    sourceAudioAllowed
+                ) {
+                    setPreviousClipVideoSource(
+                        nextClips,
+                        leftClipIdx + 1,
+                        false,
+                        transaction,
+                        state.fps,
+                    );
+                    setAudioOnlyLead(nextClips, true, transaction, state.fps);
+                } else {
+                    if (current === SOURCE_VIDEO_RELATIONSHIP) {
+                        setPreviousClipVideoSource(
+                            nextClips,
+                            leftClipIdx + 1,
+                            false,
+                            transaction,
+                            state.fps,
+                        );
+                    }
+                    if (
+                        current === SOURCE_AUDIO_RELATIONSHIP &&
+                        leftClipIdx === 0
+                    ) {
+                        setAudioOnlyLead(
+                            nextClips,
+                            false,
+                            transaction,
+                            state.fps,
+                        );
+                    }
+                    left.boundaryOut = (next as BoundaryOut) ?? "cut";
+                }
+                return "render";
+            });
+        },
+    );
     fields.appendChild(
         buildField(
             "Join",
@@ -95,7 +189,7 @@ export const buildBoundaryBody = (
                 "dissolved pixel-by-pixel.",
         ),
     );
-    if (!capability.modes.includes(value) && capability.reason) {
+    if (isJoin && !capability.modes.includes(value) && capability.reason) {
         fields.appendChild(
             buildCapabilityNotice({
                 supported: false,
@@ -104,8 +198,7 @@ export const buildBoundaryBody = (
             }),
         );
     }
-
-    if (value !== "cut" && capability.modes.includes(value)) {
+    if (isJoin && value !== "cut" && capability.modes.includes(value)) {
         const overlapValue =
             clip?.boundaryOutOverlap ?? overlapPolicy.defaultFrames;
         const overlapSpecs: OptionSpec[] = boundaryWindowChoices(
@@ -176,7 +269,9 @@ export const buildBoundaryBody = (
     }
 
     const timing =
-        seam === null ? null : resolveTimelineTiming(clips, fps, capabilities);
+        !isJoin || seam === null
+            ? null
+            : resolveTimelineTiming(clips, fps, capabilities);
     const impact =
         timing === null ? null : boundaryImpactForLeftClip(timing, leftClipIdx);
     const plannedWindow =
@@ -187,9 +282,13 @@ export const buildBoundaryBody = (
               : impact.overlapFrames;
 
     const info = document.createElement("div");
-    info.className = "vst-boundary-info";
+    info.className = "vst-boundary-info vst-detail-span-full";
     const effective = capability.effective(value);
-    if (effective !== value) {
+    if (selectedRelationship === SOURCE_VIDEO_RELATIONSHIP) {
+        info.textContent = `Clip ${leftClipIdx} is consumed as Clip ${leftClipIdx + 1}'s source video and does not extend the final video.`;
+    } else if (selectedRelationship === SOURCE_AUDIO_RELATIONSHIP) {
+        info.textContent = `Clip ${leftClipIdx} is consumed as Clip ${leftClipIdx + 1}'s source audio and does not extend the final video.`;
+    } else if (effective !== value) {
         info.classList.add("vst-boundary-warn");
         info.textContent =
             `${BOUNDARY_LABEL[value]} is preserved for repair, but this join executes as ` +
@@ -257,7 +356,7 @@ export const buildBoundaryBody = (
                 impact.overlapFrames,
         );
         const impactBlock = document.createElement("div");
-        impactBlock.className = "vst-boundary-impact";
+        impactBlock.className = "vst-boundary-impact vst-detail-span-full";
 
         const heading = document.createElement("div");
         heading.className =
@@ -312,15 +411,5 @@ export const buildBoundaryBody = (
         fields.appendChild(impactBlock);
     }
 
-    body.appendChild(
-        buildStaticSection({
-            key: "boundary",
-            label: "Boundary",
-            className: "vst-detail-boundary-section",
-            content: fields,
-            flattenContent: true,
-        }).section,
-    );
-
-    return body;
+    return fields;
 };

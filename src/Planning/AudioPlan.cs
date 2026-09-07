@@ -28,7 +28,8 @@ internal sealed record AudioSpanPlan(
     double TrimStartSeconds,
     double LengthSeconds,
     UploadedMediaSpec UploadedMedia,
-    double Volume = 1);
+    double Volume = 1,
+    bool PostDecodeOnly = false);
 
 /// <summary>
 /// One <see cref="ClipSpec"/>'s compiled audio policy; every ownership decision is final here.
@@ -39,4 +40,14 @@ internal sealed record AudioPlan(
     AudioBaseSourcePlan Base,
     AudioLengthOwner LengthOwner,
     ImmutableArray<AudioSpanPlan> Spans,
-    ImmutableArray<PlanDiagnostic> Diagnostics);
+    ImmutableArray<PlanDiagnostic> Diagnostics)
+{
+    internal ImmutableArray<AudioSpanPlan> ConditioningSpans =>
+        [.. Spans.Where(span => !span.PostDecodeOnly)];
+
+    internal ImmutableArray<AudioSpanPlan> PostDecodeSpans(
+        bool architectureConsumesTimelineAudio) =>
+        architectureConsumesTimelineAudio
+            ? [.. Spans.Where(span => span.PostDecodeOnly)]
+            : Spans;
+}

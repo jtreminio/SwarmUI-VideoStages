@@ -6,11 +6,11 @@ VideoStages adds a multi-step video flow to SwarmUI. Instead of asking one gener
 
 Think of it as draft, refine, and polish for video, built right into the normal SwarmUI experience.
 
-# The timeline
+# The clip editor
 
-Most of VideoStages lives in the **VideoStages** tab in SwarmUI's bottom bar. It is a real timeline editor: a ruler, zoom and snapping, drag-to-edit tracks, and a docked panel on the left that edits whatever you have selected. The VideoStages group toggle in the parameters list turns the whole thing on and off; a green checkmark on the tab shows when it is active.
+Open **VideoStages** in SwarmUI's bottom bar. The clip strip on the left shows generation order, source relationships, and output duration. Select a clip to edit its continuous sections on the right. Section navigation and sticky headings keep your place while scrolling through stages, references, audio, and output settings. The enable switch and the VideoStages group toggle control the same state; a checkmark on the tab shows when it is active.
 
-Everything below is authored on that timeline and rides along with your normal generation — same models, same prompt box, same generate button.
+Edits use SwarmUI's existing parameters and prompt box and are included in your normal generation. Use a clip's action menu to move it earlier or later in the sequence.
 
 ## Clips and stages
 
@@ -22,7 +22,7 @@ A timeline can hold as many clips as you like, each with its own model and setti
 
 ## Joins between clips
 
-Every gap between two clips is a **join**, edited by clicking the seam:
+Every gap between two clips is a **join**. Click its button in the clip strip or open **Join from previous clip**:
 
 - **Cut** — a hard splice.
 - **Continue** — the next clip picks up from the tail of the previous one, with a configurable overlap.
@@ -38,7 +38,7 @@ There is also a global **Refine Video** action for taking one finished video bac
 
 ## Prompts
 
-Each clip has a **major prompt** and optional **relay windows** — additional prompts pinned to time ranges inside the clip, so the description can change as the shot progresses. Both are edited on the prompt track. The `<videoclip>` prompt syntax documented below is the text-only equivalent and still works.
+Each clip has a prompt in **Prompt & clip** and, where supported, **Relay prompts** with editable start and end times. These let the description change as the shot progresses. The `<videoclip>` prompt syntax documented below also works.
 
 ## Retake windows
 
@@ -46,18 +46,15 @@ A **retake** regenerates only a chosen frame range of an existing video and leav
 
 ## Keyframes
 
-The **Keyframes** track pins images to specific frames of a clip: a first keyframe to steer where the shot starts, a final keyframe to steer where it lands, or anything in between.
+The **Keyframes** section pins images to specific frames of a clip: a first keyframe to steer where the shot starts, a final keyframe to steer where it lands, or intermediate frames where the model supports them. Upload or select media, or drop files onto **Add keyframe**. **References** provides model-supported image, video, and audio conditioning; its row labels show the tags available in prompts.
 
 ## Audio
 
-Two independent things:
-
-- **Clip audio** — the audio the clip itself owns, from the model's native audio, an upload, an AceStep track, or a ControlNet source. A clip can take its length from its audio.
-- **Timeline audio tracks** — audio lanes laid across the whole timeline, free to cross clip boundaries. Drag to place and trim them, set a per-lane volume, and overlap as many as you want; they mix additively over the finished video.
+The **Audio** section selects the clip's audio source, such as native model audio, an upload, AceStep, or a supported control source. A clip can take its length from its audio. Uploaded media has a compact preview; open it to play the selected range, or use **Edit…** beside the range summary to trim it.
 
 ## LoRAs and IC-LoRAs
 
-Normal LoRAs can be attached per stage. **IC-LoRAs** are the control-style adapters: pick one of the curated presets (union control, motion tracking, in/outpainting, lip sync, spatial upscalers, deblur, colorization, restyle, and more) or choose Custom and point it at your own weights, then choose what drives it — an upload you supply or whatever media is already flowing into that stage, as visual, audio, or model-only.
+The **LoRAs** section lists the clip's models and weights. **IC-LoRAs** are the control-style adapters: pick one of the curated presets (union control, motion tracking, in/outpainting, lip sync, spatial upscalers, deblur, colorization, restyle, and more) or choose Custom and point it at your own weights, then choose what drives it — an upload you supply or media already entering a stage.
 
 ## Upscaling
 
@@ -65,7 +62,7 @@ Each stage can upscale in one of four ways — pixel, model, latent, or latent+m
 
 ## Resolution and frame rate
 
-The timeline's resolution and frame rate follow SwarmUI's core video parameters by default; the chip in the timeline header shows the current values and lets you override them.
+Resolution and frame rate follow SwarmUI's core video parameters by default. The dimensions/FPS button above the clip strip opens **Output settings** to adjust them.
 
 # Prompt syntax
 
@@ -115,6 +112,36 @@ A serene mountain lake at dawn
 The `<lora:my-style:0.8>` under bare `<videoclip>` is loaded for every clip regardless of which fallback supplies the text. The global line (`A serene mountain lake at dawn`) is never used here because `<video>` already supplies text for clip 0 and the `<videoclip[1]*>` tiers supply text for clip 1.
 
 # Development
+
+## Browser testing
+
+See [the VideoStages browser guide](docs/BROWSER_TESTING.md) for verified
+editing recipes, locator rules, and the boundary against submitting generation.
+
+Use the global Playwright CLI for exploratory testing. Keep the commands in one
+terminal session so its browser daemon remains alive:
+
+```bash
+scripts/videostages-browser open http://127.0.0.1:7801/Text2Image --browser=chromium
+scripts/videostages-browser click "getByTestId('clip-editor-tab')"
+scripts/videostages-browser snapshot
+scripts/videostages-browser close
+```
+
+Use the stable tab locator above; generated element refs come from the latest snapshot.
+
+The repeatable browser suite expects SwarmUI at `http://127.0.0.1:7801`.
+Override it with `SWARMUI_URL` when needed:
+
+```bash
+source ~/.nvm/nvm.sh
+npx playwright install chromium
+npm run test:browser
+```
+
+Run `npm run test:browser:headed` from a graphical session for an interactive
+browser. Failures keep a screenshot, video, and Playwright trace under
+`test-results/`.
 
 Architecture maps:
 

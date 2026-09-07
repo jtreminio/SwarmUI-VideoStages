@@ -125,6 +125,21 @@ describe("hasRefinementWorkToDo", () => {
         expect(hasRefinementWorkToDo(config, true)).toBe(false);
     });
 
+    it("does not refine later stages of an audio-only clip", () => {
+        const config = makeConfig([
+            minimalClip({
+                audioOnly: true,
+                stages: [
+                    minimalStage(),
+                    minimalStage({ skipped: true }),
+                    minimalStage({ skipped: true }),
+                ],
+            }),
+        ]);
+
+        expect(hasRefinementWorkToDo(config, true)).toBe(false);
+    });
+
     it("uses another clip when clip 0 has only stage 0", () => {
         const config = makeConfig([
             minimalClip({ stages: [minimalStage()] }),
@@ -184,7 +199,10 @@ describe("hasRefinementWorkToDo", () => {
 
 describe("applyRefineToClip", () => {
     it("installs the probed video as the clip source", () => {
-        const clip = minimalClip({ stages: [minimalStage(), minimalStage()] });
+        const clip = minimalClip({
+            audioOnly: true,
+            stages: [minimalStage(), minimalStage()],
+        });
         applyRefineToClip(
             clip,
             "data:video/mp4;base64,AA==",
@@ -206,6 +224,7 @@ describe("applyRefineToClip", () => {
             lengthSeconds: 3.5,
         });
         expect(clip.duration).toBe(3.5);
+        expect(clip.audioOnly).toBe(false);
     });
 
     it("uses the source video's baked soundtrack instead of regenerating selected audio", () => {

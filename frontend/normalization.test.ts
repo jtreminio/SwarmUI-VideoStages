@@ -393,6 +393,20 @@ describe("normalization", () => {
         expect(clip.frameRefs).toEqual([]);
     });
 
+    it("uses an audio-only Clip 0 as the new Clip 1 base audio", () => {
+        const clip0 = buildDefaultClip(moduleRootDefaults(), testStageModel);
+        clip0.audioOnly = true;
+
+        const clip1 = buildDefaultClip(
+            moduleRootDefaults(),
+            testStageModel,
+            false,
+            clip0,
+        );
+
+        expect(clip1.audioSource).toBe(MEDIA_SOURCE_PREVIOUS_CLIP);
+    });
+
     it("normalizeClip ignores removed single-ControlNet IC-LoRA fields", () => {
         const defaultClip = normalizeClip(
             {},

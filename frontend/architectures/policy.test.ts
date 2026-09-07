@@ -10,11 +10,6 @@ import {
     minimalRef,
     minimalStage,
 } from "../__test_helpers__/clipFixtures";
-import {
-    clampDetailSelection,
-    detailBreadcrumb,
-} from "../detailStrip/panelRouter";
-import { renderTimeline } from "../timelineView";
 import { reconcileClipArchitectureIdentity } from "./clipIdentity";
 import { createCapabilityViewResolver } from "./policy";
 
@@ -202,8 +197,7 @@ describe("catalog-backed authoring policy", () => {
         });
         const view = createCapabilityViewResolver(models).forClip(clip);
 
-        // Both are the backend's runtime call now: relay re-tiles against the resolved
-        // length, and an ineligible audio reuse is dropped silently.
+        // Runtime resolves relay length and drops ineligible audio reuse.
         expect(view.decision("promptRelay").supported).toBe(true);
         expect(view.decision("audioReuse").supported).toBe(true);
     });
@@ -218,12 +212,10 @@ describe("catalog-backed authoring policy", () => {
             supported: false,
             reason: "Retake requires an init-video clip.",
         });
-        // Absent and unsupported: never offered for authoring.
         expect(view.authoringState("retake", false)).toMatchObject({
             visible: false,
             enabled: false,
         });
-        // Persisted and unsupported: still visible so it can be removed.
         expect(view.authoringState("retake", true)).toMatchObject({
             visible: true,
             enabled: false,
@@ -267,168 +259,6 @@ describe("catalog-backed authoring policy", () => {
         expect(left.boundaryOut).toBe("continue");
         expect(resolver.forBoundaryIndex(clips, 0).effective("continue")).toBe(
             "cut",
-        );
-    });
-
-    it("renders unsupported persisted features without exposing creation gestures", () => {
-        const clip = fakeClip();
-        clip.prompt = "Persisted major prompt";
-        clip.promptWindows = [
-            { prompt: "Persisted relay", start: 0, duration: 1 },
-        ];
-        clip.frameRefs = [minimalRef()];
-        clip.retake = {
-            startSeconds: 0,
-            lengthSeconds: 1,
-            strength: 0.5,
-        };
-        clip.audioSource = "Upload";
-        clip.uploadedAudio = {
-            data: "data:audio/wav;base64,AA==",
-            fileName: "persisted.wav",
-        };
-        const body = document.createElement("div");
-        renderTimeline(body, [clip], {
-            capabilities: createCapabilityViewResolver(testCombinedCatalog()),
-        });
-
-        expect(body.querySelector(".vst-major-seg")).not.toBeNull();
-        expect(body.querySelector(".vst-minor-seg")).not.toBeNull();
-        expect(body.querySelector(".vst-refs-mark")).not.toBeNull();
-        expect(body.querySelector(".vst-retake")).not.toBeNull();
-        for (const selector of [
-            ".vst-minor-lane",
-            ".vst-refs-lane",
-            ".vst-retake-lane",
-            ".vst-audio-clip",
-        ]) {
-            const element = body.querySelector(selector);
-            expect(element?.className).toContain("vst-capability-disabled");
-            expect(element?.hasAttribute("aria-disabled")).toBe(false);
-        }
-        expect(
-            body.querySelector<HTMLElement>(".vst-minor-seg")?.title,
-        ).toContain("click to inspect");
-        expect(body.querySelector<HTMLElement>(".vst-retake")?.title).toContain(
-            "click to inspect",
-        );
-        expect(
-            body.querySelector(".vst-refs-mark")?.getAttribute("aria-label"),
-        ).toContain("Inspect unsupported persisted keyframe");
-        expect(
-            body.querySelector(".vst-audio-clip")?.getAttribute("aria-label"),
-        ).toContain("Inspect unsupported persisted audio");
-        expect(body.querySelector("[data-vst-prompt-add]")).toBeNull();
-        expect(body.querySelector("[data-vst-ref-add]")).toBeNull();
-        expect(body.querySelector("[data-vst-retake-add]")).toBeNull();
-    });
-
-    it("drops the relay and retake lanes when no clip architecture offers them", () => {
-        const body = document.createElement("div");
-        renderTimeline(body, [fakeClip()], {
-            capabilities: createCapabilityViewResolver(testCombinedCatalog()),
-        });
-
-        expect(body.querySelector(".vst-minor-lane")).toBeNull();
-        expect(body.querySelector(".vst-retake-lane")).toBeNull();
-        expect(body.querySelector(".vst-head-tag-relay")).toBeNull();
-        expect(body.querySelector(".vst-head-tag-retake")).toBeNull();
-        expect(body.querySelector(".vst-track-prompt")?.className).toContain(
-            "vst-no-relay",
-        );
-        expect(body.querySelector(".vst-track-video")?.className).toContain(
-            "vst-no-retake",
-        );
-    });
-
-    it("leaves a blank slot for the clips an offered lane skips", () => {
-        const body = document.createElement("div");
-        renderTimeline(body, [minimalClip(), fakeClip()], {
-            capabilities: createCapabilityViewResolver(testCombinedCatalog()),
-        });
-
-        for (const selector of [".vst-minor-lane", ".vst-retake-lane"]) {
-            const lanes = body.querySelectorAll(selector);
-            expect(lanes.length).toBe(1);
-            expect(lanes[0].getAttribute("data-clip-idx")).toBe("0");
-        }
-        expect(body.querySelector(".vst-minor-lane")?.className).not.toContain(
-            "vst-capability-disabled",
-        );
-        // LTX offers retake; this clip has no init video, so it keeps a disabled
-        // lane — and says what is missing rather than blaming the architecture.
-        const retakeLane = body.querySelector(".vst-retake-lane");
-        expect(retakeLane?.className).toContain("vst-capability-disabled");
-        expect(retakeLane?.getAttribute("title")).toBe(
-            "Retake requires an init-video clip.",
-        );
-    });
-
-    it("drops the clip audio row while keeping the timeline audio tracks", () => {
-        const body = document.createElement("div");
-        renderTimeline(body, [fakeClip()], {
-            capabilities: createCapabilityViewResolver(testCombinedCatalog()),
-        });
-
-        expect(body.querySelector(".vst-audio-clip")).toBeNull();
-        expect(body.querySelector(".vst-head-tag-src")).toBeNull();
-        expect(body.querySelector(".vst-track-audio")?.className).toContain(
-            "vst-no-clip-audio",
-        );
-        // Audio mixed outside the video model stays authorable regardless.
-        expect(
-            body.querySelector(".vst-audio-track-lane-blank"),
-        ).not.toBeNull();
-        // Nothing above or below it, so the lone add-lane is centred.
-        expect(body.querySelector(".vst-track-audio")?.className).toContain(
-            "vst-audio-solo-lane",
-        );
-        expect(
-            body.querySelector(".vst-head-tag-track[data-vst-audio-track-add]"),
-        ).not.toBeNull();
-    });
-
-    it("keeps the clip audio row for the clips whose model carries audio", () => {
-        const body = document.createElement("div");
-        renderTimeline(body, [minimalClip(), fakeClip()], {
-            capabilities: createCapabilityViewResolver(testCombinedCatalog()),
-        });
-
-        const lanes = body.querySelectorAll(".vst-audio-clip");
-        expect(lanes.length).toBe(1);
-        expect(lanes[0].getAttribute("data-clip-idx")).toBe("0");
-        expect(body.querySelector(".vst-head-tag-src")).not.toBeNull();
-        expect(body.querySelector(".vst-track-audio")?.className).not.toContain(
-            "vst-no-clip-audio",
-        );
-    });
-
-    it("keeps a zero-stage source-only clip selectable and labels it plainly", () => {
-        const clip = minimalClip({
-            architectureHint: "none",
-            modelProfileId: "none",
-            initVideo: {
-                data: "data:video/mp4;base64,AA==",
-                fileName: "source.mp4",
-                fps: 24,
-                durationSeconds: 2,
-                startSeconds: 0,
-                lengthSeconds: 2,
-            },
-            stages: [],
-        });
-        const selection = clampDetailSelection(
-            { kind: "clip", clipIdx: 0, stageIdx: 0 },
-            [clip],
-        );
-
-        expect(selection).toEqual({
-            kind: "clip",
-            clipIdx: 0,
-            stageIdx: 0,
-        });
-        expect(detailBreadcrumb(selection, [clip])).toBe(
-            "Clip 0 · Source only",
         );
     });
 

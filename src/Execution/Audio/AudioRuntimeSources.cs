@@ -6,4 +6,5 @@ namespace VideoStages.Execution.Audio;
 internal sealed record AudioRuntimeSources(
     WGNodeData NativeAudio,
     IReadOnlyDictionary<int, WGNodeData> ClipAudios,
-    IReadOnlyDictionary<int, WGNodeData> UploadedAudios);
+    IReadOnlyDictionary<int, WGNodeData> UploadedAudios,
+    WGNodeData PreviousClipAudio = null);

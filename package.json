@@ -11,12 +11,15 @@
         "coverage:functions": "npm run test:coverage && node ./scripts/report-uncovered-functions.mjs",
         "fix": "biome check --write .",
         "test": "jest --config ./jest.config.cjs",
+        "test:browser": "playwright test --config ./playwright.config.ts",
+        "test:browser:headed": "playwright test --config ./playwright.config.ts --headed",
         "test:coverage": "jest --config ./jest.config.cjs --coverage",
         "typecheck": "tsc --noEmit"
     },
     "devDependencies": {
         "@biomejs/biome": "^2.4.11",
         "@jest/globals": "^30.3.0",
+        "@playwright/test": "^1.63.0",
         "esbuild": "^0.28.0",
         "jest": "^30.3.0",
         "jest-environment-jsdom": "^30.3.0",

@@ -86,7 +86,7 @@ public class MiniMaxArchitectureTests
             ["any"],
             model["enhancements"]["referencePositions"].Values<string>());
         Assert.Equal(
-            ["Native", "Upload", "ControlNet", "AceStepFun"],
+            ["Native", "Upload", "ControlNet", "AceStepFun", "Previous Clip"],
             architecture["capabilities"]["audioSourceKinds"].Values<string>());
         Assert.Equal(
             ["text-to-video", "image-to-video", "init-video"],

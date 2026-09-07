@@ -119,6 +119,14 @@ internal static class ArchitectureCapabilityValidator
 
         AudioSourceKind authoredAudioKind =
             AudioSource.Parse(clip.AudioSource).Kind;
+        if (clip.AudioOnly
+            && !descriptor.AudioSourceKinds.Contains(AudioSourceKind.Native))
+        {
+            diagnostics.Add(ArchitectureCapabilityValidator.Unsupported(
+                clip,
+                descriptor,
+                "audio-only generation"));
+        }
         if (authoredAudioKind != AudioSourceKind.Unknown
             && !descriptor.AudioSourceKinds.Contains(authoredAudioKind)
             && !(authoredAudioKind == AudioSourceKind.Native

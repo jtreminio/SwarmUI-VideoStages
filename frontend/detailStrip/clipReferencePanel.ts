@@ -12,14 +12,13 @@ import {
     clipReferenceSourceSupportsKind,
     resolveClipReferenceSourceValue,
 } from "../clipReferenceSource";
-import { CLIP_DURATION_MIN, clamp, mediaPreviewSrc } from "../constants";
+import { CLIP_DURATION_MIN } from "../constants";
 import {
     buildCheckbox,
     buildField,
     buildMediaPickRow,
     buildNumber,
     buildOptionSelect,
-    buildRepeatingEditor,
 } from "../detailWidgets";
 import { MEDIA_SOURCE_UPLOAD } from "../generatedMediaSource";
 import { probeMediaDurationSeconds } from "../mediaProbe";
@@ -28,7 +27,6 @@ import {
     clipReferenceUsedSeconds,
 } from "../normalizationMedia";
 import { getTimelineStore } from "../persistence/repository";
-import { setSelection } from "../selection";
 import { applyClipDurationResize } from "../timelineEdit";
 import { incomingReferenceContinueForClip } from "../timelineTiming";
 import {
@@ -46,13 +44,9 @@ import type {
 } from "../types";
 import { roundToTenth } from "../utils";
 import type { DetailStripContext } from "./context";
-import { buildSidebarMediaPreview } from "./sidebarMediaPreview";
 import { buildTrimLauncher, openTrimModal } from "./trimModal";
 
-/**
- * A reference has no minimum of its own — it is conditioning, not a clip — but
- * one that lends the clip its length inherits the clip's floor.
- */
+// References that own clip length inherit the clip's larger trim minimum.
 const REFERENCE_TRIM_MIN = 0.1;
 
 const appendReferenceTrim = (
@@ -72,13 +66,11 @@ const appendReferenceTrim = (
         minLengthSeconds: reference.drivesClipLength
             ? CLIP_DURATION_MIN
             : REFERENCE_TRIM_MIN,
-        // Only a driving reference hands its length to a clip, so only then does
-        // the timeline's frame grid have any claim on it.
+        // Only duration-owning references must align to the clip's frame grid.
         fps: reference.drivesClipLength ? getTimelineStore().getState().fps : 0,
     };
     const write = (next: SourceRange): void => {
-        // A range covering the whole file stores as untrimmed, so an undone trim
-        // leaves no frame-window node behind in the graph.
+        // Store a full-file range as untrimmed to avoid a redundant graph window.
         const whole =
             next.startSeconds <= 0 && next.lengthSeconds >= limitSeconds;
         Object.assign(shown, next);
@@ -154,7 +146,7 @@ const appendReferenceTrim = (
     );
 };
 
-/** Takes clip-length ownership away from every other claimant and applies it. */
+// Only one reference can own the clip length.
 const claimClipLength = (
     clip: Clip,
     referenceIdx: number,
@@ -167,12 +159,10 @@ const claimClipLength = (
     if (referenceIdx < 0) {
         return;
     }
-    // The two clip-level flags derive the length at generation time, which
-    // would silently move a clip whose authored length now says otherwise.
+    // Generation-time duration sources must agree with the authored length.
     clip.clipLengthFromAudio = false;
     clip.clipLengthFromControlNet = false;
-    // The trimmed length, not the file's — the same number normalization lends
-    // the clip, so ticking the box cannot disagree with the next document read.
+    // Use the same trimmed duration as normalization.
     const claimed = clip.references[referenceIdx];
     const seconds = claimed ? clipReferenceUsedSeconds(claimed) : 0;
     if (seconds > 0) {
@@ -185,7 +175,6 @@ const claimClipLength = (
     }
 };
 
-/** Timed media is probed for the length it can lend, which lands with it in one save. */
 const applyPickedReferenceMedia = (
     ctx: DetailStripContext,
     clipId: string,
@@ -219,25 +208,17 @@ const applyPickedReferenceMedia = (
         onApplied: () => ctx.render(),
     });
 
-/**
- * Whole-clip references: media the model conditions on with no frame position.
- * Each row shows the prompt tag the reference is presented under, because the
- * prompt has to name it for the reference to do anything.
- */
-export const buildClipReferenceSection = (
+// Prompt tags must match the names exposed to the model.
+const createClipReferenceEditor = (
     ctx: DetailStripContext,
     clipIdx: number,
-    selectedIdx: number | null,
     clips: Clip[],
     fps: number,
-    open = selectedIdx !== null,
-    incomingSelected = false,
-): HTMLElement => {
+) => {
     const clip = clips[clipIdx];
     const references = clip.references;
     const { capabilities, defaults } = ctx.authoring();
     const authoring = clipReferenceAuthoring(capabilities.forClip(clip));
-    const decision = authoring.decision;
     const incomingBoundary =
         authoring.mode === "all"
             ? incomingReferenceContinueForClip(
@@ -258,11 +239,6 @@ export const buildClipReferenceSection = (
         references,
         incomingBoundary ? [incomingReference] : [],
     );
-    const itemOffset = incomingBoundary ? 1 : 0;
-    const activeIdx =
-        references.length === 0 || selectedIdx === null
-            ? null
-            : clamp(selectedIdx, 0, references.length - 1);
     const buildIncomingEditor = (): HTMLElement | undefined => {
         if (!incomingBoundary) {
             return undefined;
@@ -310,91 +286,6 @@ export const buildClipReferenceSection = (
         );
         return fields;
     };
-    const buildSection = (
-        editorForItem?: (index: number) => HTMLElement | undefined,
-    ): HTMLElement => {
-        const section = buildRepeatingEditor({
-            key: "clip-references",
-            label:
-                authoring.mode === "identity-images"
-                    ? "Identity References"
-                    : "References",
-            sectionClass: "vst-detail-clip-ref-section",
-            open,
-            items: [
-                ...(incomingBoundary
-                    ? [
-                          {
-                              label: `<Video 1> (from Join with Clip ${incomingBoundary.leftIdx})`,
-                              stateKey: clips[incomingBoundary.leftIdx].id
-                                  ? `join-reference:${clips[incomingBoundary.leftIdx].id}`
-                                  : undefined,
-                              title: `Edit the reference supplied by the Continue join from Clip ${incomingBoundary.leftIdx}`,
-                              focusKey: `clip-reference-join-${incomingBoundary.leftIdx}`,
-                              active: incomingSelected,
-                              className:
-                                  "vst-clip-ref-tab vst-clip-ref-join-tab",
-                              onSelect: () =>
-                                  setSelection({
-                                      kind: "boundary-ref",
-                                      leftClipIdx: incomingBoundary.leftIdx,
-                                  }),
-                          },
-                      ]
-                    : []),
-                ...references.map((reference, index) => ({
-                    label: tags[index],
-                    stateKey: reference.id
-                        ? `clip-reference:${reference.id}`
-                        : undefined,
-                    focusKey: `clip-reference-tab-${index}`,
-                    title: `Edit ${CLIP_REFERENCE_KIND_INFO[reference.kind].label} reference ${tags[index]}`,
-                    active: index === activeIdx,
-                    className: "vst-clip-ref-tab",
-                    onSelect: () =>
-                        setSelection({
-                            kind: "clip-ref",
-                            clipIdx,
-                            referenceIdx: index,
-                        }),
-                    onDelete: () => ctx.deleteClipReference(clipIdx, index),
-                })),
-            ],
-            add: {
-                title: decision.supported
-                    ? "Add a reference the prompt can name by tag"
-                    : decision.reason,
-                label: "+ Add Reference",
-                className: "vst-detail-add-clip-ref",
-                disabled: !decision.supported,
-                onClick: () => ctx.addClipReference(clipIdx),
-            },
-            remove: {
-                title:
-                    activeIdx === null
-                        ? "No reference to delete"
-                        : `Delete reference ${tags[activeIdx]}`,
-                className: "vst-detail-delete-clip-ref",
-            },
-            editorForItem:
-                incomingBoundary === null && editorForItem === undefined
-                    ? undefined
-                    : (itemIndex) => {
-                          if (itemIndex < itemOffset) {
-                              return buildIncomingEditor();
-                          }
-                          return editorForItem?.(itemIndex - itemOffset);
-                      },
-        }).section;
-        const add = section.querySelector<HTMLElement>(
-            ".vst-detail-add-clip-ref",
-        );
-        if (add && clip.id) {
-            add.dataset.vstClipId = clip.id;
-        }
-        return section;
-    };
-
     const buildEditor = (editorIdx: number): HTMLElement | undefined => {
         const reference = references[editorIdx];
         if (!reference) {
@@ -414,7 +305,7 @@ export const buildClipReferenceSection = (
         };
         const fields = document.createElement("div");
         fields.className =
-            "vst-detail-col vst-detail-instance-fields vst-detail-clip-ref-editor";
+            "vst-detail-fields vst-detail-col vst-detail-instance-fields vst-detail-clip-ref-editor";
         fields.setAttribute("data-vst-clip-ref-index", `${editorIdx}`);
 
         fields.appendChild(
@@ -495,13 +386,6 @@ export const buildClipReferenceSection = (
 
         if (source === MEDIA_SOURCE_UPLOAD) {
             const data = reference.uploadedMedia?.data;
-            if (reference.kind === "image" && data) {
-                const preview = document.createElement("div");
-                preview.className =
-                    "vst-refs-thumb-preview vst-refs-thumb-preview-set";
-                preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
-                fields.appendChild(preview);
-            }
             const media = CLIP_REFERENCE_KIND_INFO[reference.kind];
             fields.appendChild(
                 buildMediaPickRow(
@@ -540,13 +424,12 @@ export const buildClipReferenceSection = (
                         });
                         ctx.render();
                     },
+                    data,
+                    reference.kind === "image"
+                        ? undefined
+                        : { kind: reference.kind, range: shownRange },
                 ),
             );
-            if (reference.kind !== "image" && data) {
-                fields.appendChild(
-                    buildSidebarMediaPreview(reference.kind, data, shownRange),
-                );
-            }
         }
 
         if (clipReferenceCanDriveLength(reference)) {
@@ -647,5 +530,41 @@ export const buildClipReferenceSection = (
         }
         return fields;
     };
-    return buildSection(buildEditor);
+    return { buildEditor, buildIncomingEditor };
+};
+
+export const buildClipReferenceFields = (
+    ctx: DetailStripContext,
+    clipIdx: number,
+    referenceIdx: number,
+    clips: Clip[],
+    fps: number,
+): HTMLElement => {
+    const fields = createClipReferenceEditor(
+        ctx,
+        clipIdx,
+        clips,
+        fps,
+    ).buildEditor(referenceIdx);
+    if (!fields) {
+        throw new Error(`Reference ${referenceIdx} does not exist`);
+    }
+    return fields;
+};
+
+export const buildIncomingReferenceFields = (
+    ctx: DetailStripContext,
+    clipIdx: number,
+    clips: Clip[],
+    fps: number,
+): HTMLElement => {
+    const fields = createClipReferenceEditor(
+        ctx,
+        clipIdx,
+        clips,
+        fps,
+    ).buildIncomingEditor();
+    if (!fields) throw new Error(`Clip ${clipIdx} has no incoming reference`);
+    fields.classList.add("vst-detail-fields");
+    return fields;
 };

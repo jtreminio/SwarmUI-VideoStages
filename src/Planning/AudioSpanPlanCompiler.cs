@@ -33,9 +33,10 @@ internal static class AudioSpanPlanCompiler
                 diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SpanIgnoredInvalidWindow, "An audio track has an invalid time window and was ignored."));
                 continue;
             }
-            // Spans are only executable from these two sources; the shared vocabulary carries
-            // more kinds than a projected span can resolve.
-            if (span.SourceKind is not (AudioSourceKind.AceStepFun or AudioSourceKind.Upload))
+            if (span.SourceKind is not (
+                AudioSourceKind.AceStepFun
+                or AudioSourceKind.Upload
+                or AudioSourceKind.PreviousClip))
             {
                 diagnostics.Add(new(PlanDiagnosticSeverity.Warning, SpanIgnoredNoSource, "An audio track has an unusable source kind and was ignored."));
                 continue;

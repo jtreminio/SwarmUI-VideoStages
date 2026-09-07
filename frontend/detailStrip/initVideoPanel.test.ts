@@ -1,18 +1,20 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
 
 import { initVideoFixture } from "../__test_helpers__/clipFixtures";
-import {
-    detailStripHarness,
-    fieldByLabel,
-} from "../__test_helpers__/detailStrip";
 import { lastSavedClips } from "../__test_helpers__/dom";
+import {
+    editorFieldContainer,
+    editorHarness,
+} from "../__test_helpers__/editor";
 import { MEDIA_SOURCE_PREVIOUS_CLIP } from "../generatedMediaSource";
 import { setSelection } from "../selection";
 import type { Clip } from "../types";
 import { closeTrimModal } from "./trimModal";
 
 describe("source video trim", () => {
-    const h = detailStripHarness();
+    const h = editorHarness();
+    const fieldByLabel = (label: string): HTMLElement =>
+        editorFieldContainer("source-video", label);
 
     const SOURCE = initVideoFixture({
         fileName: "beach.mp4",
@@ -171,26 +173,22 @@ describe("source video trim", () => {
         preview.pause = jest.fn();
         preview.load = jest.fn();
 
-        h.strip.render();
+        h.editor.refresh();
 
         expect(preview.pause).toHaveBeenCalledTimes(1);
         expect(preview.load).toHaveBeenCalledTimes(1);
         expect(preview.hasAttribute("src")).toBe(false);
     });
 
-    it("closes the trim modal when the detail strip is disposed", () => {
+    it("closes the trim modal when the editor is disposed", () => {
         openPanel();
         openTrim();
 
-        h.disposeStrip();
+        h.disposeEditor();
 
         expect(document.querySelector(".vst-trim-modal")).toBeNull();
     });
 
-    /**
-     * The chosen semantic: the in point is a left limit, not a slide. The old
-     * "Start (s)" field kept the length and moved the whole window instead.
-     */
     it("moves the in point without moving the out point", () => {
         openPanel();
         openTrim();
@@ -234,10 +232,7 @@ describe("source video trim", () => {
         expect(parseFloat(window_.style.width)).toBeCloseTo(33.87, 2);
     });
 
-    /**
-     * Without a probed length the bar has no truthful scale — its window would
-     * fill a track it can never move within. The numbers still work.
-     */
+    // An unprobed file has no meaningful full-source ruler.
     it("omits the bar when the source length is unknown", () => {
         openPanel(
             initVideoFixture({
@@ -263,6 +258,17 @@ describe("source video trim", () => {
             ),
         ).toBe(true);
         expect(document.querySelector("[data-vst-open-trim]")).not.toBeNull();
-        expect(document.querySelector(".vst-detail .vst-trim")).toBeNull();
+        expect(document.querySelector(".vst-clip-editor .vst-trim")).toBeNull();
+    });
+
+    it("keeps the source explanation on its own form row", () => {
+        openPanel();
+
+        const hint = Array.from(
+            document.querySelectorAll<HTMLElement>(".vst-detail-field-hint"),
+        ).find((entry) =>
+            entry.textContent?.startsWith("Use an existing video file"),
+        );
+        expect(hint?.classList).toContain("vst-detail-span-full");
     });
 });

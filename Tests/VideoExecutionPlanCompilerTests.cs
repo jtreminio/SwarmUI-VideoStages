@@ -90,6 +90,68 @@ public class VideoExecutionPlanCompilerTests
         Assert.Equal(24, clip.InitVideo.TargetFramesPerSecond);
     }
 
+    [Fact]
+    public void Compile_AudioOnlyClip_IgnoresAuthoredSourceVideo()
+    {
+        ClipSpec audioOnlyClip = InitVideoClip(0) with
+        {
+            AudioOnly = true,
+            Stages = [Stage(10)],
+        };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(false, audioOnlyClip));
+
+        ClipPlan clip = Assert.Single(plan.Clips);
+        Assert.True(clip.AudioOnly);
+        Assert.Equal(ArchitectureEntryMode.TextToVideo, clip.EntryMode);
+        Assert.Null(clip.InitVideo);
+        Assert.Equal(StageInputKind.EmptyLatent, Assert.Single(clip.Stages).Input);
+    }
+
+    [Fact]
+    public void Compile_AudioOnlyClip_IgnoresLaterActiveStages()
+    {
+        ClipSpec audioOnlyClip = GeneratedClip(
+            0,
+            Stage(10),
+            Stage(11),
+            Stage(12)) with { AudioOnly = true };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(true, audioOnlyClip));
+
+        Assert.Equal(10, Assert.Single(Assert.Single(plan.Clips).Stages).StageId);
+    }
+
+    [Fact]
+    public void Compile_AudioOnlyLead_IgnoresTheNextClipsSourceVideo()
+    {
+        ClipSpec audio = GeneratedClip(0, Stage(10)) with { AudioOnly = true };
+        ClipSpec video = InitVideoClip(1) with { Stages = [Stage(11)] };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(true, audio, video));
+
+        ClipPlan plannedVideo = plan.Clips[1];
+        Assert.False(plannedVideo.AudioOnly);
+        Assert.Equal(ArchitectureEntryMode.TextToVideo, plannedVideo.EntryMode);
+        Assert.Null(plannedVideo.InitVideo);
+        Assert.Equal(
+            StageInputKind.EmptyLatent,
+            Assert.Single(plannedVideo.Stages).Input);
+        Assert.Equal(AudioSourceKind.PreviousClip, plannedVideo.Audio.Base.Kind);
+        Assert.Empty(plannedVideo.Audio.Spans);
+    }
+
+    [Fact]
+    public void Compile_IgnoresAudioOnlyOnLaterClips()
+    {
+        ClipSpec lead = GeneratedClip(0, Stage(10));
+        ClipSpec later = GeneratedClip(1, Stage(11)) with { AudioOnly = true };
+
+        VideoExecutionPlan plan = TestPlanCompiler.Compile(Spec(true, lead, later));
+
+        Assert.False(plan.Clips[1].AudioOnly);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(0.5)]

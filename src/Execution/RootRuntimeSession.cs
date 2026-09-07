@@ -152,6 +152,16 @@ internal sealed class RootRuntimeSession
         // Retained single-clip roots keep their existing save-audio wrapper.
         WGNodeData audio = _publishAudio ? ResolvePublishedAudio(media.AttachedAudio) : null;
         using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+        if (media.DataType == WGNodeData.DT_AUDIO)
+        {
+            foreach (string saveId in _hostAnimationSaveIds)
+            {
+                VideoGraphHelpers.RemoveNode(_generator, bridge, saveId);
+            }
+            DemoteCoreBaseImageSave(bridge);
+            media.SaveOutput(null, _generator.CurrentAudioVae, CoreFinalOutputNodeId);
+            return true;
+        }
         INodeOutput videoOutput = bridge.ResolvePath(mediaPath);
         if (videoOutput is null)
         {
@@ -258,7 +268,8 @@ internal sealed class RootRuntimeSession
 
         using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
         HashSet<string> liveRoots = [
-            .. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().Select(save => save.Id)
+            .. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().Select(save => save.Id),
+            .. bridge.Graph.NodesOfType<SaveAudioMP3Node>().Select(save => save.Id),
         ];
         AddArtifactNodeIds(liveRoots, timeline);
         RecordRootRemovals(

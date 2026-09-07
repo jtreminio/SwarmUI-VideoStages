@@ -94,4 +94,32 @@ public class RequestReaderTimelineAudioTests
                 span.SourceStartSeconds,
                 span.Volume)).ToArray());
     }
+
+    [Fact]
+    public void Read_DisabledTimelineAudioTrack_IsIgnored()
+    {
+        JObject track = MakeAudioTrack(
+            "track-disabled",
+            AudioSpan(0, 1, 0));
+        track["disabled"] = true;
+
+        Assert.Empty(ReadWithTracks(4, track).TimelineAudioSpans);
+    }
+
+    [Fact]
+    public void Read_SingleAudioOnlyOutput_IgnoresTimelineAudioTracks()
+    {
+        JObject clip = MakeClip(4, MakeStage("ltx-2"));
+        clip["audioOnly"] = true;
+        JObject root = new()
+        {
+            ["clips"] = new JArray(clip),
+            ["audioTracks"] = new JArray(
+                MakeAudioTrack("track-score", AudioSpan(0, 1, 0))),
+        };
+        T2IParamInput input = new(null);
+        SetVideoStagesConfig(input, root.ToString(Formatting.None));
+
+        Assert.Empty(RequestReader.Read(input).TimelineAudioSpans);
+    }
 }

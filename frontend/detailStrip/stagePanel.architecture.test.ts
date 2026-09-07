@@ -25,10 +25,12 @@ import {
     mountSelect,
     mountVideoStagesData,
 } from "../__test_helpers__/dom";
-import { buildArchitectureIcLorasSection } from "../architectures/authoringPanels";
+import { buildArchitectureIcLoraFields } from "../architectures/authoringPanels";
 import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
 import type { GeneratedEntryMode } from "../architectures/generatedFeatures";
 import type { ArchitectureModelCatalog } from "../architectures/types";
+import { clipSections } from "../clipEditor/sections";
+import { resetRememberedAccordionSections } from "../detailWidgets";
 import {
     MEDIA_SOURCE_PREVIOUS_CLIP,
     MEDIA_SOURCE_UPLOAD,
@@ -41,11 +43,9 @@ import {
     __resetPersistenceForTests,
     getState,
     getTimelineStore,
-    saveState,
 } from "../persistence/repository";
-import { createTimelineHistory } from "../timelineHistory";
 import type { CharacterRefine, Clip } from "../types";
-import { buildClipLorasSection } from "./clipLorasPanel";
+import { buildClipLoraControls } from "./clipLorasPanel";
 import type { DetailStripContext } from "./context";
 import type { StructuralOutcome } from "./draftQueue";
 import { buildStageParamsColumn } from "./stagePanel";
@@ -194,6 +194,7 @@ const dispatchSpy = () =>
         .mockReturnValue({ applied: false, revision: 0 });
 
 beforeEach(() => {
+    resetRememberedAccordionSections();
     (
         globalThis as { currentBackendFeatureSet?: string[] }
     ).currentBackendFeatureSet = [
@@ -240,10 +241,11 @@ describe("stage reference strengths", () => {
         expect(column.querySelector(".vst-stage-ref-slider")).toBeNull();
     });
 
-    it("hides keyframe strengths on a Bonita repair stage", () => {
+    it("keeps saved keyframe strengths visible but inactive on a Bonita repair stage", () => {
         const models = catalog();
         const stage = minimalStage({
             characterRefine: defaultCharacterRefine([]),
+            frameRefStrengths: [0.6],
         });
         const clip = minimalClip({
             frameRefs: [minimalRef()],
@@ -259,8 +261,62 @@ describe("stage reference strengths", () => {
             testRootDefaults(models),
         );
 
-        expect(column.textContent).not.toContain("Keyframe Strengths");
-        expect(column.querySelector(".vst-stage-ref-slider")).toBeNull();
+        expect(column.textContent).toContain("Keyframe Strengths");
+        expect(column.textContent).toContain(
+            "Keyframe strengths are inactive while Make Them Bonita is enabled.",
+        );
+        const slider = column.querySelector(".vst-stage-ref-slider");
+        expect(slider).not.toBeNull();
+        const number = slider?.querySelector<HTMLInputElement>(
+            'input[type="number"]',
+        );
+        expect(number?.value).toBe("0.6");
+        expect(number?.disabled).toBe(true);
+        expect(
+            slider?.querySelector<HTMLInputElement>('input[type="range"]')
+                ?.disabled,
+        ).toBe(true);
+        expect(stage.frameRefStrengths).toEqual([0.6]);
+    });
+
+    it("hides persisted IC-LoRA strengths when the architecture cannot use them", () => {
+        const models = catalog();
+        const stage = minimalStage({
+            model: "test-video.safetensors",
+            modelProfileId: "test-profile",
+            icLoraStrengths: [0.5],
+        });
+        const clip = minimalClip({
+            architectureHint: "test-video",
+            modelProfileId: "test-profile",
+            icLoras: [
+                {
+                    lora: "guide.safetensors",
+                    preset: "pose",
+                    driveSource: "Upload",
+                    driveData: "visual",
+                    driveMediaKinds: ["image"],
+                    stage: -1,
+                    strength: 1,
+                    attentionStrength: 1,
+                    controlType: "none",
+                    driveMedia: null,
+                },
+            ],
+            stages: [stage],
+        });
+
+        const column = buildStageParamsColumn(
+            context(models),
+            clip,
+            0,
+            0,
+            stage,
+            testRootDefaults(models),
+        );
+
+        expect(column.textContent).not.toContain("IC-LoRA Guide Strengths");
+        expect(column.querySelector(".vst-stage-iclora-strength")).toBeNull();
     });
 });
 
@@ -472,13 +528,13 @@ describe("stage architecture model filtering", () => {
             testRootDefaults(models),
         );
         column.appendChild(
-            buildClipLorasSection(
+            buildClipLoraControls(
                 context(models),
                 clip,
                 0,
                 0,
                 testRootDefaults(models),
-            ),
+            ).model,
         );
         const option = (value: string) =>
             Array.from(column.querySelectorAll("option")).find(
@@ -510,11 +566,13 @@ describe("stage architecture model filtering", () => {
                 },
             ],
         });
-        const panel = buildArchitectureIcLorasSection(
+        mountClip(clip);
+        const panel = buildArchitectureIcLoraFields(
             context(models),
             clip,
             0,
             testRootDefaults(models),
+            0,
         );
         const persisted = Array.from(panel.querySelectorAll("option")).find(
             (entry) => entry.value === "removed-ic-lora.safetensors",
@@ -550,22 +608,28 @@ describe("stage architecture model filtering", () => {
             ],
         });
 
-        const panel = buildArchitectureIcLorasSection(
-            context(models),
-            clip,
-            0,
-            testRootDefaults(models),
+        mountClip(clip);
+        const section = clipSections(getState(), 0, context(models)).find(
+            (entry) => entry.key === "ic-loras",
         );
-        const add = panel.querySelector<HTMLButtonElement>(
-            ".vst-detail-add-iclora",
-        );
+        if (!section) throw new Error("missing persisted IC-LoRA section");
+        const fields = section.items[0].fields();
+        const panel = document.createElement("div");
+        panel.append(...(Array.isArray(fields) ? fields : [fields]));
 
-        expect(panel.textContent).toContain("Persisted IC-LoRAs");
+        expect(section.label).toBe("IC-LoRAs");
         expect(panel.textContent).toContain(
             "Existing entries remain available for removal.",
         );
-        expect(add?.disabled).toBe(true);
-        expect(panel.querySelector("select")).toBeNull();
+        expect(panel.textContent).toContain("persisted-ic-lora.safetensors");
+        expect(
+            section.actions?.find((action) => action.kind === "add"),
+        ).toMatchObject({ disabled: true });
+        expect(
+            section.items[0].actions?.find(
+                (action) => action.kind === "delete",
+            ),
+        ).toMatchObject({ label: "Delete", run: expect.any(Function) });
     });
 
     it("offers each latent upscaling mode only when the architecture supports it", () => {
@@ -869,6 +933,7 @@ describe("stage architecture model filtering", () => {
     });
 
     it("restores the model selection when the conversion cannot be applied", () => {
+        mountVideoStagesData({ clips: [] });
         const models = catalog();
         const clip = minimalClip({
             stages: [minimalStage({ model: "ltx" })],
@@ -970,7 +1035,7 @@ describe("stage architecture model filtering", () => {
         expect(persisted).toEqual(before);
     });
 
-    it("commits a conversion through the UI as one exact undoable store change", async () => {
+    it("commits a conversion through the UI as one store change", async () => {
         const models = catalog();
         const dto = {
             schemaVersion: 2,
@@ -1015,26 +1080,14 @@ describe("stage architecture model filtering", () => {
         __resetPersistenceForTests();
 
         const notifications: string[] = [];
-        const history = createTimelineHistory({
-            read: () => JSON.stringify(getState()),
-            write: (value) => {
-                saveState(JSON.parse(value) as ReturnType<typeof getState>, {
-                    expectedRevision: getTimelineStore().revision(),
-                    notifyDomChange: false,
-                    origin: "history",
-                });
-            },
-        });
-        history.rebase();
         getTimelineStore().subscribe((_state, meta) => {
             notifications.push(meta.origin);
-            history.capture();
         });
 
-        const before = JSON.stringify(getState());
         const revisionBefore = getTimelineStore().revision();
         const panelContext = context(models);
         const persisted = getState().clips[0];
+
         const column = buildStageParamsColumn(
             panelContext,
             persisted,
@@ -1053,9 +1106,6 @@ describe("stage architecture model filtering", () => {
 
         expect(getTimelineStore().revision()).toBe(revisionBefore + 1);
         expect(notifications).toEqual(["detail-strip"]);
-        // The timeline's store subscriber owns the render for this dispatch;
-        // the model picker must not trigger a second paint itself.
-        expect(panelContext.render).not.toHaveBeenCalled();
         expect(getState().clips[0]).toMatchObject({
             architectureHint: "test-video",
             modelProfileId: "test-profile",
@@ -1066,15 +1116,6 @@ describe("stage architecture model filtering", () => {
                 },
             ],
         });
-        const after = JSON.stringify(getState());
-
-        expect(history.undo()).toBe(true);
-        expect(JSON.stringify(getState())).toBe(before);
-        expect(history.undo()).toBe(false);
-        expect(history.redo()).toBe(true);
-        expect(JSON.stringify(getState())).toBe(after);
-        expect(history.redo()).toBe(false);
-        expect(notifications).toEqual(["detail-strip", "history", "history"]);
     });
 
     it("enables sampler and scheduler controls for a resolved generating model", () => {
@@ -1300,7 +1341,9 @@ describe("stage architecture model filtering", () => {
         );
         expect(
             bonitaChildren.indexOf(pictureSection as HTMLElement),
-        ).toBeLessThan(bonitaChildren.indexOf(verifyIdentity as HTMLElement));
+        ).toBeGreaterThan(
+            bonitaChildren.indexOf(verifyIdentity as HTMLElement),
+        );
         const pictures = Array.from(
             column.querySelectorAll<HTMLElement>(
                 ".vst-character-refine-picture",
@@ -1438,11 +1481,11 @@ describe("stage architecture model filtering", () => {
         group
             ?.querySelector<HTMLElement>(":scope > .input-group-header")
             ?.click();
-        expect(group?.classList).toContain("input-group-closed");
+        expect(group?.classList).toContain("input-group-open");
         expect(
             group?.querySelector<HTMLElement>(":scope > .input-group-content")
                 ?.hidden,
-        ).toBe(true);
+        ).toBe(false);
         expect(
             column.querySelectorAll(".vst-character-refine-picture"),
         ).toHaveLength(0);
@@ -1483,7 +1526,7 @@ describe("stage architecture model filtering", () => {
         expect(toggle?.disabled).toBe(false);
     });
 
-    it("shows Make Them Bonita only with an eligible video input and 1x upscale", () => {
+    it("shows Make Them Bonita for eligible video input and disables it above 1x", () => {
         const models = catalogWithMiniMax();
         const renderMiniMax = (
             stageIdx: number,
@@ -1585,26 +1628,30 @@ describe("stage architecture model filtering", () => {
                 ),
             ),
         ).not.toBeNull();
-        expect(
-            bonita(
-                renderMiniMax(
-                    0,
-                    initVideoFixture({ source: MEDIA_SOURCE_UPLOAD }),
-                    1.5,
-                ),
-            )?.hidden,
-        ).toBe(true);
-        expect(bonita(renderMiniMax(1, null, 1.5))?.hidden).toBe(true);
-        expect(
-            bonita(
-                renderMiniMax(
-                    0,
-                    initVideoFixture(),
-                    1.5,
-                    defaultCharacterRefine([]),
-                ),
-            )?.hidden,
-        ).toBe(true);
+        for (const column of [
+            renderMiniMax(0, initVideoFixture(), 1.5),
+            renderMiniMax(1, null, 1.5),
+            renderMiniMax(
+                0,
+                initVideoFixture(),
+                1.5,
+                defaultCharacterRefine([]),
+            ),
+        ]) {
+            const group = bonita(column);
+            expect(group?.hidden).toBe(false);
+            expect(group?.classList.contains("vst-field-disabled")).toBe(true);
+            expect(group?.title).toBe(
+                "Set Upscale to 1× to use Make Them Bonita",
+            );
+            const controls = Array.from(
+                group?.querySelectorAll<HTMLInputElement>(
+                    "input, select, button",
+                ) ?? [],
+            );
+            expect(controls.length).toBeGreaterThan(0);
+            expect(controls.every((control) => control.disabled)).toBe(true);
+        }
 
         const ltxStage = minimalStage({
             model: "ltx-2.5.safetensors",
@@ -1674,7 +1721,7 @@ describe("stage architecture model filtering", () => {
         ).not.toContain("Reference Pictures");
     });
 
-    it("updates Make Them Bonita visibility as upscale changes", () => {
+    it("keeps Make Them Bonita visible and updates availability as upscale changes", () => {
         const models = catalogWithMiniMax();
         const stage = minimalStage({
             model: "minimax.safetensors",
@@ -1710,9 +1757,26 @@ describe("stage architecture model filtering", () => {
             throw new Error("Bonita and Upscale controls must render");
         }
 
+        const header = bonita.querySelector<HTMLElement>(".input-group-header");
+        const content = bonita.querySelector<HTMLElement>(
+            ".input-group-content",
+        );
+        if (!header || !content) throw new Error("Section controls missing");
+        header.click();
+        expect(content.hidden).toBe(false);
+        const finder = content.querySelector<HTMLSelectElement>("select");
+        if (!finder) throw new Error("Finder missing");
+        expect(finder.value).toBe("sam3");
+        expect(finder?.matches(":disabled")).toBe(true);
+
         upscale.value = "1.5";
         upscale.dispatchEvent(new Event("input"));
-        expect(bonita.hidden).toBe(true);
+        expect(bonita.hidden).toBe(false);
+        const toggle = bonita.querySelector<HTMLInputElement>(
+            ".group-toggler-switch input",
+        );
+        expect(toggle?.disabled).toBe(true);
+        expect(bonita.classList.contains("vst-field-disabled")).toBe(true);
         expect(column.querySelector(".vst-character-refine-section")).toBe(
             bonita,
         );
@@ -1720,6 +1784,13 @@ describe("stage architecture model filtering", () => {
         upscale.value = "1";
         upscale.dispatchEvent(new Event("input"));
         expect(bonita.hidden).toBe(false);
+        expect(toggle?.disabled).toBe(false);
+        expect(bonita.classList.contains("vst-field-disabled")).toBe(false);
+        expect(finder.matches(":disabled")).toBe(true);
+        header.click();
+        expect(content.hidden).toBe(true);
+        header.click();
+        expect(content.hidden).toBe(false);
         expect(column.querySelector(".vst-character-refine-section")).toBe(
             bonita,
         );

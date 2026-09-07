@@ -7,8 +7,6 @@ import {
     RETAKE_STRENGTH_STEP,
 } from "../constants";
 import {
-    appendHelp,
-    buildAccordionSection,
     buildDetailActionButton,
     buildField,
     buildSlider,
@@ -17,11 +15,10 @@ import { clampStartLength } from "../trimGeometry";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
 
-export const buildRetakeSection = (
+export const buildRetakeFields = (
     context: DetailStripContext,
     clip: Clip,
     clipIdx: number,
-    open = false,
 ): HTMLElement => {
     const retake = clip.retake;
     const decision = context
@@ -29,35 +26,7 @@ export const buildRetakeSection = (
         .capabilities.forClip(clip)
         .decision("retake");
     const col = document.createElement("div");
-    col.className = "vst-detail-col vst-detail-retake-col";
-    const buildSection = (): HTMLElement => {
-        const built = buildAccordionSection({
-            key: "retake",
-            label: "Retake",
-            className: "vst-detail-retake-section",
-            open,
-            content: col,
-            flattenContent: true,
-            headerAction: retake
-                ? {
-                      label: "×",
-                      title: "Delete the retake window",
-                      className: "vst-detail-delete vst-detail-delete-retake",
-                      variant: "interrupt",
-                      onClick: () => context.removeRetake(clipIdx),
-                  }
-                : undefined,
-        });
-        appendHelp(
-            built.heading,
-            built.section,
-            "Retake",
-            "Regenerate just a time window of a base video, leaving the rest " +
-                "untouched — handy for fixing one bad stretch without redoing " +
-                "the whole clip.",
-        );
-        return built.section;
-    };
+    col.className = "vst-detail-fields vst-detail-col vst-detail-retake-col";
     if (!retake) {
         const hint = document.createElement("small");
         hint.className = "vst-detail-field-hint";
@@ -73,7 +42,7 @@ export const buildRetakeSection = (
             onClick: () => context.createRetake(clipIdx),
         });
         col.appendChild(add);
-        return buildSection();
+        return col;
     }
 
     const clipDuration = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
@@ -166,5 +135,5 @@ export const buildRetakeSection = (
         "Applies when refining a base video; audio inside the window regenerates with the frames.";
     col.appendChild(note);
 
-    return buildSection();
+    return col;
 };

@@ -1,5 +1,87 @@
 "use strict";
 (() => {
+  // frontend/architectureCatalogStatusView.ts
+  var detailDock = (body) => body.parentElement?.querySelector(":scope > .vst-detail") ?? null;
+  var setDockAvailable = (body, available) => {
+    const dock = detailDock(body);
+    if (dock) {
+      dock.hidden = !available;
+    }
+  };
+  var retryButton = (onRetry) => {
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.className = "basic-button vst-catalog-retry";
+    button2.textContent = "Retry";
+    button2.addEventListener("click", onRetry);
+    return button2;
+  };
+  var renderBlockingArchitectureCatalogStatus = (body, snapshot, onRetry) => {
+    if (snapshot.catalog) {
+      setDockAvailable(body, true);
+      return false;
+    }
+    setDockAvailable(body, false);
+    body.replaceChildren();
+    const status = document.createElement("section");
+    status.className = "vst-catalog-status";
+    status.setAttribute("role", "status");
+    status.dataset.catalogStatus = snapshot.status;
+    const title = document.createElement("strong");
+    title.className = "vst-catalog-status-title";
+    if (snapshot.status === "loading") {
+      title.textContent = "Loading video model capabilities…";
+      status.setAttribute("aria-busy", "true");
+      status.appendChild(title);
+      body.appendChild(status);
+      return true;
+    }
+    title.textContent = "Video model capabilities are unavailable";
+    const explanation = document.createElement("p");
+    explanation.textContent = "VideoStages cannot safely author clips until the backend catalog is available.";
+    status.append(title, explanation, retryButton(onRetry));
+    body.appendChild(status);
+    return true;
+  };
+  var renderRetainedArchitectureCatalogStatus = (body, snapshot, onRetry) => {
+    body.querySelector(":scope > .vst-catalog-notice")?.remove();
+    if (snapshot.status !== "refreshing" && snapshot.status !== "stale") {
+      return;
+    }
+    const notice = document.createElement("div");
+    notice.className = `vst-catalog-notice vst-catalog-notice-${snapshot.status}`;
+    notice.dataset.catalogStatus = snapshot.status;
+    notice.setAttribute(
+      "role",
+      snapshot.status === "stale" ? "alert" : "status"
+    );
+    const text2 = document.createElement("span");
+    text2.textContent = snapshot.status === "refreshing" ? "Refreshing video model capabilities…" : "Using the last known video model capabilities; refresh failed.";
+    notice.appendChild(text2);
+    if (snapshot.status === "stale") {
+      notice.appendChild(retryButton(onRetry));
+    }
+    body.prepend(notice);
+  };
+
+  // frontend/architectures/catalogQueries.ts
+  var architectureDescriptor = (catalog, architectureId) => (architectureId ? catalog?.architectures.find((entry) => entry.id === architectureId) : null) ?? null;
+  var modelCatalogEntry = (catalog, model) => (model ? catalog?.entries.find((entry) => entry.value === model) : null) ?? null;
+  var supportedArchitectureCatalog = (catalog) => ({
+    architectures: structuredClone(catalog.architectures),
+    source: catalog.source,
+    entries: catalog.entries.filter((entry) => entry.architectureId !== null)
+  });
+  var architectureForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.architectureId ?? null;
+  var modelProfileForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.modelProfileId ?? null;
+  var buildArchitectureRetargetPlan = (catalog, model) => {
+    const entry = modelCatalogEntry(catalog, model);
+    const architectureId = entry?.architectureId ?? null;
+    const profileId = entry?.modelProfileId ?? null;
+    return entry && architectureId && profileId ? { architectureId, modelProfileId: profileId, model } : null;
+  };
+  var entryModesForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.entryModes ?? [];
+
   // frontend/utils.ts
   var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
   var toNumber = (value, fallback) => {
@@ -18,221 +100,6 @@
     } catch {
       return fallback;
     }
-  };
-
-  // frontend/host/swarmUiAdapters.ts
-  var findHostBottomTabLink = (tabId) => document.querySelector(`a[href="#${tabId}"]`);
-  var getHostBottomTabMount = () => {
-    const nav = document.getElementById("bottombartabcollection");
-    const content = document.getElementById("t2i_bottom_bar_content");
-    if (!nav || !content) {
-      return null;
-    }
-    return {
-      nav,
-      content,
-      toolsTabItem: nav.querySelector('a[href="#Tools-Tab"]')?.parentElement ?? null
-    };
-  };
-  var registerBottomTabWithHost = (navLink) => {
-    if (typeof genTabLayout === "undefined" || !genTabLayout) {
-      return;
-    }
-    const tab = new MovableGenTab(navLink, genTabLayout);
-    genTabLayout.managedTabs.push(tab);
-    if (genTabLayout.managedTabContainers.length === 0) {
-      return;
-    }
-    tab.contentElem.style.height = "100%";
-    tab.contentElem.style.width = "100%";
-    const parent = tab.contentElem.parentElement;
-    if (parent && !genTabLayout.managedTabContainers.includes(parent)) {
-      genTabLayout.managedTabContainers.push(parent);
-    }
-    tab.update();
-    tab.navElem.addEventListener("click", () => {
-      browserUtil.makeVisible(tab.contentElem);
-    });
-    genTabLayout.reapplyPositions();
-  };
-  var showHostPopover = (id, event) => {
-    if (typeof doPopover === "function") {
-      doPopover(id, event);
-    }
-  };
-  var installHostFeature = (featureId, buttonContainerId) => {
-    if (typeof installFeatureById !== "function") {
-      return false;
-    }
-    installFeatureById(featureId, buttonContainerId);
-    return true;
-  };
-  var renderHostSlider = (spec) => makeSliderInput(
-    null,
-    spec.id,
-    "",
-    spec.label,
-    "",
-    spec.value,
-    spec.min,
-    spec.max,
-    spec.viewMin ?? spec.min,
-    spec.viewMax ?? spec.max,
-    spec.step,
-    spec.isPot ?? false,
-    false,
-    false
-  );
-  var enhanceHostPromptEditor = (editor) => {
-    if (typeof textPromptAddKeydownHandler === "function") {
-      textPromptAddKeydownHandler(editor);
-    }
-  };
-  var generationInputProjector = null;
-  var installedGenerationWrapper = null;
-  var installedInputCollector = null;
-  var generationProjectorRetry = null;
-  var projectGenerationInput = (actualInput, beforeProjection) => {
-    try {
-      beforeProjection?.();
-      if (isRecord(actualInput)) {
-        generationInputProjector?.(actualInput);
-      }
-    } catch (error) {
-      if (typeof showError === "function") {
-        showError(`${error}`);
-      }
-      throw error;
-    }
-  };
-  var installHostInputCollectorProjector = () => {
-    const host = globalThis;
-    if (typeof host.getGenInput !== "function" || host.getGenInput === installedInputCollector) {
-      return;
-    }
-    const original = host.getGenInput;
-    const wrapper = function(...args) {
-      const actualInput = original.apply(this, args);
-      projectGenerationInput(actualInput);
-      return actualInput;
-    };
-    host.getGenInput = wrapper;
-    installedInputCollector = wrapper;
-  };
-  var retryGenerationProjector = () => {
-    if (generationProjectorRetry !== null) {
-      return;
-    }
-    generationProjectorRetry = setTimeout(() => {
-      generationProjectorRetry = null;
-      if (generationInputProjector) {
-        installHostGenerationInputProjector(generationInputProjector);
-      }
-    }, 250);
-  };
-  var installHostGenerationInputProjector = (projector) => {
-    generationInputProjector = projector;
-    installHostInputCollectorProjector();
-    if (typeof mainGenHandler === "undefined" || typeof mainGenHandler?.doGenerate !== "function") {
-      retryGenerationProjector();
-      return false;
-    }
-    if (generationProjectorRetry !== null) {
-      clearTimeout(generationProjectorRetry);
-      generationProjectorRetry = null;
-    }
-    if (mainGenHandler.doGenerate === installedGenerationWrapper) {
-      return true;
-    }
-    const original = mainGenHandler.doGenerate;
-    const wrapper = function(...args) {
-      const existingPostCollect = args[2];
-      args[2] = (actualInput) => projectGenerationInput(
-        actualInput,
-        typeof existingPostCollect === "function" ? () => existingPostCollect(actualInput) : void 0
-      );
-      original.apply(this, args);
-    };
-    mainGenHandler.doGenerate = wrapper;
-    installedGenerationWrapper = wrapper;
-    return true;
-  };
-  var hasHostInputBrowser = () => typeof inputBrowserHelper !== "undefined" && Boolean(inputBrowserHelper);
-  var isHostReusableMediaPath = (value) => typeof isValidMediaPath === "function" && isValidMediaPath(value);
-  var openHostInputBrowser = (inputId, browserTypes) => {
-    if (typeof inputBrowserHelper !== "undefined" && inputBrowserHelper) {
-      inputBrowserHelper.openInputBrowser(inputId, browserTypes);
-    }
-  };
-  var refreshHostParameters = () => {
-    if (typeof refreshParameterValues === "function") {
-      refreshParameterValues(true);
-    }
-  };
-  var canRequestHostWs = () => typeof makeWSRequest === "function";
-  var requestHostWs = (route, payload, onMessage, onError) => {
-    if (typeof makeWSRequest !== "function") {
-      return;
-    }
-    makeWSRequest(route, payload, onMessage, 0, onError);
-  };
-
-  // frontend/bottomTimelineTab.ts
-  var TAB_ID = "VideoStages-Timeline-Tab";
-  var TIMELINE_BODY_ID = "videostages-timeline-body";
-  var updateTimelineTabIndicator = (enabled) => {
-    const navLink = findHostBottomTabLink(TAB_ID);
-    if (!navLink) {
-      return;
-    }
-    const mark = navLink.querySelector(".vst-tab-check");
-    if (enabled && !mark) {
-      const check = document.createElement("span");
-      check.className = "vst-tab-check";
-      check.setAttribute("aria-hidden", "true");
-      check.textContent = "✓";
-      navLink.appendChild(check);
-      navLink.title = "Video Stages is enabled";
-    } else if (!enabled && mark) {
-      mark.remove();
-      navLink.removeAttribute("title");
-    }
-  };
-  var injectTimelineTab = () => {
-    const existing = document.getElementById(TIMELINE_BODY_ID);
-    if (existing) {
-      return existing;
-    }
-    const mount = getHostBottomTabMount();
-    if (!mount) {
-      return null;
-    }
-    const li = document.createElement("li");
-    li.className = "nav-item";
-    li.setAttribute("role", "presentation");
-    li.innerHTML = `<a class="nav-link translate" data-bs-toggle="tab" href="#${TAB_ID}" aria-selected="false" tabindex="-1" role="tab">VideoStages</a>`;
-    if (mount.toolsTabItem) {
-      mount.nav.insertBefore(li, mount.toolsTabItem);
-    } else {
-      mount.nav.appendChild(li);
-    }
-    const pane = document.createElement("div");
-    pane.className = "tab-pane genpage-bottom-tab";
-    pane.id = TAB_ID;
-    pane.setAttribute("role", "tabpanel");
-    const shell = document.createElement("div");
-    shell.className = "vst-timeline";
-    const body = document.createElement("div");
-    body.className = "vst-right";
-    body.id = TIMELINE_BODY_ID;
-    shell.appendChild(body);
-    pane.appendChild(shell);
-    mount.content.appendChild(pane);
-    const navLink = li.querySelector("a");
-    if (navLink) {
-      registerBottomTabWithHost(navLink);
-    }
-    return body;
   };
 
   // frontend/authoringMedia.ts
@@ -357,20 +224,20 @@
 
   // frontend/host/defaultVideoStagesHostBridge.ts
   var textInput = (id) => {
-    const element = document.getElementById(id);
-    return element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement ? element : null;
+    const element2 = document.getElementById(id);
+    return element2 instanceof HTMLInputElement || element2 instanceof HTMLTextAreaElement ? element2 : null;
   };
   var input = (id) => {
-    const element = document.getElementById(id);
-    return element instanceof HTMLInputElement ? element : null;
+    const element2 = document.getElementById(id);
+    return element2 instanceof HTMLInputElement ? element2 : null;
   };
   var select = (id) => {
-    const element = document.getElementById(id);
-    return element instanceof HTMLSelectElement ? element : null;
+    const element2 = document.getElementById(id);
+    return element2 instanceof HTMLSelectElement ? element2 : null;
   };
-  var selectOptions = (element) => ({
-    values: element ? Array.from(element.options, (option) => option.value) : [],
-    labels: element ? Array.from(element.options, (option) => option.label) : []
+  var selectOptions = (element2) => ({
+    values: element2 ? Array.from(element2.options, (option) => option.value) : [],
+    labels: element2 ? Array.from(element2.options, (option) => option.label) : []
   });
   var registrySnapshot = (registry) => registry?.getSnapshot?.() ?? null;
   var withSuppressedPromptCompletion = (fn) => {
@@ -401,11 +268,11 @@
     );
   });
   var pageMetadataForSource = (src) => {
-    for (const element of document.querySelectorAll(
+    for (const element2 of document.querySelectorAll(
       "[data-src][data-metadata]"
     )) {
-      const metadata = element.dataset.metadata;
-      if (element.dataset.src === src && metadata && metadata !== "{}") {
+      const metadata = element2.dataset.metadata;
+      if (element2.dataset.src === src && metadata && metadata !== "{}") {
         return metadata;
       }
     }
@@ -510,8 +377,8 @@
       return { values: [...param.values], labels };
     },
     hasBackendFeature: (feature) => typeof currentBackendFeatureSet !== "undefined" && Array.isArray(currentBackendFeatureSet) && currentBackendFeatureSet.includes(feature),
-    notifyChanged: (element, suppressPromptCompletion = false) => {
-      const notify2 = () => triggerChangeFor(element);
+    notifyChanged: (element2, suppressPromptCompletion = false) => {
+      const notify2 = () => triggerChangeFor(element2);
       if (suppressPromptCompletion) {
         withSuppressedPromptCompletion(notify2);
       } else {
@@ -568,9 +435,9 @@
     },
     getMediaOutputPrefix: () => typeof getImageOutPrefix === "function" ? getImageOutPrefix() : "",
     createInitVideoElement: () => document.createElement("video"),
-    enableSliders: (element) => {
+    enableSliders: (element2) => {
       if (typeof enableSlidersIn === "function") {
-        enableSlidersIn(element);
+        enableSlidersIn(element2);
       }
     },
     registerRefineVideoButton: (onSelect, description) => {
@@ -671,152 +538,6 @@
   var bridge = createDefaultVideoStagesHostBridge();
   var getVideoStagesHostBridge = () => bridge;
 
-  // frontend/clipSemantics.ts
-  var activePrefix = (items) => {
-    const firstSkipped = items.findIndex((item) => item.skipped === true);
-    return firstSkipped < 0 ? [...items] : items.slice(0, firstSkipped);
-  };
-  var applySkipSuffix = (items, fromIndex, skipped) => {
-    const firstSkipped = items.findIndex((item) => item.skipped === true);
-    const start = skipped ? fromIndex : Math.max(0, firstSkipped);
-    for (let index = start; index < items.length; index++) {
-      items[index].skipped = skipped;
-    }
-  };
-  var sealSkipSuffix = (items) => {
-    const firstSkipped = items.findIndex((item) => item.skipped === true);
-    if (firstSkipped >= 0) {
-      applySkipSuffix(items, firstSkipped, true);
-    }
-  };
-  var activeStageCount = (clip) => {
-    const firstSkipped = clip.stages.findIndex(
-      (stage) => stage.skipped === true
-    );
-    return firstSkipped < 0 ? clip.stages.length : firstSkipped;
-  };
-  var isExecutableClip = (clip) => !clip.skipped && (clip.initVideo !== null || activeStageCount(clip) > 0);
-  var executableClipIndexes = (clips) => activePrefix(clips).flatMap(
-    (clip, index) => isExecutableClip(clip) ? [index] : []
-  );
-  var executableBoundaries = (clips) => {
-    const indexes = executableClipIndexes(clips);
-    const boundaries = [];
-    for (let position = 0; position < indexes.length - 1; position++) {
-      const leftIdx = indexes[position];
-      const rightIdx = indexes[position + 1];
-      boundaries.push({
-        position,
-        leftIdx,
-        rightIdx,
-        leftId: clips[leftIdx].id,
-        rightId: clips[rightIdx].id
-      });
-    }
-    return boundaries;
-  };
-  var executableBoundaryForLeftClip = (clips, leftClipIdx) => executableBoundaries(clips).find(
-    (boundary) => boundary.leftIdx === leftClipIdx
-  ) ?? null;
-
-  // frontend/architectures/catalogQueries.ts
-  var architectureDescriptor = (catalog, architectureId) => (architectureId ? catalog?.architectures.find((entry) => entry.id === architectureId) : null) ?? null;
-  var modelCatalogEntry = (catalog, model) => (model ? catalog?.entries.find((entry) => entry.value === model) : null) ?? null;
-  var supportedArchitectureCatalog = (catalog) => ({
-    architectures: structuredClone(catalog.architectures),
-    source: catalog.source,
-    entries: catalog.entries.filter((entry) => entry.architectureId !== null)
-  });
-  var architectureForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.architectureId ?? null;
-  var modelProfileForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.modelProfileId ?? null;
-  var buildArchitectureRetargetPlan = (catalog, model) => {
-    const entry = modelCatalogEntry(catalog, model);
-    const architectureId = entry?.architectureId ?? null;
-    const profileId = entry?.modelProfileId ?? null;
-    return entry && architectureId && profileId ? { architectureId, modelProfileId: profileId, model } : null;
-  };
-  var entryModesForModel = (catalog, model) => modelCatalogEntry(catalog, model)?.entryModes ?? [];
-
-  // frontend/architectures/none/identity.ts
-  var NONE_ARCHITECTURE_ID = "none";
-
-  // frontend/architectures/clipIdentity.ts
-  var modelIdentityFromCatalog = (catalog, model) => {
-    if (!catalog) return null;
-    const entry = modelCatalogEntry(catalog, model);
-    if (!entry?.architectureId || !entry.modelProfileId || !entry.compatibilityClassId) {
-      return null;
-    }
-    return {
-      architectureId: entry.architectureId,
-      modelProfileId: entry.modelProfileId,
-      compatibilityClassId: entry.compatibilityClassId
-    };
-  };
-  var resolvedClipArchitectureId = (clip, catalog) => {
-    if (clip.initVideo !== null && activeStageCount(clip) === 0) {
-      return NONE_ARCHITECTURE_ID;
-    }
-    const stageZeroModel = clip.stages[0]?.model;
-    return stageZeroModel ? modelIdentityFromCatalog(catalog, stageZeroModel)?.architectureId ?? null : null;
-  };
-  var deriveClipArchitectureIdentity = (clip, catalog) => {
-    if (!catalog) return null;
-    const identities = clip.stages.map((stage) => ({
-      stage,
-      identity: modelIdentityFromCatalog(catalog, stage.model)
-    }));
-    if (identities.some(({ identity }) => !identity)) {
-      return null;
-    }
-    const authored = identities[0]?.identity ?? null;
-    if (authored && identities.some(
-      ({ identity }) => identity?.architectureId !== authored.architectureId || identity.compatibilityClassId !== authored.compatibilityClassId
-    )) {
-      return null;
-    }
-    const authoredIdentity = {
-      authoredArchitectureId: authored?.architectureId ?? null,
-      authoredModelProfileId: authored?.modelProfileId ?? null
-    };
-    if (clip.initVideo !== null && activeStageCount(clip) === 0) {
-      return {
-        architectureId: NONE_ARCHITECTURE_ID,
-        modelProfileId: NONE_ARCHITECTURE_ID,
-        ...authoredIdentity
-      };
-    }
-    if (authored) {
-      return {
-        architectureId: authored.architectureId,
-        modelProfileId: authored.modelProfileId,
-        ...authoredIdentity
-      };
-    }
-    if (clip.architectureHint === NONE_ARCHITECTURE_ID && clip.modelProfileId === NONE_ARCHITECTURE_ID) {
-      return {
-        architectureId: NONE_ARCHITECTURE_ID,
-        modelProfileId: NONE_ARCHITECTURE_ID,
-        ...authoredIdentity
-      };
-    }
-    const validEmptyIdentity = catalog.architectures.some(
-      (architecture) => architecture.id === clip.architectureHint
-    );
-    return validEmptyIdentity ? {
-      architectureId: clip.architectureHint,
-      modelProfileId: clip.modelProfileId,
-      ...authoredIdentity
-    } : null;
-  };
-  var reconcileClipArchitectureIdentity = (clip, catalog) => {
-    const identity = deriveClipArchitectureIdentity(clip, catalog);
-    if (!identity) return false;
-    clip.architectureHint = identity.architectureId;
-    clip.modelProfileId = identity.modelProfileId;
-    return true;
-  };
-
   // frontend/architectures/generatedFeatures.ts
   var ARCHITECTURE_FEATURE_LABELS = {
     promptRelay: "Prompt relay",
@@ -853,7 +574,8 @@
     "Native",
     "Upload",
     "ControlNet",
-    "AceStepFun"
+    "AceStepFun",
+    "Previous Clip"
   ];
 
   // frontend/generatedMediaSource.ts
@@ -924,13 +646,15 @@
     AUDIO_SOURCE_NATIVE,
     AUDIO_SOURCE_UPLOAD,
     AUDIO_SOURCE_CONTROLNET,
-    AUDIO_SOURCE_ACE_STEP_FUN
+    AUDIO_SOURCE_ACE_STEP_FUN,
+    AUDIO_SOURCE_PREVIOUS_CLIP
   ] = AUDIO_SOURCE_KINDS;
   var isAceStepFunAudioSource = (source) => parseAceStepFunIndex(source) !== null;
   var LITERAL_AUDIO_SOURCES = [
     AUDIO_SOURCE_NATIVE,
     AUDIO_SOURCE_UPLOAD,
-    AUDIO_SOURCE_CONTROLNET
+    AUDIO_SOURCE_CONTROLNET,
+    AUDIO_SOURCE_PREVIOUS_CLIP
   ];
   var canonicalAudioSource = (source) => {
     const normalized = `${source ?? ""}`.trim();
@@ -952,7 +676,7 @@
   var defaultAuthoringAudioSource = (allowedKinds) => allowedKinds.includes(AUDIO_SOURCE_NATIVE) || allowedKinds.includes(AUDIO_SOURCE_DISABLED_KIND) ? AUDIO_SOURCE_NATIVE : allowedKinds[0] ?? AUDIO_SOURCE_NATIVE;
   var canUseClipLengthFromAudio = (source) => {
     const kind = audioSourceKind(source);
-    return kind === AUDIO_SOURCE_UPLOAD || kind === AUDIO_SOURCE_CONTROLNET || kind === AUDIO_SOURCE_ACE_STEP_FUN;
+    return kind === AUDIO_SOURCE_UPLOAD || kind === AUDIO_SOURCE_PREVIOUS_CLIP || kind === AUDIO_SOURCE_CONTROLNET || kind === AUDIO_SOURCE_ACE_STEP_FUN;
   };
   var getAceStepFunRefs = () => {
     const snapshot = getVideoStagesHostBridge().getAceStepFunRegistry();
@@ -1006,6 +730,12 @@
         label: AUDIO_SOURCE_CONTROLNET
       });
     }
+    if (context.previousClipEnabled) {
+      options.push({
+        value: AUDIO_SOURCE_PREVIOUS_CLIP,
+        label: context.previousClipLabel ?? "Previous Clip Output"
+      });
+    }
     if (context.allowedKinds) {
       const allowed = new Set(context.allowedKinds);
       const filtered = options.filter((option) => {
@@ -1023,8 +753,56 @@
     return options;
   };
 
+  // frontend/clipSemantics.ts
+  var clipDurationOf = (clip) => clip ? Math.max(0, clip.duration || 0) : 0;
+  var activePrefix = (items) => {
+    const firstSkipped = items.findIndex((item) => item.skipped === true);
+    return firstSkipped < 0 ? [...items] : items.slice(0, firstSkipped);
+  };
+  var applySkipSuffix = (items, fromIndex, skipped) => {
+    const firstSkipped = items.findIndex((item) => item.skipped === true);
+    const start = skipped ? fromIndex : Math.max(0, firstSkipped);
+    for (let index = start; index < items.length; index++) {
+      items[index].skipped = skipped;
+    }
+  };
+  var sealSkipSuffix = (items) => {
+    const firstSkipped = items.findIndex((item) => item.skipped === true);
+    if (firstSkipped >= 0) {
+      applySkipSuffix(items, firstSkipped, true);
+    }
+  };
+  var activeStageCount = (clip) => {
+    const firstSkipped = clip.stages.findIndex(
+      (stage) => stage.skipped === true
+    );
+    return firstSkipped < 0 ? clip.stages.length : firstSkipped;
+  };
+  var isExecutableClip = (clip) => !clip.skipped && (clip.initVideo !== null || activeStageCount(clip) > 0);
+  var executableClipIndexes = (clips) => activePrefix(clips).flatMap(
+    (clip, index) => isExecutableClip(clip) ? [index] : []
+  );
+  var executableBoundaries = (clips) => {
+    const indexes = executableClipIndexes(clips);
+    const boundaries = [];
+    for (let position = 0; position < indexes.length - 1; position++) {
+      const leftIdx = indexes[position];
+      const rightIdx = indexes[position + 1];
+      boundaries.push({
+        position,
+        leftIdx,
+        rightIdx,
+        leftId: clips[leftIdx].id,
+        rightId: clips[rightIdx].id
+      });
+    }
+    return boundaries;
+  };
+  var executableBoundaryForLeftClip = (clips, leftClipIdx) => executableBoundaries(clips).find(
+    (boundary) => boundary.leftIdx === leftClipIdx
+  ) ?? null;
+
   // frontend/renderUtils.ts
-  var escapeHtml = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   var NEUTRAL_FRAME_GRID = {
     frameGrid: 1,
     frameGridOrigin: 1
@@ -1536,6 +1314,1396 @@
     };
   };
 
+  // frontend/constants.ts
+  var DEFAULT_GENERATED_ENTRY_MODE = "text-to-video";
+  var REF_FRAME_MIN = 1;
+  var DEFAULT_CLIP_DURATION_SECONDS = 5;
+  var CLIP_DURATION_MIN = 1;
+  var CLIP_DURATION_MAX = 9999;
+  var PROMPT_WINDOW_MIN_DURATION = 0.25;
+  var PROMPT_WINDOW_DEFAULT_DURATION = 3;
+  var RETAKE_MIN_DURATION = 0.1;
+  var RETAKE_DEFAULT_DURATION = 3;
+  var RETAKE_DURATION_STEP = 0.1;
+  var RETAKE_STRENGTH_MIN = 0;
+  var RETAKE_STRENGTH_MAX = 1;
+  var RETAKE_STRENGTH_STEP = 0.05;
+  var RETAKE_STRENGTH_DEFAULT = 1;
+  var AUDIO_SPAN_MIN_LENGTH = 0.1;
+  var AUDIO_SPAN_VOLUME_MIN = 1e-5;
+  var AUDIO_SPAN_VOLUME_MAX = 1e5;
+  var AUDIO_SPAN_VOLUME_DEFAULT = 1;
+  var ROOT_DIMENSION_MIN = 32;
+  var ROOT_DIMENSION_SLIDER_MIN = 256;
+  var ROOT_DIMENSION_MAX = 4096;
+  var ROOT_DIMENSION_STEP = 32;
+  var ROOT_FPS_MIN = 1;
+  var ROOT_FPS_MAX = 120;
+  var STAGE_REF_STRENGTH_MIN = 0;
+  var STAGE_REF_STRENGTH_MAX = 1;
+  var STAGE_REF_STRENGTH_STEP = 0.1;
+  var STAGE_REF_STRENGTH_DEFAULT = 0.8;
+  var IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
+  var normalizeUploadFileName = (value) => {
+    const raw = `${value ?? ""}`.trim();
+    if (!raw) {
+      return null;
+    }
+    const slashIndex = Math.max(raw.lastIndexOf("/"), raw.lastIndexOf("\\"));
+    return slashIndex >= 0 ? raw.slice(slashIndex + 1) : raw;
+  };
+  var clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+  var mediaPreviewSrc = (value) => {
+    const resolved = resolveBrowserMedia(`${value ?? ""}`);
+    if (resolved.startsWith("data:") || resolved.startsWith("blob:")) {
+      return resolved;
+    }
+    const prefix = getVideoStagesHostBridge().getMediaOutputPrefix();
+    return `${prefix}/${resolved}`;
+  };
+
+  // frontend/architectures/none/identity.ts
+  var NONE_ARCHITECTURE_ID = "none";
+
+  // frontend/architectures/clipIdentity.ts
+  var modelIdentityFromCatalog = (catalog, model) => {
+    if (!catalog) return null;
+    const entry = modelCatalogEntry(catalog, model);
+    if (!entry?.architectureId || !entry.modelProfileId || !entry.compatibilityClassId) {
+      return null;
+    }
+    return {
+      architectureId: entry.architectureId,
+      modelProfileId: entry.modelProfileId,
+      compatibilityClassId: entry.compatibilityClassId
+    };
+  };
+  var resolvedClipArchitectureId = (clip, catalog) => {
+    if (clip.initVideo !== null && activeStageCount(clip) === 0) {
+      return NONE_ARCHITECTURE_ID;
+    }
+    const stageZeroModel = clip.stages[0]?.model;
+    return stageZeroModel ? modelIdentityFromCatalog(catalog, stageZeroModel)?.architectureId ?? null : null;
+  };
+  var deriveClipArchitectureIdentity = (clip, catalog) => {
+    if (!catalog) return null;
+    const identities = clip.stages.map((stage) => ({
+      stage,
+      identity: modelIdentityFromCatalog(catalog, stage.model)
+    }));
+    if (identities.some(({ identity }) => !identity)) {
+      return null;
+    }
+    const authored = identities[0]?.identity ?? null;
+    if (authored && identities.some(
+      ({ identity }) => identity?.architectureId !== authored.architectureId || identity.compatibilityClassId !== authored.compatibilityClassId
+    )) {
+      return null;
+    }
+    const authoredIdentity = {
+      authoredArchitectureId: authored?.architectureId ?? null,
+      authoredModelProfileId: authored?.modelProfileId ?? null
+    };
+    if (clip.initVideo !== null && activeStageCount(clip) === 0) {
+      return {
+        architectureId: NONE_ARCHITECTURE_ID,
+        modelProfileId: NONE_ARCHITECTURE_ID,
+        ...authoredIdentity
+      };
+    }
+    if (authored) {
+      return {
+        architectureId: authored.architectureId,
+        modelProfileId: authored.modelProfileId,
+        ...authoredIdentity
+      };
+    }
+    if (clip.architectureHint === NONE_ARCHITECTURE_ID && clip.modelProfileId === NONE_ARCHITECTURE_ID) {
+      return {
+        architectureId: NONE_ARCHITECTURE_ID,
+        modelProfileId: NONE_ARCHITECTURE_ID,
+        ...authoredIdentity
+      };
+    }
+    const validEmptyIdentity = catalog.architectures.some(
+      (architecture) => architecture.id === clip.architectureHint
+    );
+    return validEmptyIdentity ? {
+      architectureId: clip.architectureHint,
+      modelProfileId: clip.modelProfileId,
+      ...authoredIdentity
+    } : null;
+  };
+  var reconcileClipArchitectureIdentity = (clip, catalog) => {
+    const identity = deriveClipArchitectureIdentity(clip, catalog);
+    if (!identity) return false;
+    clip.architectureHint = identity.architectureId;
+    clip.modelProfileId = identity.modelProfileId;
+    return true;
+  };
+
+  // frontend/architectures/ltx2/generatedIcLora.ts
+  var IC_LORA_AUTO = "[AUTO]";
+  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
+  var IC_LORA_WEIGHTS = [
+    {
+      id: "union-control",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
+      dimensionDownscaleFactor: 2
+    },
+    {
+      id: "motion-track-control",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors",
+      dimensionDownscaleFactor: 2
+    },
+    {
+      id: "in-outpainting",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting/resolve/main/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "ingredients",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients/resolve/main/ltx-2.3-22b-ic-lora-ingredients-0.9.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "lipdub",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "detailer",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2-19b-IC-LoRA-Detailer/resolve/main/ltx-2-19b-ic-lora-detailer.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "pixel-spatial-upscaler-x2",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors",
+      dimensionDownscaleFactor: 2
+    },
+    {
+      id: "pixel-spatial-upscaler-2.5-x2",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors",
+      dimensionDownscaleFactor: 2
+    },
+    {
+      id: "pixel-spatial-upscaler-x4",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors",
+      dimensionDownscaleFactor: 4
+    },
+    {
+      id: "deblur",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Deblur/resolve/main/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "decompression",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Decompression/resolve/main/ltx-2.3-22b-ic-lora-decompression-0.9.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "water-simulation",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation/resolve/main/ltx-2.3-22b-ic-lora-water-simulation-0.9.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "instant-shave",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave/resolve/main/ltx-2.3-22b-ic-lora-instant-shave-0.9.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "colorization",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Colorization/resolve/main/ltx-2.3-22b-ic-lora-colorization-0.9.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "cross-eyed",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Cross-Eyed/resolve/main/ltx-2.3-22b-ic-lora-cross-eyed-0.9.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "day-to-night",
+      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Day-To-Night/resolve/main/ltx-2.3-22b-ic-lora-day-to-night-0.9.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "restyle",
+      weightsUrl: "https://huggingface.co/Cseti/LTX2.3-22B_ReStyle_IC-LoRA/resolve/main/852654_LTX2.3-22B_ReStyle_IC-LoRA_8000_v0.1.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "cameraman",
+      weightsUrl: "https://huggingface.co/Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2/resolve/main/LTX2.3-22B_IC-LoRA-Cameraman_v2_14000.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "crossview-prompt",
+      weightsUrl: "https://huggingface.co/Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt/resolve/main/LTX2.3-22B_IC-LoRA-CrossView-Prompt_v0.9_13700.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "outpaint",
+      weightsUrl: "https://huggingface.co/oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint/resolve/main/ltx-2.3-22b-ic-lora-outpaint.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "refocus",
+      weightsUrl: "https://huggingface.co/oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus/resolve/main/ltx-2.3-22b-ic-lora-refocus.safetensors",
+      dimensionDownscaleFactor: 1
+    },
+    {
+      id: "vr360-outpaint",
+      weightsUrl: "https://huggingface.co/TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA/resolve/main/360vroutpaint_v2_step09000.safetensors",
+      dimensionDownscaleFactor: 1
+    }
+  ];
+
+  // frontend/architectures/ltx2/icLoraPresets.ts
+  var DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT = {
+    acceptedKinds: ["image", "video"],
+    driveData: "visual"
+  };
+  var LIPDUB_DRIVE_MEDIA_CONTRACT = {
+    acceptedKinds: ["audio", "video"],
+    driveData: "audio"
+  };
+  var icLoraDriveMediaContractForData = (driveData) => {
+    if (driveData === "audio") {
+      return LIPDUB_DRIVE_MEDIA_CONTRACT;
+    }
+    if (driveData === "visual") {
+      return DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
+    }
+    return { acceptedKinds: [], driveData: "none" };
+  };
+  var IC_LORA_PRESET_CUSTOM_ID = "custom";
+  var IC_LORA_DEFAULT_PRESET_ID = "union-control";
+  var IC_LORA_PRESENTATION = {
+    "union-control": {
+      displayName: "Union Control",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "depth",
+      allowedControlTypes: ["none", "canny", "depth", "normal"],
+      note: "Structural control from depth/canny/normal signals; pick the control type to render. Dims snap to multiples of 64."
+    },
+    "motion-track-control": {
+      displayName: "Motion Track Control",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Feed an LTXVDrawTracks-rendered track video (e.g. saved from the official workflow) — hand-made dot videos don't match the training format. Dims snap to multiples of 64."
+    },
+    "in-outpainting": {
+      displayName: "In/Outpainting",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Feed a pre-masked clip: masked region must be hard #66FF00 green, slightly dilated, losslessly encoded. Kept regions are still re-generated, not composited back."
+    },
+    ingredients: {
+      displayName: "Ingredients",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Feed the reference sheet as drive media (a still image works). Prompt pattern: '### Reference Sheet Description' per cell, then '### Target Description'."
+    },
+    lipdub: {
+      displayName: "LipDub",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Generates new speech + lips from the prompt's words. The drive source supplies the speaker sample: audio is used directly, and video sources contribute only their audio while their frames are ignored.",
+      driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT
+    },
+    detailer: {
+      displayName: "Detailer",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Enhances fine details and textures. Apply to a low-control refine stage. Trained on LTX-2 19B.",
+      driveMedia: icLoraDriveMediaContractForData("none")
+    },
+    "pixel-spatial-upscaler-x2": {
+      displayName: "Pixel Spatial Upscaler 2.3 ×2",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
+    },
+    "pixel-spatial-upscaler-2.5-x2": {
+      displayName: "Pixel Spatial Upscaler 2.5 ×2",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
+    },
+    "pixel-spatial-upscaler-x4": {
+      displayName: "Pixel Spatial Upscaler 2.3 ×4",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Apply on a refine stage with Upscale ×4 and source Incoming media. Dims snap to multiples of 128."
+    },
+    deblur: {
+      displayName: "Deblur",
+      triggerPhrase: "DEBLUR",
+      strength: 1,
+      controlType: "none",
+      note: "Feed the blurry clip directly. Lower toward 0.8 if over-sharpened."
+    },
+    decompression: {
+      displayName: "Decompression",
+      triggerPhrase: "ENHANCE QUALITY",
+      strength: 1,
+      controlType: "none",
+      note: "Removes compression artifacts; feed a low-bitrate clip directly."
+    },
+    "water-simulation": {
+      displayName: "Water Simulation",
+      triggerPhrase: "ADD WATER",
+      strength: 1.2,
+      controlType: "none",
+      note: "Sweet spot ~1.2 (1.0 subtle; ≥1.5 warps faces). Feed a dry clip."
+    },
+    "instant-shave": {
+      displayName: "Instant Shave",
+      triggerPhrase: "REMOVEBEARD",
+      strength: 1,
+      controlType: "none",
+      note: "Feed a bearded clip directly. Lower toward 0.8 if artifacts appear."
+    },
+    colorization: {
+      displayName: "Colorization",
+      triggerPhrase: "COLORIZE",
+      strength: 1,
+      controlType: "none",
+      note: "Feed the grayscale clip; describe the restored colors after the COLORIZE trigger."
+    },
+    "cross-eyed": {
+      displayName: "Cross-Eyed",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Turns straight eyes inward (convergent strabismus) in close-up portrait clips; describe the effect in the prompt."
+    },
+    "day-to-night": {
+      displayName: "Day to Night",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Relights a daytime clip to night. Prompt the night look and add 'Only the lighting changes from day to night'. Best at ~4s clips."
+    },
+    restyle: {
+      displayName: "ReStyle",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Style transfer over an existing clip; see README for style prompts."
+    },
+    cameraman: {
+      displayName: "Cameraman",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Camera-motion control driven by the reference video's movement."
+    },
+    "crossview-prompt": {
+      displayName: "CrossView Prompt",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Re-renders the scene from a prompted new camera viewpoint."
+    },
+    outpaint: {
+      displayName: "Outpaint",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Extends the frame beyond the source video's borders."
+    },
+    refocus: {
+      displayName: "ReFocus",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Fixes lens blur / refocuses; feed the blurred clip directly."
+    },
+    "vr360-outpaint": {
+      displayName: "VR 360 Outpaint",
+      triggerPhrase: "",
+      strength: 1,
+      controlType: "none",
+      note: "Outpaints to an equirectangular 360° panorama."
+    }
+  };
+  var IC_LORA_PRESETS = IC_LORA_WEIGHTS.map(
+    (weights) => ({ ...IC_LORA_PRESENTATION[weights.id], ...weights })
+  );
+  var findIcLoraPreset = (id) => {
+    const wanted = `${id ?? ""}`.trim();
+    if (!wanted || wanted === IC_LORA_PRESET_CUSTOM_ID) {
+      return null;
+    }
+    return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
+  };
+  var icLoraDisplayName = (entry) => {
+    if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
+      return entry.lora;
+    }
+    return findIcLoraPreset(entry.preset)?.displayName ?? entry.preset;
+  };
+  var icLoraDriveMediaContract = (preset) => preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
+  var icLoraWeightsStem = (preset) => preset.weightsUrl.slice(preset.weightsUrl.lastIndexOf("/") + 1).replace(/\.safetensors$/i, "");
+  var icLoraAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset).replaceAll(".", "_")}`;
+  var icLoraLegacyAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset)}`;
+  var icLoraRepoUrl = (preset) => preset.weightsUrl.split("/resolve/")[0];
+  var icLoraTriggerHint = (preset) => {
+    if (!preset?.triggerPhrase) {
+      return "";
+    }
+    return `Prepend "${preset.triggerPhrase}" to your prompt`;
+  };
+
+  // frontend/architectures/ltx2/dimensionPolicy.ts
+  var normalizeModelName = (value) => {
+    const normalized = `${value ?? ""}`.trim().replaceAll("\\", "/");
+    const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
+    return basename.replace(/\.safetensors$/i, "").toLowerCase();
+  };
+  var presetFactors = /* @__PURE__ */ new Map();
+  var curatedModelFactors = /* @__PURE__ */ new Map();
+  for (const preset of IC_LORA_PRESETS) {
+    const factor = preset.dimensionDownscaleFactor;
+    if (factor) {
+      presetFactors.set(preset.id, factor);
+      for (const name of [
+        icLoraAutoModelName(preset),
+        icLoraLegacyAutoModelName(preset)
+      ]) {
+        curatedModelFactors.set(normalizeModelName(name), factor);
+      }
+    }
+  }
+  var icLoraDimensionFactor = (entry) => {
+    const presetFactor = presetFactors.get(
+      `${entry.preset ?? ""}`.trim().toLowerCase()
+    );
+    if (presetFactor) {
+      return presetFactor;
+    }
+    return curatedModelFactors.get(normalizeModelName(entry.lora)) ?? 1;
+  };
+  var ltx2DimensionFactor = (clip) => Math.max(1, ...clip.icLoras.map((entry) => icLoraDimensionFactor(entry)));
+  var ltx2DimensionMultiple = (clip) => ROOT_DIMENSION_STEP * ltx2DimensionFactor(clip);
+
+  // frontend/architectures/ltx2/icLoraDriveAvailability.ts
+  var canUseIncomingIcLoraDrive = (entry, clip, clipIdx, clips, generatedEntryMode) => {
+    const executable = executableClipIndexes(clips);
+    if (entry.driveData === "none" || !executable.includes(clipIdx)) {
+      return false;
+    }
+    const acceptedKinds = entry.driveMediaKinds;
+    const activeStageIndexes = clip.stages.slice(0, activeStageCount(clip)).map((_stage, rawIndex) => rawIndex);
+    const targetedStages = entry.stage >= 0 ? activeStageIndexes.includes(entry.stage) ? [entry.stage] : [] : activeStageIndexes;
+    const hasPreviousClipOutput = executable.some((index) => index < clipIdx);
+    return targetedStages.length > 0 && targetedStages.every((targetStage) => {
+      const activeStageIndex = activeStageIndexes.indexOf(targetStage);
+      const incomingKind = activeStageIndex > 0 || clip.initVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
+      return incomingKind !== null && acceptedKinds.includes(incomingKind);
+    });
+  };
+  var reconcileIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode) => {
+    const clip = clips[clipIdx];
+    if (!clip) {
+      return false;
+    }
+    let changed = false;
+    for (const entry of clip.icLoras) {
+      if (entry.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+        entry,
+        clip,
+        clipIdx,
+        clips,
+        generatedEntryMode
+      )) {
+        entry.driveSource = MEDIA_SOURCE_UPLOAD;
+        changed = true;
+      }
+    }
+    return changed;
+  };
+
+  // frontend/icLoraAuthoring.ts
+  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
+  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
+  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
+  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
+  var IC_LORA_STAGE_ALL = -1;
+  var IC_LORA_STRENGTH_MIN = 0;
+  var IC_LORA_STRENGTH_MAX = 5;
+  var IC_LORA_STRENGTH_STEP = 0.05;
+  var IC_LORA_STRENGTH_DEFAULT = 1;
+  var IC_LORA_ATTENTION_MIN = 0;
+  var IC_LORA_ATTENTION_MAX = 1;
+  var IC_LORA_ATTENTION_STEP = 0.05;
+  var IC_LORA_ATTENTION_DEFAULT = 1;
+
+  // frontend/generatedReferenceScale.ts
+  var REFERENCE_SCALE_FULL = 1;
+  var REFERENCE_SCALES = [1, 0.5, 0.25];
+
+  // frontend/clipReferenceAuthoring.ts
+  var clipReferenceAuthoring = (capabilities) => {
+    const general = capabilities.decision("clipReferences");
+    if (general.supported) {
+      return { mode: "all", decision: general, feature: "clipReferences" };
+    }
+    const identity = capabilities.decision("characterRefineIdentityReferences");
+    return identity.supported ? {
+      mode: "identity-images",
+      decision: identity,
+      feature: "characterRefineIdentityReferences"
+    } : { mode: "none", decision: general, feature: "clipReferences" };
+  };
+  var CLIP_REFERENCE_KIND_INFO = {
+    image: {
+      label: "Image",
+      tag: "Picture",
+      accept: "image/*",
+      browserTypes: ["image"]
+    },
+    video: {
+      label: "Video",
+      tag: "Video",
+      accept: "video/*",
+      browserTypes: ["video"]
+    },
+    audio: {
+      label: "Audio",
+      tag: "Audio",
+      accept: "audio/*",
+      browserTypes: ["audio"]
+    }
+  };
+  var CLIP_REFERENCE_KINDS = ["image", "video", "audio"];
+  var CLIP_REFERENCE_SCALE_LABELS = {
+    1: "Full",
+    0.5: "Half",
+    0.25: "Quarter"
+  };
+  var CLIP_REFERENCE_SCALES = REFERENCE_SCALES.map((value) => ({
+    value,
+    label: CLIP_REFERENCE_SCALE_LABELS[value]
+  }));
+  var normalizeClipReferenceScale = (value) => {
+    const numeric = Number(value);
+    return REFERENCE_SCALES.some((scale) => scale === numeric) ? numeric : REFERENCE_SCALE_FULL;
+  };
+  var normalizeClipReferenceKind = (value) => {
+    const raw = `${value ?? ""}`.trim().toLowerCase();
+    return raw === "video" || raw === "audio" ? raw : "image";
+  };
+  var buildDefaultClipReference = (kind = "image") => ({
+    kind,
+    source: MEDIA_SOURCE_UPLOAD,
+    uploadedMedia: null,
+    includeSoundtrack: false,
+    mediaDurationSeconds: 0,
+    drivesClipLength: false,
+    startSeconds: 0,
+    lengthSeconds: 0,
+    mediaScale: REFERENCE_SCALE_FULL
+  });
+  var clipReferenceCanDriveLength = (reference) => reference.kind === "video" || reference.kind === "audio";
+  var clipReferenceTags = (references, precedingReferences = []) => {
+    const allReferences = [...precedingReferences, ...references];
+    const used = {
+      image: 0,
+      video: 0,
+      audio: allReferences.filter(
+        (reference) => reference.kind === "video" && reference.includeSoundtrack === true
+      ).length
+    };
+    for (const reference of precedingReferences) {
+      used[reference.kind] += 1;
+    }
+    return references.map((reference) => {
+      used[reference.kind] += 1;
+      return `<${CLIP_REFERENCE_KIND_INFO[reference.kind].tag} ${used[reference.kind]}>`;
+    });
+  };
+  var clipLengthReferenceIndex = (references) => references.findIndex(
+    (reference) => reference.drivesClipLength === true && clipReferenceCanDriveLength(reference) && reference.mediaDurationSeconds > 0
+  );
+
+  // frontend/normalizationShared.ts
+  var text = (value, fallback = "") => `${value ?? fallback}`;
+  var trimmedText = (value, fallback = "") => text(value, fallback).trim();
+  var textOr = (value, fallback) => text(value, fallback) || fallback;
+  var numberOr = (value, fallback) => toNumber(text(value, fallback), fallback);
+  var clampedNumber = (value, fallback, min, max) => clamp(numberOr(value, fallback), min, max);
+  var nonNegativeNumber = (value) => Math.max(0, numberOr(value, 0));
+  var optionalNonNegativeNumber = (value) => {
+    if (value == null || trimmedText(value) === "") {
+      return null;
+    }
+    const number = toNumber(text(value), Number.NaN);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+  };
+  var optionalPositiveNumber = (value) => {
+    const number = optionalNonNegativeNumber(value);
+    return number !== null && number > 0 ? number : null;
+  };
+  var readProp = (raw, ...keys) => {
+    for (const key of keys) {
+      if (Object.hasOwn(raw, key)) {
+        return raw[key];
+      }
+    }
+    return void 0;
+  };
+  var normalizeOptionalEntityId = (value) => typeof value === "string" ? value.trim() || void 0 : void 0;
+  var snapToStep = (value, step) => step > 0 ? Math.round(value / step) * step : value;
+  var clampWindowInDuration = (startRaw, lengthRaw, clipDuration, minLength) => {
+    if (!(lengthRaw > 0)) {
+      return null;
+    }
+    const maxStart = Math.max(0, clipDuration - minLength);
+    const startSeconds = clamp(startRaw, 0, maxStart);
+    const lengthSeconds = clamp(
+      lengthRaw,
+      minLength,
+      Math.max(minLength, clipDuration - startSeconds)
+    );
+    if (!(lengthSeconds > 0)) {
+      return null;
+    }
+    return { startSeconds, lengthSeconds };
+  };
+  var snapValueToStep = (value, fallback, min, max, step) => {
+    const unitScale = 1 / step;
+    return Math.round(clampedNumber(value, fallback, min, max) * unitScale) / unitScale;
+  };
+
+  // frontend/normalizationMedia.ts
+  var normalizePromptWindow = (raw) => {
+    const duration = numberOr(raw.duration, 0);
+    if (!(duration > 0)) {
+      return null;
+    }
+    const start = nonNegativeNumber(raw.start);
+    return {
+      id: normalizeOptionalEntityId(raw.id),
+      prompt: text(raw.prompt),
+      start,
+      duration
+    };
+  };
+  var normalizePromptWindows = (rawClip) => {
+    const rawList = rawClip.promptWindows;
+    if (!Array.isArray(rawList)) {
+      return [];
+    }
+    return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
+  };
+  var normalizeRetake = (value, clipDuration) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const startRaw = nonNegativeNumber(value.startSeconds);
+    const lengthRaw = numberOr(value.lengthSeconds, 0);
+    const window2 = clampWindowInDuration(
+      startRaw,
+      lengthRaw,
+      clipDuration,
+      RETAKE_MIN_DURATION
+    );
+    if (!window2) {
+      return null;
+    }
+    const strengthRaw = value.strength;
+    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clampedNumber(
+      strengthRaw,
+      RETAKE_STRENGTH_DEFAULT,
+      RETAKE_STRENGTH_MIN,
+      RETAKE_STRENGTH_MAX
+    );
+    return {
+      id: normalizeOptionalEntityId(value.id),
+      startSeconds: roundToTenth(window2.startSeconds),
+      lengthSeconds: roundToTenth(window2.lengthSeconds),
+      strength
+    };
+  };
+  var normalizeInitVideo = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const source = trimmedText(value.source) || MEDIA_SOURCE_UPLOAD;
+    const previousClip = source === MEDIA_SOURCE_PREVIOUS_CLIP;
+    const data = trimmedText(value.data);
+    if (!previousClip && !data) {
+      return null;
+    }
+    const durationSeconds = nonNegativeNumber(value.durationSeconds);
+    let startSeconds = nonNegativeNumber(value.startSeconds);
+    let lengthSeconds = nonNegativeNumber(value.lengthSeconds);
+    if (durationSeconds > 0) {
+      startSeconds = Math.min(
+        startSeconds,
+        Math.max(0, durationSeconds - CLIP_DURATION_MIN)
+      );
+      if (!(lengthSeconds > 0)) {
+        lengthSeconds = durationSeconds - startSeconds;
+      }
+      lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
+    }
+    if (!(lengthSeconds > 0)) {
+      return null;
+    }
+    return {
+      source: previousClip ? MEDIA_SOURCE_PREVIOUS_CLIP : MEDIA_SOURCE_UPLOAD,
+      data,
+      fileName: normalizeUploadFileName(
+        value.fileName == null ? null : text(value.fileName)
+      ),
+      fps: nonNegativeNumber(value.fps),
+      durationSeconds: roundToTenth(durationSeconds),
+      startSeconds: roundToTenth(startSeconds),
+      lengthSeconds: roundToTenth(lengthSeconds)
+    };
+  };
+  var normalizeClipReferences = (value, clipLengthClaimedElsewhere = false) => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    let lengthClaimed = clipLengthClaimedElsewhere;
+    return value.map((entry) => {
+      const raw = isRecord(entry) ? entry : {};
+      const kind = normalizeClipReferenceKind(raw.kind);
+      const source = trimmedText(raw.source) || MEDIA_SOURCE_UPLOAD;
+      const mediaDurationSeconds = roundToTenth(
+        nonNegativeNumber(raw.mediaDurationSeconds)
+      );
+      const reference = {
+        id: normalizeOptionalEntityId(raw.id),
+        kind,
+        source,
+        uploadedMedia: normalizeUploadedMedia(raw.uploadedMedia),
+        includeSoundtrack: kind === "video" && raw.includeSoundtrack === true,
+        mediaDurationSeconds,
+        // A claim with no length behind it cannot move the clip, so it is
+        // dropped rather than left holding the one slot forever.
+        drivesClipLength: !lengthClaimed && raw.drivesClipLength === true && clipReferenceCanDriveLength({ kind }) && mediaDurationSeconds > 0,
+        mediaScale: kind === "video" ? normalizeClipReferenceScale(raw.mediaScale) : REFERENCE_SCALE_FULL,
+        ...normalizeClipReferenceTrim(raw, kind, mediaDurationSeconds)
+      };
+      lengthClaimed = lengthClaimed || reference.drivesClipLength;
+      return reference;
+    });
+  };
+  var normalizeClipReferenceTrim = (raw, kind, mediaDurationSeconds) => {
+    if (kind === "image") {
+      return { startSeconds: 0, lengthSeconds: 0 };
+    }
+    return normalizeTimedMediaRange(
+      raw.startSeconds,
+      raw.lengthSeconds,
+      mediaDurationSeconds
+    );
+  };
+  var normalizeTimedMediaRange = (startValue, lengthValue, mediaDurationSeconds) => {
+    if (mediaDurationSeconds <= 0) {
+      return { startSeconds: 0, lengthSeconds: 0 };
+    }
+    const startSeconds = Math.min(
+      roundToTenth(nonNegativeNumber(startValue)),
+      mediaDurationSeconds
+    );
+    const lengthSeconds = Math.min(
+      roundToTenth(nonNegativeNumber(lengthValue)),
+      mediaDurationSeconds - startSeconds
+    );
+    return lengthSeconds > 0 ? { startSeconds, lengthSeconds } : { startSeconds: 0, lengthSeconds: 0 };
+  };
+  var clipReferenceUsedRange = (reference) => reference.lengthSeconds > 0 ? {
+    startSeconds: reference.startSeconds,
+    lengthSeconds: reference.lengthSeconds
+  } : {
+    startSeconds: 0,
+    lengthSeconds: reference.mediaDurationSeconds
+  };
+  var clipReferenceUsedSeconds = (reference) => clipReferenceUsedRange(reference).lengthSeconds;
+  var clipReferenceDurationSeconds = (references) => {
+    const index = clipLengthReferenceIndex(references);
+    return index < 0 ? null : clipReferenceUsedSeconds(references[index]);
+  };
+  var normalizeUploadedMedia = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const data = trimmedText(value.data);
+    if (!data) {
+      return null;
+    }
+    return {
+      data,
+      fileName: normalizeUploadFileName(
+        value.fileName == null ? null : text(value.fileName)
+      )
+    };
+  };
+
+  // frontend/architectures/ltx2/icLoraNormalization.ts
+  var defaultIcLora = (overrides = {}) => ({
+    lora: "",
+    preset: IC_LORA_PRESET_CUSTOM_ID,
+    driveSource: MEDIA_SOURCE_UPLOAD,
+    driveData: "visual",
+    driveMediaKinds: ["image", "video"],
+    stage: IC_LORA_STAGE_ALL,
+    strength: IC_LORA_STRENGTH_DEFAULT,
+    attentionStrength: IC_LORA_ATTENTION_DEFAULT,
+    controlType: "none",
+    driveMedia: null,
+    ...overrides
+  });
+  var normalizeControlNetLora = (value) => {
+    const raw = `${value ?? ""}`.trim();
+    if (!raw) {
+      return "";
+    }
+    const squeezed = raw.replace(/\s+/g, "").toLowerCase();
+    if (squeezed === "(none)") {
+      return "";
+    }
+    return raw;
+  };
+  var normalizeIcLoraControlType = (value) => {
+    const raw = `${value ?? ""}`.trim().toLowerCase();
+    return raw === "canny" || raw === "depth" || raw === "normal" ? raw : "none";
+  };
+  var INCOMING_LEGACY_COMPACT = compactMediaSource(
+    MEDIA_SOURCE_INCOMING_LEGACY
+  );
+  var normalizeIcLoraDriveSource = (value) => {
+    const authored = `${value ?? ""}`.trim();
+    const compact = compactMediaSource(authored);
+    if (!compact || equalsMediaSource(compact, MEDIA_SOURCE_UPLOAD)) {
+      return MEDIA_SOURCE_UPLOAD;
+    }
+    if (equalsMediaSource(compact, MEDIA_SOURCE_INCOMING) || equalsMediaSource(compact, INCOMING_LEGACY_COMPACT)) {
+      return MEDIA_SOURCE_INCOMING;
+    }
+    return canonicalControlNetSource(authored) ?? authored;
+  };
+  var normalizeIcLoraDriveData = (value) => {
+    const compact = `${value ?? ""}`.trim().toLowerCase();
+    return compact === "none" || compact === "audio" ? compact : "visual";
+  };
+  var mediaKindsForData = (driveData) => icLoraDriveMediaContractForData(driveData).acceptedKinds;
+  var mediaKindByExtension = {
+    apng: "image",
+    avif: "image",
+    bmp: "image",
+    gif: "image",
+    jpeg: "image",
+    jpg: "image",
+    png: "image",
+    svg: "image",
+    webp: "image",
+    flac: "audio",
+    m4a: "audio",
+    mp3: "audio",
+    ogg: "audio",
+    wav: "audio",
+    weba: "audio",
+    avi: "video",
+    m4v: "video",
+    mkv: "video",
+    mov: "video",
+    mp4: "video",
+    webm: "video"
+  };
+  var isAcceptedIcLoraDriveMedia = (value, fileName, acceptedKinds) => {
+    const resolved = resolveBrowserMedia(value);
+    const dataKind = /^data:(image|video|audio)\//i.exec(resolved)?.[1];
+    const named = fileName || resolved.split(/[?#]/, 1)[0] || "";
+    const extension = named.slice(named.lastIndexOf(".") + 1).toLowerCase();
+    const kind = dataKind ?? mediaKindByExtension[extension] ?? null;
+    return kind !== null && acceptedKinds.includes(kind);
+  };
+  var normalizeIcLoraDriveMediaKinds = (value, driveData) => {
+    const allowed = mediaKindsForData(driveData);
+    if (!Array.isArray(value)) {
+      return [...allowed];
+    }
+    const kinds = [];
+    for (const rawKind of value) {
+      const kind = `${rawKind ?? ""}`.trim().toLowerCase();
+      if ((kind === "image" || kind === "video" || kind === "audio") && allowed.includes(kind) && !kinds.includes(kind)) {
+        kinds.push(kind);
+      }
+    }
+    return kinds;
+  };
+  var normalizeIcLoraStage = (value, stageCount) => {
+    if (value == null || `${value}`.trim() === "") {
+      return IC_LORA_STAGE_ALL;
+    }
+    const stage = Math.trunc(Number(value));
+    if (!Number.isFinite(stage) || stage < 0) {
+      return IC_LORA_STAGE_ALL;
+    }
+    return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
+  };
+  var normalizeIcLora = (raw, stageCount = 0, _initVideoClip = false) => {
+    if (!isRecord(raw)) {
+      return null;
+    }
+    const lora = normalizeControlNetLora(raw.lora);
+    if (!lora) {
+      return null;
+    }
+    const preset = `${raw.preset ?? ""}`.trim();
+    const repairsLegacyCustomAuto = lora === IC_LORA_AUTO && (!preset || preset === IC_LORA_PRESET_CUSTOM_ID);
+    const normalizedPreset = repairsLegacyCustomAuto ? IC_LORA_DEFAULT_PRESET_ID : preset || IC_LORA_PRESET_CUSTOM_ID;
+    const repairedPreset = repairsLegacyCustomAuto ? findIcLoraPreset(normalizedPreset) : null;
+    const driveData = normalizeIcLoraDriveData(raw.driveData);
+    const driveMediaKinds = normalizeIcLoraDriveMediaKinds(
+      raw.driveMediaKinds,
+      driveData
+    );
+    const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
+    let driveSource = normalizeIcLoraDriveSource(raw.driveSource);
+    const driveMedia = driveSource === MEDIA_SOURCE_UPLOAD && driveData !== "none" && normalizedDriveMedia && isAcceptedIcLoraDriveMedia(
+      normalizedDriveMedia.data,
+      normalizedDriveMedia.fileName,
+      driveMediaKinds
+    ) ? normalizedDriveMedia : null;
+    const stage = normalizeIcLoraStage(raw.stage, stageCount);
+    if (driveData === "none") {
+      driveSource = MEDIA_SOURCE_UPLOAD;
+    }
+    return {
+      id: normalizeOptionalEntityId(raw.id),
+      lora,
+      preset: normalizedPreset,
+      driveSource,
+      driveData,
+      driveMediaKinds,
+      stage,
+      strength: repairsLegacyCustomAuto ? repairedPreset?.strength ?? IC_LORA_STRENGTH_DEFAULT : snapValueToStep(
+        raw.strength,
+        IC_LORA_STRENGTH_DEFAULT,
+        IC_LORA_STRENGTH_MIN,
+        IC_LORA_STRENGTH_MAX,
+        IC_LORA_STRENGTH_STEP
+      ),
+      attentionStrength: snapValueToStep(
+        raw.attentionStrength,
+        IC_LORA_ATTENTION_DEFAULT,
+        IC_LORA_ATTENTION_MIN,
+        IC_LORA_ATTENTION_MAX,
+        IC_LORA_ATTENTION_STEP
+      ),
+      controlType: driveData !== "visual" ? "none" : repairsLegacyCustomAuto ? repairedPreset?.controlType ?? "none" : normalizeIcLoraControlType(raw.controlType),
+      driveMedia
+    };
+  };
+  var normalizeIcLoras = (rawClip, stageCount = 0, initVideoClip = false) => {
+    if (!Array.isArray(rawClip.icLoras)) {
+      return [];
+    }
+    return rawClip.icLoras.map((entry) => normalizeIcLora(entry, stageCount, initVideoClip)).filter((entry) => entry !== null);
+  };
+  var canonicalizeIcLoraFields = (entry) => {
+    if (entry.driveData === "none") {
+      entry.driveSource = MEDIA_SOURCE_UPLOAD;
+      entry.driveMedia = null;
+    }
+    entry.driveMediaKinds = normalizeIcLoraDriveMediaKinds(
+      entry.driveMediaKinds,
+      entry.driveData
+    );
+  };
+  var hasSlotSourcedIcLora = (icLoras) => icLoras.some(
+    (entry) => canonicalControlNetSource(entry.driveSource) !== null
+  );
+
+  // frontend/architectures/ltx2/identity.ts
+  var LTX2_ARCHITECTURE_ID = "ltx2";
+
+  // frontend/architectures/behaviorRegistry.ts
+  var isLtx2 = (architectureId) => architectureId === LTX2_ARCHITECTURE_ID;
+  var architectureDimensionMultiple = (clip, architectureId) => {
+    const requested = isLtx2(architectureId) ? ltx2DimensionMultiple(clip) : ROOT_DIMENSION_STEP;
+    if (!Number.isFinite(requested)) {
+      return ROOT_DIMENSION_STEP;
+    }
+    return Math.max(
+      ROOT_DIMENSION_STEP,
+      Math.ceil(requested / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP
+    );
+  };
+  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, initVideoClip, options = {}) => {
+    if (isLtx2(architectureId)) {
+      return normalizeIcLoras(
+        rawClip,
+        stageCount,
+        initVideoClip
+      );
+    }
+    return options.preserveDormantLtx === true && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? normalizeIcLoras(
+      rawClip,
+      stageCount,
+      initVideoClip
+    ) : [];
+  };
+  var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
+    if (isLtx2(architectureId)) {
+      canonicalizeIcLoraFields(entry);
+    }
+  };
+  var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode, catalog) => {
+    let changed = false;
+    clips.forEach((clip, clipIdx) => {
+      const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
+      changed = isLtx2(architectureId) && reconcileIncomingIcLoraDrives(
+        clips,
+        clipIdx,
+        generatedEntryMode
+      ) || changed;
+    });
+    return changed;
+  };
+  var reconcileClipArchitectureIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode, catalog) => {
+    const clip = clips[clipIdx];
+    if (!clip) return false;
+    const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
+    return isLtx2(architectureId) && reconcileIncomingIcLoraDrives(clips, clipIdx, generatedEntryMode);
+  };
+  var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => isLtx2(architectureId) && hasSlotSourcedIcLora(entries);
+  var architectureIcLoraDisplayName = (architectureId, entry) => isLtx2(architectureId) ? icLoraDisplayName(entry) : entry.lora;
+
+  // frontend/architectures/diagnostics.ts
+  var issue = (code, message, clipIdx, severity = "error") => ({ severity, code, message, clipIdx });
+  var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities) => {
+    const diagnostics = [];
+    const supports = (feature) => architectureFeatureSupport(feature, capabilities);
+    const unsupported = (active, key, label, severity) => {
+      if (active) {
+        const effectiveSeverity = severity ?? "warning";
+        diagnostics.push(
+          issue(
+            `architecture.unsupported.${key}`,
+            effectiveSeverity === "warning" ? `Clip ${clipIdx} has ${label} saved, but its architecture cannot use it. Generation will ignore it and keep the authored setting.` : `Clip ${clipIdx} has ${label} persisted, but its architecture does not support it. Remove it or explicitly convert the clip.`,
+            clipIdx,
+            effectiveSeverity
+          )
+        );
+      }
+    };
+    const unsupportedFeature = (active, feature) => unsupported(
+      active,
+      feature.replace(/[A-Z]/g, (upper) => `-${upper.toLowerCase()}`),
+      ARCHITECTURE_FEATURE_LABELS[feature]
+    );
+    unsupportedFeature(
+      !supports("frameReferences") && clip.frameRefs.length > 0,
+      "frameReferences"
+    );
+    const identityImagesSupported = supports("characterRefineIdentityReferences") && clip.stages.some(
+      (stage) => stage.characterRefine?.verifyIdentity === true
+    );
+    unsupportedFeature(
+      !supports("clipReferences") && clip.references.some(
+        (reference) => !identityImagesSupported || reference.kind !== "image"
+      ),
+      "clipReferences"
+    );
+    const characterRefineConfigured = clip.stages.some(
+      (stage) => stage.characterRefine !== null
+    );
+    unsupportedFeature(
+      !supports("characterRefine") && characterRefineConfigured,
+      "characterRefine"
+    );
+    unsupportedFeature(
+      supports("characterRefine") && !supports("characterRefineAppearanceReferences") && clip.stages.some(
+        (stage) => (stage.characterRefine?.pictureReferenceIds.length ?? 0) > 0
+      ),
+      "characterRefineAppearanceReferences"
+    );
+    unsupportedFeature(
+      supports("characterRefine") && !supports("characterRefineIdentityReferences") && clip.stages.some(
+        (stage) => stage.characterRefine?.verifyIdentity === true
+      ),
+      "characterRefineIdentityReferences"
+    );
+    unsupportedFeature(
+      !supports("referenceFraming") && clip.refFraming !== "crop",
+      "referenceFraming"
+    );
+    unsupportedFeature(
+      !supports("icLora") && clip.icLoras.length > 0,
+      "icLora"
+    );
+    unsupportedFeature(!supports("retake") && clip.retake !== null, "retake");
+    unsupportedFeature(
+      !supports("promptRelay") && clip.promptWindows.length > 0,
+      "promptRelay"
+    );
+    const activeUpscaleModes = clip.stages.filter((stage) => stage.upscale !== 1).map((stage) => upscaleModeForMethod(stage.upscaleMethod));
+    if (activeUpscaleModes.includes("unsupported")) {
+      diagnostics.push(
+        issue(
+          "architecture.unsupported.upscale",
+          `Clip ${clipIdx} has stage upscaling persisted, but its upscale method is not a known method. Remove it or choose a known method.`,
+          clipIdx
+        )
+      );
+    }
+    unsupportedFeature(
+      !supports("latentUpscale") && activeUpscaleModes.includes("latent"),
+      "latentUpscale"
+    );
+    unsupportedFeature(
+      !supports("latentModelUpscale") && activeUpscaleModes.includes("latent-model"),
+      "latentModelUpscale"
+    );
+    const sourceKind = audioSourceKind(clip.audioSource);
+    const clipAudioCapabilitySupported = supportsClipAudio(
+      capabilities.audioSourceKinds
+    );
+    const standaloneAudioSupported = capabilities.audioSourceKinds.includes(AUDIO_SOURCE_NATIVE);
+    const selectedAudioSourceSupported = isAllowedAudioSource(
+      capabilities.audioSourceKinds,
+      clip.audioSource
+    );
+    unsupportedFeature(
+      !supports("audioReuse") && clip.reuseAudio,
+      "audioReuse"
+    );
+    unsupportedFeature(
+      !supports("audioDerivedDuration") && clip.clipLengthFromAudio,
+      "audioDerivedDuration"
+    );
+    const supportsControlSignalDerivedDuration = supports("icLora");
+    unsupported(
+      !supportsControlSignalDerivedDuration && clip.clipLengthFromControlNet,
+      "control-signal-derived-duration",
+      "Control-signal-derived clip duration"
+    );
+    unsupported(
+      !selectedAudioSourceSupported && (sourceKind !== AUDIO_SOURCE_NATIVE || clip.uploadedAudio !== null),
+      "audio-source",
+      `Audio source '${sourceKind}'`,
+      clipAudioCapabilitySupported ? "error" : void 0
+    );
+    unsupported(
+      clip.saveAudioTrack && !standaloneAudioSupported,
+      "audio-output",
+      "Standalone audio output"
+    );
+    if (clip.clipLengthFromAudio && supports("audioDerivedDuration") && selectedAudioSourceSupported && !canUseClipLengthFromAudio(clip.audioSource)) {
+      diagnostics.push(
+        issue(
+          "architecture.unusable.clip-length-from-audio",
+          `Clip length from audio is persisted on Clip ${clipIdx}, but audio source '${sourceKind}' cannot supply a length. Turn it off or pick a source that can.`,
+          clipIdx
+        )
+      );
+    }
+    if (clip.clipLengthFromControlNet && supportsControlSignalDerivedDuration && !hasArchitectureSlotSourcedIcLora(architectureId, clip.icLoras)) {
+      diagnostics.push(
+        issue(
+          "architecture.unusable.clip-length-from-control-net",
+          `Clip length from the control signal is persisted on Clip ${clipIdx}, but no IC-LoRA supplies one. Turn it off or add a slot-init-video IC-LoRA.`,
+          clipIdx
+        )
+      );
+    }
+    return diagnostics;
+  };
+  var effectiveArchitectureIdForClip = (clip, catalog) => resolvedClipArchitectureId(clip, catalog) ?? "unsupported";
+  var deriveArchitectureDiagnostics = (clips, resolver) => {
+    const catalog = resolver.catalog;
+    const diagnostics = [];
+    const architectureById = new Map(
+      catalog.architectures.map((entry) => [entry.id, entry])
+    );
+    const modelByName = new Map(
+      catalog.entries.map((entry) => [entry.value, entry])
+    );
+    const executableClipIndexSet = new Set(executableClipIndexes(clips));
+    clips.forEach((clip, clipIdx) => {
+      const temporalGrid = resolver.forClip(clip).frameGridResolution;
+      if (executableClipIndexSet.has(clipIdx) && temporalGrid.status === "conflict") {
+        diagnostics.push(
+          issue(
+            "architecture.temporal-grid-conflict",
+            `Clip ${clipIdx}'s active model handlers have no representable compatible temporal grid. Use stage models with compatible temporal requirements.`,
+            clipIdx
+          )
+        );
+      }
+      const sourceOnly = activeStageCount(clip) === 0 && clip.initVideo !== null;
+      const resolvedFirstModel = !sourceOnly && clip.stages.length > 0 ? modelByName.get(clip.stages[0].model) : void 0;
+      const effectiveArchitectureId = effectiveArchitectureIdForClip(
+        clip,
+        catalog
+      );
+      const effectiveModelProfileId = resolvedFirstModel?.modelProfileId ?? clip.modelProfileId;
+      const effectiveCompatibilityClassId = resolvedFirstModel?.compatibilityClassId ?? null;
+      if (resolvedFirstModel?.architectureId && resolvedFirstModel.architectureId !== clip.architectureHint) {
+        diagnostics.push(
+          issue(
+            "architecture.stale-identity-hint",
+            `Clip ${clipIdx} caches architecture hint '${clip.architectureHint}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.architectureId}'. Generation uses the resolved architecture and preserves the authored hint.`,
+            clipIdx,
+            "warning"
+          )
+        );
+      }
+      if (resolvedFirstModel?.modelProfileId && resolvedFirstModel.modelProfileId !== clip.modelProfileId) {
+        diagnostics.push(
+          issue(
+            "architecture.stale-profile-hint",
+            `Clip ${clipIdx} caches model profile '${clip.modelProfileId}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.modelProfileId}'. Generation uses the resolved profile and preserves the authored hint.`,
+            clipIdx,
+            "warning"
+          )
+        );
+      }
+      if (sourceOnly) {
+        if (clip.architectureHint !== NONE_ARCHITECTURE_ID || clip.modelProfileId !== NONE_ARCHITECTURE_ID) {
+          diagnostics.push(
+            issue(
+              "architecture.source-only-requires-none",
+              `Source-only Clip ${clipIdx} must use architecture and profile 'none'.`,
+              clipIdx
+            )
+          );
+        }
+      }
+      const architecture = sourceOnly ? architectureById.get("none") : architectureById.get(effectiveArchitectureId);
+      if (architecture) {
+        const capabilities = effectiveClipCapabilities(
+          clip,
+          architecture,
+          (model) => modelByName.get(model)
+        );
+        if (capabilities) {
+          diagnostics.push(
+            ...persistedCapabilityIssues(
+              clip,
+              clipIdx,
+              effectiveArchitectureId,
+              capabilities
+            )
+          );
+        }
+      }
+      let dormantArchitecture = null;
+      let dormantCompatibilityClass = null;
+      clip.stages.forEach((stage, stageIdx) => {
+        const resolved = modelByName.get(stage.model);
+        if (!resolved?.architectureId || !resolved.modelProfileId) {
+          diagnostics.push(
+            issue(
+              "architecture.model-unknown",
+              `Clip ${clipIdx} Stage ${stageIdx} model '${stage.model}' is not in the architecture catalog.`,
+              clipIdx
+            )
+          );
+          return;
+        }
+        if (sourceOnly && dormantArchitecture === null) {
+          dormantArchitecture = resolved.architectureId;
+          dormantCompatibilityClass = resolved.compatibilityClassId;
+        }
+        const mixedDormant = sourceOnly && dormantArchitecture !== null && (resolved.architectureId !== dormantArchitecture || resolved.compatibilityClassId !== dormantCompatibilityClass);
+        if (mixedDormant || !sourceOnly && (resolved.architectureId !== effectiveArchitectureId || effectiveCompatibilityClassId !== null && resolved.compatibilityClassId !== effectiveCompatibilityClassId)) {
+          diagnostics.push(
+            issue(
+              "architecture.mixed-stage",
+              sourceOnly ? `Source-only Clip ${clipIdx} has dormant stages from incompatible model families; Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to architecture '${resolved.architectureId}' and compatibility class '${resolved.compatibilityClassId}'.` : `Clip ${clipIdx} uses architecture '${effectiveArchitectureId}' and compatibility class '${effectiveCompatibilityClassId}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}' and '${resolved.compatibilityClassId}'.`,
+              clipIdx
+            )
+          );
+        }
+        if (stage.modelProfileId !== resolved.modelProfileId || !sourceOnly && stageIdx === 0 && effectiveModelProfileId !== resolved.modelProfileId) {
+          diagnostics.push(
+            issue(
+              "architecture.profile-mismatch",
+              `Clip ${clipIdx} Stage ${stageIdx} caches a profile identity that does not match model '${stage.model}'. Generation uses the resolved profile and preserves the authored hint.`,
+              clipIdx,
+              "warning"
+            )
+          );
+        }
+      });
+    });
+    for (const seam of executableBoundaries(clips)) {
+      const left = { clip: clips[seam.leftIdx], clipIdx: seam.leftIdx };
+      const right = { clip: clips[seam.rightIdx], clipIdx: seam.rightIdx };
+      if (effectiveArchitectureIdForClip(left.clip, catalog) !== effectiveArchitectureIdForClip(right.clip, catalog) && left.clip.boundaryOut !== "cut") {
+        diagnostics.push(
+          issue(
+            "architecture.cross-boundary-cut-only",
+            `Clip ${left.clipIdx} → ${right.clipIdx} crosses architectures; '${left.clip.boundaryOut}' remains authored, but generation safely uses a cut.`,
+            left.clipIdx,
+            "warning"
+          )
+        );
+        continue;
+      }
+      const boundary = resolver.forBoundary(
+        left.clip,
+        right.clip,
+        left.clipIdx,
+        right.clipIdx
+      );
+      if (boundary.effective(left.clip.boundaryOut) !== left.clip.boundaryOut) {
+        const reason = boundary.reason ? ` ${boundary.reason}` : ` Its requested value is preserved for repair, but only '${boundary.effective(left.clip.boundaryOut)}' can execute.`;
+        diagnostics.push(
+          issue(
+            "architecture.boundary-unsupported",
+            `Clip ${left.clipIdx} cannot execute a '${left.clip.boundaryOut}' boundary into Clip ${right.clipIdx}.${reason} Generation safely uses a cut while preserving the authored boundary.`,
+            left.clipIdx,
+            "warning"
+          )
+        );
+      }
+    }
+    return diagnostics;
+  };
+
+  // frontend/authoringDiagnostics.ts
+  var diagnostic = (severity, code, message, clipIdx) => ({ severity, code, message, clipIdx });
+  var deriveAuthoringDiagnostics = (clips, capabilities) => {
+    const diagnostics = [];
+    const authoredPrefix = activePrefix(clips);
+    const executable = executableClipIndexes(clips).map((clipIdx) => ({
+      clip: clips[clipIdx],
+      clipIdx
+    }));
+    diagnostics.push(
+      ...deriveArchitectureDiagnostics(authoredPrefix, capabilities)
+    );
+    for (const { clip, clipIdx } of executable) {
+      const retake = capabilities.forClip(clip).decision("retake");
+      if (clip.retake !== null && retake.code) {
+        diagnostics.push(
+          diagnostic("error", retake.code, retake.reason, clipIdx)
+        );
+      }
+    }
+    return diagnostics;
+  };
+
   // frontend/architectures/boundaryConstraints.ts
   var GENERIC_BOUNDARY_CONSTRAINTS = {
     frameStep: 1,
@@ -1843,59 +3011,6 @@
       ...boundaries,
       executableClipIndexes
     };
-  };
-
-  // frontend/constants.ts
-  var DEFAULT_GENERATED_ENTRY_MODE = "text-to-video";
-  var REF_FRAME_MIN = 1;
-  var DEFAULT_CLIP_DURATION_SECONDS = 5;
-  var CLIP_DURATION_MIN = 1;
-  var CLIP_DURATION_MAX = 9999;
-  var PROMPT_WINDOW_MIN_DURATION = 0.25;
-  var PROMPT_WINDOW_DEFAULT_DURATION = 3;
-  var RETAKE_MIN_DURATION = 0.1;
-  var RETAKE_DEFAULT_DURATION = 3;
-  var RETAKE_DURATION_STEP = 0.1;
-  var RETAKE_STRENGTH_MIN = 0;
-  var RETAKE_STRENGTH_MAX = 1;
-  var RETAKE_STRENGTH_STEP = 0.05;
-  var RETAKE_STRENGTH_DEFAULT = 1;
-  var AUDIO_SPAN_MIN_LENGTH = 0.1;
-  var AUDIO_SPAN_DEFAULT_LENGTH = 2;
-  var AUDIO_SPAN_STEP = 0.1;
-  var AUDIO_SPAN_VOLUME_MIN = 1e-5;
-  var AUDIO_SPAN_VOLUME_MAX = 1e5;
-  var AUDIO_SPAN_VOLUME_SLIDER_MIN = 0.1;
-  var AUDIO_SPAN_VOLUME_SLIDER_MAX = 4;
-  var AUDIO_SPAN_VOLUME_SLIDER_STEP = 0.1;
-  var AUDIO_SPAN_VOLUME_DEFAULT = 1;
-  var ROOT_DIMENSION_MIN = 32;
-  var ROOT_DIMENSION_SLIDER_MIN = 256;
-  var ROOT_DIMENSION_MAX = 4096;
-  var ROOT_DIMENSION_STEP = 32;
-  var ROOT_FPS_MIN = 1;
-  var ROOT_FPS_MAX = 120;
-  var STAGE_REF_STRENGTH_MIN = 0;
-  var STAGE_REF_STRENGTH_MAX = 1;
-  var STAGE_REF_STRENGTH_STEP = 0.1;
-  var STAGE_REF_STRENGTH_DEFAULT = 0.8;
-  var IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH = 1;
-  var normalizeUploadFileName = (value) => {
-    const raw = `${value ?? ""}`.trim();
-    if (!raw) {
-      return null;
-    }
-    const slashIndex = Math.max(raw.lastIndexOf("/"), raw.lastIndexOf("\\"));
-    return slashIndex >= 0 ? raw.slice(slashIndex + 1) : raw;
-  };
-  var clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-  var mediaPreviewSrc = (value) => {
-    const resolved = resolveBrowserMedia(`${value ?? ""}`);
-    if (resolved.startsWith("data:") || resolved.startsWith("blob:")) {
-      return resolved;
-    }
-    const prefix = getVideoStagesHostBridge().getMediaOutputPrefix();
-    return `${prefix}/${resolved}`;
   };
 
   // frontend/dimensionSnap.ts
@@ -2603,1317 +3718,6 @@
     };
   };
 
-  // frontend/mediaProbe.ts
-  var initVideoFromProbe = (probe, data, fileName, clipDuration) => {
-    const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
-    return {
-      source: MEDIA_SOURCE_UPLOAD,
-      data,
-      fileName,
-      fps: probe?.fps ?? 0,
-      durationSeconds,
-      startSeconds: 0,
-      lengthSeconds: durationSeconds > 0 ? durationSeconds : clipDuration
-    };
-  };
-  var FPS_SAMPLE_FRAMES = 12;
-  var MIN_FRAME_DELTA_SECONDS = 5e-4;
-  var MAX_PLAUSIBLE_FPS = 240;
-  var estimateFpsFromMediaTimes = (mediaTimes) => {
-    const deltas = [];
-    for (let i = 1; i < mediaTimes.length; i++) {
-      const delta = mediaTimes[i] - mediaTimes[i - 1];
-      if (delta > MIN_FRAME_DELTA_SECONDS) {
-        deltas.push(delta);
-      }
-    }
-    if (deltas.length < 4) {
-      return null;
-    }
-    deltas.sort((a, b) => a - b);
-    const median = deltas[Math.floor(deltas.length / 2)];
-    const fps = Math.round(1 / median);
-    return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
-  };
-  var withProbedMedia = (src, timeoutMs, empty, onMetadata) => new Promise((resolve) => {
-    const video = getVideoStagesHostBridge().createInitVideoElement();
-    video.muted = true;
-    video.preload = "auto";
-    let settled = false;
-    const finish2 = (result) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-      resolve(result);
-    };
-    const timer = setTimeout(() => finish2(empty), timeoutMs);
-    video.addEventListener("error", () => finish2(empty));
-    video.addEventListener("loadedmetadata", () => {
-      const durationSeconds = Number.isFinite(video.duration) ? video.duration : 0;
-      if (!(durationSeconds > 0)) {
-        finish2(empty);
-        return;
-      }
-      onMetadata(video, durationSeconds, finish2);
-    });
-    video.src = mediaPreviewSrc(src);
-  });
-  var probeInitVideo = (src, timeoutMs = 8e3) => withProbedMedia(
-    src,
-    timeoutMs,
-    null,
-    (video, durationSeconds, finish2) => {
-      const dimensions = {
-        width: video.videoWidth > 0 ? video.videoWidth : null,
-        height: video.videoHeight > 0 ? video.videoHeight : null
-      };
-      const requestFrame = video.requestVideoFrameCallback?.bind(video);
-      if (!requestFrame) {
-        finish2({ durationSeconds, fps: null, ...dimensions });
-        return;
-      }
-      const mediaTimes = [];
-      const step = (_now, metadata) => {
-        mediaTimes.push(metadata.mediaTime);
-        if (mediaTimes.length >= FPS_SAMPLE_FRAMES || metadata.mediaTime >= durationSeconds) {
-          finish2({
-            durationSeconds,
-            fps: estimateFpsFromMediaTimes(mediaTimes),
-            ...dimensions
-          });
-          return;
-        }
-        requestFrame(step);
-      };
-      requestFrame(step);
-      video.play()?.catch(
-        () => finish2({ durationSeconds, fps: null, ...dimensions })
-      );
-    }
-  );
-  var probeReferenceVideo = (src, timeoutMs = 8e3) => withProbedMedia(
-    src,
-    timeoutMs,
-    null,
-    (video, durationSeconds, finish2) => {
-      const requestFrame = video.requestVideoFrameCallback?.bind(video);
-      if (!requestFrame) {
-        finish2({ durationSeconds, hasMultipleFrames: true });
-        return;
-      }
-      let firstMediaTime = null;
-      const inspect = (_now, metadata) => {
-        if (firstMediaTime === null) {
-          firstMediaTime = metadata.mediaTime;
-          requestFrame(inspect);
-          video.currentTime = Math.max(
-            0,
-            durationSeconds - Math.min(1e-3, durationSeconds / 2)
-          );
-          return;
-        }
-        finish2({
-          durationSeconds,
-          hasMultipleFrames: Math.abs(metadata.mediaTime - firstMediaTime) >= MIN_FRAME_DELTA_SECONDS
-        });
-      };
-      requestFrame(inspect);
-      video.play()?.catch(
-        () => finish2({ durationSeconds, hasMultipleFrames: true })
-      );
-    }
-  );
-  var probeMediaDurationSeconds = (src, timeoutMs = 8e3) => withProbedMedia(
-    src,
-    timeoutMs,
-    0,
-    (_video, duration, finish2) => finish2(duration)
-  );
-
-  // frontend/normalizationShared.ts
-  var text = (value, fallback = "") => `${value ?? fallback}`;
-  var trimmedText = (value, fallback = "") => text(value, fallback).trim();
-  var textOr = (value, fallback) => text(value, fallback) || fallback;
-  var numberOr = (value, fallback) => toNumber(text(value, fallback), fallback);
-  var clampedNumber = (value, fallback, min, max) => clamp(numberOr(value, fallback), min, max);
-  var nonNegativeNumber = (value) => Math.max(0, numberOr(value, 0));
-  var optionalNonNegativeNumber = (value) => {
-    if (value == null || trimmedText(value) === "") {
-      return null;
-    }
-    const number = toNumber(text(value), Number.NaN);
-    return Number.isFinite(number) && number >= 0 ? number : null;
-  };
-  var optionalPositiveNumber = (value) => {
-    const number = optionalNonNegativeNumber(value);
-    return number !== null && number > 0 ? number : null;
-  };
-  var readProp = (raw, ...keys) => {
-    for (const key of keys) {
-      if (Object.hasOwn(raw, key)) {
-        return raw[key];
-      }
-    }
-    return void 0;
-  };
-  var normalizeOptionalEntityId = (value) => typeof value === "string" ? value.trim() || void 0 : void 0;
-  var snapToStep = (value, step) => step > 0 ? Math.round(value / step) * step : value;
-  var clampWindowInDuration = (startRaw, lengthRaw, clipDuration, minLength) => {
-    if (!(lengthRaw > 0)) {
-      return null;
-    }
-    const maxStart = Math.max(0, clipDuration - minLength);
-    const startSeconds = clamp(startRaw, 0, maxStart);
-    const lengthSeconds = clamp(
-      lengthRaw,
-      minLength,
-      Math.max(minLength, clipDuration - startSeconds)
-    );
-    if (!(lengthSeconds > 0)) {
-      return null;
-    }
-    return { startSeconds, lengthSeconds };
-  };
-  var snapValueToStep = (value, fallback, min, max, step) => {
-    const unitScale = 1 / step;
-    return Math.round(clampedNumber(value, fallback, min, max) * unitScale) / unitScale;
-  };
-
-  // frontend/types.ts
-  var CURRENT_AUTHORING_SCHEMA_VERSION = 9;
-
-  // frontend/identity.ts
-  var fallbackSequence = 0;
-  var normalizedExistingId = (value) => {
-    if (typeof value !== "string") {
-      return null;
-    }
-    const id = value.trim();
-    return id.length > 0 && !id.includes("_legacy_") ? id : null;
-  };
-  var createEntityId = (kind) => {
-    const randomUuid = globalThis.crypto?.randomUUID?.();
-    if (randomUuid) {
-      return `${kind}_${randomUuid}`;
-    }
-    fallbackSequence += 1;
-    return `${kind}_${Date.now().toString(36)}_${fallbackSequence.toString(36)}`;
-  };
-  var assignUniqueId = (entry, reserved, used) => {
-    const reservedId = reserved.get(entry.entity);
-    if (reservedId) {
-      entry.entity.id = reservedId;
-      return reservedId;
-    }
-    const base = `${entry.kind}_${entry.repairPath}`;
-    let id = base;
-    let collision = 1;
-    while (used.has(id)) {
-      collision += 1;
-      id = `${base}_${collision}`;
-    }
-    entry.entity.id = id;
-    used.add(id);
-    return id;
-  };
-  var clipIdentityEntries = (clips) => {
-    const entries = [];
-    for (let clipIndex = 0; clipIndex < clips.length; clipIndex++) {
-      const clip = clips[clipIndex];
-      entries.push({
-        entity: clip,
-        kind: "clip",
-        repairPath: `${clipIndex}`
-      });
-      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
-        entries.push({
-          entity: clip.stages[stageIndex],
-          kind: "stage",
-          repairPath: `${clipIndex}_${stageIndex}`
-        });
-      }
-      for (let refIndex = 0; refIndex < clip.frameRefs.length; refIndex++) {
-        entries.push({
-          entity: clip.frameRefs[refIndex],
-          kind: "keyframe",
-          repairPath: `${clipIndex}_${refIndex}`
-        });
-      }
-      for (let referenceIndex = 0; referenceIndex < clip.references.length; referenceIndex++) {
-        entries.push({
-          entity: clip.references[referenceIndex],
-          kind: "clip_reference",
-          repairPath: `${clipIndex}_${referenceIndex}`
-        });
-      }
-      for (let icLoraIndex = 0; icLoraIndex < clip.icLoras.length; icLoraIndex++) {
-        entries.push({
-          entity: clip.icLoras[icLoraIndex],
-          kind: "ic_lora",
-          repairPath: `${clipIndex}_${icLoraIndex}`
-        });
-      }
-      for (let windowIndex = 0; windowIndex < clip.promptWindows.length; windowIndex++) {
-        entries.push({
-          entity: clip.promptWindows[windowIndex],
-          kind: "prompt_window",
-          repairPath: `${clipIndex}_${windowIndex}`
-        });
-      }
-      if (clip.retake) {
-        entries.push({
-          entity: clip.retake,
-          kind: "retake",
-          repairPath: `${clipIndex}`
-        });
-      }
-    }
-    return entries;
-  };
-  var audioTrackIdentityEntries = (tracks) => {
-    const entries = [];
-    for (let trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
-      const track = tracks[trackIndex];
-      entries.push({
-        entity: track,
-        kind: "audio_track",
-        repairPath: `${trackIndex}`
-      });
-      for (let spanIndex = 0; spanIndex < track.spans.length; spanIndex++) {
-        entries.push({
-          entity: track.spans[spanIndex],
-          kind: "audio_span",
-          repairPath: `${trackIndex}_${spanIndex}`
-        });
-      }
-    }
-    return entries;
-  };
-  var assignEntryIdentities = (entries, used) => {
-    const reserved = /* @__PURE__ */ new Map();
-    for (const { entity } of entries) {
-      const existing = normalizedExistingId(entity.id);
-      if (existing && !used.has(existing)) {
-        reserved.set(entity, existing);
-        used.add(existing);
-      }
-    }
-    for (const entry of entries) {
-      assignUniqueId(entry, reserved, used);
-    }
-  };
-  var ensureClipEntityIdentities = (clips, seen = /* @__PURE__ */ new Set()) => {
-    assignEntryIdentities(clipIdentityEntries(clips), seen);
-    return seen;
-  };
-  function ensureAuthoringDocumentIdentity(state) {
-    state.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
-    state.audioTracks ??= [];
-    assignEntryIdentities(
-      [
-        ...clipIdentityEntries(state.clips),
-        ...audioTrackIdentityEntries(state.audioTracks)
-      ],
-      /* @__PURE__ */ new Set()
-    );
-  }
-  var ownedIds = (entity) => {
-    const nested = "stages" in entity ? [
-      ...entity.stages,
-      ...entity.frameRefs,
-      ...entity.references ?? [],
-      ...entity.icLoras ?? [],
-      ...entity.promptWindows,
-      ...entity.retake ? [entity.retake] : []
-    ] : "spans" in entity ? entity.spans : [];
-    return [entity.id, ...nested.map((item) => item.id)];
-  };
-  var collectAuthoringEntityIds = (state) => [
-    ...state.clips.flatMap(ownedIds),
-    ...(state.audioTracks ?? []).flatMap(ownedIds)
-  ].filter((id) => !!id);
-
-  // frontend/generatedReferenceScale.ts
-  var REFERENCE_SCALE_FULL = 1;
-  var REFERENCE_SCALES = [1, 0.5, 0.25];
-
-  // frontend/clipReferenceAuthoring.ts
-  var clipReferenceAuthoring = (capabilities) => {
-    const general = capabilities.decision("clipReferences");
-    if (general.supported) {
-      return { mode: "all", decision: general, feature: "clipReferences" };
-    }
-    const identity = capabilities.decision("characterRefineIdentityReferences");
-    return identity.supported ? {
-      mode: "identity-images",
-      decision: identity,
-      feature: "characterRefineIdentityReferences"
-    } : { mode: "none", decision: general, feature: "clipReferences" };
-  };
-  var CLIP_REFERENCE_KIND_INFO = {
-    image: {
-      label: "Image",
-      tag: "Picture",
-      accept: "image/*",
-      browserTypes: ["image"]
-    },
-    video: {
-      label: "Video",
-      tag: "Video",
-      accept: "video/*",
-      browserTypes: ["video"]
-    },
-    audio: {
-      label: "Audio",
-      tag: "Audio",
-      accept: "audio/*",
-      browserTypes: ["audio"]
-    }
-  };
-  var CLIP_REFERENCE_KINDS = ["image", "video", "audio"];
-  var CLIP_REFERENCE_SCALE_LABELS = {
-    1: "Full",
-    0.5: "Half",
-    0.25: "Quarter"
-  };
-  var CLIP_REFERENCE_SCALES = REFERENCE_SCALES.map((value) => ({
-    value,
-    label: CLIP_REFERENCE_SCALE_LABELS[value]
-  }));
-  var normalizeClipReferenceScale = (value) => {
-    const numeric = Number(value);
-    return REFERENCE_SCALES.some((scale) => scale === numeric) ? numeric : REFERENCE_SCALE_FULL;
-  };
-  var normalizeClipReferenceKind = (value) => {
-    const raw = `${value ?? ""}`.trim().toLowerCase();
-    return raw === "video" || raw === "audio" ? raw : "image";
-  };
-  var buildDefaultClipReference = (kind = "image") => ({
-    kind,
-    source: MEDIA_SOURCE_UPLOAD,
-    uploadedMedia: null,
-    includeSoundtrack: false,
-    mediaDurationSeconds: 0,
-    drivesClipLength: false,
-    startSeconds: 0,
-    lengthSeconds: 0,
-    mediaScale: REFERENCE_SCALE_FULL
-  });
-  var clipReferenceCanDriveLength = (reference) => reference.kind === "video" || reference.kind === "audio";
-  var clipReferenceTags = (references, precedingReferences = []) => {
-    const allReferences = [...precedingReferences, ...references];
-    const used = {
-      image: 0,
-      video: 0,
-      audio: allReferences.filter(
-        (reference) => reference.kind === "video" && reference.includeSoundtrack === true
-      ).length
-    };
-    for (const reference of precedingReferences) {
-      used[reference.kind] += 1;
-    }
-    return references.map((reference) => {
-      used[reference.kind] += 1;
-      return `<${CLIP_REFERENCE_KIND_INFO[reference.kind].tag} ${used[reference.kind]}>`;
-    });
-  };
-  var clipLengthReferenceIndex = (references) => references.findIndex(
-    (reference) => reference.drivesClipLength === true && clipReferenceCanDriveLength(reference) && reference.mediaDurationSeconds > 0
-  );
-
-  // frontend/normalizationMedia.ts
-  var normalizePromptWindow = (raw) => {
-    const duration = numberOr(raw.duration, 0);
-    if (!(duration > 0)) {
-      return null;
-    }
-    const start = nonNegativeNumber(raw.start);
-    return {
-      id: normalizeOptionalEntityId(raw.id),
-      prompt: text(raw.prompt),
-      start,
-      duration
-    };
-  };
-  var normalizePromptWindows = (rawClip) => {
-    const rawList = rawClip.promptWindows;
-    if (!Array.isArray(rawList)) {
-      return [];
-    }
-    return rawList.map((entry) => normalizePromptWindow(isRecord(entry) ? entry : {})).filter((window2) => window2 !== null).sort((a, b) => a.start - b.start);
-  };
-  var normalizeRetake = (value, clipDuration) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const startRaw = nonNegativeNumber(value.startSeconds);
-    const lengthRaw = numberOr(value.lengthSeconds, 0);
-    const window2 = clampWindowInDuration(
-      startRaw,
-      lengthRaw,
-      clipDuration,
-      RETAKE_MIN_DURATION
-    );
-    if (!window2) {
-      return null;
-    }
-    const strengthRaw = value.strength;
-    const strength = strengthRaw == null ? RETAKE_STRENGTH_DEFAULT : clampedNumber(
-      strengthRaw,
-      RETAKE_STRENGTH_DEFAULT,
-      RETAKE_STRENGTH_MIN,
-      RETAKE_STRENGTH_MAX
-    );
-    return {
-      id: normalizeOptionalEntityId(value.id),
-      startSeconds: roundToTenth(window2.startSeconds),
-      lengthSeconds: roundToTenth(window2.lengthSeconds),
-      strength
-    };
-  };
-  var normalizeInitVideo = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const source = trimmedText(value.source) || MEDIA_SOURCE_UPLOAD;
-    const previousClip = source === MEDIA_SOURCE_PREVIOUS_CLIP;
-    const data = trimmedText(value.data);
-    if (!previousClip && !data) {
-      return null;
-    }
-    const durationSeconds = nonNegativeNumber(value.durationSeconds);
-    let startSeconds = nonNegativeNumber(value.startSeconds);
-    let lengthSeconds = nonNegativeNumber(value.lengthSeconds);
-    if (durationSeconds > 0) {
-      startSeconds = Math.min(
-        startSeconds,
-        Math.max(0, durationSeconds - CLIP_DURATION_MIN)
-      );
-      if (!(lengthSeconds > 0)) {
-        lengthSeconds = durationSeconds - startSeconds;
-      }
-      lengthSeconds = Math.min(lengthSeconds, durationSeconds - startSeconds);
-    }
-    if (!(lengthSeconds > 0)) {
-      return null;
-    }
-    return {
-      source: previousClip ? MEDIA_SOURCE_PREVIOUS_CLIP : MEDIA_SOURCE_UPLOAD,
-      data,
-      fileName: normalizeUploadFileName(
-        value.fileName == null ? null : text(value.fileName)
-      ),
-      fps: nonNegativeNumber(value.fps),
-      durationSeconds: roundToTenth(durationSeconds),
-      startSeconds: roundToTenth(startSeconds),
-      lengthSeconds: roundToTenth(lengthSeconds)
-    };
-  };
-  var normalizeClipReferences = (value, clipLengthClaimedElsewhere = false) => {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    let lengthClaimed = clipLengthClaimedElsewhere;
-    return value.map((entry) => {
-      const raw = isRecord(entry) ? entry : {};
-      const kind = normalizeClipReferenceKind(raw.kind);
-      const source = trimmedText(raw.source) || MEDIA_SOURCE_UPLOAD;
-      const mediaDurationSeconds = roundToTenth(
-        nonNegativeNumber(raw.mediaDurationSeconds)
-      );
-      const reference = {
-        id: normalizeOptionalEntityId(raw.id),
-        kind,
-        source,
-        uploadedMedia: normalizeUploadedMedia(raw.uploadedMedia),
-        includeSoundtrack: kind === "video" && raw.includeSoundtrack === true,
-        mediaDurationSeconds,
-        // A claim with no length behind it cannot move the clip, so it is
-        // dropped rather than left holding the one slot forever.
-        drivesClipLength: !lengthClaimed && raw.drivesClipLength === true && clipReferenceCanDriveLength({ kind }) && mediaDurationSeconds > 0,
-        mediaScale: kind === "video" ? normalizeClipReferenceScale(raw.mediaScale) : REFERENCE_SCALE_FULL,
-        ...normalizeClipReferenceTrim(raw, kind, mediaDurationSeconds)
-      };
-      lengthClaimed = lengthClaimed || reference.drivesClipLength;
-      return reference;
-    });
-  };
-  var normalizeClipReferenceTrim = (raw, kind, mediaDurationSeconds) => {
-    if (kind === "image") {
-      return { startSeconds: 0, lengthSeconds: 0 };
-    }
-    return normalizeTimedMediaRange(
-      raw.startSeconds,
-      raw.lengthSeconds,
-      mediaDurationSeconds
-    );
-  };
-  var normalizeTimedMediaRange = (startValue, lengthValue, mediaDurationSeconds) => {
-    if (mediaDurationSeconds <= 0) {
-      return { startSeconds: 0, lengthSeconds: 0 };
-    }
-    const startSeconds = Math.min(
-      roundToTenth(nonNegativeNumber(startValue)),
-      mediaDurationSeconds
-    );
-    const lengthSeconds = Math.min(
-      roundToTenth(nonNegativeNumber(lengthValue)),
-      mediaDurationSeconds - startSeconds
-    );
-    return lengthSeconds > 0 ? { startSeconds, lengthSeconds } : { startSeconds: 0, lengthSeconds: 0 };
-  };
-  var clipReferenceUsedRange = (reference) => reference.lengthSeconds > 0 ? {
-    startSeconds: reference.startSeconds,
-    lengthSeconds: reference.lengthSeconds
-  } : {
-    startSeconds: 0,
-    lengthSeconds: reference.mediaDurationSeconds
-  };
-  var clipReferenceUsedSeconds = (reference) => clipReferenceUsedRange(reference).lengthSeconds;
-  var clipReferenceDurationSeconds = (references) => {
-    const index = clipLengthReferenceIndex(references);
-    return index < 0 ? null : clipReferenceUsedSeconds(references[index]);
-  };
-  var normalizeUploadedMedia = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const data = trimmedText(value.data);
-    if (!data) {
-      return null;
-    }
-    return {
-      data,
-      fileName: normalizeUploadFileName(
-        value.fileName == null ? null : text(value.fileName)
-      )
-    };
-  };
-
-  // frontend/normalizationAudio.ts
-  var normalizeAudioTrackSourceKind = (value) => {
-    const compact = trimmedText(value).toLowerCase();
-    switch (compact) {
-      case MEDIA_SOURCE_UPLOAD.toLowerCase():
-        return MEDIA_SOURCE_UPLOAD;
-      case MEDIA_SOURCE_ACE_STEP_FUN.toLowerCase():
-        return MEDIA_SOURCE_ACE_STEP_FUN;
-      case MEDIA_SOURCE_NATIVE.toLowerCase():
-        return MEDIA_SOURCE_NATIVE;
-      case MEDIA_SOURCE_CONTROLNET.toLowerCase():
-        return MEDIA_SOURCE_CONTROLNET;
-      default:
-        return "Unrecognized";
-    }
-  };
-  var normalizeAudioTrackSpan = (value) => {
-    if (!isRecord(value)) {
-      return null;
-    }
-    const sourceStart = optionalNonNegativeNumber(value.sourceStartSeconds) ?? 0;
-    return {
-      id: normalizeOptionalEntityId(value.id),
-      timelineStartSeconds: optionalNonNegativeNumber(
-        value.timelineStartSeconds
-      ),
-      timelineLengthSeconds: optionalPositiveNumber(
-        value.timelineLengthSeconds
-      ),
-      sourceStartSeconds: sourceStart
-    };
-  };
-  var splitSpansIntoLanes = (track) => {
-    if (track.spans.length <= 1) {
-      return [track];
-    }
-    return track.spans.map((span, spanIndex) => ({
-      ...track,
-      id: track.id === void 0 ? void 0 : `${track.id}:${spanIndex}`,
-      source: { ...track.source },
-      spans: [span]
-    }));
-  };
-  var normalizeAudioTracks = (value) => {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    const tracks = [];
-    for (const rawTrack of value) {
-      if (!isRecord(rawTrack)) {
-        continue;
-      }
-      const rawSource = rawTrack.source;
-      const source = isRecord(rawSource) ? rawSource : {};
-      const rawSpans = rawTrack.spans;
-      const volume = rawTrack.volume === void 0 ? void 0 : clampedNumber(
-        rawTrack.volume,
-        AUDIO_SPAN_VOLUME_DEFAULT,
-        AUDIO_SPAN_VOLUME_MIN,
-        AUDIO_SPAN_VOLUME_MAX
-      );
-      tracks.push(
-        ...splitSpansIntoLanes({
-          id: normalizeOptionalEntityId(rawTrack.id),
-          source: {
-            kind: normalizeAudioTrackSourceKind(source.kind),
-            reference: trimmedText(source.reference),
-            uploadedAudio: normalizeUploadedMedia(source.uploadedAudio),
-            mediaDurationSeconds: optionalPositiveNumber(source.mediaDurationSeconds) ?? 0
-          },
-          spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter(
-            (span) => span !== null
-          ) : [],
-          ...volume === void 0 ? {} : { volume }
-        })
-      );
-    }
-    return tracks;
-  };
-
-  // frontend/architectures/ltx2/generatedIcLora.ts
-  var IC_LORA_AUTO = "[AUTO]";
-  var IC_LORA_AUTO_FOLDER = "LTX-2/IC-LoRA";
-  var IC_LORA_WEIGHTS = [
-    {
-      id: "union-control",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Union-Control/resolve/main/ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors",
-      dimensionDownscaleFactor: 2
-    },
-    {
-      id: "motion-track-control",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Motion-Track-Control/resolve/main/ltx-2.3-22b-ic-lora-motion-track-control-ref0.5.safetensors",
-      dimensionDownscaleFactor: 2
-    },
-    {
-      id: "in-outpainting",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-In-Outpainting/resolve/main/ltx-2.3-22b-ic-lora-in-outpainting-0.9.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "ingredients",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Ingredients/resolve/main/ltx-2.3-22b-ic-lora-ingredients-0.9.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "lipdub",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-LipDub/resolve/main/ltx-2.3-22b-ic-lora-lipdub-0.9.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "detailer",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2-19b-IC-LoRA-Detailer/resolve/main/ltx-2-19b-ic-lora-detailer.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "pixel-spatial-upscaler-x2",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x2-0.9.safetensors",
-      dimensionDownscaleFactor: 2
-    },
-    {
-      id: "pixel-spatial-upscaler-2.5-x2",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors",
-      dimensionDownscaleFactor: 2
-    },
-    {
-      id: "pixel-spatial-upscaler-x4",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Pixel-Spatial-Upscaler/resolve/main/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors",
-      dimensionDownscaleFactor: 4
-    },
-    {
-      id: "deblur",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Deblur/resolve/main/ltx-2.3-22b-ic-lora-deblur-0.9.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "decompression",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Decompression/resolve/main/ltx-2.3-22b-ic-lora-decompression-0.9.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "water-simulation",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Water-Simulation/resolve/main/ltx-2.3-22b-ic-lora-water-simulation-0.9.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "instant-shave",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Instant-Shave/resolve/main/ltx-2.3-22b-ic-lora-instant-shave-0.9.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "colorization",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Colorization/resolve/main/ltx-2.3-22b-ic-lora-colorization-0.9.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "cross-eyed",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Cross-Eyed/resolve/main/ltx-2.3-22b-ic-lora-cross-eyed-0.9.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "day-to-night",
-      weightsUrl: "https://huggingface.co/Lightricks/LTX-2.3-22b-IC-LoRA-Day-To-Night/resolve/main/ltx-2.3-22b-ic-lora-day-to-night-0.9.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "restyle",
-      weightsUrl: "https://huggingface.co/Cseti/LTX2.3-22B_ReStyle_IC-LoRA/resolve/main/852654_LTX2.3-22B_ReStyle_IC-LoRA_8000_v0.1.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "cameraman",
-      weightsUrl: "https://huggingface.co/Cseti/LTX2.3-22B_IC-LoRA-Cameraman_v2/resolve/main/LTX2.3-22B_IC-LoRA-Cameraman_v2_14000.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "crossview-prompt",
-      weightsUrl: "https://huggingface.co/Cseti/LTX2.3-22B_IC-LoRA-CrossView-Prompt/resolve/main/LTX2.3-22B_IC-LoRA-CrossView-Prompt_v0.9_13700.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "outpaint",
-      weightsUrl: "https://huggingface.co/oumoumad/LTX-2.3-22b-IC-LoRA-Outpaint/resolve/main/ltx-2.3-22b-ic-lora-outpaint.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "refocus",
-      weightsUrl: "https://huggingface.co/oumoumad/LTX-2.3-22b-IC-LoRA-ReFocus/resolve/main/ltx-2.3-22b-ic-lora-refocus.safetensors",
-      dimensionDownscaleFactor: 1
-    },
-    {
-      id: "vr360-outpaint",
-      weightsUrl: "https://huggingface.co/TheBurgstall/VR-360-Outpaint-LTX2.3-IC-LoRA/resolve/main/360vroutpaint_v2_step09000.safetensors",
-      dimensionDownscaleFactor: 1
-    }
-  ];
-
-  // frontend/architectures/ltx2/icLoraPresets.ts
-  var DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT = {
-    acceptedKinds: ["image", "video"],
-    driveData: "visual"
-  };
-  var LIPDUB_DRIVE_MEDIA_CONTRACT = {
-    acceptedKinds: ["audio", "video"],
-    driveData: "audio"
-  };
-  var icLoraDriveMediaContractForData = (driveData) => {
-    if (driveData === "audio") {
-      return LIPDUB_DRIVE_MEDIA_CONTRACT;
-    }
-    if (driveData === "visual") {
-      return DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
-    }
-    return { acceptedKinds: [], driveData: "none" };
-  };
-  var IC_LORA_PRESET_CUSTOM_ID = "custom";
-  var IC_LORA_DEFAULT_PRESET_ID = "union-control";
-  var IC_LORA_PRESENTATION = {
-    "union-control": {
-      displayName: "Union Control",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "depth",
-      allowedControlTypes: ["none", "canny", "depth", "normal"],
-      note: "Structural control from depth/canny/normal signals; pick the control type to render. Dims snap to multiples of 64."
-    },
-    "motion-track-control": {
-      displayName: "Motion Track Control",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Feed an LTXVDrawTracks-rendered track video (e.g. saved from the official workflow) — hand-made dot videos don't match the training format. Dims snap to multiples of 64."
-    },
-    "in-outpainting": {
-      displayName: "In/Outpainting",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Feed a pre-masked clip: masked region must be hard #66FF00 green, slightly dilated, losslessly encoded. Kept regions are still re-generated, not composited back."
-    },
-    ingredients: {
-      displayName: "Ingredients",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Feed the reference sheet as drive media (a still image works). Prompt pattern: '### Reference Sheet Description' per cell, then '### Target Description'."
-    },
-    lipdub: {
-      displayName: "LipDub",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Generates new speech + lips from the prompt's words. The drive source supplies the speaker sample: audio is used directly, and video sources contribute only their audio while their frames are ignored.",
-      driveMedia: LIPDUB_DRIVE_MEDIA_CONTRACT
-    },
-    detailer: {
-      displayName: "Detailer",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Enhances fine details and textures. Apply to a low-control refine stage. Trained on LTX-2 19B.",
-      driveMedia: icLoraDriveMediaContractForData("none")
-    },
-    "pixel-spatial-upscaler-x2": {
-      displayName: "Pixel Spatial Upscaler 2.3 ×2",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
-    },
-    "pixel-spatial-upscaler-2.5-x2": {
-      displayName: "Pixel Spatial Upscaler 2.5 ×2",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Apply on a refine stage with Upscale ×2 and source Incoming media. Dims snap to multiples of 64."
-    },
-    "pixel-spatial-upscaler-x4": {
-      displayName: "Pixel Spatial Upscaler 2.3 ×4",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Apply on a refine stage with Upscale ×4 and source Incoming media. Dims snap to multiples of 128."
-    },
-    deblur: {
-      displayName: "Deblur",
-      triggerPhrase: "DEBLUR",
-      strength: 1,
-      controlType: "none",
-      note: "Feed the blurry clip directly. Lower toward 0.8 if over-sharpened."
-    },
-    decompression: {
-      displayName: "Decompression",
-      triggerPhrase: "ENHANCE QUALITY",
-      strength: 1,
-      controlType: "none",
-      note: "Removes compression artifacts; feed a low-bitrate clip directly."
-    },
-    "water-simulation": {
-      displayName: "Water Simulation",
-      triggerPhrase: "ADD WATER",
-      strength: 1.2,
-      controlType: "none",
-      note: "Sweet spot ~1.2 (1.0 subtle; ≥1.5 warps faces). Feed a dry clip."
-    },
-    "instant-shave": {
-      displayName: "Instant Shave",
-      triggerPhrase: "REMOVEBEARD",
-      strength: 1,
-      controlType: "none",
-      note: "Feed a bearded clip directly. Lower toward 0.8 if artifacts appear."
-    },
-    colorization: {
-      displayName: "Colorization",
-      triggerPhrase: "COLORIZE",
-      strength: 1,
-      controlType: "none",
-      note: "Feed the grayscale clip; describe the restored colors after the COLORIZE trigger."
-    },
-    "cross-eyed": {
-      displayName: "Cross-Eyed",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Turns straight eyes inward (convergent strabismus) in close-up portrait clips; describe the effect in the prompt."
-    },
-    "day-to-night": {
-      displayName: "Day to Night",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Relights a daytime clip to night. Prompt the night look and add 'Only the lighting changes from day to night'. Best at ~4s clips."
-    },
-    restyle: {
-      displayName: "ReStyle",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Style transfer over an existing clip; see README for style prompts."
-    },
-    cameraman: {
-      displayName: "Cameraman",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Camera-motion control driven by the reference video's movement."
-    },
-    "crossview-prompt": {
-      displayName: "CrossView Prompt",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Re-renders the scene from a prompted new camera viewpoint."
-    },
-    outpaint: {
-      displayName: "Outpaint",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Extends the frame beyond the source video's borders."
-    },
-    refocus: {
-      displayName: "ReFocus",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Fixes lens blur / refocuses; feed the blurred clip directly."
-    },
-    "vr360-outpaint": {
-      displayName: "VR 360 Outpaint",
-      triggerPhrase: "",
-      strength: 1,
-      controlType: "none",
-      note: "Outpaints to an equirectangular 360° panorama."
-    }
-  };
-  var IC_LORA_PRESETS = IC_LORA_WEIGHTS.map(
-    (weights) => ({ ...IC_LORA_PRESENTATION[weights.id], ...weights })
-  );
-  var findIcLoraPreset = (id) => {
-    const wanted = `${id ?? ""}`.trim();
-    if (!wanted || wanted === IC_LORA_PRESET_CUSTOM_ID) {
-      return null;
-    }
-    return IC_LORA_PRESETS.find((preset) => preset.id === wanted) ?? null;
-  };
-  var icLoraDisplayName = (entry) => {
-    if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
-      return entry.lora;
-    }
-    return findIcLoraPreset(entry.preset)?.displayName ?? entry.preset;
-  };
-  var icLoraDriveMediaContract = (preset) => preset?.driveMedia ?? DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT;
-  var icLoraWeightsStem = (preset) => preset.weightsUrl.slice(preset.weightsUrl.lastIndexOf("/") + 1).replace(/\.safetensors$/i, "");
-  var icLoraAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset).replaceAll(".", "_")}`;
-  var icLoraLegacyAutoModelName = (preset) => `${IC_LORA_AUTO_FOLDER}/${icLoraWeightsStem(preset)}`;
-  var icLoraRepoUrl = (preset) => preset.weightsUrl.split("/resolve/")[0];
-  var icLoraTriggerHint = (preset) => {
-    if (!preset?.triggerPhrase) {
-      return "";
-    }
-    return `Prepend "${preset.triggerPhrase}" to your prompt`;
-  };
-
-  // frontend/architectures/ltx2/dimensionPolicy.ts
-  var normalizeModelName = (value) => {
-    const normalized = `${value ?? ""}`.trim().replaceAll("\\", "/");
-    const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
-    return basename.replace(/\.safetensors$/i, "").toLowerCase();
-  };
-  var presetFactors = /* @__PURE__ */ new Map();
-  var curatedModelFactors = /* @__PURE__ */ new Map();
-  for (const preset of IC_LORA_PRESETS) {
-    const factor = preset.dimensionDownscaleFactor;
-    if (factor) {
-      presetFactors.set(preset.id, factor);
-      for (const name of [
-        icLoraAutoModelName(preset),
-        icLoraLegacyAutoModelName(preset)
-      ]) {
-        curatedModelFactors.set(normalizeModelName(name), factor);
-      }
-    }
-  }
-  var icLoraDimensionFactor = (entry) => {
-    const presetFactor = presetFactors.get(
-      `${entry.preset ?? ""}`.trim().toLowerCase()
-    );
-    if (presetFactor) {
-      return presetFactor;
-    }
-    return curatedModelFactors.get(normalizeModelName(entry.lora)) ?? 1;
-  };
-  var ltx2DimensionFactor = (clip) => Math.max(1, ...clip.icLoras.map((entry) => icLoraDimensionFactor(entry)));
-  var ltx2DimensionMultiple = (clip) => ROOT_DIMENSION_STEP * ltx2DimensionFactor(clip);
-
-  // frontend/architectures/ltx2/icLoraDriveAvailability.ts
-  var canUseIncomingIcLoraDrive = (entry, clip, clipIdx, clips, generatedEntryMode) => {
-    const executable = executableClipIndexes(clips);
-    if (entry.driveData === "none" || !executable.includes(clipIdx)) {
-      return false;
-    }
-    const acceptedKinds = entry.driveMediaKinds;
-    const activeStageIndexes = clip.stages.slice(0, activeStageCount(clip)).map((_stage, rawIndex) => rawIndex);
-    const targetedStages = entry.stage >= 0 ? activeStageIndexes.includes(entry.stage) ? [entry.stage] : [] : activeStageIndexes;
-    const hasPreviousClipOutput = executable.some((index) => index < clipIdx);
-    return targetedStages.length > 0 && targetedStages.every((targetStage) => {
-      const activeStageIndex = activeStageIndexes.indexOf(targetStage);
-      const incomingKind = activeStageIndex > 0 || clip.initVideo ? "video" : hasPreviousClipOutput ? "video" : generatedEntryMode === "image-to-video" ? "image" : null;
-      return incomingKind !== null && acceptedKinds.includes(incomingKind);
-    });
-  };
-  var reconcileIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode) => {
-    const clip = clips[clipIdx];
-    if (!clip) {
-      return false;
-    }
-    let changed = false;
-    for (const entry of clip.icLoras) {
-      if (entry.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
-        entry,
-        clip,
-        clipIdx,
-        clips,
-        generatedEntryMode
-      )) {
-        entry.driveSource = MEDIA_SOURCE_UPLOAD;
-        changed = true;
-      }
-    }
-    return changed;
-  };
-
-  // frontend/icLoraAuthoring.ts
-  var STAGE_CONTROLNET_STRENGTH_MIN = 0;
-  var STAGE_CONTROLNET_STRENGTH_MAX = 1;
-  var STAGE_CONTROLNET_STRENGTH_STEP = 0.1;
-  var STAGE_CONTROLNET_STRENGTH_DEFAULT = 0.8;
-  var IC_LORA_STAGE_ALL = -1;
-  var IC_LORA_STRENGTH_MIN = 0;
-  var IC_LORA_STRENGTH_MAX = 5;
-  var IC_LORA_STRENGTH_STEP = 0.05;
-  var IC_LORA_STRENGTH_DEFAULT = 1;
-  var IC_LORA_ATTENTION_MIN = 0;
-  var IC_LORA_ATTENTION_MAX = 1;
-  var IC_LORA_ATTENTION_STEP = 0.05;
-  var IC_LORA_ATTENTION_DEFAULT = 1;
-
-  // frontend/architectures/ltx2/icLoraNormalization.ts
-  var defaultIcLora = (overrides = {}) => ({
-    lora: "",
-    preset: IC_LORA_PRESET_CUSTOM_ID,
-    driveSource: MEDIA_SOURCE_UPLOAD,
-    driveData: "visual",
-    driveMediaKinds: ["image", "video"],
-    stage: IC_LORA_STAGE_ALL,
-    strength: IC_LORA_STRENGTH_DEFAULT,
-    attentionStrength: IC_LORA_ATTENTION_DEFAULT,
-    controlType: "none",
-    driveMedia: null,
-    ...overrides
-  });
-  var normalizeControlNetLora = (value) => {
-    const raw = `${value ?? ""}`.trim();
-    if (!raw) {
-      return "";
-    }
-    const squeezed = raw.replace(/\s+/g, "").toLowerCase();
-    if (squeezed === "(none)") {
-      return "";
-    }
-    return raw;
-  };
-  var normalizeIcLoraControlType = (value) => {
-    const raw = `${value ?? ""}`.trim().toLowerCase();
-    return raw === "canny" || raw === "depth" || raw === "normal" ? raw : "none";
-  };
-  var INCOMING_LEGACY_COMPACT = compactMediaSource(
-    MEDIA_SOURCE_INCOMING_LEGACY
-  );
-  var normalizeIcLoraDriveSource = (value) => {
-    const authored = `${value ?? ""}`.trim();
-    const compact = compactMediaSource(authored);
-    if (!compact || equalsMediaSource(compact, MEDIA_SOURCE_UPLOAD)) {
-      return MEDIA_SOURCE_UPLOAD;
-    }
-    if (equalsMediaSource(compact, MEDIA_SOURCE_INCOMING) || equalsMediaSource(compact, INCOMING_LEGACY_COMPACT)) {
-      return MEDIA_SOURCE_INCOMING;
-    }
-    return canonicalControlNetSource(authored) ?? authored;
-  };
-  var normalizeIcLoraDriveData = (value) => {
-    const compact = `${value ?? ""}`.trim().toLowerCase();
-    return compact === "none" || compact === "audio" ? compact : "visual";
-  };
-  var mediaKindsForData = (driveData) => icLoraDriveMediaContractForData(driveData).acceptedKinds;
-  var mediaKindByExtension = {
-    apng: "image",
-    avif: "image",
-    bmp: "image",
-    gif: "image",
-    jpeg: "image",
-    jpg: "image",
-    png: "image",
-    svg: "image",
-    webp: "image",
-    flac: "audio",
-    m4a: "audio",
-    mp3: "audio",
-    ogg: "audio",
-    wav: "audio",
-    weba: "audio",
-    avi: "video",
-    m4v: "video",
-    mkv: "video",
-    mov: "video",
-    mp4: "video",
-    webm: "video"
-  };
-  var isAcceptedIcLoraDriveMedia = (value, fileName, acceptedKinds) => {
-    const resolved = resolveBrowserMedia(value);
-    const dataKind = /^data:(image|video|audio)\//i.exec(resolved)?.[1];
-    const named = fileName || resolved.split(/[?#]/, 1)[0] || "";
-    const extension = named.slice(named.lastIndexOf(".") + 1).toLowerCase();
-    const kind = dataKind ?? mediaKindByExtension[extension] ?? null;
-    return kind !== null && acceptedKinds.includes(kind);
-  };
-  var normalizeIcLoraDriveMediaKinds = (value, driveData) => {
-    const allowed = mediaKindsForData(driveData);
-    if (!Array.isArray(value)) {
-      return [...allowed];
-    }
-    const kinds = [];
-    for (const rawKind of value) {
-      const kind = `${rawKind ?? ""}`.trim().toLowerCase();
-      if ((kind === "image" || kind === "video" || kind === "audio") && allowed.includes(kind) && !kinds.includes(kind)) {
-        kinds.push(kind);
-      }
-    }
-    return kinds;
-  };
-  var normalizeIcLoraStage = (value, stageCount) => {
-    if (value == null || `${value}`.trim() === "") {
-      return IC_LORA_STAGE_ALL;
-    }
-    const stage = Math.trunc(Number(value));
-    if (!Number.isFinite(stage) || stage < 0) {
-      return IC_LORA_STAGE_ALL;
-    }
-    return stageCount > 0 && stage >= stageCount ? IC_LORA_STAGE_ALL : stage;
-  };
-  var normalizeIcLora = (raw, stageCount = 0, _initVideoClip = false) => {
-    if (!isRecord(raw)) {
-      return null;
-    }
-    const lora = normalizeControlNetLora(raw.lora);
-    if (!lora) {
-      return null;
-    }
-    const preset = `${raw.preset ?? ""}`.trim();
-    const repairsLegacyCustomAuto = lora === IC_LORA_AUTO && (!preset || preset === IC_LORA_PRESET_CUSTOM_ID);
-    const normalizedPreset = repairsLegacyCustomAuto ? IC_LORA_DEFAULT_PRESET_ID : preset || IC_LORA_PRESET_CUSTOM_ID;
-    const repairedPreset = repairsLegacyCustomAuto ? findIcLoraPreset(normalizedPreset) : null;
-    const driveData = normalizeIcLoraDriveData(raw.driveData);
-    const driveMediaKinds = normalizeIcLoraDriveMediaKinds(
-      raw.driveMediaKinds,
-      driveData
-    );
-    const normalizedDriveMedia = normalizeUploadedMedia(raw.driveMedia);
-    let driveSource = normalizeIcLoraDriveSource(raw.driveSource);
-    const driveMedia = driveSource === MEDIA_SOURCE_UPLOAD && driveData !== "none" && normalizedDriveMedia && isAcceptedIcLoraDriveMedia(
-      normalizedDriveMedia.data,
-      normalizedDriveMedia.fileName,
-      driveMediaKinds
-    ) ? normalizedDriveMedia : null;
-    const stage = normalizeIcLoraStage(raw.stage, stageCount);
-    if (driveData === "none") {
-      driveSource = MEDIA_SOURCE_UPLOAD;
-    }
-    return {
-      id: normalizeOptionalEntityId(raw.id),
-      lora,
-      preset: normalizedPreset,
-      driveSource,
-      driveData,
-      driveMediaKinds,
-      stage,
-      strength: repairsLegacyCustomAuto ? repairedPreset?.strength ?? IC_LORA_STRENGTH_DEFAULT : snapValueToStep(
-        raw.strength,
-        IC_LORA_STRENGTH_DEFAULT,
-        IC_LORA_STRENGTH_MIN,
-        IC_LORA_STRENGTH_MAX,
-        IC_LORA_STRENGTH_STEP
-      ),
-      attentionStrength: snapValueToStep(
-        raw.attentionStrength,
-        IC_LORA_ATTENTION_DEFAULT,
-        IC_LORA_ATTENTION_MIN,
-        IC_LORA_ATTENTION_MAX,
-        IC_LORA_ATTENTION_STEP
-      ),
-      controlType: driveData !== "visual" ? "none" : repairsLegacyCustomAuto ? repairedPreset?.controlType ?? "none" : normalizeIcLoraControlType(raw.controlType),
-      driveMedia
-    };
-  };
-  var normalizeIcLoras = (rawClip, stageCount = 0, initVideoClip = false) => {
-    if (!Array.isArray(rawClip.icLoras)) {
-      return [];
-    }
-    return rawClip.icLoras.map((entry) => normalizeIcLora(entry, stageCount, initVideoClip)).filter((entry) => entry !== null);
-  };
-  var canonicalizeIcLoraFields = (entry) => {
-    if (entry.driveData === "none") {
-      entry.driveSource = MEDIA_SOURCE_UPLOAD;
-      entry.driveMedia = null;
-    }
-    entry.driveMediaKinds = normalizeIcLoraDriveMediaKinds(
-      entry.driveMediaKinds,
-      entry.driveData
-    );
-  };
-  var hasSlotSourcedIcLora = (icLoras) => icLoras.some(
-    (entry) => canonicalControlNetSource(entry.driveSource) !== null
-  );
-
-  // frontend/architectures/ltx2/identity.ts
-  var LTX2_ARCHITECTURE_ID = "ltx2";
-
-  // frontend/architectures/behaviorRegistry.ts
-  var isLtx2 = (architectureId) => architectureId === LTX2_ARCHITECTURE_ID;
-  var architectureDimensionMultiple = (clip, architectureId) => {
-    const requested = isLtx2(architectureId) ? ltx2DimensionMultiple(clip) : ROOT_DIMENSION_STEP;
-    if (!Number.isFinite(requested)) {
-      return ROOT_DIMENSION_STEP;
-    }
-    return Math.max(
-      ROOT_DIMENSION_STEP,
-      Math.ceil(requested / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP
-    );
-  };
-  var normalizeArchitectureIcLoras = (architectureId, rawClip, stageCount, initVideoClip, options = {}) => {
-    if (isLtx2(architectureId)) {
-      return normalizeIcLoras(
-        rawClip,
-        stageCount,
-        initVideoClip
-      );
-    }
-    return options.preserveDormantLtx === true && Array.isArray(rawClip.icLoras) && rawClip.icLoras.length > 0 ? normalizeIcLoras(
-      rawClip,
-      stageCount,
-      initVideoClip
-    ) : [];
-  };
-  var canonicalizeArchitectureIcLoraFields = (architectureId, entry) => {
-    if (isLtx2(architectureId)) {
-      canonicalizeIcLoraFields(entry);
-    }
-  };
-  var reconcileArchitectureIncomingIcLoraDrives = (clips, generatedEntryMode, catalog) => {
-    let changed = false;
-    clips.forEach((clip, clipIdx) => {
-      const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
-      changed = isLtx2(architectureId) && reconcileIncomingIcLoraDrives(
-        clips,
-        clipIdx,
-        generatedEntryMode
-      ) || changed;
-    });
-    return changed;
-  };
-  var reconcileClipArchitectureIncomingIcLoraDrives = (clips, clipIdx, generatedEntryMode, catalog) => {
-    const clip = clips[clipIdx];
-    if (!clip) return false;
-    const architectureId = resolvedClipArchitectureId(clip, catalog) ?? "";
-    return isLtx2(architectureId) && reconcileIncomingIcLoraDrives(clips, clipIdx, generatedEntryMode);
-  };
-  var hasArchitectureSlotSourcedIcLora = (architectureId, entries) => isLtx2(architectureId) && hasSlotSourcedIcLora(entries);
-  var architectureIcLoraDisplayName = (architectureId, entry) => isLtx2(architectureId) ? icLoraDisplayName(entry) : entry.lora;
-
   // frontend/architectures/identity.ts
   var normalizeClipArchitecture = (rawArchitecture, stageZeroModel, catalog) => {
     const fromCatalog = catalog && stageZeroModel ? architectureForModel(catalog, stageZeroModel) : null;
@@ -3929,8 +3733,6 @@
   var HUE_RANGE = 360;
   var BASE_HUE = 210;
   var UNASSIGNED_HUE = -1;
-  var HUE_SATURATION = 65;
-  var HUE_LIGHTNESS = 55;
   var isAssignedHue = (value) => typeof value === "number" && Number.isInteger(value) && value >= HUE_MIN && value <= HUE_MAX;
   var normalizeStoredHue = (value) => {
     if (value == null || value === "") {
@@ -3983,10 +3785,6 @@
       clip.hue = hue;
       assigned.push(hue);
     }
-  };
-  var clipHueCss = (hue) => {
-    const resolved = isAssignedHue(hue) ? hue : BASE_HUE;
-    return `hsl(${resolved} ${HUE_SATURATION}% ${HUE_LIGHTNESS}%)`;
   };
 
   // frontend/h3AttentionWindow.ts
@@ -4203,24 +4001,6 @@
     frame: REF_FRAME_MIN,
     fromEnd: false
   });
-  var appendRefToClip = (clip, ref) => {
-    clip.frameRefs.push(ref);
-    for (const stage of clip.stages) {
-      stage.frameRefStrengths.push(STAGE_REF_STRENGTH_DEFAULT);
-    }
-  };
-  var removeRefAt = (clip, refIdx) => {
-    if (refIdx < 0 || refIdx >= clip.frameRefs.length) {
-      return false;
-    }
-    clip.frameRefs.splice(refIdx, 1);
-    for (const stage of clip.stages) {
-      if (refIdx < stage.frameRefStrengths.length) {
-        stage.frameRefStrengths.splice(refIdx, 1);
-      }
-    }
-    return true;
-  };
   var appendIcLoraStrengthToClip = (clip, initialStrength = 1) => {
     for (const stage of clip.stages) {
       stage.icLoraStrengths.push(
@@ -4418,10 +4198,11 @@
         defaults.fps
       ),
       useSeedVr: false,
+      audioOnly: false,
       refFraming: "crop",
       h3AttentionWindowSeconds: 0,
       h3TextEncoder: previousClip?.h3TextEncoder ?? "default",
-      audioSource: AUDIO_SOURCE_NATIVE,
+      audioSource: previousClip?.audioOnly === true ? AUDIO_SOURCE_PREVIOUS_CLIP : AUDIO_SOURCE_NATIVE,
       loras,
       icLoras: [],
       saveAudioTrack: false,
@@ -4440,6 +4221,11 @@
       frameRefs,
       stages: [firstStage]
     };
+  };
+  var applyAudioOnlyLeadBase = (clips) => {
+    if (clips[0]?.audioOnly === true && clips[1]) {
+      clips[1].audioSource = AUDIO_SOURCE_PREVIOUS_CLIP;
+    }
   };
   var normalizeClip = (rawClip, defaults, defaultStageModel, effectiveFps) => {
     const rawAudioSource = text(rawClip.audioSource, AUDIO_SOURCE_NATIVE);
@@ -4585,6 +4371,7 @@
       ),
       duration,
       useSeedVr: !!rawClip.useSeedVr,
+      audioOnly: !!rawClip.audioOnly,
       refFraming: normalizeReferenceFraming(rawClip.refFraming),
       h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
         rawClip.h3AttentionWindowSeconds
@@ -4611,517 +4398,6 @@
     };
   };
 
-  // frontend/persistence/documentCodec.ts
-  var toIntOrNull = (value) => {
-    const num = optionalNonNegativeNumber(value);
-    return num === null ? null : Math.round(num);
-  };
-  var resolveRootDims = (inherited, stored) => {
-    const width = toIntOrNull(stored.width);
-    const height = toIntOrNull(stored.height);
-    const dimsExplicit = width !== null && width >= ROOT_DIMENSION_MIN && height !== null && height >= ROOT_DIMENSION_MIN;
-    return {
-      width: dimsExplicit ? width : inherited.width,
-      height: dimsExplicit ? height : inherited.height,
-      // The timeline follows core's Video FPS param.
-      fps: inherited.fps,
-      dimsExplicit
-    };
-  };
-  var createRootConfig = (dims, clips, audioTracks = []) => {
-    const config = {
-      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
-      ...dims,
-      clips,
-      audioTracks
-    };
-    ensureAuthoringDocumentIdentity(config);
-    return config;
-  };
-  var serializeClipsForStorage = (clips) => {
-    ensureClipEntityIdentities(clips);
-    return clips.map(
-      (clip) => ({
-        id: clip.id,
-        architectureHint: clip.architectureHint,
-        modelProfileId: clip.modelProfileId,
-        skipped: clip.skipped,
-        boundaryOut: clip.boundaryOut,
-        boundaryOutCarryAudio: clip.boundaryOutCarryAudio,
-        boundaryOutReferenceScale: clip.boundaryOutReferenceScale,
-        boundaryOutReferenceIncludeSoundtrack: clip.boundaryOutReferenceIncludeSoundtrack,
-        boundaryOutOverlap: clip.boundaryOutOverlap,
-        duration: clip.duration,
-        useSeedVr: clip.useSeedVr,
-        refFraming: clip.refFraming,
-        h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
-        h3TextEncoder: clip.h3TextEncoder,
-        audioSource: clip.audioSource,
-        loras: clip.loras.map((entry) => ({
-          name: entry.name,
-          weight: entry.weight
-        })),
-        icLoras: clip.icLoras.map((entry) => ({
-          id: entry.id,
-          lora: entry.lora,
-          preset: entry.preset,
-          driveSource: entry.driveSource,
-          driveData: entry.driveData,
-          driveMediaKinds: entry.driveMediaKinds,
-          stage: entry.stage,
-          strength: entry.strength,
-          attentionStrength: entry.attentionStrength,
-          controlType: entry.controlType,
-          driveMedia: entry.driveMedia
-        })),
-        saveAudioTrack: clip.saveAudioTrack,
-        clipLengthFromAudio: clip.clipLengthFromAudio,
-        clipLengthFromControlNet: clip.clipLengthFromControlNet,
-        reuseAudio: clip.reuseAudio,
-        uploadedAudio: clip.uploadedAudio,
-        uploadedAudioDurationSeconds: clip.uploadedAudioDurationSeconds,
-        uploadedAudioStartSeconds: clip.uploadedAudioStartSeconds,
-        uploadedAudioLengthSeconds: clip.uploadedAudioLengthSeconds,
-        initVideo: clip.initVideo ? {
-          source: clip.initVideo.source ?? MEDIA_SOURCE_UPLOAD,
-          data: clip.initVideo.data,
-          fileName: clip.initVideo.fileName,
-          fps: clip.initVideo.fps,
-          durationSeconds: clip.initVideo.durationSeconds,
-          startSeconds: clip.initVideo.startSeconds,
-          lengthSeconds: clip.initVideo.lengthSeconds
-        } : null,
-        retake: clip.retake ? {
-          id: clip.retake.id,
-          startSeconds: clip.retake.startSeconds,
-          lengthSeconds: clip.retake.lengthSeconds,
-          strength: clip.retake.strength
-        } : null,
-        references: clip.references.map((reference) => ({
-          id: reference.id,
-          kind: reference.kind,
-          source: reference.source,
-          uploadedMedia: reference.uploadedMedia,
-          includeSoundtrack: reference.includeSoundtrack,
-          mediaDurationSeconds: reference.mediaDurationSeconds,
-          drivesClipLength: reference.drivesClipLength,
-          mediaScale: reference.mediaScale,
-          startSeconds: reference.startSeconds,
-          lengthSeconds: reference.lengthSeconds
-        })),
-        keyframes: clip.frameRefs.map((ref) => ({
-          id: ref.id,
-          source: ref.source,
-          uploadFileName: ref.uploadFileName,
-          uploadedImage: ref.uploadedImage,
-          frame: ref.frame,
-          fromEnd: ref.fromEnd
-        })),
-        stages: clip.stages.map((stage) => ({
-          id: stage.id,
-          skipped: stage.skipped,
-          control: stage.control,
-          controlNetStrength: stage.controlNetStrength,
-          icLoraStrengths: stage.icLoraStrengths,
-          keyframeStrengths: stage.frameRefStrengths,
-          upscale: stage.upscale,
-          upscaleMethod: stage.upscaleMethod,
-          model: stage.model,
-          modelProfileId: stage.modelProfileId,
-          steps: stage.steps,
-          cfgScale: stage.cfgScale,
-          sampler: stage.sampler,
-          scheduler: stage.scheduler,
-          ...stage.characterRefine ? { characterRefine: stage.characterRefine } : {}
-        }))
-      })
-    );
-  };
-  var timelinePointProjection = (clips, seconds2, edge) => {
-    if (!Number.isFinite(seconds2) || seconds2 < 0 || clips.length === 0) {
-      return null;
-    }
-    let cursor = 0;
-    for (let index = 0; index < clips.length; index++) {
-      const clip = clips[index];
-      const duration = Math.max(0, clip.duration || 0);
-      const clipEnd = cursor + duration;
-      const isLast = index === clips.length - 1;
-      const ownsPoint = edge === "start" ? seconds2 < clipEnd || isLast : seconds2 <= clipEnd || isLast;
-      if (ownsPoint) {
-        return {
-          clipId: clip.id,
-          offsetSeconds: Math.max(
-            0,
-            Math.min(duration, seconds2 - cursor)
-          )
-        };
-      }
-      cursor = clipEnd;
-    }
-    return null;
-  };
-  var timelineSpanProjection = (clips, span) => {
-    if (span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
-      return null;
-    }
-    const start = timelinePointProjection(
-      clips,
-      span.timelineStartSeconds,
-      "start"
-    );
-    const end = timelinePointProjection(
-      clips,
-      span.timelineStartSeconds + span.timelineLengthSeconds,
-      "end"
-    );
-    return start && end ? {
-      firstClipId: start.clipId,
-      lastClipId: end.clipId,
-      clipStartOffsetSeconds: start.offsetSeconds,
-      clipEndOffsetSeconds: end.offsetSeconds
-    } : null;
-  };
-  var serializeStateForStorage = (state) => {
-    ensureAuthoringDocumentIdentity(state);
-    const canonical = state;
-    const out = {
-      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION
-    };
-    if (state.dimsExplicit) {
-      out.width = Math.round(state.width);
-      out.height = Math.round(state.height);
-    }
-    out.clips = serializeClipsForStorage(state.clips);
-    out.audioTracks = canonical.audioTracks.map((track) => ({
-      id: track.id,
-      ...track.volume === void 0 ? {} : { volume: track.volume },
-      source: {
-        kind: track.source.kind,
-        reference: track.source.reference,
-        uploadedAudio: track.source.uploadedAudio,
-        mediaDurationSeconds: track.source.mediaDurationSeconds
-      },
-      spans: track.spans.map((span) => ({
-        id: span.id,
-        timelineStartSeconds: span.timelineStartSeconds,
-        timelineLengthSeconds: span.timelineLengthSeconds,
-        sourceStartSeconds: span.sourceStartSeconds,
-        projection: timelineSpanProjection(canonical.clips, span)
-      }))
-    }));
-    return JSON.stringify(out);
-  };
-  var isTransientBrowserMedia = (media) => {
-    const data = media?.data.trim().toLowerCase() ?? "";
-    return data.startsWith("data:") || data.startsWith("blob:") || isBrowserMediaHandle(data);
-  };
-  var serializeStateForDurableStorage = (state) => {
-    ensureAuthoringDocumentIdentity(state);
-    const durable = structuredClone(state);
-    for (const clip of durable.clips) {
-      if (isTransientBrowserMedia(clip.uploadedAudio)) {
-        clip.uploadedAudioDurationSeconds = 0;
-        clip.uploadedAudioStartSeconds = 0;
-        clip.uploadedAudioLengthSeconds = 0;
-      }
-    }
-    visitAuthoringMedia(durable, (media, replace) => {
-      if (media.source !== MEDIA_SOURCE_PREVIOUS_CLIP && isTransientBrowserMedia(media)) {
-        replace(null);
-      }
-    });
-    return serializeStateForStorage(durable);
-  };
-  var hasArrayOfRecords = (owner, key) => {
-    if (!Object.hasOwn(owner, key)) {
-      return true;
-    }
-    const value = owner[key];
-    return Array.isArray(value) && value.every(isRecord);
-  };
-  var hasValidStoredCollections = (parsed) => {
-    if (!Array.isArray(parsed.clips) || !parsed.clips.every(isRecord)) {
-      return false;
-    }
-    if (!hasArrayOfRecords(parsed, "audioTracks") || !hasArrayOfRecords(parsed, "clips")) {
-      return false;
-    }
-    for (const clip of parsed.clips) {
-      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "keyframes") || !hasArrayOfRecords(clip, "references") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
-        return false;
-      }
-      const stages = Array.isArray(clip.stages) ? clip.stages : [];
-      const loras = Array.isArray(clip.loras) ? clip.loras : [];
-      if (loras.some(
-        (lora) => !isRecord(lora) || typeof lora.weight !== "number" || !Number.isFinite(lora.weight)
-      )) {
-        return false;
-      }
-      for (const stage of stages) {
-        if (Object.hasOwn(stage, "loras") || Object.hasOwn(stage, "loraWeights") || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
-          (strength) => typeof strength === "number" && Number.isFinite(strength)
-        )) || Object.hasOwn(stage, "keyframeStrengths") && (!Array.isArray(stage.keyframeStrengths) || !stage.keyframeStrengths.every(
-          (strength) => typeof strength === "number" && Number.isFinite(strength)
-        ))) {
-          return false;
-        }
-      }
-    }
-    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
-    return tracks.every(
-      (track) => hasArrayOfRecords(track, "spans") && (!Object.hasOwn(track, "source") || isRecord(track.source))
-    );
-  };
-  var OUTDATED_SCHEMA_NOTICE = "VideoStages: the saved timeline was created by an older version and could not be loaded.";
-  var noticedOutdatedDocument = null;
-  var noticeOutdatedSchema = (serialized) => {
-    if (noticedOutdatedDocument === serialized) {
-      return;
-    }
-    noticedOutdatedDocument = serialized;
-    getVideoStagesHostBridge().showError(OUTDATED_SCHEMA_NOTICE);
-  };
-  var DIVERGENT_PROJECTION_NOTICE = "VideoStages: the saved timeline has audio spans whose clip anchors disagree with their timeline seconds. The seconds were used and the anchors will be rewritten on the next save — re-check those spans.";
-  var noticedDivergentProjection = null;
-  var SPAN_PROJECTION_TOLERANCE = 1e-6;
-  var numberAt = (owner, key) => typeof owner[key] === "number" && Number.isFinite(owner[key]) ? owner[key] : null;
-  var storedSpanProjection = (span) => {
-    const raw = span.projection;
-    if (!isRecord(raw)) {
-      return null;
-    }
-    const first = raw.firstClipId;
-    const last = raw.lastClipId;
-    const startOffset = numberAt(raw, "clipStartOffsetSeconds");
-    const endOffset = numberAt(raw, "clipEndOffsetSeconds");
-    return typeof first === "string" && typeof last === "string" && startOffset !== null && endOffset !== null ? {
-      firstClipId: first,
-      lastClipId: last,
-      clipStartOffsetSeconds: startOffset,
-      clipEndOffsetSeconds: endOffset
-    } : null;
-  };
-  var hasDivergentSpanProjection = (parsed) => {
-    const clips = parsed.clips.map((clip) => ({
-      id: typeof clip.id === "string" ? clip.id : "",
-      duration: numberAt(clip, "duration") ?? 0
-    }));
-    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
-    for (const track of tracks) {
-      const spans = isRecord(track) && Array.isArray(track.spans) ? track.spans : [];
-      for (const span of spans) {
-        if (!isRecord(span)) {
-          continue;
-        }
-        const stored = storedSpanProjection(span);
-        if (!stored) {
-          continue;
-        }
-        const expected = timelineSpanProjection(clips, {
-          timelineStartSeconds: numberAt(span, "timelineStartSeconds"),
-          timelineLengthSeconds: numberAt(span, "timelineLengthSeconds")
-        });
-        if (!expected || expected.firstClipId !== stored.firstClipId || expected.lastClipId !== stored.lastClipId || Math.abs(
-          expected.clipStartOffsetSeconds - stored.clipStartOffsetSeconds
-        ) > SPAN_PROJECTION_TOLERANCE || Math.abs(
-          expected.clipEndOffsetSeconds - stored.clipEndOffsetSeconds
-        ) > SPAN_PROJECTION_TOLERANCE) {
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-  var noticeDivergentProjection = (serialized) => {
-    if (noticedDivergentProjection === serialized) {
-      return;
-    }
-    noticedDivergentProjection = serialized;
-    getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
-  };
-  var FRAME_REFS_SCHEMA_VERSION = 7;
-  var STAGE_LORA_SCHEMA_VERSION = 8;
-  var renameKey = (target, oldKey, newKey) => {
-    if (!(oldKey in target)) {
-      return;
-    }
-    if (!(newKey in target)) {
-      target[newKey] = target[oldKey];
-    }
-    delete target[oldKey];
-  };
-  var finiteNumberArray = (value) => Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
-  var migrateStageLorasToClip = (document2) => {
-    if (!Array.isArray(document2.clips)) {
-      return null;
-    }
-    for (const rawClip of document2.clips) {
-      if (!isRecord(rawClip)) {
-        continue;
-      }
-      if (!hasArrayOfRecords(rawClip, "loras")) {
-        return null;
-      }
-      const clipLoras = Array.isArray(rawClip.loras) ? rawClip.loras : [];
-      const stages = Array.isArray(rawClip.stages) ? rawClip.stages : [];
-      const firstStage = isRecord(stages[0]) ? stages[0] : null;
-      const firstStageWeights = firstStage?.loraWeights;
-      if (firstStage && Object.hasOwn(firstStage, "loraWeights") && !finiteNumberArray(firstStageWeights)) {
-        return null;
-      }
-      const names = /* @__PURE__ */ new Set();
-      clipLoras.forEach((entry, index) => {
-        if (!isRecord(entry)) {
-          return;
-        }
-        const name = typeof entry.name === "string" ? entry.name.trim() : "";
-        if (name) {
-          names.add(name);
-        }
-        const weight = entry.weight;
-        entry.weight = typeof weight === "number" && Number.isFinite(weight) ? weight : (finiteNumberArray(firstStageWeights) ? firstStageWeights[index] : void 0) ?? 1;
-      });
-      for (const rawStage of stages) {
-        if (!isRecord(rawStage)) {
-          continue;
-        }
-        if (Object.hasOwn(rawStage, "loras") && !hasArrayOfRecords(rawStage, "loras") || Object.hasOwn(rawStage, "loraWeights") && !finiteNumberArray(rawStage.loraWeights)) {
-          return null;
-        }
-        const stageLoras = Array.isArray(rawStage.loras) ? rawStage.loras : [];
-        for (const entry of stageLoras) {
-          if (!isRecord(entry)) {
-            continue;
-          }
-          const name = typeof entry.name === "string" ? entry.name.trim() : "";
-          if (!name || names.has(name)) {
-            continue;
-          }
-          const weight = entry.weight;
-          clipLoras.push({
-            name,
-            weight: typeof weight === "number" && Number.isFinite(weight) ? weight : 1
-          });
-          names.add(name);
-        }
-        delete rawStage.loras;
-        delete rawStage.loraWeights;
-      }
-      rawClip.loras = clipLoras;
-    }
-    document2.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
-    return document2;
-  };
-  var migrateStoredDocument = (parsed) => {
-    if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
-      return parsed;
-    }
-    if (parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION && parsed.schemaVersion !== STAGE_LORA_SCHEMA_VERSION) {
-      return null;
-    }
-    const migrated = structuredClone(parsed);
-    if (migrated.schemaVersion === FRAME_REFS_SCHEMA_VERSION) {
-      if (!Array.isArray(migrated.clips)) {
-        return null;
-      }
-      for (const rawClip of migrated.clips) {
-        if (!isRecord(rawClip)) {
-          continue;
-        }
-        renameKey(rawClip, "frameRefs", "keyframes");
-        if (!Array.isArray(rawClip.stages)) {
-          continue;
-        }
-        for (const rawStage of rawClip.stages) {
-          if (isRecord(rawStage)) {
-            renameKey(
-              rawStage,
-              "frameRefStrengths",
-              "keyframeStrengths"
-            );
-          }
-        }
-      }
-      migrated.schemaVersion = STAGE_LORA_SCHEMA_VERSION;
-    }
-    return migrateStageLorasToClip(migrated);
-  };
-  var decodeStoredDocument = (serialized, inherited, defaults, defaultStageModel) => {
-    try {
-      const parsed = JSON.parse(serialized);
-      if (!isRecord(parsed)) {
-        return null;
-      }
-      const current = migrateStoredDocument(parsed);
-      if (!current) {
-        noticeOutdatedSchema(serialized);
-        return null;
-      }
-      if (!hasValidStoredCollections(current)) {
-        return null;
-      }
-      if (hasDivergentSpanProjection(current)) {
-        noticeDivergentProjection(serialized);
-      }
-      const dims = resolveRootDims(inherited, {
-        width: current.width,
-        height: current.height
-      });
-      const clips = current.clips.map(
-        (entry) => normalizeClip(entry, defaults, defaultStageModel, dims.fps)
-      );
-      sealSkipSuffix(clips);
-      return {
-        dims,
-        clips,
-        audioTracks: normalizeAudioTracks(current.audioTracks)
-      };
-    } catch {
-      return null;
-    }
-  };
-  var hasCanonicalStoredId = (value, seen) => {
-    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id) || value.id.includes("_legacy_")) {
-      return false;
-    }
-    seen.add(value.id);
-    return true;
-  };
-  var storedDocumentNeedsCanonicalIdRepair = (serialized) => {
-    try {
-      const parsed = JSON.parse(serialized);
-      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !Array.isArray(parsed.clips) || !Array.isArray(parsed.audioTracks)) {
-        return true;
-      }
-      const seenIds = /* @__PURE__ */ new Set();
-      for (const rawClip of parsed.clips) {
-        if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
-        for (const key of ["stages", "keyframes", "references"]) {
-          const children = rawClip[key];
-          if (!Array.isArray(children) || children.some(
-            (child) => !hasCanonicalStoredId(child, seenIds)
-          )) {
-            return true;
-          }
-        }
-        if (rawClip.retake !== null && !hasCanonicalStoredId(rawClip.retake, seenIds)) {
-          return true;
-        }
-      }
-      for (const rawTrack of parsed.audioTracks) {
-        if (!hasCanonicalStoredId(rawTrack, seenIds) || !Array.isArray(rawTrack.spans) || rawTrack.spans.some(
-          (span) => !hasCanonicalStoredId(span, seenIds)
-        )) {
-          return true;
-        }
-      }
-      return false;
-    } catch {
-      return true;
-    }
-  };
-
   // frontend/debugLog.ts
   var videoStagesDebugEnabled = () => typeof window !== "undefined" && !!window.__VIDEO_STAGES_DEBUG__;
   var videoStagesDebugLog = (area, message, ...details) => {
@@ -5132,6 +4408,73 @@
   };
 
   // frontend/architectures/conversion/plan.ts
+  var discardUnsupportedFeatures = (clip, capabilities) => {
+    const supports = (feature) => architectureFeatureSupport(feature, capabilities);
+    if (!supports("frameReferences")) {
+      clip.frameRefs = [];
+    }
+    if (!supports("promptRelay")) {
+      clip.promptWindows = [];
+    }
+    if (!supports("retake")) {
+      clip.retake = null;
+    }
+    if (!supports("referenceFraming")) {
+      clip.refFraming = "crop";
+    }
+    if (!supports("icLora")) {
+      clip.icLoras = [];
+      clip.clipLengthFromControlNet = false;
+    }
+    if (!supports("audioReuse")) {
+      clip.reuseAudio = false;
+    }
+    if (!supports("audioDerivedDuration")) {
+      clip.clipLengthFromAudio = false;
+    }
+    if (!supports("audioBoundaryCarry")) {
+      clip.boundaryOutCarryAudio = false;
+    }
+    if (!isAllowedAudioSource(capabilities.audioSourceKinds, clip.audioSource)) {
+      clip.audioSource = defaultAuthoringAudioSource(
+        capabilities.audioSourceKinds
+      );
+      clip.uploadedAudio = null;
+      clip.uploadedAudioDurationSeconds = 0;
+      clip.uploadedAudioStartSeconds = 0;
+      clip.uploadedAudioLengthSeconds = 0;
+      clip.saveAudioTrack = false;
+    }
+    if (!capabilities.entryModes.includes("init-video")) {
+      clip.initVideo = null;
+    }
+    const keepCharacterReferences = supports("characterRefineAppearanceReferences") || supports("characterRefineIdentityReferences");
+    if (!supports("clipReferences") && !keepCharacterReferences) {
+      clip.references = [];
+    }
+    for (const stage of clip.stages) {
+      if (!supports("frameReferences") || !supports("stageReferenceStrengths")) {
+        stage.frameRefStrengths = [];
+      }
+      if (!supports("icLora")) {
+        stage.icLoraStrengths = [];
+      }
+      if (!supports("characterRefine")) {
+        stage.characterRefine = null;
+      } else if (stage.characterRefine) {
+        if (!supports("characterRefineAppearanceReferences")) {
+          stage.characterRefine.pictureReferenceIds = [];
+        }
+        if (!supports("characterRefineIdentityReferences")) {
+          stage.characterRefine.verifyIdentity = false;
+        }
+      }
+      const upscaleMode = upscaleModeForMethod(stage.upscaleMethod);
+      if (upscaleMode === "unsupported" || upscaleMode === "latent" && !supports("latentUpscale") || upscaleMode === "latent-model" && !supports("latentModelUpscale")) {
+        stage.upscale = 1;
+      }
+    }
+  };
   var resolveArchitectureRetarget = (requested, catalog) => {
     if (!catalog) {
       return null;
@@ -5162,6 +4505,11 @@
       stage.model = target.model;
       stage.modelProfileId = target.modelProfileId;
     }
+    const capabilities = modelCatalogEntry(catalog, target.model)?.capabilities ?? architectureDescriptor(catalog, target.architectureId)?.capabilities;
+    if (!capabilities) {
+      return null;
+    }
+    discardUnsupportedFeatures(clip, capabilities);
     return clip;
   };
 
@@ -5197,6 +4545,7 @@
       "boundaryOutOverlap",
       "duration",
       "useSeedVr",
+      "audioOnly",
       "refFraming",
       "h3AttentionWindowSeconds",
       "h3TextEncoder",
@@ -5305,7 +4654,7 @@
     entityField: "track",
     idField: "trackId",
     beforeIdField: "beforeTrackId",
-    patchKeys: ["source", "volume"],
+    patchKeys: ["source", "volume", "disabled"],
     reservedKeys: ["id", "spans"],
     collection: (document2) => document2.audioTracks
   });
@@ -5332,6 +4681,160 @@
     audioTrack: AUDIO_TRACK_ENTITY,
     audioSpan: AUDIO_SPAN_ENTITY
   };
+
+  // frontend/types.ts
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 9;
+
+  // frontend/identity.ts
+  var fallbackSequence = 0;
+  var normalizedExistingId = (value) => {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const id = value.trim();
+    return id.length > 0 && !id.includes("_legacy_") ? id : null;
+  };
+  var createEntityId = (kind) => {
+    const randomUuid = globalThis.crypto?.randomUUID?.();
+    if (randomUuid) {
+      return `${kind}_${randomUuid}`;
+    }
+    fallbackSequence += 1;
+    return `${kind}_${Date.now().toString(36)}_${fallbackSequence.toString(36)}`;
+  };
+  var assignUniqueId = (entry, reserved, used) => {
+    const reservedId = reserved.get(entry.entity);
+    if (reservedId) {
+      entry.entity.id = reservedId;
+      return reservedId;
+    }
+    const base = `${entry.kind}_${entry.repairPath}`;
+    let id = base;
+    let collision = 1;
+    while (used.has(id)) {
+      collision += 1;
+      id = `${base}_${collision}`;
+    }
+    entry.entity.id = id;
+    used.add(id);
+    return id;
+  };
+  var clipIdentityEntries = (clips) => {
+    const entries = [];
+    for (let clipIndex = 0; clipIndex < clips.length; clipIndex++) {
+      const clip = clips[clipIndex];
+      entries.push({
+        entity: clip,
+        kind: "clip",
+        repairPath: `${clipIndex}`
+      });
+      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
+        entries.push({
+          entity: clip.stages[stageIndex],
+          kind: "stage",
+          repairPath: `${clipIndex}_${stageIndex}`
+        });
+      }
+      for (let refIndex = 0; refIndex < clip.frameRefs.length; refIndex++) {
+        entries.push({
+          entity: clip.frameRefs[refIndex],
+          kind: "keyframe",
+          repairPath: `${clipIndex}_${refIndex}`
+        });
+      }
+      for (let referenceIndex = 0; referenceIndex < clip.references.length; referenceIndex++) {
+        entries.push({
+          entity: clip.references[referenceIndex],
+          kind: "clip_reference",
+          repairPath: `${clipIndex}_${referenceIndex}`
+        });
+      }
+      for (let icLoraIndex = 0; icLoraIndex < clip.icLoras.length; icLoraIndex++) {
+        entries.push({
+          entity: clip.icLoras[icLoraIndex],
+          kind: "ic_lora",
+          repairPath: `${clipIndex}_${icLoraIndex}`
+        });
+      }
+      for (let windowIndex = 0; windowIndex < clip.promptWindows.length; windowIndex++) {
+        entries.push({
+          entity: clip.promptWindows[windowIndex],
+          kind: "prompt_window",
+          repairPath: `${clipIndex}_${windowIndex}`
+        });
+      }
+      if (clip.retake) {
+        entries.push({
+          entity: clip.retake,
+          kind: "retake",
+          repairPath: `${clipIndex}`
+        });
+      }
+    }
+    return entries;
+  };
+  var audioTrackIdentityEntries = (tracks) => {
+    const entries = [];
+    for (let trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
+      const track = tracks[trackIndex];
+      entries.push({
+        entity: track,
+        kind: "audio_track",
+        repairPath: `${trackIndex}`
+      });
+      for (let spanIndex = 0; spanIndex < track.spans.length; spanIndex++) {
+        entries.push({
+          entity: track.spans[spanIndex],
+          kind: "audio_span",
+          repairPath: `${trackIndex}_${spanIndex}`
+        });
+      }
+    }
+    return entries;
+  };
+  var assignEntryIdentities = (entries, used) => {
+    const reserved = /* @__PURE__ */ new Map();
+    for (const { entity } of entries) {
+      const existing = normalizedExistingId(entity.id);
+      if (existing && !used.has(existing)) {
+        reserved.set(entity, existing);
+        used.add(existing);
+      }
+    }
+    for (const entry of entries) {
+      assignUniqueId(entry, reserved, used);
+    }
+  };
+  var ensureClipEntityIdentities = (clips, seen = /* @__PURE__ */ new Set()) => {
+    assignEntryIdentities(clipIdentityEntries(clips), seen);
+    return seen;
+  };
+  function ensureAuthoringDocumentIdentity(state) {
+    state.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    state.audioTracks ??= [];
+    assignEntryIdentities(
+      [
+        ...clipIdentityEntries(state.clips),
+        ...audioTrackIdentityEntries(state.audioTracks)
+      ],
+      /* @__PURE__ */ new Set()
+    );
+  }
+  var ownedIds = (entity) => {
+    const nested = "stages" in entity ? [
+      ...entity.stages,
+      ...entity.frameRefs,
+      ...entity.references ?? [],
+      ...entity.icLoras ?? [],
+      ...entity.promptWindows,
+      ...entity.retake ? [entity.retake] : []
+    ] : "spans" in entity ? entity.spans : [];
+    return [entity.id, ...nested.map((item) => item.id)];
+  };
+  var collectAuthoringEntityIds = (state) => [
+    ...state.clips.flatMap(ownedIds),
+    ...(state.audioTracks ?? []).flatMap(ownedIds)
+  ].filter((id) => !!id);
 
   // frontend/documentDiff.ts
   var DocumentDiffError = class extends Error {
@@ -6539,6 +6042,601 @@
     }
   };
 
+  // frontend/normalizationAudio.ts
+  var normalizeAudioTrackSourceKind = (value) => {
+    const compact = trimmedText(value).toLowerCase();
+    switch (compact) {
+      case MEDIA_SOURCE_UPLOAD.toLowerCase():
+        return MEDIA_SOURCE_UPLOAD;
+      case MEDIA_SOURCE_ACE_STEP_FUN.toLowerCase():
+        return MEDIA_SOURCE_ACE_STEP_FUN;
+      case MEDIA_SOURCE_NATIVE.toLowerCase():
+        return MEDIA_SOURCE_NATIVE;
+      case MEDIA_SOURCE_CONTROLNET.toLowerCase():
+        return MEDIA_SOURCE_CONTROLNET;
+      default:
+        return "Unrecognized";
+    }
+  };
+  var normalizeAudioTrackSpan = (value) => {
+    if (!isRecord(value)) {
+      return null;
+    }
+    const sourceStart = optionalNonNegativeNumber(value.sourceStartSeconds) ?? 0;
+    return {
+      id: normalizeOptionalEntityId(value.id),
+      timelineStartSeconds: optionalNonNegativeNumber(
+        value.timelineStartSeconds
+      ),
+      timelineLengthSeconds: optionalPositiveNumber(
+        value.timelineLengthSeconds
+      ),
+      sourceStartSeconds: sourceStart
+    };
+  };
+  var splitSpansIntoLanes = (track) => {
+    if (track.spans.length <= 1) {
+      return [track];
+    }
+    return track.spans.map((span, spanIndex) => ({
+      ...track,
+      id: track.id === void 0 ? void 0 : `${track.id}:${spanIndex}`,
+      source: { ...track.source },
+      spans: [span]
+    }));
+  };
+  var normalizeAudioTracks = (value) => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const tracks = [];
+    for (const rawTrack of value) {
+      if (!isRecord(rawTrack)) {
+        continue;
+      }
+      const rawSource = rawTrack.source;
+      const source = isRecord(rawSource) ? rawSource : {};
+      const rawSpans = rawTrack.spans;
+      const volume = rawTrack.volume === void 0 ? void 0 : clampedNumber(
+        rawTrack.volume,
+        AUDIO_SPAN_VOLUME_DEFAULT,
+        AUDIO_SPAN_VOLUME_MIN,
+        AUDIO_SPAN_VOLUME_MAX
+      );
+      tracks.push(
+        ...splitSpansIntoLanes({
+          id: normalizeOptionalEntityId(rawTrack.id),
+          source: {
+            kind: normalizeAudioTrackSourceKind(source.kind),
+            reference: trimmedText(source.reference),
+            uploadedAudio: normalizeUploadedMedia(source.uploadedAudio),
+            mediaDurationSeconds: optionalPositiveNumber(source.mediaDurationSeconds) ?? 0
+          },
+          spans: Array.isArray(rawSpans) ? rawSpans.map(normalizeAudioTrackSpan).filter(
+            (span) => span !== null
+          ) : [],
+          ...rawTrack.disabled === true ? { disabled: true } : {},
+          ...volume === void 0 ? {} : { volume }
+        })
+      );
+    }
+    return tracks;
+  };
+
+  // frontend/persistence/documentCodec.ts
+  var toIntOrNull = (value) => {
+    const num = optionalNonNegativeNumber(value);
+    return num === null ? null : Math.round(num);
+  };
+  var resolveRootDims = (inherited, stored) => {
+    const width = toIntOrNull(stored.width);
+    const height = toIntOrNull(stored.height);
+    const dimsExplicit = width !== null && width >= ROOT_DIMENSION_MIN && height !== null && height >= ROOT_DIMENSION_MIN;
+    return {
+      width: dimsExplicit ? width : inherited.width,
+      height: dimsExplicit ? height : inherited.height,
+      // The timeline follows core's Video FPS param.
+      fps: inherited.fps,
+      dimsExplicit
+    };
+  };
+  var createRootConfig = (dims, clips, audioTracks = []) => {
+    const config = {
+      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
+      ...dims,
+      clips,
+      audioTracks
+    };
+    ensureAuthoringDocumentIdentity(config);
+    return config;
+  };
+  var serializeClipsForStorage = (clips) => {
+    ensureClipEntityIdentities(clips);
+    return clips.map(
+      (clip) => ({
+        id: clip.id,
+        architectureHint: clip.architectureHint,
+        modelProfileId: clip.modelProfileId,
+        skipped: clip.skipped,
+        boundaryOut: clip.boundaryOut,
+        boundaryOutCarryAudio: clip.boundaryOutCarryAudio,
+        boundaryOutReferenceScale: clip.boundaryOutReferenceScale,
+        boundaryOutReferenceIncludeSoundtrack: clip.boundaryOutReferenceIncludeSoundtrack,
+        boundaryOutOverlap: clip.boundaryOutOverlap,
+        duration: clip.duration,
+        useSeedVr: clip.useSeedVr,
+        audioOnly: clip.audioOnly,
+        refFraming: clip.refFraming,
+        h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
+        h3TextEncoder: clip.h3TextEncoder,
+        audioSource: clip.audioSource,
+        loras: clip.loras.map((entry) => ({
+          name: entry.name,
+          weight: entry.weight
+        })),
+        icLoras: clip.icLoras.map((entry) => ({
+          id: entry.id,
+          lora: entry.lora,
+          preset: entry.preset,
+          driveSource: entry.driveSource,
+          driveData: entry.driveData,
+          driveMediaKinds: entry.driveMediaKinds,
+          stage: entry.stage,
+          strength: entry.strength,
+          attentionStrength: entry.attentionStrength,
+          controlType: entry.controlType,
+          driveMedia: entry.driveMedia
+        })),
+        saveAudioTrack: clip.saveAudioTrack,
+        clipLengthFromAudio: clip.clipLengthFromAudio,
+        clipLengthFromControlNet: clip.clipLengthFromControlNet,
+        reuseAudio: clip.reuseAudio,
+        uploadedAudio: clip.uploadedAudio,
+        uploadedAudioDurationSeconds: clip.uploadedAudioDurationSeconds,
+        uploadedAudioStartSeconds: clip.uploadedAudioStartSeconds,
+        uploadedAudioLengthSeconds: clip.uploadedAudioLengthSeconds,
+        initVideo: clip.initVideo ? {
+          source: clip.initVideo.source ?? MEDIA_SOURCE_UPLOAD,
+          data: clip.initVideo.data,
+          fileName: clip.initVideo.fileName,
+          fps: clip.initVideo.fps,
+          durationSeconds: clip.initVideo.durationSeconds,
+          startSeconds: clip.initVideo.startSeconds,
+          lengthSeconds: clip.initVideo.lengthSeconds
+        } : null,
+        retake: clip.retake ? {
+          id: clip.retake.id,
+          startSeconds: clip.retake.startSeconds,
+          lengthSeconds: clip.retake.lengthSeconds,
+          strength: clip.retake.strength
+        } : null,
+        references: clip.references.map((reference) => ({
+          id: reference.id,
+          kind: reference.kind,
+          source: reference.source,
+          uploadedMedia: reference.uploadedMedia,
+          includeSoundtrack: reference.includeSoundtrack,
+          mediaDurationSeconds: reference.mediaDurationSeconds,
+          drivesClipLength: reference.drivesClipLength,
+          mediaScale: reference.mediaScale,
+          startSeconds: reference.startSeconds,
+          lengthSeconds: reference.lengthSeconds
+        })),
+        keyframes: clip.frameRefs.map((ref) => ({
+          id: ref.id,
+          source: ref.source,
+          uploadFileName: ref.uploadFileName,
+          uploadedImage: ref.uploadedImage,
+          frame: ref.frame,
+          fromEnd: ref.fromEnd
+        })),
+        stages: clip.stages.map((stage) => ({
+          id: stage.id,
+          skipped: stage.skipped,
+          control: stage.control,
+          controlNetStrength: stage.controlNetStrength,
+          icLoraStrengths: stage.icLoraStrengths,
+          keyframeStrengths: stage.frameRefStrengths,
+          upscale: stage.upscale,
+          upscaleMethod: stage.upscaleMethod,
+          model: stage.model,
+          modelProfileId: stage.modelProfileId,
+          steps: stage.steps,
+          cfgScale: stage.cfgScale,
+          sampler: stage.sampler,
+          scheduler: stage.scheduler,
+          ...stage.characterRefine ? { characterRefine: stage.characterRefine } : {}
+        }))
+      })
+    );
+  };
+  var timelinePointProjection = (clips, seconds2, edge) => {
+    if (!Number.isFinite(seconds2) || seconds2 < 0 || clips.length === 0) {
+      return null;
+    }
+    let cursor = 0;
+    for (let index = 0; index < clips.length; index++) {
+      const clip = clips[index];
+      const duration = Math.max(0, clip.duration || 0);
+      const clipEnd = cursor + duration;
+      const isLast = index === clips.length - 1;
+      const ownsPoint = edge === "start" ? seconds2 < clipEnd || isLast : seconds2 <= clipEnd || isLast;
+      if (ownsPoint) {
+        return {
+          clipId: clip.id,
+          offsetSeconds: Math.max(
+            0,
+            Math.min(duration, seconds2 - cursor)
+          )
+        };
+      }
+      cursor = clipEnd;
+    }
+    return null;
+  };
+  var timelineSpanProjection = (clips, span) => {
+    if (span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
+      return null;
+    }
+    const start = timelinePointProjection(
+      clips,
+      span.timelineStartSeconds,
+      "start"
+    );
+    const end = timelinePointProjection(
+      clips,
+      span.timelineStartSeconds + span.timelineLengthSeconds,
+      "end"
+    );
+    return start && end ? {
+      firstClipId: start.clipId,
+      lastClipId: end.clipId,
+      clipStartOffsetSeconds: start.offsetSeconds,
+      clipEndOffsetSeconds: end.offsetSeconds
+    } : null;
+  };
+  var serializeStateForStorage = (state) => {
+    ensureAuthoringDocumentIdentity(state);
+    const canonical = state;
+    const out = {
+      schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION
+    };
+    if (state.dimsExplicit) {
+      out.width = Math.round(state.width);
+      out.height = Math.round(state.height);
+    }
+    out.clips = serializeClipsForStorage(state.clips);
+    out.audioTracks = canonical.audioTracks.map((track) => ({
+      id: track.id,
+      disabled: track.disabled === true,
+      ...track.volume === void 0 ? {} : { volume: track.volume },
+      source: {
+        kind: track.source.kind,
+        reference: track.source.reference,
+        uploadedAudio: track.source.uploadedAudio,
+        mediaDurationSeconds: track.source.mediaDurationSeconds
+      },
+      spans: track.spans.map((span) => ({
+        id: span.id,
+        timelineStartSeconds: span.timelineStartSeconds,
+        timelineLengthSeconds: span.timelineLengthSeconds,
+        sourceStartSeconds: span.sourceStartSeconds,
+        projection: timelineSpanProjection(canonical.clips, span)
+      }))
+    }));
+    return JSON.stringify(out);
+  };
+  var isTransientBrowserMedia = (media) => {
+    const data = media?.data.trim().toLowerCase() ?? "";
+    return data.startsWith("data:") || data.startsWith("blob:") || isBrowserMediaHandle(data);
+  };
+  var serializeStateForDurableStorage = (state) => {
+    ensureAuthoringDocumentIdentity(state);
+    const durable = structuredClone(state);
+    for (const clip of durable.clips) {
+      if (isTransientBrowserMedia(clip.uploadedAudio)) {
+        clip.uploadedAudioDurationSeconds = 0;
+        clip.uploadedAudioStartSeconds = 0;
+        clip.uploadedAudioLengthSeconds = 0;
+      }
+    }
+    visitAuthoringMedia(durable, (media, replace) => {
+      if (media.source !== MEDIA_SOURCE_PREVIOUS_CLIP && isTransientBrowserMedia(media)) {
+        replace(null);
+      }
+    });
+    return serializeStateForStorage(durable);
+  };
+  var hasArrayOfRecords = (owner, key) => {
+    if (!Object.hasOwn(owner, key)) {
+      return true;
+    }
+    const value = owner[key];
+    return Array.isArray(value) && value.every(isRecord);
+  };
+  var hasValidStoredCollections = (parsed) => {
+    if (!Array.isArray(parsed.clips) || !parsed.clips.every(isRecord)) {
+      return false;
+    }
+    if (!hasArrayOfRecords(parsed, "audioTracks") || !hasArrayOfRecords(parsed, "clips")) {
+      return false;
+    }
+    for (const clip of parsed.clips) {
+      if (!hasArrayOfRecords(clip, "stages") || !hasArrayOfRecords(clip, "keyframes") || !hasArrayOfRecords(clip, "references") || !hasArrayOfRecords(clip, "icLoras") || Object.hasOwn(clip, "loras") && !hasArrayOfRecords(clip, "loras")) {
+        return false;
+      }
+      const stages = Array.isArray(clip.stages) ? clip.stages : [];
+      const loras = Array.isArray(clip.loras) ? clip.loras : [];
+      if (loras.some(
+        (lora) => !isRecord(lora) || typeof lora.weight !== "number" || !Number.isFinite(lora.weight)
+      )) {
+        return false;
+      }
+      for (const stage of stages) {
+        if (Object.hasOwn(stage, "loras") || Object.hasOwn(stage, "loraWeights") || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
+          (strength) => typeof strength === "number" && Number.isFinite(strength)
+        )) || Object.hasOwn(stage, "keyframeStrengths") && (!Array.isArray(stage.keyframeStrengths) || !stage.keyframeStrengths.every(
+          (strength) => typeof strength === "number" && Number.isFinite(strength)
+        ))) {
+          return false;
+        }
+      }
+    }
+    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
+    return tracks.every(
+      (track) => hasArrayOfRecords(track, "spans") && (!Object.hasOwn(track, "source") || isRecord(track.source))
+    );
+  };
+  var OUTDATED_SCHEMA_NOTICE = "VideoStages: the saved timeline was created by an older version and could not be loaded.";
+  var noticedOutdatedDocument = null;
+  var noticeOutdatedSchema = (serialized) => {
+    if (noticedOutdatedDocument === serialized) {
+      return;
+    }
+    noticedOutdatedDocument = serialized;
+    getVideoStagesHostBridge().showError(OUTDATED_SCHEMA_NOTICE);
+  };
+  var DIVERGENT_PROJECTION_NOTICE = "VideoStages: the saved timeline has audio spans whose clip anchors disagree with their timeline seconds. The seconds were used and the anchors will be rewritten on the next save — re-check those spans.";
+  var noticedDivergentProjection = null;
+  var SPAN_PROJECTION_TOLERANCE = 1e-6;
+  var numberAt = (owner, key) => typeof owner[key] === "number" && Number.isFinite(owner[key]) ? owner[key] : null;
+  var storedSpanProjection = (span) => {
+    const raw = span.projection;
+    if (!isRecord(raw)) {
+      return null;
+    }
+    const first = raw.firstClipId;
+    const last = raw.lastClipId;
+    const startOffset = numberAt(raw, "clipStartOffsetSeconds");
+    const endOffset = numberAt(raw, "clipEndOffsetSeconds");
+    return typeof first === "string" && typeof last === "string" && startOffset !== null && endOffset !== null ? {
+      firstClipId: first,
+      lastClipId: last,
+      clipStartOffsetSeconds: startOffset,
+      clipEndOffsetSeconds: endOffset
+    } : null;
+  };
+  var hasDivergentSpanProjection = (parsed) => {
+    const clips = parsed.clips.map((clip) => ({
+      id: typeof clip.id === "string" ? clip.id : "",
+      duration: numberAt(clip, "duration") ?? 0
+    }));
+    const tracks = Array.isArray(parsed.audioTracks) ? parsed.audioTracks : [];
+    for (const track of tracks) {
+      const spans = isRecord(track) && Array.isArray(track.spans) ? track.spans : [];
+      for (const span of spans) {
+        if (!isRecord(span)) {
+          continue;
+        }
+        const stored = storedSpanProjection(span);
+        if (!stored) {
+          continue;
+        }
+        const expected = timelineSpanProjection(clips, {
+          timelineStartSeconds: numberAt(span, "timelineStartSeconds"),
+          timelineLengthSeconds: numberAt(span, "timelineLengthSeconds")
+        });
+        if (!expected || expected.firstClipId !== stored.firstClipId || expected.lastClipId !== stored.lastClipId || Math.abs(
+          expected.clipStartOffsetSeconds - stored.clipStartOffsetSeconds
+        ) > SPAN_PROJECTION_TOLERANCE || Math.abs(
+          expected.clipEndOffsetSeconds - stored.clipEndOffsetSeconds
+        ) > SPAN_PROJECTION_TOLERANCE) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+  var noticeDivergentProjection = (serialized) => {
+    if (noticedDivergentProjection === serialized) {
+      return;
+    }
+    noticedDivergentProjection = serialized;
+    getVideoStagesHostBridge().showError(DIVERGENT_PROJECTION_NOTICE);
+  };
+  var FRAME_REFS_SCHEMA_VERSION = 7;
+  var STAGE_LORA_SCHEMA_VERSION = 8;
+  var renameKey = (target, oldKey, newKey) => {
+    if (!(oldKey in target)) {
+      return;
+    }
+    if (!(newKey in target)) {
+      target[newKey] = target[oldKey];
+    }
+    delete target[oldKey];
+  };
+  var finiteNumberArray = (value) => Array.isArray(value) && value.every((entry) => typeof entry === "number" && Number.isFinite(entry));
+  var migrateStageLorasToClip = (document2) => {
+    if (!Array.isArray(document2.clips)) {
+      return null;
+    }
+    for (const rawClip of document2.clips) {
+      if (!isRecord(rawClip)) {
+        continue;
+      }
+      if (!hasArrayOfRecords(rawClip, "loras")) {
+        return null;
+      }
+      const clipLoras = Array.isArray(rawClip.loras) ? rawClip.loras : [];
+      const stages = Array.isArray(rawClip.stages) ? rawClip.stages : [];
+      const firstStage = isRecord(stages[0]) ? stages[0] : null;
+      const firstStageWeights = firstStage?.loraWeights;
+      if (firstStage && Object.hasOwn(firstStage, "loraWeights") && !finiteNumberArray(firstStageWeights)) {
+        return null;
+      }
+      const names = /* @__PURE__ */ new Set();
+      clipLoras.forEach((entry, index) => {
+        if (!isRecord(entry)) {
+          return;
+        }
+        const name = typeof entry.name === "string" ? entry.name.trim() : "";
+        if (name) {
+          names.add(name);
+        }
+        const weight = entry.weight;
+        entry.weight = typeof weight === "number" && Number.isFinite(weight) ? weight : (finiteNumberArray(firstStageWeights) ? firstStageWeights[index] : void 0) ?? 1;
+      });
+      for (const rawStage of stages) {
+        if (!isRecord(rawStage)) {
+          continue;
+        }
+        if (Object.hasOwn(rawStage, "loras") && !hasArrayOfRecords(rawStage, "loras") || Object.hasOwn(rawStage, "loraWeights") && !finiteNumberArray(rawStage.loraWeights)) {
+          return null;
+        }
+        const stageLoras = Array.isArray(rawStage.loras) ? rawStage.loras : [];
+        for (const entry of stageLoras) {
+          if (!isRecord(entry)) {
+            continue;
+          }
+          const name = typeof entry.name === "string" ? entry.name.trim() : "";
+          if (!name || names.has(name)) {
+            continue;
+          }
+          const weight = entry.weight;
+          clipLoras.push({
+            name,
+            weight: typeof weight === "number" && Number.isFinite(weight) ? weight : 1
+          });
+          names.add(name);
+        }
+        delete rawStage.loras;
+        delete rawStage.loraWeights;
+      }
+      rawClip.loras = clipLoras;
+    }
+    document2.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    return document2;
+  };
+  var migrateStoredDocument = (parsed) => {
+    if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
+      return parsed;
+    }
+    if (parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION && parsed.schemaVersion !== STAGE_LORA_SCHEMA_VERSION) {
+      return null;
+    }
+    const migrated = structuredClone(parsed);
+    if (migrated.schemaVersion === FRAME_REFS_SCHEMA_VERSION) {
+      if (!Array.isArray(migrated.clips)) {
+        return null;
+      }
+      for (const rawClip of migrated.clips) {
+        if (!isRecord(rawClip)) {
+          continue;
+        }
+        renameKey(rawClip, "frameRefs", "keyframes");
+        if (!Array.isArray(rawClip.stages)) {
+          continue;
+        }
+        for (const rawStage of rawClip.stages) {
+          if (isRecord(rawStage)) {
+            renameKey(
+              rawStage,
+              "frameRefStrengths",
+              "keyframeStrengths"
+            );
+          }
+        }
+      }
+      migrated.schemaVersion = STAGE_LORA_SCHEMA_VERSION;
+    }
+    return migrateStageLorasToClip(migrated);
+  };
+  var decodeStoredDocument = (serialized, inherited, defaults, defaultStageModel) => {
+    try {
+      const parsed = JSON.parse(serialized);
+      if (!isRecord(parsed)) {
+        return null;
+      }
+      const current = migrateStoredDocument(parsed);
+      if (!current) {
+        noticeOutdatedSchema(serialized);
+        return null;
+      }
+      if (!hasValidStoredCollections(current)) {
+        return null;
+      }
+      if (hasDivergentSpanProjection(current)) {
+        noticeDivergentProjection(serialized);
+      }
+      const dims = resolveRootDims(inherited, {
+        width: current.width,
+        height: current.height
+      });
+      const clips = current.clips.map(
+        (entry) => normalizeClip(entry, defaults, defaultStageModel, dims.fps)
+      );
+      applyAudioOnlyLeadBase(clips);
+      sealSkipSuffix(clips);
+      return {
+        dims,
+        clips,
+        audioTracks: normalizeAudioTracks(current.audioTracks)
+      };
+    } catch {
+      return null;
+    }
+  };
+  var hasCanonicalStoredId = (value, seen) => {
+    if (!isRecord(value) || typeof value.id !== "string" || value.id.length === 0 || value.id.trim() !== value.id || seen.has(value.id) || value.id.includes("_legacy_")) {
+      return false;
+    }
+    seen.add(value.id);
+    return true;
+  };
+  var storedDocumentNeedsCanonicalIdRepair = (serialized) => {
+    try {
+      const parsed = JSON.parse(serialized);
+      if (!isRecord(parsed) || parsed.schemaVersion !== CURRENT_AUTHORING_SCHEMA_VERSION || !Array.isArray(parsed.clips) || !Array.isArray(parsed.audioTracks)) {
+        return true;
+      }
+      const seenIds = /* @__PURE__ */ new Set();
+      for (const rawClip of parsed.clips) {
+        if (!hasCanonicalStoredId(rawClip, seenIds)) return true;
+        for (const key of ["stages", "keyframes", "references"]) {
+          const children = rawClip[key];
+          if (!Array.isArray(children) || children.some(
+            (child) => !hasCanonicalStoredId(child, seenIds)
+          )) {
+            return true;
+          }
+        }
+        if (rawClip.retake !== null && !hasCanonicalStoredId(rawClip.retake, seenIds)) {
+          return true;
+        }
+      }
+      for (const rawTrack of parsed.audioTracks) {
+        if (!hasCanonicalStoredId(rawTrack, seenIds) || !Array.isArray(rawTrack.spans) || rawTrack.spans.some(
+          (span) => !hasCanonicalStoredId(span, seenIds)
+        )) {
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  };
+
   // frontend/persistence/durableAuthoringState.ts
   var DURABLE_AUTHORING_KEY = "videostages_authoring_state_v1";
   var DURABLE_AUTHORING_VERSION = 1;
@@ -6639,6 +6737,23 @@
   var protectOverriddenBootCarrier = false;
   var bootCarrierProtectionDeadline = 0;
   var externalizedCarrierValue = null;
+  var withoutFrontendAudioTracks = (serialized) => {
+    try {
+      const parsed = JSON.parse(serialized);
+      if (typeof parsed !== "object" || parsed === null) {
+        return serialized;
+      }
+      const record = parsed;
+      const audioTracks = record.audioTracks;
+      if (!Array.isArray(audioTracks) || audioTracks.length === 0) {
+        return serialized;
+      }
+      record.audioTracks = [];
+      return JSON.stringify(parsed);
+    } catch {
+      return serialized;
+    }
+  };
   var overlayPromptAndUiState = (clips) => {
     ensureClipEntityIdentities(clips);
     const { sections, windows } = parseClipPrompts(
@@ -6727,11 +6842,12 @@
       return serialized;
     }
     const externalized = externalizeSerializedBrowserMedia(serialized);
-    if (externalized.changed) {
-      writeDataParam(externalized.serialized);
+    const frontendState = withoutFrontendAudioTracks(externalized.serialized);
+    if (frontendState !== serialized) {
+      writeDataParam(frontendState);
     }
-    externalizedCarrierValue = externalized.serialized;
-    return externalized.serialized;
+    externalizedCarrierValue = frontendState;
+    return frontendState;
   };
   var ensureHydratedCarrier = () => {
     const dataInput = getDataInput();
@@ -6830,6 +6946,7 @@
     const transaction = captureAuthoringTransactionSnapshot();
     const commandContext = commandContextFor(transaction);
     const requested = structuredClone(requestedInput);
+    requested.audioTracks = [];
     ensureAuthoringDocumentIdentity(requested);
     assignMissingHues(requested.clips);
     const dimensionSnap = snapExplicitDocumentDimensions(
@@ -6910,903 +7027,6 @@
     state.clips = structuredClone(clips);
     const notifyDomChange = options?.notifyDomChange !== void 0 ? options.notifyDomChange : isVideoStagesEnabled();
     saveRequestedState(state, { ...options, notifyDomChange }, snapshot);
-  };
-
-  // frontend/refineVideoButton.ts
-  var REFINE_SOURCE_FILE_NAME = "refine-source";
-  var REFINE_STAGE_INDEX = 1;
-  var REFINE_OWNED_PARAMS = /* @__PURE__ */ new Set(["images", "videostages"]);
-  var COMFY_BUTTON_ID = "video_stages_refine_to_comfy_button";
-  var COMFY_ROW_ID = "video_stages_refine_to_comfy_row";
-  var COMFY_MARK_CLASS = "video-stages-refine-comfy-mark";
-  var DONE_TIMEOUT_MS = 2500;
-  var comfyButtonObserver = null;
-  var markTimer = null;
-  var resolvedPromptParameterOverrides = (originalPrompt, sourceParams) => {
-    const sourceKeys = new Map(
-      Object.keys(sourceParams).map((key) => [cleanParamName(key), key])
-    );
-    const overrides = {};
-    for (const match of originalPrompt.matchAll(/<param\[([^\]]+)\]\s*:/gi)) {
-      const authoredId = cleanParamName(match[1]) ?? "";
-      const resolvedId = window.parameter_remaps?.[authoredId] ?? authoredId;
-      if (REFINE_OWNED_PARAMS.has(resolvedId)) {
-        continue;
-      }
-      const sourceKey = sourceKeys.get(resolvedId);
-      if (!sourceKey) {
-        continue;
-      }
-      overrides[resolvedId] = structuredClone(sourceParams[sourceKey]);
-    }
-    return overrides;
-  };
-  var refineNeedsExtraStageMessage = () => `Refine Video needs another stage or clip in the current timeline. Add one after the source video's last completed stage, then click Refine Video again.`;
-  var refineSourceMismatchMessage = () => `Refine Video source metadata does not match the current timeline. Restore the timeline that generated this video, then click Refine Video again.`;
-  var entityId = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
-  var lastCompletedSourceStage = (serialized) => {
-    let parsed = serialized;
-    if (typeof serialized === "string") {
-      try {
-        parsed = JSON.parse(serialized);
-      } catch {
-        return null;
-      }
-    }
-    if (!isRecord(parsed) || !Array.isArray(parsed.clips)) {
-      return null;
-    }
-    let completed = null;
-    for (let clipIndex = 0; clipIndex < parsed.clips.length; clipIndex++) {
-      const clip = parsed.clips[clipIndex];
-      if (!isRecord(clip)) {
-        return null;
-      }
-      if (clip.skipped === true) {
-        break;
-      }
-      if (!Array.isArray(clip.stages)) {
-        return null;
-      }
-      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
-        const stage = clip.stages[stageIndex];
-        if (!isRecord(stage)) {
-          return null;
-        }
-        if (stage.skipped === true) {
-          break;
-        }
-        completed = {
-          clipIndex,
-          clipId: entityId(clip.id),
-          stageIndex,
-          stageId: entityId(stage.id)
-        };
-      }
-    }
-    return completed;
-  };
-  var currentCompletedStage = (state, source) => {
-    const clipIndex = source.clipId ? state.clips.findIndex((clip2) => clip2.id === source.clipId) : source.clipIndex;
-    const clip = state.clips[clipIndex];
-    if (!clip) {
-      return null;
-    }
-    const stageIndex = source.stageId ? clip.stages.findIndex((stage) => stage.id === source.stageId) : source.stageIndex;
-    return stageIndex >= 0 ? { clipIndex, stageIndex } : null;
-  };
-  var defaultRefinementTarget = (state) => {
-    const clip0 = state.clips[0];
-    if (!clip0 || clip0.skipped) {
-      return null;
-    }
-    if (clip0.stages.length > REFINE_STAGE_INDEX) {
-      return {
-        clipIndex: 0,
-        stageIndex: REFINE_STAGE_INDEX
-      };
-    }
-    return state.clips.length > 1 ? {
-      clipIndex: 1,
-      stageIndex: 0
-    } : null;
-  };
-  var refinementTarget = (state, serializedSource) => {
-    const source = lastCompletedSourceStage(serializedSource);
-    if (!source) {
-      return defaultRefinementTarget(state);
-    }
-    const completed = currentCompletedStage(state, source);
-    if (!completed) {
-      throw new Error(refineSourceMismatchMessage());
-    }
-    const nextStageIndex = completed.stageIndex + 1;
-    if (state.clips[completed.clipIndex].stages.length > nextStageIndex) {
-      return {
-        clipIndex: completed.clipIndex,
-        stageIndex: nextStageIndex
-      };
-    }
-    const nextClipIndex = completed.clipIndex + 1;
-    return state.clips.length > nextClipIndex ? {
-      clipIndex: nextClipIndex,
-      stageIndex: 0
-    } : null;
-  };
-  var hasRefinementWorkToDo = (state, enabled, serializedSource) => {
-    return enabled && refinementTarget(state, serializedSource) !== null;
-  };
-  var installRefineSource = (clip, data, probe) => {
-    clip.initVideo = initVideoFromProbe(
-      probe,
-      data,
-      REFINE_SOURCE_FILE_NAME,
-      clip.duration
-    );
-    clip.duration = clip.initVideo.lengthSeconds;
-    clip.audioSource = MEDIA_SOURCE_UPLOAD;
-    clip.saveAudioTrack = false;
-    clip.clipLengthFromAudio = false;
-    clip.uploadedAudio = null;
-    clip.uploadedAudioDurationSeconds = 0;
-    clip.uploadedAudioStartSeconds = 0;
-    clip.uploadedAudioLengthSeconds = 0;
-  };
-  var applyRefineToClip = (clip, data, probe, targetStageIndex) => {
-    installRefineSource(clip, data, probe);
-    if (clip.stages.length > targetStageIndex) {
-      applySkipSuffix(clip.stages, targetStageIndex, false);
-    }
-    for (let index = 0; index < targetStageIndex; index++) {
-      clip.stages[index].control = 0;
-      clip.stages[index].upscale = 1;
-    }
-    if (targetStageIndex > 0) {
-      clip.retake = null;
-    }
-  };
-  var buildRefineVideoPayload = async (src) => {
-    const host = getVideoStagesHostBridge();
-    let parsedMetadata = null;
-    const currentMetadata = await host.getMediaMetadata(src);
-    if (currentMetadata) {
-      try {
-        const readable = host.interpretMediaMetadata(currentMetadata);
-        parsedMetadata = readable ? JSON.parse(readable) : null;
-      } catch (error) {
-        console.warn(
-          "VideoStages: failed to parse source video metadata",
-          error
-        );
-      }
-    }
-    const params = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
-    const sourceVideostages = isRecord(params) ? readProp(params, "videostages") : void 0;
-    const initialState = getState();
-    if (!hasRefinementWorkToDo(
-      initialState,
-      isVideoStagesEnabled(),
-      sourceVideostages
-    )) {
-      host.showError(refineNeedsExtraStageMessage());
-      return null;
-    }
-    const videoDataUrl = await host.toDataUrl(src);
-    const probe = await probeInitVideo(videoDataUrl);
-    const state = getState();
-    const target = refinementTarget(state, sourceVideostages);
-    if (!isVideoStagesEnabled() || !target) {
-      host.showError(refineNeedsExtraStageMessage());
-      return null;
-    }
-    const sourceClipIndex = target.stageIndex > 0 ? target.clipIndex : target.clipIndex - 1;
-    const sourceClip = state.clips[sourceClipIndex];
-    const bakesAceStepFunAudio = isAceStepFunAudioSource(
-      sourceClip.audioSource
-    );
-    const clips = structuredClone(state.clips.slice(target.clipIndex));
-    clips[0].skipped = false;
-    applyRefineToClip(clips[0], videoDataUrl, probe, target.stageIndex);
-    reconcileClipArchitectureIdentity(
-      clips[0],
-      captureAuthoringTransactionSnapshot().capabilities.catalog
-    );
-    const sourceDimensions = probe?.width && probe.height ? {
-      width: probe.width,
-      height: probe.height,
-      dimsExplicit: true
-    } : {};
-    const inputOverrides = {
-      videostages: serializeStateForStorage({
-        ...state,
-        ...sourceDimensions,
-        clips
-      }),
-      images: 1
-    };
-    const sourceExtraMetadata = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_extra_data") : void 0;
-    const originalPrompt = isRecord(sourceExtraMetadata) ? readProp(sourceExtraMetadata, "original_prompt") : void 0;
-    if (isRecord(params) && typeof originalPrompt === "string") {
-      Object.assign(
-        inputOverrides,
-        resolvedPromptParameterOverrides(originalPrompt, params)
-      );
-    }
-    if (bakesAceStepFunAudio) {
-      const aceStepFunModelParam = cleanParamName("AceStepFun Model");
-      if (aceStepFunModelParam) {
-        inputOverrides[aceStepFunModelParam] = null;
-      }
-    }
-    const prompt = isRecord(params) ? readProp(params, "prompt") : void 0;
-    if (typeof prompt === "string") {
-      inputOverrides.prompt = prompt;
-    }
-    const negativePrompt = isRecord(params) ? readProp(params, "negativeprompt") : void 0;
-    if (typeof negativePrompt === "string") {
-      inputOverrides.negativeprompt = negativePrompt;
-    }
-    const seed = isRecord(params) ? readProp(params, "seed") : void 0;
-    if (typeof seed === "number") {
-      inputOverrides.seed = seed;
-    }
-    if (isRecord(sourceExtraMetadata)) {
-      inputOverrides.extra_metadata = structuredClone(sourceExtraMetadata);
-    }
-    return inputOverrides;
-  };
-  var dispatchRefineVideo = async (src, destination) => {
-    const host = getVideoStagesHostBridge();
-    try {
-      const payload = await buildRefineVideoPayload(src);
-      if (!payload) {
-        return false;
-      }
-      await destination(host, payload);
-      return true;
-    } catch (error) {
-      console.error("VideoStages: failed to prepare Refine Video", error);
-      host.showError(
-        error instanceof Error ? error.message : "Failed to prepare Refine Video."
-      );
-      return false;
-    }
-  };
-  var setComfyButtonMark = (mark, timeoutMs = 0) => {
-    const button2 = document.getElementById(COMFY_BUTTON_ID);
-    if (!button2) {
-      return;
-    }
-    if (markTimer !== null) {
-      clearTimeout(markTimer);
-      markTimer = null;
-    }
-    let marker = button2.querySelector(`.${COMFY_MARK_CLASS}`);
-    if (!mark) {
-      marker?.remove();
-      return;
-    }
-    if (!marker) {
-      marker = document.createElement("span");
-      marker.className = COMFY_MARK_CLASS;
-      marker.style.marginLeft = "0.3rem";
-      marker.style.fontWeight = "bold";
-      button2.appendChild(marker);
-    }
-    marker.textContent = mark;
-    if (timeoutMs > 0) {
-      const shown = marker;
-      markTimer = setTimeout(() => {
-        shown.remove();
-        markTimer = null;
-      }, timeoutMs);
-    }
-  };
-  var refineCurrentVideoToComfy = () => {
-    const host = getVideoStagesHostBridge();
-    const src = host.getCurrentVideoSource();
-    if (!src) {
-      host.showError("Select a video on the Generate tab first.");
-      return;
-    }
-    setComfyButtonMark("…");
-    void dispatchRefineVideo(
-      src,
-      (target, payload) => target.sendToComfyUiAndSave(payload)
-    ).then((success2) => {
-      setComfyButtonMark(success2 ? "✓" : "", success2 ? DONE_TIMEOUT_MS : 0);
-    });
-  };
-  var injectRefineVideoToComfyButton = (rootDoc) => {
-    if (rootDoc.getElementById(COMFY_BUTTON_ID)) {
-      return true;
-    }
-    const whatTheDuckButton = rootDoc.getElementById(
-      "wtd_comfy_save_workflow_button"
-    );
-    const whatTheDuckRow = whatTheDuckButton?.closest(".wtd-comfy-save-row") ?? whatTheDuckButton?.parentElement;
-    if (!whatTheDuckRow) {
-      return false;
-    }
-    const row = rootDoc.createElement("div");
-    row.id = COMFY_ROW_ID;
-    row.className = "comfy-second-button-row";
-    row.style.clear = "both";
-    row.style.overflow = "hidden";
-    const button2 = rootDoc.createElement("button");
-    button2.type = "button";
-    button2.id = COMFY_BUTTON_ID;
-    button2.className = "basic-button comfy-small-button comfy-left-button";
-    button2.title = "Use the selected Generate-tab video for the next VideoStages refinement, open the workflow in ComfyUI, and save the payload and workflow to the server.";
-    button2.textContent = "Refine Video to ComfyUI";
-    button2.addEventListener("click", refineCurrentVideoToComfy);
-    row.appendChild(button2);
-    whatTheDuckRow.insertAdjacentElement("afterend", row);
-    return true;
-  };
-  var initRefineVideoToComfyButton = () => {
-    if (injectRefineVideoToComfyButton(document) || comfyButtonObserver) {
-      return;
-    }
-    if (!document.body) {
-      document.addEventListener(
-        "DOMContentLoaded",
-        initRefineVideoToComfyButton,
-        {
-          once: true
-        }
-      );
-      return;
-    }
-    comfyButtonObserver = new MutationObserver(() => {
-      if (injectRefineVideoToComfyButton(document)) {
-        comfyButtonObserver?.disconnect();
-        comfyButtonObserver = null;
-      }
-    });
-    comfyButtonObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  };
-  var refineVideoButton = () => {
-    const host = getVideoStagesHostBridge();
-    const description = "Uses this video as the source for the next refinement stage or clip.";
-    host.registerRefineVideoButton(
-      (src) => void dispatchRefineVideo(
-        src,
-        (target, payload) => target.generate(payload)
-      ),
-      description
-    );
-    initRefineVideoToComfyButton();
-  };
-
-  // frontend/architectureCatalogStatusView.ts
-  var detailDock = (body) => body.parentElement?.querySelector(":scope > .vst-detail") ?? null;
-  var setDockAvailable = (body, available) => {
-    const dock = detailDock(body);
-    if (dock) {
-      dock.hidden = !available;
-    }
-  };
-  var retryButton = (onRetry) => {
-    const button2 = document.createElement("button");
-    button2.type = "button";
-    button2.className = "basic-button vst-catalog-retry";
-    button2.textContent = "Retry";
-    button2.addEventListener("click", onRetry);
-    return button2;
-  };
-  var renderBlockingArchitectureCatalogStatus = (body, snapshot, onRetry) => {
-    if (snapshot.catalog) {
-      setDockAvailable(body, true);
-      return false;
-    }
-    setDockAvailable(body, false);
-    body.replaceChildren();
-    const status = document.createElement("section");
-    status.className = "vst-catalog-status";
-    status.setAttribute("role", "status");
-    status.dataset.catalogStatus = snapshot.status;
-    const title = document.createElement("strong");
-    title.className = "vst-catalog-status-title";
-    if (snapshot.status === "loading") {
-      title.textContent = "Loading video model capabilities…";
-      status.setAttribute("aria-busy", "true");
-      status.appendChild(title);
-      body.appendChild(status);
-      return true;
-    }
-    title.textContent = "Video model capabilities are unavailable";
-    const explanation = document.createElement("p");
-    explanation.textContent = "VideoStages cannot safely author clips until the backend catalog is available.";
-    status.append(title, explanation, retryButton(onRetry));
-    body.appendChild(status);
-    return true;
-  };
-  var renderRetainedArchitectureCatalogStatus = (body, snapshot, onRetry) => {
-    body.querySelector(":scope > .vst-catalog-notice")?.remove();
-    if (snapshot.status !== "refreshing" && snapshot.status !== "stale") {
-      return;
-    }
-    const notice = document.createElement("div");
-    notice.className = `vst-catalog-notice vst-catalog-notice-${snapshot.status}`;
-    notice.dataset.catalogStatus = snapshot.status;
-    notice.setAttribute(
-      "role",
-      snapshot.status === "stale" ? "alert" : "status"
-    );
-    const text2 = document.createElement("span");
-    text2.textContent = snapshot.status === "refreshing" ? "Refreshing video model capabilities…" : "Using the last known video model capabilities; refresh failed.";
-    notice.appendChild(text2);
-    if (snapshot.status === "stale") {
-      notice.appendChild(retryButton(onRetry));
-    }
-    body.prepend(notice);
-  };
-
-  // frontend/architectures/diagnostics.ts
-  var issue = (code, message, clipIdx, severity = "error") => ({ severity, code, message, clipIdx });
-  var persistedCapabilityIssues = (clip, clipIdx, architectureId, capabilities) => {
-    const diagnostics = [];
-    const supports = (feature) => architectureFeatureSupport(feature, capabilities);
-    const unsupported = (active, key, label, severity) => {
-      if (active) {
-        const effectiveSeverity = severity ?? "warning";
-        diagnostics.push(
-          issue(
-            `architecture.unsupported.${key}`,
-            effectiveSeverity === "warning" ? `Clip ${clipIdx} has ${label} saved, but its architecture cannot use it. Generation will ignore it and keep the authored setting.` : `Clip ${clipIdx} has ${label} persisted, but its architecture does not support it. Remove it or explicitly convert the clip.`,
-            clipIdx,
-            effectiveSeverity
-          )
-        );
-      }
-    };
-    const unsupportedFeature = (active, feature) => unsupported(
-      active,
-      feature.replace(/[A-Z]/g, (upper) => `-${upper.toLowerCase()}`),
-      ARCHITECTURE_FEATURE_LABELS[feature]
-    );
-    unsupportedFeature(
-      !supports("frameReferences") && clip.frameRefs.length > 0,
-      "frameReferences"
-    );
-    const identityImagesSupported = supports("characterRefineIdentityReferences") && clip.stages.some(
-      (stage) => stage.characterRefine?.verifyIdentity === true
-    );
-    unsupportedFeature(
-      !supports("clipReferences") && clip.references.some(
-        (reference) => !identityImagesSupported || reference.kind !== "image"
-      ),
-      "clipReferences"
-    );
-    const characterRefineConfigured = clip.stages.some(
-      (stage) => stage.characterRefine !== null
-    );
-    unsupportedFeature(
-      !supports("characterRefine") && characterRefineConfigured,
-      "characterRefine"
-    );
-    unsupportedFeature(
-      supports("characterRefine") && !supports("characterRefineAppearanceReferences") && clip.stages.some(
-        (stage) => (stage.characterRefine?.pictureReferenceIds.length ?? 0) > 0
-      ),
-      "characterRefineAppearanceReferences"
-    );
-    unsupportedFeature(
-      supports("characterRefine") && !supports("characterRefineIdentityReferences") && clip.stages.some(
-        (stage) => stage.characterRefine?.verifyIdentity === true
-      ),
-      "characterRefineIdentityReferences"
-    );
-    unsupportedFeature(
-      !supports("referenceFraming") && clip.refFraming !== "crop",
-      "referenceFraming"
-    );
-    unsupportedFeature(
-      !supports("icLora") && clip.icLoras.length > 0,
-      "icLora"
-    );
-    unsupportedFeature(!supports("retake") && clip.retake !== null, "retake");
-    unsupportedFeature(
-      !supports("promptRelay") && clip.promptWindows.length > 0,
-      "promptRelay"
-    );
-    const activeUpscaleModes = clip.stages.filter((stage) => stage.upscale !== 1).map((stage) => upscaleModeForMethod(stage.upscaleMethod));
-    if (activeUpscaleModes.includes("unsupported")) {
-      diagnostics.push(
-        issue(
-          "architecture.unsupported.upscale",
-          `Clip ${clipIdx} has stage upscaling persisted, but its upscale method is not a known method. Remove it or choose a known method.`,
-          clipIdx
-        )
-      );
-    }
-    unsupportedFeature(
-      !supports("latentUpscale") && activeUpscaleModes.includes("latent"),
-      "latentUpscale"
-    );
-    unsupportedFeature(
-      !supports("latentModelUpscale") && activeUpscaleModes.includes("latent-model"),
-      "latentModelUpscale"
-    );
-    const sourceKind = audioSourceKind(clip.audioSource);
-    const clipAudioCapabilitySupported = supportsClipAudio(
-      capabilities.audioSourceKinds
-    );
-    const standaloneAudioSupported = capabilities.audioSourceKinds.includes(AUDIO_SOURCE_NATIVE);
-    const selectedAudioSourceSupported = isAllowedAudioSource(
-      capabilities.audioSourceKinds,
-      clip.audioSource
-    );
-    unsupportedFeature(
-      !supports("audioReuse") && clip.reuseAudio,
-      "audioReuse"
-    );
-    unsupportedFeature(
-      !supports("audioDerivedDuration") && clip.clipLengthFromAudio,
-      "audioDerivedDuration"
-    );
-    const supportsControlSignalDerivedDuration = supports("icLora");
-    unsupported(
-      !supportsControlSignalDerivedDuration && clip.clipLengthFromControlNet,
-      "control-signal-derived-duration",
-      "Control-signal-derived clip duration"
-    );
-    unsupported(
-      !selectedAudioSourceSupported && (sourceKind !== AUDIO_SOURCE_NATIVE || clip.uploadedAudio !== null),
-      "audio-source",
-      `Audio source '${sourceKind}'`,
-      clipAudioCapabilitySupported ? "error" : void 0
-    );
-    unsupported(
-      clip.saveAudioTrack && !standaloneAudioSupported,
-      "audio-output",
-      "Standalone audio output"
-    );
-    if (clip.clipLengthFromAudio && supports("audioDerivedDuration") && selectedAudioSourceSupported && !canUseClipLengthFromAudio(clip.audioSource)) {
-      diagnostics.push(
-        issue(
-          "architecture.unusable.clip-length-from-audio",
-          `Clip length from audio is persisted on Clip ${clipIdx}, but audio source '${sourceKind}' cannot supply a length. Turn it off or pick a source that can.`,
-          clipIdx
-        )
-      );
-    }
-    if (clip.clipLengthFromControlNet && supportsControlSignalDerivedDuration && !hasArchitectureSlotSourcedIcLora(architectureId, clip.icLoras)) {
-      diagnostics.push(
-        issue(
-          "architecture.unusable.clip-length-from-control-net",
-          `Clip length from the control signal is persisted on Clip ${clipIdx}, but no IC-LoRA supplies one. Turn it off or add a slot-init-video IC-LoRA.`,
-          clipIdx
-        )
-      );
-    }
-    return diagnostics;
-  };
-  var effectiveArchitectureIdForClip = (clip, catalog) => resolvedClipArchitectureId(clip, catalog) ?? "unsupported";
-  var deriveArchitectureDiagnostics = (clips, resolver) => {
-    const catalog = resolver.catalog;
-    const diagnostics = [];
-    const architectureById = new Map(
-      catalog.architectures.map((entry) => [entry.id, entry])
-    );
-    const modelByName = new Map(
-      catalog.entries.map((entry) => [entry.value, entry])
-    );
-    const executableClipIndexSet = new Set(executableClipIndexes(clips));
-    clips.forEach((clip, clipIdx) => {
-      const temporalGrid = resolver.forClip(clip).frameGridResolution;
-      if (executableClipIndexSet.has(clipIdx) && temporalGrid.status === "conflict") {
-        diagnostics.push(
-          issue(
-            "architecture.temporal-grid-conflict",
-            `Clip ${clipIdx}'s active model handlers have no representable compatible temporal grid. Use stage models with compatible temporal requirements.`,
-            clipIdx
-          )
-        );
-      }
-      const sourceOnly = activeStageCount(clip) === 0 && clip.initVideo !== null;
-      const resolvedFirstModel = !sourceOnly && clip.stages.length > 0 ? modelByName.get(clip.stages[0].model) : void 0;
-      const effectiveArchitectureId = effectiveArchitectureIdForClip(
-        clip,
-        catalog
-      );
-      const effectiveModelProfileId = resolvedFirstModel?.modelProfileId ?? clip.modelProfileId;
-      const effectiveCompatibilityClassId = resolvedFirstModel?.compatibilityClassId ?? null;
-      if (resolvedFirstModel?.architectureId && resolvedFirstModel.architectureId !== clip.architectureHint) {
-        diagnostics.push(
-          issue(
-            "architecture.stale-identity-hint",
-            `Clip ${clipIdx} caches architecture hint '${clip.architectureHint}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.architectureId}'. Generation uses the resolved architecture and preserves the authored hint.`,
-            clipIdx,
-            "warning"
-          )
-        );
-      }
-      if (resolvedFirstModel?.modelProfileId && resolvedFirstModel.modelProfileId !== clip.modelProfileId) {
-        diagnostics.push(
-          issue(
-            "architecture.stale-profile-hint",
-            `Clip ${clipIdx} caches model profile '${clip.modelProfileId}', but model '${clip.stages[0].model}' resolves to '${resolvedFirstModel.modelProfileId}'. Generation uses the resolved profile and preserves the authored hint.`,
-            clipIdx,
-            "warning"
-          )
-        );
-      }
-      if (sourceOnly) {
-        if (clip.architectureHint !== NONE_ARCHITECTURE_ID || clip.modelProfileId !== NONE_ARCHITECTURE_ID) {
-          diagnostics.push(
-            issue(
-              "architecture.source-only-requires-none",
-              `Source-only Clip ${clipIdx} must use architecture and profile 'none'.`,
-              clipIdx
-            )
-          );
-        }
-      }
-      const architecture = sourceOnly ? architectureById.get("none") : architectureById.get(effectiveArchitectureId);
-      if (architecture) {
-        const capabilities = effectiveClipCapabilities(
-          clip,
-          architecture,
-          (model) => modelByName.get(model)
-        );
-        if (capabilities) {
-          diagnostics.push(
-            ...persistedCapabilityIssues(
-              clip,
-              clipIdx,
-              effectiveArchitectureId,
-              capabilities
-            )
-          );
-        }
-      }
-      let dormantArchitecture = null;
-      let dormantCompatibilityClass = null;
-      clip.stages.forEach((stage, stageIdx) => {
-        const resolved = modelByName.get(stage.model);
-        if (!resolved?.architectureId || !resolved.modelProfileId) {
-          diagnostics.push(
-            issue(
-              "architecture.model-unknown",
-              `Clip ${clipIdx} Stage ${stageIdx} model '${stage.model}' is not in the architecture catalog.`,
-              clipIdx
-            )
-          );
-          return;
-        }
-        if (sourceOnly && dormantArchitecture === null) {
-          dormantArchitecture = resolved.architectureId;
-          dormantCompatibilityClass = resolved.compatibilityClassId;
-        }
-        const mixedDormant = sourceOnly && dormantArchitecture !== null && (resolved.architectureId !== dormantArchitecture || resolved.compatibilityClassId !== dormantCompatibilityClass);
-        if (mixedDormant || !sourceOnly && (resolved.architectureId !== effectiveArchitectureId || effectiveCompatibilityClassId !== null && resolved.compatibilityClassId !== effectiveCompatibilityClassId)) {
-          diagnostics.push(
-            issue(
-              "architecture.mixed-stage",
-              sourceOnly ? `Source-only Clip ${clipIdx} has dormant stages from incompatible model families; Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to architecture '${resolved.architectureId}' and compatibility class '${resolved.compatibilityClassId}'.` : `Clip ${clipIdx} uses architecture '${effectiveArchitectureId}' and compatibility class '${effectiveCompatibilityClassId}', but Stage ${stageIdx}${stage.skipped ? " (skipped)" : ""} resolves to '${resolved.architectureId}' and '${resolved.compatibilityClassId}'.`,
-              clipIdx
-            )
-          );
-        }
-        if (stage.modelProfileId !== resolved.modelProfileId || !sourceOnly && stageIdx === 0 && effectiveModelProfileId !== resolved.modelProfileId) {
-          diagnostics.push(
-            issue(
-              "architecture.profile-mismatch",
-              `Clip ${clipIdx} Stage ${stageIdx} caches a profile identity that does not match model '${stage.model}'. Generation uses the resolved profile and preserves the authored hint.`,
-              clipIdx,
-              "warning"
-            )
-          );
-        }
-      });
-    });
-    for (const seam of executableBoundaries(clips)) {
-      const left = { clip: clips[seam.leftIdx], clipIdx: seam.leftIdx };
-      const right = { clip: clips[seam.rightIdx], clipIdx: seam.rightIdx };
-      if (effectiveArchitectureIdForClip(left.clip, catalog) !== effectiveArchitectureIdForClip(right.clip, catalog) && left.clip.boundaryOut !== "cut") {
-        diagnostics.push(
-          issue(
-            "architecture.cross-boundary-cut-only",
-            `Clip ${left.clipIdx} → ${right.clipIdx} crosses architectures; '${left.clip.boundaryOut}' remains authored, but generation safely uses a cut.`,
-            left.clipIdx,
-            "warning"
-          )
-        );
-        continue;
-      }
-      const boundary = resolver.forBoundary(
-        left.clip,
-        right.clip,
-        left.clipIdx,
-        right.clipIdx
-      );
-      if (boundary.effective(left.clip.boundaryOut) !== left.clip.boundaryOut) {
-        const reason = boundary.reason ? ` ${boundary.reason}` : ` Its requested value is preserved for repair, but only '${boundary.effective(left.clip.boundaryOut)}' can execute.`;
-        diagnostics.push(
-          issue(
-            "architecture.boundary-unsupported",
-            `Clip ${left.clipIdx} cannot execute a '${left.clip.boundaryOut}' boundary into Clip ${right.clipIdx}.${reason} Generation safely uses a cut while preserving the authored boundary.`,
-            left.clipIdx,
-            "warning"
-          )
-        );
-      }
-    }
-    return diagnostics;
-  };
-
-  // frontend/authoringDiagnostics.ts
-  var diagnostic = (severity, code, message, clipIdx) => ({ severity, code, message, clipIdx });
-  var deriveAuthoringDiagnostics = (clips, capabilities) => {
-    const diagnostics = [];
-    const authoredPrefix = activePrefix(clips);
-    const executable = executableClipIndexes(clips).map((clipIdx) => ({
-      clip: clips[clipIdx],
-      clipIdx
-    }));
-    diagnostics.push(
-      ...deriveArchitectureDiagnostics(authoredPrefix, capabilities)
-    );
-    for (const { clip, clipIdx } of executable) {
-      const retake = capabilities.forClip(clip).decision("retake");
-      if (clip.retake !== null && retake.code) {
-        diagnostics.push(
-          diagnostic("error", retake.code, retake.reason, clipIdx)
-        );
-      }
-    }
-    return diagnostics;
-  };
-
-  // frontend/gestureRouter.ts
-  var DEFAULT_THRESHOLD_PX = 5;
-  var claimOnly = () => ({
-    threshold: Number.POSITIVE_INFINITY,
-    onMove: () => {
-    },
-    onCommit: () => {
-    }
-  });
-  var createGestureRouter = () => {
-    let body = null;
-    const routes = [];
-    let live = null;
-    let swallowNextClick = false;
-    const ctxFor = (me) => ({
-      event: me,
-      dx: me.clientX - (live?.startX ?? 0),
-      dy: me.clientY - (live?.startY ?? 0)
-    });
-    const onMouseDown = (event) => {
-      swallowNextClick = false;
-      const me = event;
-      if (me.cancelBubble) {
-        return;
-      }
-      if (me.button !== 0 || !(me.target instanceof Element) || !body) {
-        return;
-      }
-      if (live) {
-        return;
-      }
-      const ordered = [...routes].sort((a, b) => b.priority - a.priority);
-      for (const route of ordered) {
-        const session = route.onPress(me, body);
-        if (session) {
-          live = {
-            session,
-            startX: me.clientX,
-            startY: me.clientY,
-            active: (session.threshold ?? DEFAULT_THRESHOLD_PX) <= 0
-          };
-          me.stopPropagation();
-          return;
-        }
-      }
-    };
-    const onDocMouseMove = (event) => {
-      if (!live) {
-        return;
-      }
-      const ctx = ctxFor(event);
-      if (!live.active) {
-        const threshold = live.session.threshold ?? DEFAULT_THRESHOLD_PX;
-        const dist = live.session.axis === "xy" ? Math.hypot(ctx.dx, ctx.dy) : Math.abs(ctx.dx);
-        if (dist < threshold) {
-          return;
-        }
-        live.active = true;
-      }
-      live.session.onMove(ctx);
-    };
-    const onDocMouseUp = (event) => {
-      if (!live) {
-        return;
-      }
-      const ctx = ctxFor(event);
-      const { session, active } = live;
-      live = null;
-      if (active) {
-        swallowNextClick = true;
-        session.onCommit(ctx);
-        return;
-      }
-      if (session.suppressTapClick) {
-        swallowNextClick = true;
-      }
-      session.onTap?.(ctx);
-    };
-    const onDocKeyDown = (event) => {
-      if (event.key !== "Escape" || !live) {
-        return;
-      }
-      const { session, active } = live;
-      live = null;
-      if (session.suppressEscapeClick && active) {
-        swallowNextClick = true;
-      }
-      session.onCancel?.();
-    };
-    const onBodyClickCapture = (event) => {
-      if (!swallowNextClick) {
-        return;
-      }
-      swallowNextClick = false;
-      event.stopPropagation();
-      event.preventDefault();
-    };
-    const removeListeners = () => {
-      if (body) {
-        body.removeEventListener("mousedown", onMouseDown, true);
-        body.removeEventListener("click", onBodyClickCapture, true);
-      }
-      document.removeEventListener("mousemove", onDocMouseMove);
-      document.removeEventListener("mouseup", onDocMouseUp);
-      document.removeEventListener("keydown", onDocKeyDown);
-    };
-    const cancelLive = () => {
-      if (live) {
-        const { session } = live;
-        live = null;
-        session.onCancel?.();
-      }
-    };
-    return {
-      attach: (nextBody) => {
-        if (body === nextBody) {
-          return;
-        }
-        cancelLive();
-        removeListeners();
-        body = nextBody;
-        swallowNextClick = false;
-        nextBody.addEventListener("mousedown", onMouseDown, true);
-        nextBody.addEventListener("click", onBodyClickCapture, true);
-        document.addEventListener("mousemove", onDocMouseMove);
-        document.addEventListener("mouseup", onDocMouseUp);
-        document.addEventListener("keydown", onDocKeyDown);
-      },
-      register: (route) => {
-        routes.push(route);
-        return () => {
-          const at = routes.indexOf(route);
-          if (at !== -1) {
-            routes.splice(at, 1);
-          }
-        };
-      },
-      dispose: () => {
-        cancelLive();
-        removeListeners();
-        body = null;
-        swallowNextClick = false;
-      }
-    };
   };
 
   // frontend/selectionIdentity.ts
@@ -7980,15 +7200,12 @@
         return a.clipIdx === b.clipIdx;
     }
   };
-  var isSameSelection = sameSelectionShape;
 
   // frontend/selection.ts
   var NO_SELECTION = { selection: { kind: "none" } };
   var anchor = NO_SELECTION;
   var selectionSubscribers = /* @__PURE__ */ new Set();
-  var clipIdxOf = (sel) => sel.kind === "none" || sel.kind === "boundary" || sel.kind === "boundary-ref" || sel.kind === "audio-track" ? null : sel.clipIdx;
   var getSelection = () => resolveSelection(anchor);
-  var getSelectedClipIndex = () => clipIdxOf(getSelection());
   var notify = () => {
     const current = getSelection();
     for (const cb of [...selectionSubscribers]) {
@@ -8006,10 +7223,6 @@
     anchor = nextAnchor;
     notify();
   };
-  var activateSelection = (next) => {
-    anchor = anchorSelection(next);
-    notify();
-  };
   var subscribeSelection = (cb) => {
     selectionSubscribers.add(cb);
     return () => {
@@ -8017,1198 +7230,361 @@
     };
   };
 
-  // frontend/timelineView/layout.ts
-  var DEFAULT_PX_PER_SECOND = 44;
-  var DEFAULT_MIN_WIDTH_PX = 8;
-  var MIN_PX_PER_SECOND = 6;
-  var MAX_PX_PER_SECOND = 400;
-  var ZOOM_FACTOR = 1.25;
-  var TRACK_HEADER_W_PX = 168;
-  var waveBarHeights = (clipIdx, count) => {
-    const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
-    const heights = [];
-    for (let i = 0; i < n; i++) {
-      const raw = Math.sin((clipIdx * 131 + i) * 12.9898) * 43758.5453;
-      const fract = raw - Math.floor(raw);
-      heights.push(Math.round((20 + fract * 80) * 10) / 10);
-    }
-    return heights;
-  };
-  var audioSpanWaveBarHeights = (trackIdx, count) => waveBarHeights(trackIdx * 4099 + 1, count);
-  var clampPxPerSecond = (value) => Number.isFinite(value) ? Math.min(MAX_PX_PER_SECOND, Math.max(MIN_PX_PER_SECOND, value)) : DEFAULT_PX_PER_SECOND;
-  var zoomAnchorTime = (offsetX, scrollLeft, pxPerSecond, headerW = TRACK_HEADER_W_PX) => {
-    if (pxPerSecond <= 0) {
-      return 0;
-    }
-    const effectiveOffsetX = Math.max(offsetX, headerW);
-    return Math.max(0, (effectiveOffsetX + scrollLeft - headerW) / pxPerSecond);
-  };
-  var zoomAnchorScrollLeft = (time, pxPerSecond, offsetX, headerW = TRACK_HEADER_W_PX) => {
-    const effectiveOffsetX = Math.max(offsetX, headerW);
-    return Math.max(0, headerW + time * pxPerSecond - effectiveOffsetX);
-  };
-  var computeFitPxPerSecond = (totalSeconds, containerWidthPx, padPx = 24) => {
-    if (totalSeconds <= 0 || containerWidthPx <= padPx) {
-      return DEFAULT_PX_PER_SECOND;
-    }
-    return clampPxPerSecond((containerWidthPx - padPx) / totalSeconds);
-  };
-  var clipTrimSeconds = (incoming, outgoing, joinsDrawn) => ({
-    before: joinsDrawn && incoming?.effectiveMode === "crossfade" ? incoming.overlapSeconds / 2 : 0,
-    after: outgoing?.effectiveMode !== "crossfade" ? outgoing?.timelineReductionSeconds ?? 0 : joinsDrawn ? outgoing.overlapSeconds / 2 : 0
-  });
-  var computeRegionLayout = (clips, options) => {
-    const pxPerSecond = options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND;
-    const timing = options?.timing;
-    const useOutputGeometry = timing?.outputGeometryAvailable === true;
-    const boundaryAfter = new Map(
-      timing?.boundaries.map((boundary) => [boundary.leftIdx, boundary]) ?? []
-    );
-    const boundaryBefore = new Map(
-      timing?.boundaries.map((boundary) => [boundary.rightIdx, boundary]) ?? []
-    );
-    const layouts = [];
-    let cursorSeconds = 0;
-    let cursorPx = 0;
-    for (let index = 0; index < clips.length; index++) {
-      const clip = clips[index];
-      const durationSeconds = Math.max(0, clip.duration || 0);
-      const frameCount = timing?.clipFrames[index] ?? 0;
-      const incomingBoundary = boundaryBefore.get(index);
-      const generationFrameCount = frameCount + (incomingBoundary?.handleFrames ?? 0);
-      const generatedDurationSeconds = generationFrameCount > 0 ? generationFrameCount / (timing?.fps ?? 1) : durationSeconds;
-      const outgoingBoundary = boundaryAfter.get(index);
-      const incomingJoinSeconds = useOutputGeometry ? incomingBoundary?.overlapSeconds ?? 0 : 0;
-      const outgoingJoinSeconds = useOutputGeometry ? outgoingBoundary?.overlapSeconds ?? 0 : 0;
-      const incomingHandleSeconds = useOutputGeometry ? incomingBoundary?.handleSeconds ?? 0 : 0;
-      const layoutDurationSeconds = useOutputGeometry ? frameCount / (timing?.fps ?? 1) : durationSeconds;
-      const trim = clipTrimSeconds(
-        incomingBoundary,
-        outgoingBoundary,
-        useOutputGeometry
+  // frontend/clipCreation.ts
+  var addClipInFlight = false;
+  var addClipAfterCatalog = async () => {
+    try {
+      await loadAuthoritativeArchitectureCatalog();
+      const { defaults } = captureAuthoringTransactionSnapshot();
+      const defaultModel = getDefaultStageModel(defaults);
+      if (!defaultModel || architectureForModel(defaults.modelCatalog, defaultModel) === null) {
+        getVideoStagesHostBridge().showError(
+          "VideoStages cannot add a clip because no supported video model is available."
+        );
+        return;
+      }
+      const state = getState();
+      const clips = state.clips;
+      const previousClip = clips[clips.length - 1] ?? null;
+      if (previousClip && clips.length >= 2) {
+        const previousJoin = clips[clips.length - 2];
+        previousClip.boundaryOut = previousJoin.boundaryOut;
+        previousClip.boundaryOutCarryAudio = previousJoin.boundaryOutCarryAudio;
+        previousClip.boundaryOutReferenceScale = previousJoin.boundaryOutReferenceScale;
+        previousClip.boundaryOutReferenceIncludeSoundtrack = previousJoin.boundaryOutReferenceIncludeSoundtrack;
+        previousClip.boundaryOutOverlap = previousJoin.boundaryOutOverlap;
+      }
+      clips.push(
+        buildDefaultClip(defaults, defaultModel, false, previousClip)
       );
-      const timelineReductionSeconds = trim.before + trim.after;
-      const timelineDurationSeconds = Math.max(
-        0,
-        layoutDurationSeconds - timelineReductionSeconds
-      );
-      const rawWidthPx = timelineDurationSeconds * pxPerSecond;
-      const widthPx = incomingJoinSeconds > 0 || outgoingJoinSeconds > 0 ? Math.max(1, rawWidthPx) : Math.max(DEFAULT_MIN_WIDTH_PX, rawWidthPx);
-      layouts.push({
-        index,
-        startSeconds: cursorSeconds,
-        durationSeconds,
-        generatedDurationSeconds,
-        timelineDurationSeconds,
-        incomingJoinSeconds,
-        outgoingJoinSeconds,
-        incomingHandleSeconds,
-        timelineReductionSeconds,
-        frameCount,
-        startPx: cursorPx,
-        widthPx,
-        stageCount: (clip.stages ?? []).length,
-        keyframeCount: (clip.frameRefs ?? []).length,
-        skipped: clip.skipped === true
+      saveState(state, { origin: "timeline" });
+      setSelection({
+        kind: "clip",
+        clipIdx: clips.length - 1,
+        stageIdx: 0
       });
-      cursorSeconds += timelineDurationSeconds;
-      cursorPx += timelineDurationSeconds * pxPerSecond;
+    } catch (error) {
+      console.warn("VideoStages: failed to add clip", error);
+      getVideoStagesHostBridge().showError(
+        "VideoStages could not add the clip. See the browser console for details."
+      );
+    } finally {
+      addClipInFlight = false;
     }
-    return layouts;
+  };
+  var addVideoStagesClip = () => {
+    if (addClipInFlight) {
+      return;
+    }
+    addClipInFlight = true;
+    void addClipAfterCatalog();
   };
 
-  // frontend/timelineSnap.ts
-  var SNAP_THRESHOLD_PX = 8;
-  var nearestTarget = (value, targets, threshold) => {
-    let nearest = null;
-    let nearestDistance = Number.POSITIVE_INFINITY;
-    for (const target of targets) {
-      const distance = Math.abs(value - target);
-      if (distance <= threshold && distance < nearestDistance) {
-        nearest = target;
-        nearestDistance = distance;
-      }
-    }
-    return nearest;
-  };
-  var snapPoint = (value, primaryTargets, fallbackTargets, threshold) => nearestTarget(value, primaryTargets, threshold) ?? nearestTarget(value, fallbackTargets, threshold) ?? value;
-  var snapStartAgainst = (start, length, targets, threshold) => {
-    const nearStart = nearestTarget(start, targets, threshold);
-    const nearEnd = nearestTarget(start + length, targets, threshold);
-    if (nearStart === null) {
-      return nearEnd === null ? null : nearEnd - length;
-    }
-    if (nearEnd === null) {
-      return nearStart;
-    }
-    return Math.abs(nearStart - start) <= Math.abs(nearEnd - (start + length)) ? nearStart : nearEnd - length;
-  };
-  var snapMovedStart = (start, length, primaryTargets, fallbackTargets, threshold) => snapStartAgainst(start, length, primaryTargets, threshold) ?? snapStartAgainst(start, length, fallbackTargets, threshold) ?? start;
-  var timelineClipEdges = (clips, timing) => {
-    if (timing) {
-      const boundaryAfter = new Map(
-        timing.boundaries.map((boundary) => [boundary.leftIdx, boundary])
-      );
-      const boundaryBefore = new Map(
-        timing.boundaries.map((boundary) => [boundary.rightIdx, boundary])
-      );
-      const edges2 = [0];
-      let cursor2 = 0;
-      for (const clipIdx of timing.executableClipIndexes) {
-        const duration = (timing.clipFrames[clipIdx] ?? 0) / timing.fps;
-        const incoming = boundaryBefore.get(clipIdx);
-        const outgoing = boundaryAfter.get(clipIdx);
-        const trim = clipTrimSeconds(incoming, outgoing, true);
-        const editEnd = cursor2 + Math.max(0, duration - trim.before - trim.after);
-        edges2.push(cursor2, editEnd);
-        if (outgoing && outgoing.overlapSeconds > 0) {
-          edges2.push(
-            outgoing.effectiveMode === "continue" ? editEnd - outgoing.overlapSeconds : editEnd - outgoing.overlapSeconds / 2,
-            outgoing.effectiveMode === "continue" ? editEnd : editEnd + outgoing.overlapSeconds / 2
-          );
-        }
-        cursor2 = editEnd;
-      }
-      edges2.push(timing.outputSeconds);
-      return edges2.sort((left, right) => left - right).filter(
-        (edge, index, sorted) => index === 0 || Math.abs(edge - sorted[index - 1]) > 1e-9
-      );
-    }
-    const edges = [0];
-    let cursor = 0;
-    for (const clip of clips) {
-      cursor += Math.max(0, clip.duration || 0);
-      edges.push(cursor);
-    }
-    return edges;
-  };
-
-  // frontend/boundaryPlan.ts
-  var boundaryPlanForClips = (clips, fps, resolveConstraints = (clip, _index, mode) => {
-    const generic = boundaryWindowConstraints(null);
-    const persisted = Math.trunc(Number(clip.boundaryOutOverlap));
-    return {
-      ...generic,
-      defaultFrames: mode === "cut" || !Number.isFinite(persisted) || persisted <= 0 ? generic.defaultFrames : persisted
-    };
-  }, resolveFrameGrid = () => NEUTRAL_FRAME_GRID) => {
-    const count = clips.length;
-    const boundaryCount = Math.max(0, count - 1);
-    const zeroBoundaries = () => new Array(boundaryCount).fill(0);
-    if (count < 2) {
-      return {
-        overlaps: zeroBoundaries(),
-        continuityWindows: zeroBoundaries(),
-        fallback: false
-      };
-    }
-    const modes = [];
-    for (let i = 0; i < count - 1; i++) {
-      const b = clips[i].boundaryOut ?? "cut";
-      modes[i] = b;
-    }
-    const frames = clips.map(
-      (clip, index) => framesForClip(clip.duration, fps, resolveFrameGrid(clip, index))
-    );
-    const constraints = clips.map(
-      (clip, index) => resolveConstraints(clip, index, clip.boundaryOut ?? "cut")
-    );
-    const prefs = clips.map(
-      (clip, index) => normalizeBoundaryWindow(clip.boundaryOutOverlap, constraints[index])
-    );
-    const hasRequestedBoundary = modes.some((mode) => mode !== "cut");
-    const active = (index) => modes[index] === "crossfade" || modes[index] === "continue" && constraints[index].continueMode === "overlap";
-    const trim = (index) => modes[index] === "continue" ? constraints[index].continueMode === "overlap" ? prefs[index] + constraints[index].continuityExtraFrames : 0 : modes[index] === "crossfade" ? prefs[index] : 0;
-    const hasBudgetedOverlap = modes.some((_mode, index) => active(index));
-    const continuityWindows = () => modes.slice(0, boundaryCount).map(
-      (mode, index) => mode === "continue" ? constraints[index].continueMode === "reference" ? prefs[index] : trim(index) : 0
-    );
-    if (!hasBudgetedOverlap) {
-      return {
-        overlaps: zeroBoundaries(),
-        continuityWindows: continuityWindows(),
-        fallback: false
-      };
-    }
-    while (true) {
-      let overBudgetClip = -1;
-      for (let i = 0; i < count; i++) {
-        const left = i > 0 ? trim(i - 1) : 0;
-        const right = i < boundaryCount ? trim(i) : 0;
-        const incomingHandle = i > 0 && modes[i - 1] === "continue" && constraints[i - 1].continueMode === "overlap" ? prefs[i - 1] : 0;
-        if (left + right > frames[i] + incomingHandle - 1) {
-          overBudgetClip = i;
-          break;
-        }
-      }
-      if (overBudgetClip < 0) break;
-      const candidate = overBudgetClip < boundaryCount && active(overBudgetClip) ? overBudgetClip : overBudgetClip > 0 && active(overBudgetClip - 1) ? overBudgetClip - 1 : -1;
-      if (candidate < 0) {
-        for (let i = 0; i < boundaryCount; i++) {
-          if (active(i)) modes[i] = "cut";
-        }
-        return {
-          overlaps: zeroBoundaries(),
-          continuityWindows: continuityWindows(),
-          fallback: !modes.some((mode) => mode !== "cut")
-        };
-      }
-      const reduced = prefs[candidate] - constraints[candidate].frameStep;
-      if (reduced < constraints[candidate].minFrames) {
-        modes[candidate] = "cut";
-        prefs[candidate] = 0;
-      } else {
-        prefs[candidate] = reduced;
-      }
-    }
-    const overlaps = modes.slice(0, boundaryCount).map((_mode, index) => trim(index));
-    return {
-      overlaps,
-      continuityWindows: continuityWindows(),
-      fallback: hasRequestedBoundary && !modes.some((mode) => mode !== "cut")
-    };
-  };
-
-  // frontend/timelineDetail.ts
-  var DEFAULT_FPS = 24;
-  var safeFps = (fps) => typeof fps === "number" && Number.isFinite(fps) && fps > 0 ? fps : DEFAULT_FPS;
-  var keyframeTimeSeconds = (frame, fromEnd, clipDurationSeconds, fps) => {
-    const duration = Math.max(0, clipDurationSeconds || 0);
-    const offset = Math.max(0, frame || 0) / safeFps(fps);
-    const raw = fromEnd ? duration - offset : offset;
-    return Math.min(Math.max(raw, 0), duration);
-  };
-  var formatTimeLabel = (seconds2, unit, fps) => {
-    if (unit === "frames") {
-      return `${Math.round((seconds2 || 0) * safeFps(fps))}f`;
-    }
-    const rounded = Math.round((seconds2 || 0) * 10) / 10;
-    return Number.isInteger(rounded) ? `${rounded}s` : `${rounded.toFixed(1)}s`;
-  };
-  var formatSecondsTenth = (seconds2) => `${(Math.round((Number.isFinite(seconds2) ? seconds2 : 0) * 10) / 10).toFixed(1)}s`;
-  var formatOverlapSeconds = (frames, fps) => formatSecondsTenth(frames / Math.max(1, fps));
-  var RULER_MIN_TICK_SPACING_PX = 60;
-  var RULER_STEP_LADDER_SECONDS = [
-    0.5,
-    1,
-    2,
-    5,
-    10,
-    15,
-    30,
-    60,
-    120,
-    300,
-    600,
-    900,
-    1800,
-    3600
-  ];
-  var chooseRulerStepSeconds = (pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
-    const pps = pxPerSecond > 0 ? pxPerSecond : 1;
-    for (const step of RULER_STEP_LADDER_SECONDS) {
-      if (step * pps >= minSpacingPx) {
-        return step;
-      }
-    }
-    return RULER_STEP_LADDER_SECONDS[RULER_STEP_LADDER_SECONDS.length - 1];
-  };
-  var computeRulerTicks = (totalSeconds, pxPerSecond, minSpacingPx = RULER_MIN_TICK_SPACING_PX) => {
-    const total = Math.max(0, totalSeconds || 0);
-    if (total <= 0 || pxPerSecond <= 0) {
-      return [{ x: 0, seconds: 0 }];
-    }
-    const step = chooseRulerStepSeconds(pxPerSecond, minSpacingPx);
-    const ticks = [];
-    const MAX_TICKS = 1e3;
-    for (let i = 0; i < MAX_TICKS; i++) {
-      const t = i * step;
-      if (t > total + 1e-6) {
-        break;
-      }
-      ticks.push({ x: t * pxPerSecond, seconds: t });
-    }
-    return ticks;
-  };
-  var formatRulerLabel = (seconds2, unit, fps) => {
-    if (unit === "frames") {
-      return `${Math.round((seconds2 || 0) * safeFps(fps))}f`;
-    }
-    const s = Math.max(0, seconds2 || 0);
-    if (s >= 60) {
-      const totalWhole = Math.round(s);
-      const mm = Math.floor(totalWhole / 60);
-      const ss = totalWhole % 60;
-      return `${mm}:${`${ss}`.padStart(2, "0")}`;
-    }
-    return formatTimeLabel(s, unit, fps);
-  };
-  var truncate = (value, max = 80) => {
-    const text2 = `${value ?? ""}`;
-    return text2.length <= max ? text2 : `${text2.slice(0, Math.max(0, max - 1))}…`;
-  };
-  var refSourceLabel = (source) => {
-    const value = `${source ?? ""}`.trim();
-    if (!value) {
-      return MEDIA_SOURCE_REFINER;
-    }
-    const editStage = parseBase2EditStageIndex(value);
-    if (editStage != null) {
-      return `Base2Edit Edit ${editStage}`;
-    }
-    return value;
-  };
-  var audioSourceBadge = (source) => {
-    const value = `${source ?? ""}`.trim();
-    if (!value || value === "Native") {
-      return { label: "Native", title: "Audio source: Native" };
-    }
-    return { label: value, title: `Audio source: ${value}` };
-  };
-  var shortModelName = (model) => {
-    const raw = `${model ?? ""}`.trim();
-    if (!raw) {
-      return "(default)";
-    }
-    const segment = raw.split(/[\\/]/).pop() ?? raw;
-    return segment.replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|bin)$/i, "");
-  };
-  var stageChipLabel = (index) => `S${index}`;
-  var stageChipTitle = (stage, index) => {
-    const parts = [
-      `Stage ${index}${index === 0 ? " (full gen)" : " (refine)"}`,
-      `model: ${shortModelName(stage?.model ?? "")}`,
-      `steps: ${stage?.steps ?? "?"}`,
-      `cfg: ${stage?.cfgScale ?? "?"}`,
-      `control: ${stage?.control ?? "?"}`
-    ];
-    if (stage?.skipped) {
-      parts.push("skipped");
-    }
-    return parts.join(" · ");
-  };
-
-  // frontend/timelineTiming.ts
-  var resolveTimelineTiming = (clips, rawFps, capabilities) => {
-    const fps = safeFps(rawFps);
-    const indexes = executableClipIndexes(clips);
-    const executable = new Set(indexes);
-    const compacted = indexes.map((clipIdx, position) => {
-      const clip = clips[clipIdx];
-      const requested = clip.boundaryOut ?? "cut";
-      let effective = position < indexes.length - 1 ? capabilities?.forBoundaryIndex(clips, clipIdx).effective(requested) ?? requested : "cut";
-      const target = clips[indexes[position + 1]];
-      if (effective === "continue" && (target?.clipLengthFromAudio === true || target?.clipLengthFromControlNet === true)) {
-        effective = "cut";
-      }
-      return { ...clip, boundaryOut: effective };
-    });
-    const plan = capabilities ? boundaryPlanForClips(
-      compacted,
-      fps,
-      (_left, position, mode) => capabilities.forBoundaryIndex(clips, indexes[position]).windowConstraints(mode),
-      (clip) => capabilities.forClip(clip).frameGrid
-    ) : boundaryPlanForClips(compacted, fps);
-    const seams = executableBoundaries(clips);
-    const boundaries = seams.map((seam) => {
-      const requestedMode = clips[seam.leftIdx].boundaryOut ?? "cut";
-      const policyEffective = compacted[seam.position].boundaryOut ?? "cut";
-      const overlapFrames = Math.max(0, plan.overlaps[seam.position] ?? 0);
-      const continuityWindowFrames = Math.max(
-        0,
-        plan.continuityWindows[seam.position] ?? 0
-      );
-      const effectiveMode = overlapFrames > 0 || continuityWindowFrames > 0 ? policyEffective : "cut";
-      const continuityExtraFrames = effectiveMode === "continue" ? capabilities?.forBoundaryIndex(clips, seam.leftIdx).windowConstraints(effectiveMode).continuityExtraFrames ?? 1 : 0;
-      const handleFrames = effectiveMode === "continue" ? Math.max(0, overlapFrames - continuityExtraFrames) : 0;
-      const timelineReductionFrames = Math.max(
-        0,
-        overlapFrames - handleFrames
-      );
-      return {
-        ...seam,
-        requestedMode,
-        effectiveMode,
-        continuityWindowFrames,
-        continuityWindowSeconds: continuityWindowFrames / fps,
-        overlapFrames,
-        overlapSeconds: overlapFrames / fps,
-        handleFrames,
-        handleSeconds: handleFrames / fps,
-        timelineReductionFrames,
-        timelineReductionSeconds: timelineReductionFrames / fps
-      };
-    });
-    const clipFrames = clips.map(
-      (clip, clipIdx) => executable.has(clipIdx) ? framesForClip(
-        clip.duration,
-        fps,
-        capabilities?.forClip(clip).frameGrid ?? NEUTRAL_FRAME_GRID
-      ) : 0
-    );
-    const generatedFrames = indexes.reduce((sum, clipIdx) => sum + clipFrames[clipIdx], 0) + boundaries.reduce((sum, boundary) => sum + boundary.handleFrames, 0);
-    const joinFrames = boundaries.reduce(
-      (sum, boundary) => sum + boundary.overlapFrames,
-      0
-    );
-    const outputFrames = Math.max(0, generatedFrames - joinFrames);
-    return {
-      fps,
-      executableClipIndexes: indexes,
-      clipFrames,
-      boundaries,
-      authoredSeconds: indexes.reduce(
-        (sum, clipIdx) => sum + Math.max(0, clips[clipIdx].duration || 0),
-        0
-      ),
-      generatedFrames,
-      joinFrames,
-      joinSeconds: joinFrames / fps,
-      outputFrames,
-      outputSeconds: outputFrames / fps,
-      outputGeometryAvailable: indexes.length === clips.length
-    };
-  };
-  var boundaryImpactForLeftClip = (timing, leftClipIdx) => timing.boundaries.find((boundary) => boundary.leftIdx === leftClipIdx) ?? null;
-  var incomingReferenceContinueForClip = (clips, rawFps, capabilities, rightClipIdx) => resolveTimelineTiming(clips, rawFps, capabilities).boundaries.find(
-    (boundary) => boundary.rightIdx === rightClipIdx && boundary.effectiveMode === "continue" && capabilities.forBoundaryIndex(clips, boundary.leftIdx).windowConstraints("continue").continueMode === "reference"
-  ) ?? null;
-  var timelineDisplaySeconds = (clips, timing) => timing.outputGeometryAvailable ? timing.outputSeconds : clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
-
-  // frontend/trackDomUtils.ts
-  var livePxPerSecond = (body) => {
-    const pps = Number.parseFloat(body.dataset.vstPps ?? "");
-    return Number.isFinite(pps) && pps > 0 ? pps : DEFAULT_PX_PER_SECOND;
-  };
-  var parseIntAttr = (el, name) => {
-    if (!el) {
+  // frontend/clipReorder.ts
+  var reorderClip = (from, to) => {
+    const { state, revision } = getTimelineStore().getSnapshot();
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from >= state.clips.length || to < 0 || to >= state.clips.length)
       return null;
-    }
-    const raw = el.getAttribute(name);
-    if (raw === null) {
-      return null;
-    }
-    const value = Number.parseInt(raw, 10);
-    return Number.isInteger(value) && value >= 0 ? value : null;
+    if (from === to) return to;
+    const [clip] = state.clips.splice(from, 1);
+    state.clips.splice(to, 0, clip);
+    const { defaults, generatedEntryMode } = captureAuthoringTransactionSnapshot();
+    reconcileArchitectureIncomingIcLoraDrives(
+      state.clips,
+      generatedEntryMode,
+      defaults.modelCatalog
+    );
+    saveState(state, { expectedRevision: revision, origin: "linking" });
+    return to;
   };
-  var clipDurationOf = (clip) => clip ? Math.max(0, clip.duration || 0) : 0;
-  var spanGeometry = (startSeconds, lengthSeconds, durationSeconds, options = {}) => {
-    const duration = Math.max(0, durationSeconds || 0);
-    const rawStart = startSeconds || 0;
-    const start = clamp(rawStart, 0, duration);
-    const end = clamp(rawStart + (lengthSeconds || 0), start, duration);
-    const percent = (options.unit ?? "percent") === "percent";
-    const scale = percent ? duration > 0 ? 100 / duration : 0 : options.pxPerSecond ?? 0;
-    let left = start * scale;
-    let width = (end - start) * scale;
-    if (options.clampOutput ?? percent) {
-      const bound = percent ? 100 : Number.MAX_SAFE_INTEGER;
-      left = clamp(left, 0, bound);
-      width = clamp(width, 0, bound - left);
-    }
-    if (options.minWidth !== void 0) {
-      width = Math.max(options.minWidth, width);
-    }
-    return {
-      startSeconds: start,
-      endSeconds: end,
-      left,
-      width,
-      empty: end <= start
-    };
-  };
-  var keyframeLeftPercent = (time, duration) => spanGeometry(time, 0, duration).left;
-  var currentRevision = () => getTimelineStore().revision();
-  var isStaleRevision = (sourceRevision) => currentRevision() !== sourceRevision;
-  var commitClipMutation = (sourceRevision, origin, mutate) => {
-    if (isStaleRevision(sourceRevision)) {
-      return false;
-    }
-    const next = mutate(getClips());
-    if (!next) {
-      return false;
-    }
-    saveClips(next, { origin });
-    return true;
-  };
-  var isActivateKey = (ke) => ke.key === "Enter" || ke.key === " " || ke.key === "Spacebar";
 
-  // frontend/windowTrack.ts
-  var DRAG_THRESHOLD_PX = 4;
-  var createDefaultOrDraggedSpan = (startSec, endSec, lo, hi, minLen, defaultLen) => {
-    const gap = hi - lo;
-    if (gap < minLen) {
-      return null;
-    }
-    let start;
-    let length;
-    if (endSec === null) {
-      length = Math.min(defaultLen, gap);
-      start = clamp(startSec, lo, hi - length);
-    } else {
-      const a = clamp(Math.min(startSec, endSec), lo, hi);
-      const b = clamp(Math.max(startSec, endSec), lo, hi);
-      start = a;
-      length = Math.max(minLen, b - a);
-      if (start + length > hi) {
-        length = hi - start;
-      }
-    }
-    return length < minLen ? null : { start, length };
+  // frontend/trimGeometry.ts
+  var clampStartLength = (start, length, duration, minLength) => {
+    const clampedStart = clamp(start, 0, Math.max(0, duration - minLength));
+    const clampedLength = clamp(
+      length,
+      minLength,
+      Math.max(minLength, duration - clampedStart)
+    );
+    return { start: clampedStart, length: clampedLength };
   };
-  var resizeSpanEdge = (edge, press, deltaSec, minLen, lo, hi) => {
-    if (edge === "right") {
-      const end2 = clamp(
-        press.start + press.length + deltaSec,
-        press.start + minLen,
-        hi
-      );
-      return { start: press.start, length: end2 - press.start };
-    }
-    const end = press.start + press.length;
-    const start = clamp(press.start + deltaSec, lo, end - minLen);
-    return { start, length: end - start };
+  var sourceLimitSeconds = (source) => source.durationSeconds > 0 ? source.durationSeconds : source.startSeconds + source.lengthSeconds;
+  var toInOut = ({
+    startSeconds,
+    lengthSeconds
+  }) => ({
+    inSeconds: startSeconds,
+    outSeconds: roundToTenth(startSeconds + lengthSeconds)
+  });
+  var fromInOut = ({ inSeconds, outSeconds }, { limitSeconds, minLengthSeconds, fps }) => {
+    const start = roundToTenth(inSeconds);
+    const length = snapDurationToFps(roundToTenth(outSeconds) - start, fps);
+    const clamped = clampStartLength(
+      start,
+      length,
+      limitSeconds,
+      minLengthSeconds
+    );
+    return { startSeconds: clamped.start, lengthSeconds: clamped.length };
   };
-  var clipWindowTrackScope = (origin) => {
-    const laneFor = (clip, ownerIdx) => clip ? { owner: clip, ownerIdx, duration: clipDurationOf(clip) } : null;
-    return {
-      read: (ownerIdx) => laneFor(getClips()[ownerIdx], ownerIdx),
-      resolveLane: (lane) => {
-        const ownerIdx = parseIntAttr(lane, "data-clip-idx");
-        return ownerIdx === null ? null : laneFor(getClips()[ownerIdx], ownerIdx);
+  var setInPoint = (current, inSeconds, limits) => {
+    const { outSeconds } = toInOut(current);
+    return fromInOut(
+      {
+        inSeconds: Math.max(
+          0,
+          Math.min(inSeconds, outSeconds - limits.minLengthSeconds)
+        ),
+        outSeconds
       },
-      write: (ownerIdx, _create, mutate) => {
-        const clips = getClips();
-        const lane = laneFor(clips[ownerIdx], ownerIdx);
-        if (!lane || !mutate(lane)) {
-          return false;
-        }
-        saveClips(clips, { origin });
-        return true;
-      }
-    };
+      limits
+    );
   };
-  var createWindowTrack = (config) => {
-    let boundBody = null;
-    let unregister = null;
-    const ownerAttr = config.ownerIdxAttr ?? "data-clip-idx";
-    const snapTargets = (ownerIdx, duration) => config.snapTargets?.(ownerIdx, duration) ?? {
-      primary: [],
-      fallback: [0, duration]
-    };
-    const spanStyle = (start, length, laneDuration, pps) => {
-      const pct = config.unit === "pct";
-      const geometry = spanGeometry(start, length, laneDuration, {
-        unit: pct ? "percent" : "px",
-        pxPerSecond: pps,
-        minWidth: pct ? void 0 : 2
-      });
-      const suffix = pct ? "%" : "px";
-      return {
-        left: `${geometry.left}${suffix}`,
-        width: `${geometry.width}${suffix}`
-      };
-    };
-    const moveTarget = (lane, itemIdx, press, desiredStart, pps) => {
-      const raw = config.moveTargetStart(lane, itemIdx, press, desiredStart);
-      if (!getTimelineAuthoringSettings().snap) {
-        return raw;
-      }
-      const targets = snapTargets(lane.ownerIdx, lane.duration);
-      const snapped = snapMovedStart(
-        raw,
-        press.length,
-        targets.primary,
-        targets.fallback,
-        SNAP_THRESHOLD_PX / pps
-      );
-      return config.moveTargetStart(lane, itemIdx, press, snapped);
-    };
-    const resizeTarget = (lane, itemIdx, edge, press, deltaSec, pps) => {
-      const raw = config.resizeTarget(lane, itemIdx, edge, press, deltaSec);
-      if (!getTimelineAuthoringSettings().snap) {
-        return raw;
-      }
-      const targets = snapTargets(lane.ownerIdx, lane.duration);
-      const rawEdge = edge === "left" ? raw.start : raw.start + raw.length;
-      const snappedEdge = snapPoint(
-        rawEdge,
-        targets.primary,
-        targets.fallback,
-        SNAP_THRESHOLD_PX / pps
-      );
-      if (snappedEdge === rawEdge) {
-        return raw;
-      }
-      const pressEdge = edge === "left" ? press.start : press.start + press.length;
-      return config.resizeTarget(
-        lane,
-        itemIdx,
-        edge,
-        press,
-        snappedEdge - pressEdge
-      );
-    };
-    const commitEdit = (state, write) => {
-      if (isStaleRevision(state.sourceRevision)) {
+  var setOutPoint = (current, outSeconds, limits) => {
+    const { inSeconds } = toInOut(current);
+    return fromInOut(
+      {
+        inSeconds,
+        outSeconds: Math.min(
+          limits.limitSeconds,
+          Math.max(outSeconds, inSeconds + limits.minLengthSeconds)
+        )
+      },
+      limits
+    );
+  };
+  var slideRange = (current, inSeconds, limits) => {
+    const length = current.lengthSeconds;
+    const start = Math.max(
+      0,
+      Math.min(
+        roundToTenth(inSeconds),
+        Math.max(0, limits.limitSeconds - length)
+      )
+    );
+    return fromInOut({ inSeconds: start, outSeconds: start + length }, limits);
+  };
+  var markInPoint = (current, inSeconds, limits) => inSeconds > toInOut(current).outSeconds ? slideRange(current, inSeconds, limits) : setInPoint(current, inSeconds, limits);
+
+  // frontend/detailStrip/modalManager.ts
+  var currentModal = null;
+  var closeManagedModal = () => currentModal?.close();
+  var createManagedModal = (spec) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = `modal-backdrop fade show ${spec.backdropClass}`;
+    const modal = document.createElement("div");
+    modal.className = `modal fade show ${spec.modalClass}`;
+    modal.style.display = "block";
+    modal.tabIndex = -1;
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", spec.labelledBy);
+    const dialog = document.createElement("div");
+    dialog.className = "modal-dialog modal-dialog-centered";
+    dialog.setAttribute("role", "document");
+    const content = document.createElement("div");
+    content.className = "modal-content";
+    const header = document.createElement("div");
+    header.className = "modal-header";
+    const body = document.createElement("div");
+    body.className = "modal-body";
+    content.append(header, body);
+    dialog.appendChild(content);
+    modal.appendChild(dialog);
+    let open = false;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        managed.close();
         return;
       }
-      const saved = config.scope.write(state.lane.ownerIdx, false, (txn) => {
-        if (config.canEdit && !config.canEdit(txn) || !config.readSpan(txn, state.itemIdx)) {
-          return false;
+      spec.onKeyDown?.(event);
+    };
+    const managed = {
+      modal,
+      content,
+      header,
+      body,
+      open: (initialFocus) => {
+        closeManagedModal();
+        open = true;
+        currentModal = managed;
+        document.addEventListener("keydown", onKeyDown);
+        document.body.append(backdrop, modal);
+        initialFocus?.focus();
+      },
+      close: () => {
+        if (!open) {
+          return;
         }
-        write(txn);
-        return true;
-      });
-      if (saved) {
-        setSelection(
-          config.selectionFor(state.lane.ownerIdx, state.itemIdx)
-        );
-      }
-    };
-    const commitMove = (state, dxPx, pps) => {
-      commitEdit(state, (txn) => {
-        config.writeMove(
-          txn,
-          state.itemIdx,
-          state.press,
-          moveTarget(
-            txn,
-            state.itemIdx,
-            state.press,
-            state.press.start + dxPx / pps,
-            pps
-          )
-        );
-      });
-    };
-    const commitResize = (state, dxPx, pps) => {
-      commitEdit(state, (txn) => {
-        config.writeResize(
-          txn,
-          state.itemIdx,
-          state.edge,
-          state.press,
-          resizeTarget(
-            txn,
-            state.itemIdx,
-            state.edge,
-            state.press,
-            dxPx / pps,
-            pps
-          )
-        );
-      });
-    };
-    const commitCreate = (state, endSec) => {
-      if (isStaleRevision(state.sourceRevision)) {
-        return;
-      }
-      const created = {
-        selection: null
-      };
-      const saved = config.scope.write(state.ownerIdx, true, (txn) => {
-        if (config.canCreate && !config.canCreate(txn)) {
-          return false;
+        open = false;
+        document.removeEventListener("keydown", onKeyDown);
+        if (currentModal === managed) {
+          currentModal = null;
         }
-        created.selection = config.createSpan(txn, state.startSec, endSec);
-        return created.selection !== null;
-      });
-      if (saved && created.selection) {
-        setSelection(created.selection);
-      }
-    };
-    const timeAtX = (lane, laneLeft, clientX, pps) => {
-      const raw = clamp((clientX - laneLeft) / pps, 0, lane.duration);
-      if (!getTimelineAuthoringSettings().snap) {
-        return raw;
-      }
-      const targets = snapTargets(lane.ownerIdx, lane.duration);
-      return snapPoint(
-        raw,
-        targets.primary,
-        targets.fallback,
-        SNAP_THRESHOLD_PX / pps
-      );
-    };
-    const laneTimeAt = (state, clientX, pps) => timeAtX(state, state.laneLeft, clientX, pps);
-    const moveSession = (body, state) => {
-      const restore = () => {
-        state.el.style.left = state.originalLeft;
-      };
-      return {
-        threshold: DRAG_THRESHOLD_PX,
-        onMove: (ctx) => {
-          body.classList.add(config.draggingClass);
-          const pps = livePxPerSecond(body);
-          const start = moveTarget(
-            state.lane,
-            state.itemIdx,
-            state.press,
-            state.press.start + ctx.dx / pps,
-            pps
-          );
-          state.el.style.left = spanStyle(
-            start,
-            state.press.length,
-            state.lane.duration,
-            pps
-          ).left;
-        },
-        onCommit: (ctx) => {
-          body.classList.remove(config.draggingClass);
-          commitMove(state, ctx.dx, livePxPerSecond(body));
-        },
-        onTap: restore,
-        onCancel: () => {
-          restore();
-          body.classList.remove(config.draggingClass);
+        try {
+          spec.onClose?.();
+        } finally {
+          modal.remove();
+          backdrop.remove();
         }
-      };
-    };
-    const resizeSession = (body, state) => {
-      const restore = () => {
-        state.el.style.left = state.originalLeft;
-        state.el.style.width = state.originalWidth;
-      };
-      return {
-        threshold: DRAG_THRESHOLD_PX,
-        onMove: (ctx) => {
-          body.classList.add(config.draggingClass);
-          const pps = livePxPerSecond(body);
-          const geom = resizeTarget(
-            state.lane,
-            state.itemIdx,
-            state.edge,
-            state.press,
-            ctx.dx / pps,
-            pps
-          );
-          const style = spanStyle(
-            geom.start,
-            geom.length,
-            state.lane.duration,
-            pps
-          );
-          if (state.edge === "left") {
-            state.el.style.left = style.left;
-          }
-          state.el.style.width = style.width;
-        },
-        onCommit: (ctx) => {
-          body.classList.remove(config.draggingClass);
-          commitResize(state, ctx.dx, livePxPerSecond(body));
-        },
-        onTap: restore,
-        onCancel: () => {
-          restore();
-          body.classList.remove(config.draggingClass);
-        }
-      };
-    };
-    const createSession = (body, state) => {
-      const removeGhost = () => {
-        state.ghost?.remove();
-        state.ghost = null;
-      };
-      return {
-        threshold: DRAG_THRESHOLD_PX,
-        // A plain lane tap creates a default-length span at the pressed
-        // time, so the concluding click is always consumed.
-        suppressTapClick: true,
-        onMove: (ctx) => {
-          body.classList.add(config.draggingClass);
-          const pps = livePxPerSecond(body);
-          const nowSec = laneTimeAt(state, ctx.event.clientX, pps);
-          const a = Math.min(state.startSec, nowSec);
-          const b = Math.max(state.startSec, nowSec);
-          if (!state.ghost) {
-            const ghost = document.createElement("div");
-            ghost.className = config.ghostClass;
-            state.laneEl.appendChild(ghost);
-            state.ghost = ghost;
-          }
-          const ghostStyle = spanStyle(a, b - a, state.duration, pps);
-          state.ghost.style.left = ghostStyle.left;
-          state.ghost.style.width = ghostStyle.width;
-        },
-        onCommit: (ctx) => {
-          body.classList.remove(config.draggingClass);
-          removeGhost();
-          commitCreate(
-            state,
-            laneTimeAt(state, ctx.event.clientX, livePxPerSecond(body))
-          );
-        },
-        onTap: () => {
-          removeGhost();
-          commitCreate(state, null);
-        },
-        onCancel: () => {
-          removeGhost();
-          body.classList.remove(config.draggingClass);
-        }
-      };
-    };
-    const createFromButton = (target) => {
-      const button2 = config.createButtonSelector ? target.closest(config.createButtonSelector) : null;
-      if (!(button2 instanceof HTMLElement)) {
-        return false;
-      }
-      const lane = config.scope.resolveLane(button2);
-      if (lane && !(config.canCreate && !config.canCreate(lane))) {
-        commitCreate(
-          {
-            ownerIdx: lane.ownerIdx,
-            duration: lane.duration,
-            laneEl: button2,
-            laneLeft: 0,
-            startSec: 0,
-            ghost: null,
-            sourceRevision: currentRevision()
-          },
-          null
-        );
-      }
-      return true;
-    };
-    const itemIdxOf = (span) => config.itemIdxAttr ? parseIntAttr(span, config.itemIdxAttr) : 0;
-    const spanAt = (span) => {
-      const ownerIdx = parseIntAttr(span, ownerAttr);
-      const itemIdx = itemIdxOf(span);
-      if (ownerIdx === null || itemIdx === null) {
-        return null;
-      }
-      const lane = config.scope.read(ownerIdx);
-      const press = lane ? config.readSpan(lane, itemIdx) : null;
-      return lane && press ? { lane, itemIdx, press } : null;
-    };
-    const onPress = (me, body) => {
-      if (!(me.target instanceof Element)) {
-        return null;
-      }
-      const span = me.target.closest(config.spanSelector);
-      if (span instanceof HTMLElement) {
-        if (me.shiftKey) {
-          me.preventDefault();
-          return claimOnly();
-        }
-        const found = spanAt(span);
-        if (!found) {
-          return null;
-        }
-        if (config.canEdit && !config.canEdit(found.lane)) {
-          me.preventDefault();
-          return claimOnly();
-        }
-        const base = {
-          lane: found.lane,
-          itemIdx: found.itemIdx,
-          el: span,
-          press: found.press,
-          originalLeft: span.style.left,
-          sourceRevision: currentRevision()
-        };
-        me.preventDefault();
-        const edgeEl = me.target.closest(config.edgeSelector);
-        if (edgeEl) {
-          return resizeSession(body, {
-            ...base,
-            edge: edgeEl.getAttribute(config.edgeAttr) === "left" ? "left" : "right",
-            originalWidth: span.style.width
-          });
-        }
-        return moveSession(body, base);
-      }
-      const laneEl = me.target.closest(config.laneSelector);
-      if (laneEl instanceof HTMLElement) {
-        const lane = config.scope.resolveLane(laneEl);
-        if (!lane || config.canCreate && !config.canCreate(lane)) {
-          return null;
-        }
-        const rect = laneEl.getBoundingClientRect();
-        me.preventDefault();
-        return createSession(body, {
-          ownerIdx: lane.ownerIdx,
-          duration: lane.duration,
-          laneEl,
-          laneLeft: rect.left,
-          startSec: timeAtX(
-            lane,
-            rect.left,
-            me.clientX,
-            livePxPerSecond(body)
-          ),
-          ghost: null,
-          sourceRevision: currentRevision()
-        });
-      }
-      return null;
-    };
-    const activate = (selection) => {
-      if (config.revealOnActivate) {
-        activateSelection(selection);
-      } else {
-        setSelection(selection);
       }
     };
-    const onBodyClick = (event) => {
-      if (!(event.target instanceof Element)) {
-        return;
+    backdrop.addEventListener("click", managed.close);
+    modal.addEventListener("mousedown", (event) => {
+      if (event.target === modal) {
+        managed.close();
       }
-      if (createFromButton(event.target)) {
-        return;
-      }
-      const span = event.target.closest(config.spanSelector);
-      if (!(span instanceof HTMLElement)) {
-        config.onClickFallthrough?.(event, event.target);
-        return;
-      }
-      if (config.isolateClicks) {
-        event.stopImmediatePropagation();
-      }
-      const found = spanAt(span);
-      if (!found) {
-        return;
-      }
-      if (event.shiftKey) {
-        const removed = {
-          selection: null
-        };
-        const saved = config.scope.write(
-          found.lane.ownerIdx,
-          false,
-          (txn) => {
-            removed.selection = config.deleteItem(txn, found.itemIdx);
-            return removed.selection !== null;
-          }
-        );
-        if (saved && removed.selection) {
-          setSelection(removed.selection);
-        }
-        return;
-      }
-      activate(config.selectionFor(found.lane.ownerIdx, found.itemIdx));
-    };
-    const onBodyKeyDown = (event) => {
-      const ke = event;
-      if (!isActivateKey(ke)) {
-        return;
-      }
-      if (!(ke.target instanceof Element)) {
-        return;
-      }
-      if (createFromButton(ke.target)) {
-        ke.preventDefault();
-        return;
-      }
-      const span = ke.target.closest(config.spanSelector);
-      if (!(span instanceof HTMLElement)) {
-        return;
-      }
-      ke.preventDefault();
-      if (config.isolateClicks) {
-        ke.stopImmediatePropagation();
-      }
-      const found = spanAt(span);
-      if (!found) {
-        return;
-      }
-      activate(config.selectionFor(found.lane.ownerIdx, found.itemIdx));
-    };
-    const attach = (body, router) => {
-      if (boundBody === body) {
-        return;
-      }
-      dispose();
-      boundBody = body;
-      body.addEventListener("click", onBodyClick);
-      if (config.keyboardSelect) {
-        body.addEventListener("keydown", onBodyKeyDown);
-      }
-      unregister = router.register({
-        id: config.routeId,
-        priority: config.priority,
-        onPress: (me) => onPress(me, body)
-      });
-    };
-    const dispose = () => {
-      if (boundBody) {
-        boundBody.removeEventListener("click", onBodyClick);
-        boundBody.removeEventListener("keydown", onBodyKeyDown);
-        boundBody = null;
-      }
-      unregister?.();
-      unregister = null;
-    };
-    return { attach, dispose };
+    });
+    return managed;
   };
 
-  // frontend/timelineAudioSpanTrack.ts
-  var timelineTiming = (state, capabilities) => resolveTimelineTiming(state.clips, state.fps, capabilities?.());
-  var timelineDuration = (state, capabilities) => timelineTiming(state, capabilities).outputSeconds;
-  var pressSpanOf = (span) => span && span.timelineStartSeconds !== null && span.timelineLengthSeconds !== null ? {
-    start: span.timelineStartSeconds,
-    length: span.timelineLengthSeconds,
-    trim: span.sourceStartSeconds
-  } : null;
-  var blankTrack = () => ({
-    id: createEntityId("audio_track"),
-    source: { kind: "Upload", reference: "", uploadedAudio: null },
-    volume: AUDIO_SPAN_VOLUME_DEFAULT,
-    spans: []
-  });
-  var audioTrackScope = (capabilities) => ({
-    read: (ownerIdx) => {
-      const state = getState();
-      const owner = state.audioTracks?.[ownerIdx];
-      return owner ? {
-        owner,
-        ownerIdx,
-        duration: timelineDuration(state, capabilities)
-      } : null;
-    },
-    // The blank lane carries no index: a create appends a new track.
-    resolveLane: () => {
-      const state = getState();
-      return {
-        owner: null,
-        ownerIdx: state.audioTracks?.length ?? 0,
-        duration: timelineDuration(state, capabilities)
-      };
-    },
-    write: (ownerIdx, create, mutate) => {
-      const state = getState();
-      state.audioTracks ??= [];
-      const tracks = state.audioTracks;
-      if (create && ownerIdx === tracks.length) {
-        tracks.push(blankTrack());
-      }
-      const owner = tracks[ownerIdx];
-      if (!owner) {
-        return false;
-      }
-      const applied = mutate({
-        owner,
-        ownerIdx,
-        duration: timelineDuration(state, capabilities),
-        removeOwner: () => {
-          tracks.splice(ownerIdx, 1);
-          return tracks.length;
+  // frontend/detailStrip/sidebarMediaPreview.ts
+  var makeMediaPreviewExpandable = (preview, src, name, playback) => {
+    preview.querySelector(".auto-input-remove-button")?.remove();
+    const media = preview.querySelector("img, video, audio");
+    if (!media) return;
+    const kind = playback?.kind ?? media.tagName.toLowerCase();
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.className = "basic-button vst-media-thumbnail";
+    button2.dataset.testid = "media-preview";
+    button2.dataset.mediaKind = kind;
+    button2.setAttribute("aria-label", `Preview ${name}`);
+    const hint = document.createElement("span");
+    hint.className = "vst-media-thumbnail-hint";
+    hint.textContent = kind === "audio" ? "▶ Audio" : kind === "video" ? "▶ Video" : "↗";
+    hint.setAttribute("aria-hidden", "true");
+    media.addEventListener("error", () => {
+      hint.textContent = "Preview unavailable";
+      button2.setAttribute("aria-label", `Preview unavailable: ${name}`);
+    });
+    if (media instanceof HTMLMediaElement) {
+      media.controls = false;
+      media.muted = true;
+      if (kind === "audio") media.hidden = true;
+    }
+    button2.append(media, hint);
+    preview.replaceChildren(button2);
+    button2.addEventListener("click", () => {
+      const modal = createManagedModal({
+        modalClass: "vst-media-preview-modal",
+        backdropClass: "vst-media-preview-backdrop",
+        labelledBy: "vst-media-preview-title",
+        onClose: () => {
+          releaseSidebarMediaPreviews(modal.body);
+          if (button2.isConnected) button2.focus();
+        },
+        onKeyDown: (event) => {
+          if (event.key !== "Tab") return;
+          const controls = Array.from(
+            modal.modal.querySelectorAll(
+              "button, video[controls], audio[controls]"
+            )
+          );
+          const first = controls[0];
+          const last = controls.at(-1);
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last?.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first?.focus();
+          }
         }
       });
-      if (!applied) {
-        return false;
+      const title = document.createElement("h5");
+      title.id = "vst-media-preview-title";
+      title.className = "modal-title";
+      title.textContent = name;
+      const close = document.createElement("button");
+      close.type = "button";
+      close.className = "basic-button";
+      close.textContent = "Close";
+      close.addEventListener("click", modal.close);
+      modal.header.append(title, close);
+      if (kind === "audio" || kind === "video") {
+        modal.body.append(
+          buildSidebarMediaPreview(
+            kind,
+            src,
+            playback?.range ?? { startSeconds: 0, lengthSeconds: 0 }
+          )
+        );
+      } else {
+        const image = document.createElement("img");
+        image.alt = name;
+        image.src = mediaPreviewSrc(src);
+        modal.body.append(image);
       }
-      saveState(state, { origin: "audio-span-track" });
-      return true;
-    }
-  });
-  var createTimelineAudioSpanTrack = (capabilities) => createWindowTrack({
-    routeId: "timeline-audio-span",
-    priority: 40,
-    scope: audioTrackScope(capabilities),
-    spanSelector: ".vst-audio-span[data-track-idx]",
-    ownerIdxAttr: "data-track-idx",
-    itemIdxAttr: null,
-    edgeSelector: "[data-vst-audio-span-edge]",
-    edgeAttr: "data-vst-audio-span-edge",
-    laneSelector: ".vst-audio-track-lane[data-vst-audio-track-add]:not([data-clip-idx])",
-    createButtonSelector: ".vst-head-tag-track[data-vst-audio-track-add]",
-    draggingClass: "vst-audio-span-dragging",
-    ghostClass: "vst-audio-span-ghost",
-    unit: "pct",
-    keyboardSelect: true,
-    // The span sits on the audio row; its clicks must not bubble
-    // into that row's select handler.
-    isolateClicks: true,
-    readSpan: ({ owner }) => pressSpanOf(owner.spans[0]),
-    canCreate: ({ duration }) => duration >= AUDIO_SPAN_MIN_LENGTH,
-    // Spans snap to the track immediately above before falling back
-    // to the clip boundaries underneath them.
-    snapTargets: (ownerIdx) => {
-      const state = getState();
-      const timing = timelineTiming(state, capabilities);
-      const above = pressSpanOf(
-        ownerIdx > 0 ? state.audioTracks?.[ownerIdx - 1]?.spans[0] : void 0
-      );
-      return {
-        primary: above ? [above.start, above.start + above.length] : [],
-        fallback: timelineClipEdges(state.clips, timing)
-      };
-    },
-    moveTargetStart: ({ duration }, _itemIdx, press, desiredStart) => Math.min(
-      Math.max(desiredStart, 0),
-      Math.max(0, duration - press.length)
-    ),
-    writeMove: ({ owner }, _itemIdx, _press, start) => {
-      const span = owner.spans[0];
-      if (span) {
-        span.timelineStartSeconds = roundToTenth(start);
+      modal.open(close);
+    });
+  };
+  var buildSidebarMediaPreview = (mediaKind, dataUri, range) => {
+    const section = document.createElement("div");
+    section.className = "vst-sidebar-media-preview-section";
+    const label = document.createElement("span");
+    label.className = "vst-sidebar-media-preview-label";
+    label.textContent = "Preview";
+    const player = mediaKind === "video" ? getVideoStagesHostBridge().createInitVideoElement() : document.createElement("audio");
+    player.className = `vst-sidebar-media-preview vst-sidebar-${mediaKind}-preview`;
+    player.controls = true;
+    player.preload = "metadata";
+    player.setAttribute("playsinline", "");
+    const mediaError = document.createElement("div");
+    mediaError.className = "vst-sidebar-media-preview-error";
+    mediaError.textContent = `Cannot preview this ${mediaKind}.`;
+    mediaError.hidden = true;
+    const bounds = () => range.lengthSeconds > 0 ? toInOut(range) : null;
+    const resetToIn = () => {
+      const selected = bounds();
+      if (selected && player.currentTime !== selected.inSeconds) {
+        player.currentTime = selected.inSeconds;
       }
-    },
-    // A left resize may run back to the start of the untrimmed source,
-    // so its wall sits `trim` seconds before the pressed start.
-    resizeTarget: ({ duration }, _itemIdx, edge, press, delta) => resizeSpanEdge(
-      edge,
-      press,
-      delta,
-      AUDIO_SPAN_MIN_LENGTH,
-      Math.max(0, press.start - press.trim),
-      duration
-    ),
-    writeResize: ({ owner }, _itemIdx, edge, press, geom) => {
-      const span = owner.spans[0];
-      if (!span) {
+    };
+    const keepSeekInRange = () => {
+      const selected = bounds();
+      if (selected && (player.currentTime < selected.inSeconds || player.currentTime >= selected.outSeconds)) {
+        resetToIn();
+      }
+    };
+    const stopAtOut = () => {
+      const selected = bounds();
+      if (!selected) {
         return;
       }
-      span.timelineStartSeconds = roundToTenth(geom.start);
-      span.timelineLengthSeconds = roundToTenth(geom.length);
-      if (edge === "left") {
-        span.sourceStartSeconds = roundToTenth(
-          press.trim + (geom.start - press.start)
-        );
+      if (player.currentTime >= selected.outSeconds) {
+        player.pause();
+        resetToIn();
+      } else if (player.currentTime < selected.inSeconds) {
+        resetToIn();
       }
-    },
-    createSpan: ({ owner, ownerIdx, duration }, startSec, endSec) => {
-      const geom = createDefaultOrDraggedSpan(
-        startSec,
-        endSec,
-        0,
-        duration,
-        AUDIO_SPAN_MIN_LENGTH,
-        AUDIO_SPAN_DEFAULT_LENGTH
-      );
-      if (!geom) {
-        return null;
-      }
-      owner.spans.push({
-        id: createEntityId("audio_span"),
-        timelineStartSeconds: roundToTenth(geom.start),
-        timelineLengthSeconds: roundToTenth(geom.length),
-        sourceStartSeconds: 0
-      });
-      return { kind: "audio-track", trackIdx: ownerIdx };
-    },
-    // A track exists only for its spans: deleting the last one
-    // deletes the track, and the selection moves to a sibling track.
-    deleteItem: ({ owner, ownerIdx, removeOwner }, itemIdx) => {
-      if (!owner.spans[itemIdx]) {
-        return null;
-      }
-      owner.spans.splice(itemIdx, 1);
-      if (owner.spans.length > 0) {
-        return { kind: "audio-track", trackIdx: ownerIdx };
-      }
-      return selectionAfterRemoval(
-        ownerIdx,
-        removeOwner?.() ?? 0,
-        (index) => ({ kind: "audio-track", trackIdx: index }),
-        { kind: "none" }
-      );
-    },
-    selectionFor: (trackIdx) => ({ kind: "audio-track", trackIdx })
-  });
+    };
+    player.addEventListener("loadedmetadata", resetToIn);
+    player.addEventListener("play", keepSeekInRange);
+    player.addEventListener(
+      mediaKind === "audio" ? "seeked" : "seeking",
+      keepSeekInRange
+    );
+    player.addEventListener("timeupdate", stopAtOut);
+    player.addEventListener("ended", stopAtOut);
+    player.addEventListener("error", () => {
+      player.hidden = true;
+      mediaError.hidden = false;
+    });
+    player.src = mediaPreviewSrc(dataUri);
+    section.append(label, player, mediaError);
+    return section;
+  };
+  var releaseSidebarMediaPreviews = (root) => {
+    for (const player of root.querySelectorAll(
+      ".vst-sidebar-media-preview"
+    )) {
+      player.pause();
+      player.removeAttribute("src");
+      player.load();
+    }
+  };
 
   // frontend/fileDataUri.ts
   var fileAsDataUri = (file) => new Promise((resolve) => {
@@ -9266,10 +7642,215 @@
     return files.length > 0 ? files : Array.from(transfer.files);
   };
 
+  // frontend/host/swarmUiAdapters.ts
+  var restoreHostMediaPreview = (input2, src, name) => {
+    if (typeof setMediaFileDirect !== "function") return;
+    setMediaFileDirect(input2, src, getMediaType(src), name);
+    const player = input2.closest(".auto-input")?.querySelector("video, audio");
+    if (player instanceof HTMLMediaElement) {
+      player.classList.add("vst-sidebar-media-preview");
+      player.autoplay = false;
+      player.controls = true;
+      player.preload = "metadata";
+    }
+  };
+  var findHostBottomTabLink = (tabId) => document.querySelector(`a[href="#${tabId}"]`);
+  var getHostBottomTabMount = () => {
+    const nav = document.getElementById("bottombartabcollection");
+    const content = document.getElementById("t2i_bottom_bar_content");
+    if (!nav || !content) {
+      return null;
+    }
+    return {
+      nav,
+      content,
+      toolsTabItem: nav.querySelector('a[href="#Tools-Tab"]')?.parentElement ?? null
+    };
+  };
+  var registerBottomTabWithHost = (navLink) => {
+    if (typeof genTabLayout === "undefined" || !genTabLayout) {
+      return;
+    }
+    const tab = new MovableGenTab(navLink, genTabLayout);
+    genTabLayout.managedTabs.push(tab);
+    if (genTabLayout.managedTabContainers.length === 0) {
+      return;
+    }
+    tab.contentElem.style.height = "100%";
+    tab.contentElem.style.width = "100%";
+    const parent = tab.contentElem.parentElement;
+    if (parent && !genTabLayout.managedTabContainers.includes(parent)) {
+      genTabLayout.managedTabContainers.push(parent);
+    }
+    tab.update();
+    tab.navElem.addEventListener("click", () => {
+      browserUtil.makeVisible(tab.contentElem);
+    });
+    genTabLayout.reapplyPositions();
+  };
+  var showHostPopover = (id, event) => {
+    if (typeof doPopover === "function") {
+      doPopover(id, event);
+    }
+  };
+  var showHostActionMenu = (anchor2, actions) => {
+    if (typeof AdvancedPopover !== "function") return;
+    const rect = anchor2.getBoundingClientRect();
+    new AdvancedPopover(
+      "videostages-actions",
+      actions,
+      false,
+      rect.left,
+      rect.bottom,
+      document.body,
+      null,
+      rect.height
+    );
+  };
+  var installHostFeature = (featureId, buttonContainerId) => {
+    if (typeof installFeatureById !== "function") {
+      return false;
+    }
+    installFeatureById(featureId, buttonContainerId);
+    return true;
+  };
+  var renderHostSlider = (spec) => makeSliderInput(
+    null,
+    spec.id,
+    "",
+    spec.label,
+    "",
+    spec.value,
+    spec.min,
+    spec.max,
+    spec.viewMin ?? spec.min,
+    spec.viewMax ?? spec.max,
+    spec.step,
+    spec.isPot ?? false,
+    false,
+    false
+  );
+  var enhanceHostPromptEditor = (editor) => {
+    if (typeof textPromptAddKeydownHandler === "function") {
+      textPromptAddKeydownHandler(editor);
+    }
+  };
+  var generationInputProjector = null;
+  var installedGenerationWrapper = null;
+  var installedInputCollector = null;
+  var generationProjectorRetry = null;
+  var projectGenerationInput = (actualInput, beforeProjection) => {
+    try {
+      beforeProjection?.();
+      if (isRecord(actualInput)) {
+        generationInputProjector?.(actualInput);
+      }
+    } catch (error) {
+      if (typeof showError === "function") {
+        showError(`${error}`);
+      }
+      throw error;
+    }
+  };
+  var installHostInputCollectorProjector = () => {
+    const host = globalThis;
+    if (typeof host.getGenInput !== "function" || host.getGenInput === installedInputCollector) {
+      return;
+    }
+    const original = host.getGenInput;
+    const wrapper = function(...args) {
+      const actualInput = original.apply(this, args);
+      projectGenerationInput(actualInput);
+      return actualInput;
+    };
+    host.getGenInput = wrapper;
+    installedInputCollector = wrapper;
+  };
+  var retryGenerationProjector = () => {
+    if (generationProjectorRetry !== null) {
+      return;
+    }
+    generationProjectorRetry = setTimeout(() => {
+      generationProjectorRetry = null;
+      if (generationInputProjector) {
+        installHostGenerationInputProjector(generationInputProjector);
+      }
+    }, 250);
+  };
+  var installHostGenerationInputProjector = (projector) => {
+    generationInputProjector = projector;
+    installHostInputCollectorProjector();
+    if (typeof mainGenHandler === "undefined" || typeof mainGenHandler?.doGenerate !== "function") {
+      retryGenerationProjector();
+      return false;
+    }
+    if (generationProjectorRetry !== null) {
+      clearTimeout(generationProjectorRetry);
+      generationProjectorRetry = null;
+    }
+    if (mainGenHandler.doGenerate === installedGenerationWrapper) {
+      return true;
+    }
+    const original = mainGenHandler.doGenerate;
+    const wrapper = function(...args) {
+      const existingPostCollect = args[2];
+      args[2] = (actualInput) => projectGenerationInput(
+        actualInput,
+        typeof existingPostCollect === "function" ? () => existingPostCollect(actualInput) : void 0
+      );
+      original.apply(this, args);
+    };
+    mainGenHandler.doGenerate = wrapper;
+    installedGenerationWrapper = wrapper;
+    return true;
+  };
+  var hasHostInputBrowser = () => typeof inputBrowserHelper !== "undefined" && Boolean(inputBrowserHelper);
+  var isHostReusableMediaPath = (value) => typeof isValidMediaPath === "function" && isValidMediaPath(value);
+  var openHostInputBrowser = (inputId, browserTypes) => {
+    if (typeof inputBrowserHelper !== "undefined" && inputBrowserHelper) {
+      inputBrowserHelper.openInputBrowser(inputId, browserTypes);
+    }
+  };
+  var refreshHostParameters = () => {
+    if (typeof refreshParameterValues === "function") {
+      refreshParameterValues(true);
+    }
+  };
+  var canRequestHostWs = () => typeof makeWSRequest === "function";
+  var requestHostWs = (route, payload, onMessage, onError) => {
+    if (typeof makeWSRequest !== "function") {
+      return;
+    }
+    makeWSRequest(route, payload, onMessage, 0, onError);
+  };
+
+  // frontend/toggleSwitch.ts
+  var toggleSequence = 0;
+  function buildToggleSwitch(options) {
+    const wrap = document.createElement("span");
+    wrap.className = "form-check form-switch toggle-switch display-inline-block group-toggler-switch";
+    const input2 = document.createElement("input");
+    input2.type = "checkbox";
+    input2.id = `vst_toggle_${++toggleSequence}`;
+    input2.className = "auto-slider-toggle form-check-input";
+    input2.checked = options.checked;
+    input2.disabled = options.disabled === true;
+    input2.title = options.title;
+    input2.setAttribute("aria-label", options.title);
+    input2.addEventListener("click", (event) => event.stopPropagation());
+    input2.addEventListener("change", (event) => {
+      event.stopPropagation();
+      options.onChange(input2.checked);
+    });
+    const track = document.createElement("div");
+    track.className = "auto-slider-toggle-content";
+    wrap.append(input2, track);
+    return wrap;
+  }
+
   // frontend/detailWidgets.ts
   var sliderSeq = 0;
   var helpSeq = 0;
-  var checkboxSeq = 0;
   var fieldSeq = 0;
   var slugify = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "field";
   var appendHelp = (labelEl, row, fieldName, helpText) => {
@@ -9324,6 +7905,9 @@
     input2.addEventListener("change", () => apply(true));
   };
   var boxClassFor = (control) => {
+    if (control.classList.contains("auto-checkbox")) {
+      return "auto-checkbox-box";
+    }
     if (control.classList.contains("auto-dropdown")) {
       return "auto-dropdown-box";
     }
@@ -9345,7 +7929,8 @@
   };
   var buildField = (label, control, hint, help) => {
     const row = document.createElement("div");
-    row.className = "auto-input vst-detail-field";
+    row.className = "auto-input vst-detail-field vst-form-field";
+    row.dataset.fieldKind = control instanceof HTMLInputElement ? control.type : control.tagName.toLowerCase();
     row.classList.add(
       control.classList.contains("auto-text-block") ? "auto-input-flex-wide" : "auto-input-flex"
     );
@@ -9354,9 +7939,6 @@
       row.classList.add(boxClass);
     }
     const labelEl = buildFieldLabel(label);
-    if (help) {
-      appendHelp(labelEl, row, label, help);
-    }
     if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement) {
       if (!control.id) {
         control.id = `vst_field_${slugify(label)}_${++fieldSeq}`;
@@ -9364,6 +7946,9 @@
       labelEl.htmlFor = control.id;
     }
     row.append(labelEl, control);
+    if (help) {
+      appendHelp(labelEl, row, label, help);
+    }
     if (hint) {
       const small = document.createElement("small");
       small.className = "auto-input-description vst-detail-field-hint";
@@ -9371,6 +7956,13 @@
       row.appendChild(small);
     }
     return row;
+  };
+  var setFieldDisabled = (field, disabled, reason = "") => {
+    field.querySelectorAll("input, select, textarea, button").forEach((control) => {
+      control.disabled = disabled;
+    });
+    field.classList.toggle("vst-field-disabled", disabled);
+    field.title = disabled ? reason : "";
   };
   var buildOptionSelect = (specs, selected, onChange) => {
     const select2 = document.createElement("select");
@@ -9409,7 +8001,8 @@
   };
   var buildSlider = (label, value, min, max, step, onChange, opts) => {
     const holder = document.createElement("div");
-    holder.className = "vst-stage-slider auto-input-flex-wide";
+    holder.className = "vst-stage-slider auto-input-flex-wide vst-detail-field vst-form-field";
+    holder.dataset.fieldKind = "slider";
     const id = `vst_stage_slider_${++sliderSeq}`;
     holder.innerHTML = renderHostSlider({
       id,
@@ -9422,10 +8015,26 @@
       step,
       isPot: opts?.isPot
     });
+    holder.querySelector(".auto-input-name")?.classList.add("vst-detail-field-label");
     const number = holder.querySelector(
       "input.auto-slider-number"
     );
     if (number) {
+      const labelEl = holder.querySelector("label");
+      if (labelEl) {
+        labelEl.htmlFor = number.id;
+        labelEl.addEventListener("click", (event) => {
+          if (event.target.closest(
+            "input, .info-popover-button"
+          ))
+            return;
+          event.preventDefault();
+          if (!number.disabled) {
+            number.focus();
+            number.select();
+          }
+        });
+      }
       number.step = `${opts?.numberStep ?? step}`;
       if (opts?.allowNumberOutOfRange) {
         wireUnboundedNumericInput(number, value, onChange);
@@ -9451,42 +8060,47 @@
     return holder;
   };
   var buildCheckbox = (label, checked, onChange, opts) => {
-    const row = document.createElement("div");
-    row.className = "auto-input auto-checkbox-box auto-input-flex vst-detail-field vst-detail-field-check";
-    row.dataset.disabled = `${opts?.disabled === true}`;
     const input2 = document.createElement("input");
     input2.type = "checkbox";
     input2.className = "auto-checkbox";
-    input2.id = `vst_checkbox_${slugify(label)}_${++checkboxSeq}`;
     input2.dataset.name = label;
     input2.checked = checked;
     input2.addEventListener("change", () => onChange(input2.checked));
-    const labelEl = buildFieldLabel(label);
-    row.append(labelEl, input2);
-    if (opts?.help) {
-      appendHelp(labelEl, row, label, opts.help);
-    }
+    const row = buildField(label, input2, void 0, opts?.help);
+    row.classList.add("vst-detail-field-check");
+    row.dataset.disabled = `${opts?.disabled === true}`;
     if (opts?.disabled) {
       row.classList.add("vst-audio-disabled");
       input2.disabled = true;
     }
     return row;
   };
-  var buildTextarea = (value, placeholder, focusKey, onInput) => {
+  var buildTextarea = (value, placeholder, focusKey, onInput, layout) => {
     const editor = document.createElement("textarea");
     editor.className = "auto-text auto-text-block vst-prompt-editor vst-detail-prompt";
     editor.value = value;
     editor.placeholder = placeholder;
     editor.setAttribute("data-vst-focus-key", focusKey);
+    if (layout) {
+      editor.rows = layout.rows;
+      if (layout.maxRows !== void 0) {
+        editor.classList.add("vst-textarea-limited");
+        editor.style.setProperty(
+          "--vst-textarea-max-lines",
+          `${layout.maxRows}lh`
+        );
+      }
+    }
     editor.addEventListener("input", () => onInput(editor.value));
     enhanceHostPromptEditor(editor);
     return editor;
   };
   var mediaPickCounter = 0;
-  var buildMediaPickRow = (label, accept, browserTypes, name, onFile, onClear) => {
+  var buildMediaPickRow = (label, accept, browserTypes, name, onFile, onClear, previewData, playback) => {
     const row = document.createElement("div");
-    row.className = "auto-input auto-file-box vst-detail-field vst-audio-upload";
-    const controls = document.createElement("label");
+    row.className = "auto-input auto-file-box vst-detail-field vst-form-field vst-audio-upload";
+    row.dataset.fieldKind = "file";
+    const controls = document.createElement("div");
     controls.className = "auto-file-input-label";
     const pickLabel = document.createElement("span");
     pickLabel.className = "auto-input-name vst-detail-field-label";
@@ -9501,7 +8115,10 @@
     uploadBtn.className = "basic-button auto-file-input-button vst-media-pick-upload";
     uploadBtn.textContent = "Upload";
     uploadBtn.addEventListener("click", () => fileInput.click());
-    controls.append(pickLabel, uploadBtn);
+    const actions = document.createElement("span");
+    actions.className = "vst-media-pick-actions";
+    actions.appendChild(uploadBtn);
+    controls.append(pickLabel, actions);
     const fileDrop = document.createElement("label");
     fileDrop.className = "auto-file-label";
     fileDrop.htmlFor = fileInput.id;
@@ -9526,14 +8143,20 @@
         }
       });
     };
-    fileInput.addEventListener("change", () => {
+    const previewSrc = previewData ? mediaPreviewSrc(previewData) : "";
+    fileInput.addEventListener("change", (event) => {
       const file = fileInput.files?.[0];
       if (file) {
         acceptFile(file);
         return;
       }
       const picked = fileInput.dataset.filedata ?? "";
+      if (previewSrc && picked === previewSrc) {
+        event.stopPropagation();
+        return;
+      }
       if (!picked) {
+        if (previewSrc) onClear();
         return;
       }
       const pickedName = fileInput.dataset.filename ?? "server file";
@@ -9576,10 +8199,37 @@
         "click",
         () => openHostInputBrowser(fileInput.id, browserTypes)
       );
-      controls.appendChild(selectBtn);
+      actions.appendChild(selectBtn);
     }
-    controls.appendChild(clearBtn);
-    row.append(controls, fileDrop, preview);
+    actions.appendChild(clearBtn);
+    const details = document.createElement("div");
+    details.className = "vst-media-pick-details";
+    details.append(controls, fileDrop);
+    row.append(preview, details);
+    if (previewSrc) {
+      if (playback) {
+        fileInput.dataset.filedata = previewSrc;
+        preview.append(
+          buildSidebarMediaPreview(
+            playback.kind,
+            previewData ?? previewSrc,
+            playback.range
+          )
+        );
+      } else {
+        restoreHostMediaPreview(fileInput, previewSrc, name || "media");
+      }
+      makeMediaPreviewExpandable(
+        preview,
+        previewData ?? previewSrc,
+        name || "media",
+        playback
+      );
+    }
+    row.classList.toggle(
+      "vst-media-pick-has-preview",
+      Boolean(preview.firstChild)
+    );
     return row;
   };
   var setAccordionOpen = (section, open) => {
@@ -9696,38 +8346,20 @@
   var resetRememberedAccordionSections = () => {
     rememberedAccordionSections.clear();
     seenAccordionSections.clear();
-    rememberedRepeaterItems.clear();
-    rememberedRepeaterOpenItems.clear();
-    forceOpenRepeaterKeys.clear();
-    persistedRepeaterState = null;
-  };
-  var buildStaticSection = (spec) => {
-    const section = document.createElement("div");
-    section.className = `input-group input-group-open vst-detail-section vst-detail-static-section ${spec.className ?? ""}`.trim();
-    section.dataset.vstStaticKey = spec.key;
-    const { header, heading, actions } = buildSectionHeader({
-      label: spec.label,
-      className: "input-group-header input-group-noshrink vst-detail-section-header"
-    });
-    appendSectionHeaderActions(actions, spec);
-    const content = document.createElement("div");
-    content.className = "input-group-content vst-detail-section-content";
-    appendSectionContent(content, spec.content, spec.flattenContent === true);
-    section.append(header, content);
-    return { section, heading, content };
   };
   var buildAccordionSection = (spec) => {
     const firstBuild = !seenAccordionSections.has(spec.key);
-    const enabled = spec.toggle?.checked ?? true;
-    const open = enabled && (spec.open === true || firstBuild && spec.defaultOpen === true || rememberedAccordionSections.has(spec.key));
-    if (enabled) {
-      seenAccordionSections.add(spec.key);
-    }
+    const open = spec.open === true || firstBuild && spec.defaultOpen === true || rememberedAccordionSections.has(spec.key);
+    seenAccordionSections.add(spec.key);
     if (open) {
       rememberedAccordionSections.add(spec.key);
     }
     const section = document.createElement("div");
     section.className = `input-group vst-detail-section ${open ? "input-group-open" : "input-group-closed"} ${spec.className ?? ""}`.trim();
+    section.classList.toggle(
+      "vst-detail-section-has-toggle",
+      spec.toggle !== void 0
+    );
     section.dataset.vstAccordionKey = spec.key;
     const { header, heading, actions } = buildSectionHeader({
       label: spec.label,
@@ -9740,35 +8372,17 @@
     header.setAttribute("aria-expanded", `${open}`);
     appendSectionHeaderActions(actions, spec);
     if (spec.toggle) {
-      const switchWrap = document.createElement("span");
-      switchWrap.className = "form-check form-switch toggle-switch display-inline-block group-toggler-switch";
-      const toggle2 = document.createElement("input");
-      toggle2.type = "checkbox";
-      toggle2.className = "auto-slider-toggle form-check-input";
-      toggle2.checked = spec.toggle.checked;
-      toggle2.disabled = spec.toggle.disabled === true;
-      toggle2.title = spec.toggle.title;
-      toggle2.setAttribute("aria-label", spec.toggle.title);
-      toggle2.addEventListener("click", (event) => event.stopPropagation());
-      toggle2.addEventListener("change", (event) => {
-        event.stopPropagation();
-        spec.toggle?.onChange(toggle2.checked);
-      });
-      const switchContent = document.createElement("div");
-      switchContent.className = "auto-slider-toggle-content";
-      switchWrap.append(toggle2, switchContent);
-      actions.appendChild(switchWrap);
+      heading.after(buildToggleSwitch(spec.toggle));
     }
-    const content = document.createElement("div");
+    const content = document.createElement("fieldset");
     content.className = "input-group-content vst-detail-section-content";
+    content.disabled = spec.toggle?.checked === false;
+    content.classList.toggle("vst-field-disabled", content.disabled);
     content.hidden = !open;
     appendSectionContent(content, spec.content, spec.flattenContent === true);
     const toggle = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (spec.toggle?.checked === false) {
-        return;
-      }
       const opening = content.hidden === true;
       setAccordionOpen(section, opening);
       if (opening) {
@@ -9779,401 +8393,17 @@
     };
     header.addEventListener("click", toggle);
     header.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
+      if (event.target === header && (event.key === "Enter" || event.key === " ")) {
         toggle(event);
       }
     });
     section.append(header, content);
     return { section, heading, content };
   };
-  var rememberedRepeaterItems = /* @__PURE__ */ new Map();
-  var rememberedRepeaterOpenItems = /* @__PURE__ */ new Map();
-  var forceOpenRepeaterKeys = /* @__PURE__ */ new Set();
-  var REPEATER_OPEN_STORAGE_KEY = "videostages.detail.openRepeaterItems";
-  var persistedRepeaterState = null;
-  var storedRepeaterState = () => {
-    if (persistedRepeaterState) {
-      return persistedRepeaterState;
-    }
-    try {
-      const parsed = JSON.parse(
-        localStorage.getItem(REPEATER_OPEN_STORAGE_KEY) ?? "[]"
-      );
-      const strings = (value) => Array.isArray(value) ? value.filter(
-        (entry) => typeof entry === "string"
-      ) : [];
-      const open = strings(
-        Array.isArray(parsed) ? parsed : typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "open") : []
-      );
-      const known = Array.isArray(parsed) ? open : strings(
-        typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "known") : []
-      );
-      persistedRepeaterState = {
-        open: new Set(open),
-        known: new Set(known)
-      };
-    } catch {
-      persistedRepeaterState = { open: /* @__PURE__ */ new Set(), known: /* @__PURE__ */ new Set() };
-    }
-    return persistedRepeaterState;
-  };
-  var writeRepeaterState = (stored) => {
-    try {
-      localStorage.setItem(
-        REPEATER_OPEN_STORAGE_KEY,
-        JSON.stringify({
-          open: [...stored.open].sort(),
-          known: [...stored.known].sort()
-        })
-      );
-    } catch {
-    }
-  };
-  var persistRepeaterOpenItems = (items, openItems) => {
-    const stored = storedRepeaterState();
-    let changed = false;
-    items.forEach((item, index) => {
-      if (!item.stateKey) {
-        return;
-      }
-      if (!stored.known.has(item.stateKey)) {
-        stored.known.add(item.stateKey);
-        changed = true;
-      }
-      const open = openItems.has(index);
-      if (open !== stored.open.has(item.stateKey)) {
-        changed = true;
-        if (open) {
-          stored.open.add(item.stateKey);
-        } else {
-          stored.open.delete(item.stateKey);
-        }
-      }
-    });
-    if (!changed) {
-      return;
-    }
-    writeRepeaterState(stored);
-  };
-  var forgetRepeaterItem = (item) => {
-    if (!item.stateKey) {
-      return;
-    }
-    const stored = storedRepeaterState();
-    const removedOpen = stored.open.delete(item.stateKey);
-    const removedKnown = stored.known.delete(item.stateKey);
-    if (!removedOpen && !removedKnown) {
-      return;
-    }
-    writeRepeaterState(stored);
-  };
-  var runRepeaterStructuralAction = (source, action) => {
-    const previousBody = source.closest(".vst-detail-body");
-    const detail = previousBody?.closest(".vst-detail");
-    const scrollTop = previousBody?.scrollTop;
-    const repeaterKey = source.closest("[data-vst-repeater-key]")?.dataset.vstRepeaterKey;
-    const anchorTop = source.classList.contains("vst-detail-repeating-add") ? source.getBoundingClientRect().top : null;
-    action();
-    if (scrollTop === void 0) {
-      return;
-    }
-    const currentBody = () => detail?.querySelector(".vst-detail-body") ?? (previousBody?.isConnected ? previousBody : null);
-    const restore = () => {
-      const body = currentBody();
-      if (!body) {
-        return;
-      }
-      if (anchorTop !== null && repeaterKey) {
-        const section = Array.from(
-          body.querySelectorAll("[data-vst-repeater-key]")
-        ).find(
-          (candidate) => candidate.dataset.vstRepeaterKey === repeaterKey
-        );
-        const nextAdd = section?.querySelector(
-          ":scope > .input-group-content > .vst-detail-repeating-add"
-        );
-        if (nextAdd) {
-          const nextTop = nextAdd.getBoundingClientRect().top;
-          body.scrollTop = anchorTop === 0 && nextTop === 0 ? scrollTop : body.scrollTop + nextTop - anchorTop;
-          return;
-        }
-      }
-      body.scrollTop = scrollTop;
-    };
-    if (anchorTop !== null && typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(restore);
-      return;
-    }
-    restore();
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => {
-        const body = currentBody();
-        if (body) {
-          body.scrollTop = scrollTop;
-        }
-      });
-    }
-  };
-  var buildRepeatingEditor = (spec) => {
-    const explicitActiveIndex = spec.items.findIndex(
-      (item) => item.active === true
-    );
-    const isValidIndex = (index) => index !== null && index !== void 0 && index >= 0 && index < spec.items.length;
-    const rememberedIndex = rememberedRepeaterItems.get(spec.key);
-    const validRememberedIndex = isValidIndex(rememberedIndex) ? rememberedIndex : null;
-    const selectionChanged = rememberedIndex !== void 0 && explicitActiveIndex >= 0 && explicitActiveIndex !== validRememberedIndex;
-    if (rememberedIndex !== void 0 && validRememberedIndex === null) {
-      rememberedRepeaterItems.delete(spec.key);
-      forceOpenRepeaterKeys.delete(spec.key);
-    }
-    const forceOpen = forceOpenRepeaterKeys.has(spec.key) && validRememberedIndex !== null;
-    const defaultActiveIndex = isValidIndex(spec.defaultActiveIndex) ? spec.defaultActiveIndex : null;
-    const activeIndex = forceOpen ? validRememberedIndex : explicitActiveIndex >= 0 ? explicitActiveIndex : validRememberedIndex ?? defaultActiveIndex;
-    if (explicitActiveIndex >= 0 && !forceOpen) {
-      rememberedRepeaterItems.set(spec.key, explicitActiveIndex);
-    } else if (activeIndex !== null) {
-      rememberedRepeaterItems.set(spec.key, activeIndex);
-    }
-    if (forceOpen) {
-      forceOpenRepeaterKeys.delete(spec.key);
-    }
-    const autoCollapse = getTimelineAuthoringSettings().autoCollapse;
-    const rememberedOpenItems = rememberedRepeaterOpenItems.get(spec.key);
-    const storedState = storedRepeaterState();
-    const hasStoredItemState = spec.items.some(
-      (item) => item.stateKey && storedState.known.has(item.stateKey)
-    );
-    const newlyPopulated = spec.items.length > 0 && rememberedOpenItems !== void 0 && rememberedIndex === void 0;
-    const openItems = new Set(
-      rememberedOpenItems ?? spec.items.flatMap(
-        (item, index) => item.stateKey && storedState.open.has(item.stateKey) ? [index] : []
-      )
-    );
-    for (const index of openItems) {
-      if (index < 0 || index >= spec.items.length) {
-        openItems.delete(index);
-      }
-    }
-    if (activeIndex !== null && (forceOpen || selectionChanged || newlyPopulated || rememberedOpenItems === void 0 && !hasStoredItemState)) {
-      if (autoCollapse) {
-        openItems.clear();
-      }
-      openItems.add(activeIndex);
-    }
-    rememberedRepeaterOpenItems.set(spec.key, openItems);
-    persistRepeaterOpenItems(spec.items, openItems);
-    const children = document.createDocumentFragment();
-    spec.items.forEach((item, index) => {
-      const active = index === activeIndex;
-      const open = openItems.has(index);
-      const group = document.createElement("div");
-      group.className = `input-group vst-detail-repeating-group ${open ? "input-group-open" : "input-group-closed"} ${item.groupClassName ?? ""}`.trim();
-      const { header, actions } = buildSectionHeader({
-        label: item.label,
-        className: `input-group-header input-group-shrinkable vst-detail-repeating-group-header ${item.className ?? ""}`.trim(),
-        open
-      });
-      header.tabIndex = 0;
-      header.setAttribute("role", "button");
-      header.setAttribute("aria-expanded", `${open}`);
-      header.setAttribute("aria-pressed", `${active}`);
-      if (item.focusKey) {
-        header.dataset.vstFocusKey = item.focusKey;
-      }
-      if (item.title) {
-        header.title = item.title;
-      }
-      if (item.headerAction) {
-        appendSectionHeaderAction(actions, item.headerAction);
-      }
-      const onDelete = item.onDelete;
-      if (onDelete) {
-        const remove = buildDetailActionButton({
-          label: "×",
-          title: item.deleteTitle ?? (active ? spec.remove.title : `Delete ${item.label}`),
-          className: `vst-btn-tiny vst-detail-delete vst-detail-repeating-group-delete ${spec.remove.className}`.trim(),
-          variant: "interrupt",
-          disabled: item.deleteDisabled,
-          stopPropagation: true,
-          onClick: (button2) => {
-            forgetRepeaterItem(item);
-            runRepeaterStructuralAction(button2, onDelete);
-          }
-        });
-        actions.appendChild(remove);
-      }
-      const content = document.createElement("div");
-      content.className = "input-group-content vst-detail-repeating-group-content";
-      let editor = open ? item.editor ?? spec.editorForItem?.(index) ?? (active ? spec.editor : void 0) : void 0;
-      if (editor) {
-        appendSectionContent(content, editor, true);
-      }
-      content.hidden = !open;
-      content.classList.toggle(
-        "vst-detail-repeating-editor-active",
-        open && editor !== void 0
-      );
-      const activateOrToggle = (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!active && item.onSelect) {
-          if (getTimelineAuthoringSettings().autoCollapse) {
-            rememberedRepeaterOpenItems.set(spec.key, /* @__PURE__ */ new Set([index]));
-          } else {
-            const remembered = rememberedRepeaterOpenItems.get(spec.key) ?? /* @__PURE__ */ new Set();
-            for (const sibling of Array.from(
-              group.parentElement?.children ?? []
-            )) {
-              if (sibling instanceof HTMLElement && sibling.classList.contains(
-                "vst-detail-repeating-group"
-              ) && sibling.classList.contains("input-group-open")) {
-                const siblingIndex = Number(
-                  sibling.dataset.vstRepeaterItem
-                );
-                if (Number.isInteger(siblingIndex)) {
-                  remembered.add(siblingIndex);
-                }
-              }
-            }
-            remembered.add(index);
-            rememberedRepeaterOpenItems.set(spec.key, remembered);
-          }
-          persistRepeaterOpenItems(
-            spec.items,
-            rememberedRepeaterOpenItems.get(spec.key) ?? /* @__PURE__ */ new Set()
-          );
-          rememberedRepeaterItems.set(spec.key, index);
-          item.onSelect();
-          return;
-        }
-        const opening = content.hidden === true;
-        const collapseItems = getTimelineAuthoringSettings().autoCollapse;
-        if (opening && collapseItems) {
-          for (const sibling of Array.from(
-            group.parentElement?.children ?? []
-          )) {
-            if (sibling instanceof HTMLElement && sibling !== group && sibling.classList.contains("vst-detail-repeating-group")) {
-              setAccordionOpen(sibling, false);
-            }
-          }
-        }
-        if (opening && !editor) {
-          editor = item.editor ?? spec.editorForItem?.(index) ?? (active ? spec.editor : void 0);
-          if (editor) {
-            appendSectionContent(content, editor, true);
-            getVideoStagesHostBridge().enableSliders(content);
-          }
-        }
-        setAccordionOpen(group, opening);
-        if (opening) {
-          rememberedRepeaterItems.set(spec.key, index);
-          if (collapseItems) {
-            rememberedRepeaterOpenItems.set(spec.key, /* @__PURE__ */ new Set([index]));
-          } else {
-            const remembered = rememberedRepeaterOpenItems.get(spec.key) ?? /* @__PURE__ */ new Set();
-            remembered.add(index);
-            rememberedRepeaterOpenItems.set(spec.key, remembered);
-          }
-        } else {
-          rememberedRepeaterOpenItems.get(spec.key)?.delete(index);
-        }
-        persistRepeaterOpenItems(
-          spec.items,
-          rememberedRepeaterOpenItems.get(spec.key) ?? /* @__PURE__ */ new Set()
-        );
-      };
-      header.addEventListener("click", activateOrToggle);
-      header.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          activateOrToggle(event);
-        }
-      });
-      group.append(header, content);
-      children.appendChild(group);
-      group.dataset.vstRepeaterItem = `${index}`;
-    });
-    const add = buildDetailActionButton({
-      label: spec.add.label ?? "+ Add",
-      title: spec.add.title,
-      className: `small-button vst-detail-repeating-add ${spec.add.className}`.trim(),
-      disabled: spec.add.disabled,
-      onClick: (button2) => {
-        const nextIndex = spec.items.length;
-        if (getTimelineAuthoringSettings().autoCollapse) {
-          rememberedRepeaterOpenItems.set(spec.key, /* @__PURE__ */ new Set([nextIndex]));
-        } else {
-          const remembered = rememberedRepeaterOpenItems.get(spec.key) ?? /* @__PURE__ */ new Set();
-          for (const sibling of Array.from(
-            button2.parentElement?.children ?? []
-          )) {
-            if (sibling instanceof HTMLElement && sibling.classList.contains(
-              "vst-detail-repeating-group"
-            ) && sibling.classList.contains("input-group-open")) {
-              const siblingIndex = Number(
-                sibling.dataset.vstRepeaterItem
-              );
-              if (Number.isInteger(siblingIndex)) {
-                remembered.add(siblingIndex);
-              }
-            }
-          }
-          remembered.add(nextIndex);
-          rememberedRepeaterOpenItems.set(spec.key, remembered);
-        }
-        rememberedRepeaterItems.set(spec.key, spec.items.length);
-        forceOpenRepeaterKeys.add(spec.key);
-        runRepeaterStructuralAction(button2, spec.add.onClick);
-      }
-    });
-    children.appendChild(add);
-    const built = buildAccordionSection({
-      key: spec.key,
-      label: spec.label,
-      content: children,
-      counter: spec.items.length,
-      // Keep empty repeaters open so Add remains reachable.
-      open: forceOpen || spec.items.length === 0 || spec.open,
-      defaultOpen: spec.items.length > 0,
-      className: `vst-detail-repeating-editor ${spec.sectionClass ?? ""}`.trim()
-    });
-    built.section.dataset.vstRepeaterKey = spec.key;
-    return {
-      section: built.section,
-      heading: built.heading,
-      content: built.content,
-      editor: spec.editor ?? null
-    };
-  };
-  var wrapForm = (key, label, content) => {
-    const body = document.createElement("div");
-    body.className = "vst-detail-body";
-    body.appendChild(
-      buildAccordionSection({
-        key,
-        label,
-        content,
-        open: true,
-        flattenContent: true
-      }).section
-    );
-    return body;
-  };
   var tagFocus = (field, key) => {
     const control = field.querySelector("input.auto-slider-number") ?? field.querySelector("input, select") ?? (field.matches("input, select") ? field : null);
     control?.setAttribute("data-vst-focus-key", key);
     return field;
-  };
-  var buildStackSection = (key, label, colClass, open = false) => {
-    const col = document.createElement("div");
-    col.className = `vst-detail-col ${colClass}`;
-    const built = buildAccordionSection({
-      key,
-      label,
-      content: col,
-      open,
-      flattenContent: true
-    });
-    return { wrap: built.section, col: built.content };
   };
 
   // frontend/detailStrip/draftQueue.ts
@@ -10559,3894 +8789,6 @@
     };
   };
 
-  // frontend/clipMediaProbeGuard.ts
-  var INIT_VIDEO_PROBE_SLOT = "init-video";
-  var nextOperationId = 0;
-  var currentOperations = /* @__PURE__ */ new Map();
-  var findClipByStableId = (clips, clipId) => clips.find((clip) => clip.id === clipId);
-  var beginClipMediaProbe = (clipId, slot, revisionAtStart) => {
-    const operationId = ++nextOperationId;
-    const key = `${clipId}
-${slot}`;
-    currentOperations.set(key, operationId);
-    const release = () => {
-      if (currentOperations.get(key) === operationId) {
-        currentOperations.delete(key);
-      }
-    };
-    return {
-      clipId,
-      claim: (currentRevision2) => {
-        const current = currentRevision2 === revisionAtStart && currentOperations.get(key) === operationId;
-        release();
-        return current;
-      },
-      cancel: release
-    };
-  };
-  var runClipMediaProbe = ({
-    clipId,
-    slot,
-    probe,
-    apply,
-    onApplied
-  }) => {
-    const store2 = getTimelineStore();
-    const operation = beginClipMediaProbe(
-      clipId,
-      slot,
-      store2.getSnapshot().revision
-    );
-    void probe().then((result) => {
-      if (!operation.claim(store2.revision())) {
-        return;
-      }
-      const state = store2.getState();
-      const clip = findClipByStableId(state.clips, operation.clipId);
-      if (!clip) {
-        return;
-      }
-      apply(clip, result, state);
-      saveClips(state.clips, { origin: "detail-strip" });
-      onApplied?.();
-    }, operation.cancel);
-  };
-
-  // frontend/documentQueries.ts
-  var documentFps = (document2) => safeFps(document2.fps);
-  var clipTimelineWindow = (clips, clipIdx) => {
-    if (clipIdx < 0 || clipIdx >= clips.length) {
-      return null;
-    }
-    const startSeconds = clips.slice(0, clipIdx).reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
-    return {
-      startSeconds,
-      endSeconds: startSeconds + Math.max(0, clips[clipIdx].duration || 0)
-    };
-  };
-  var audioTrackIndicesForClipWindow = (state, clipIdx) => {
-    const clipWindow = clipTimelineWindow(state.clips, clipIdx);
-    if (!clipWindow || clipWindow.endSeconds <= clipWindow.startSeconds) {
-      return [];
-    }
-    return (state.audioTracks ?? []).flatMap((track, trackIdx) => {
-      const intersects = track.spans.some((span) => {
-        const start = span.timelineStartSeconds;
-        const length = span.timelineLengthSeconds;
-        if (typeof start !== "number" || !Number.isFinite(start) || typeof length !== "number" || !Number.isFinite(length) || length <= 0) {
-          return false;
-        }
-        const end = start + length;
-        return start < clipWindow.endSeconds && end > clipWindow.startSeconds;
-      });
-      return intersects ? [trackIdx] : [];
-    });
-  };
-
-  // frontend/trimGeometry.ts
-  var clampStartLength = (start, length, duration, minLength) => {
-    const clampedStart = clamp(start, 0, Math.max(0, duration - minLength));
-    const clampedLength = clamp(
-      length,
-      minLength,
-      Math.max(minLength, duration - clampedStart)
-    );
-    return { start: clampedStart, length: clampedLength };
-  };
-  var sourceLimitSeconds = (source) => source.durationSeconds > 0 ? source.durationSeconds : source.startSeconds + source.lengthSeconds;
-  var toInOut = ({
-    startSeconds,
-    lengthSeconds
-  }) => ({
-    inSeconds: startSeconds,
-    outSeconds: roundToTenth(startSeconds + lengthSeconds)
-  });
-  var fromInOut = ({ inSeconds, outSeconds }, { limitSeconds, minLengthSeconds, fps }) => {
-    const start = roundToTenth(inSeconds);
-    const length = snapDurationToFps(roundToTenth(outSeconds) - start, fps);
-    const clamped = clampStartLength(
-      start,
-      length,
-      limitSeconds,
-      minLengthSeconds
-    );
-    return { startSeconds: clamped.start, lengthSeconds: clamped.length };
-  };
-  var setInPoint = (current, inSeconds, limits) => {
-    const { outSeconds } = toInOut(current);
-    return fromInOut(
-      {
-        inSeconds: Math.max(
-          0,
-          Math.min(inSeconds, outSeconds - limits.minLengthSeconds)
-        ),
-        outSeconds
-      },
-      limits
-    );
-  };
-  var setOutPoint = (current, outSeconds, limits) => {
-    const { inSeconds } = toInOut(current);
-    return fromInOut(
-      {
-        inSeconds,
-        outSeconds: Math.min(
-          limits.limitSeconds,
-          Math.max(outSeconds, inSeconds + limits.minLengthSeconds)
-        )
-      },
-      limits
-    );
-  };
-  var slideRange = (current, inSeconds, limits) => {
-    const length = current.lengthSeconds;
-    const start = Math.max(
-      0,
-      Math.min(
-        roundToTenth(inSeconds),
-        Math.max(0, limits.limitSeconds - length)
-      )
-    );
-    return fromInOut({ inSeconds: start, outSeconds: start + length }, limits);
-  };
-  var markInPoint = (current, inSeconds, limits) => inSeconds > toInOut(current).outSeconds ? slideRange(current, inSeconds, limits) : setInPoint(current, inSeconds, limits);
-
-  // frontend/detailStrip/sidebarMediaPreview.ts
-  var buildSidebarMediaPreview = (mediaKind, dataUri, range) => {
-    const section = document.createElement("div");
-    section.className = "vst-sidebar-media-preview-section";
-    const label = document.createElement("span");
-    label.className = "vst-sidebar-media-preview-label";
-    label.textContent = "Preview";
-    const player = mediaKind === "video" ? getVideoStagesHostBridge().createInitVideoElement() : document.createElement("audio");
-    player.className = `vst-sidebar-media-preview vst-sidebar-${mediaKind}-preview`;
-    player.controls = true;
-    player.preload = "metadata";
-    player.setAttribute("playsinline", "");
-    const mediaError = document.createElement("div");
-    mediaError.className = "vst-sidebar-media-preview-error";
-    mediaError.textContent = `Cannot preview this ${mediaKind}.`;
-    mediaError.hidden = true;
-    const bounds = () => range.lengthSeconds > 0 ? toInOut(range) : null;
-    const resetToIn = () => {
-      const selected = bounds();
-      if (selected && player.currentTime !== selected.inSeconds) {
-        player.currentTime = selected.inSeconds;
-      }
-    };
-    const keepSeekInRange = () => {
-      const selected = bounds();
-      if (selected && (player.currentTime < selected.inSeconds || player.currentTime >= selected.outSeconds)) {
-        resetToIn();
-      }
-    };
-    const stopAtOut = () => {
-      const selected = bounds();
-      if (!selected) {
-        return;
-      }
-      if (player.currentTime >= selected.outSeconds) {
-        player.pause();
-        resetToIn();
-      } else if (player.currentTime < selected.inSeconds) {
-        resetToIn();
-      }
-    };
-    player.addEventListener("loadedmetadata", resetToIn);
-    player.addEventListener("play", keepSeekInRange);
-    player.addEventListener(
-      mediaKind === "audio" ? "seeked" : "seeking",
-      keepSeekInRange
-    );
-    player.addEventListener("timeupdate", stopAtOut);
-    player.addEventListener("ended", stopAtOut);
-    player.addEventListener("error", () => {
-      player.hidden = true;
-      mediaError.hidden = false;
-    });
-    player.src = mediaPreviewSrc(dataUri);
-    section.append(label, player, mediaError);
-    return section;
-  };
-  var releaseSidebarMediaPreviews = (root) => {
-    for (const player of root.querySelectorAll(
-      ".vst-sidebar-media-preview"
-    )) {
-      player.pause();
-      player.removeAttribute("src");
-      player.load();
-    }
-  };
-
-  // frontend/detailStrip/modalManager.ts
-  var currentModal = null;
-  var closeManagedModal = () => currentModal?.close();
-  var createManagedModal = (spec) => {
-    const backdrop = document.createElement("div");
-    backdrop.className = `modal-backdrop fade show ${spec.backdropClass}`;
-    const modal = document.createElement("div");
-    modal.className = `modal fade show ${spec.modalClass}`;
-    modal.style.display = "block";
-    modal.tabIndex = -1;
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-    modal.setAttribute("aria-labelledby", spec.labelledBy);
-    const dialog = document.createElement("div");
-    dialog.className = "modal-dialog modal-dialog-centered";
-    dialog.setAttribute("role", "document");
-    const content = document.createElement("div");
-    content.className = "modal-content";
-    const header = document.createElement("div");
-    header.className = "modal-header";
-    const body = document.createElement("div");
-    body.className = "modal-body";
-    content.append(header, body);
-    dialog.appendChild(content);
-    modal.appendChild(dialog);
-    let open = false;
-    const onKeyDown = (event) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        managed.close();
-        return;
-      }
-      spec.onKeyDown?.(event);
-    };
-    const managed = {
-      modal,
-      content,
-      header,
-      body,
-      open: (initialFocus) => {
-        closeManagedModal();
-        open = true;
-        currentModal = managed;
-        document.addEventListener("keydown", onKeyDown);
-        document.body.append(backdrop, modal);
-        initialFocus?.focus();
-      },
-      close: () => {
-        if (!open) {
-          return;
-        }
-        open = false;
-        document.removeEventListener("keydown", onKeyDown);
-        if (currentModal === managed) {
-          currentModal = null;
-        }
-        try {
-          spec.onClose?.();
-        } finally {
-          modal.remove();
-          backdrop.remove();
-        }
-      }
-    };
-    backdrop.addEventListener("click", managed.close);
-    modal.addEventListener("mousedown", (event) => {
-      if (event.target === modal) {
-        managed.close();
-      }
-    });
-    return managed;
-  };
-
-  // frontend/detailStrip/trimBar.ts
-  var NUDGE_SECONDS = 0.1;
-  var COARSE_NUDGE_SECONDS = 1;
-  var pointerSecondsAt = (clientX, trackLeft, trackWidth, limitSeconds) => {
-    if (!(trackWidth > 0) || !(limitSeconds > 0)) {
-      return 0;
-    }
-    const ratio = (clientX - trackLeft) / trackWidth;
-    return Math.min(limitSeconds, Math.max(0, ratio * limitSeconds));
-  };
-  var trimBarGeometry = (range, limitSeconds) => {
-    if (!(limitSeconds > 0)) {
-      return { leftPct: 0, widthPct: 100 };
-    }
-    const { inSeconds, outSeconds } = toInOut(range);
-    const leftPct = Math.min(
-      100,
-      Math.max(0, inSeconds / limitSeconds * 100)
-    );
-    const rightPct = Math.min(
-      100,
-      Math.max(0, outSeconds / limitSeconds * 100)
-    );
-    return { leftPct, widthPct: Math.max(0, rightPct - leftPct) };
-  };
-  var applyGrip = (grip, range, seconds2, limits) => {
-    if (grip === "in") {
-      return setInPoint(range, seconds2, limits);
-    }
-    if (grip === "out") {
-      return setOutPoint(range, seconds2, limits);
-    }
-    return slideRange(range, seconds2, limits);
-  };
-  var buildTrimBar = (spec) => {
-    let range = spec.range;
-    const { limits } = spec;
-    const wrap = document.createElement("div");
-    wrap.className = "vst-trim";
-    const track = document.createElement("div");
-    track.className = "vst-trim-track";
-    wrap.appendChild(track);
-    const window_ = document.createElement("div");
-    window_.className = "vst-trim-window";
-    window_.setAttribute("role", "slider");
-    window_.setAttribute("aria-label", "Trimmed range position");
-    window_.tabIndex = 0;
-    track.appendChild(window_);
-    const grips = {
-      in: document.createElement("span"),
-      out: document.createElement("span")
-    };
-    for (const edge of ["in", "out"]) {
-      const grip = grips[edge];
-      grip.className = `vst-trim-grip vst-trim-grip-${edge}`;
-      grip.dataset.vstTrimGrip = edge;
-      grip.setAttribute("role", "slider");
-      grip.setAttribute(
-        "aria-label",
-        edge === "in" ? "In point" : "Out point"
-      );
-      grip.tabIndex = 0;
-      track.appendChild(grip);
-    }
-    const scale = document.createElement("div");
-    scale.className = "vst-trim-scale";
-    const scaleStart = document.createElement("span");
-    scaleStart.textContent = "0.0";
-    const scaleEnd = document.createElement("span");
-    scaleEnd.textContent = `${limits.limitSeconds.toFixed(1)}`;
-    scale.append(scaleStart, scaleEnd);
-    wrap.appendChild(scale);
-    const paint = () => {
-      const { leftPct, widthPct } = trimBarGeometry(
-        range,
-        limits.limitSeconds
-      );
-      window_.style.left = `${leftPct}%`;
-      window_.style.width = `${widthPct}%`;
-      grips.in.style.left = `${leftPct}%`;
-      grips.out.style.left = `${leftPct + widthPct}%`;
-      const { inSeconds, outSeconds } = toInOut(range);
-      const describe = (element, now, max, text2) => {
-        element.setAttribute("aria-valuemin", "0");
-        element.setAttribute("aria-valuemax", `${max}`);
-        element.setAttribute("aria-valuenow", `${now}`);
-        element.setAttribute("aria-valuetext", text2);
-      };
-      describe(
-        grips.in,
-        inSeconds,
-        limits.limitSeconds,
-        `In point, ${inSeconds.toFixed(1)} seconds`
-      );
-      describe(
-        grips.out,
-        outSeconds,
-        limits.limitSeconds,
-        `Out point, ${outSeconds.toFixed(1)} seconds`
-      );
-      describe(
-        window_,
-        inSeconds,
-        limits.limitSeconds,
-        `Trimmed range, ${inSeconds.toFixed(1)} to ${outSeconds.toFixed(1)} seconds`
-      );
-      grips.in.title = `In point — ${inSeconds.toFixed(1)} s`;
-      grips.out.title = `Out point — ${outSeconds.toFixed(1)} s`;
-      window_.title = "Drag to slide the range without changing its length";
-    };
-    const push = (next) => {
-      if (next.startSeconds === range.startSeconds && next.lengthSeconds === range.lengthSeconds) {
-        return;
-      }
-      range = next;
-      paint();
-      spec.onChange(next);
-    };
-    const startDrag = (grip, event) => {
-      if (!(limits.limitSeconds > 0) || event.button !== 0) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      const target = event.currentTarget;
-      target.setPointerCapture?.(event.pointerId);
-      const rect = track.getBoundingClientRect();
-      const pressed = toInOut(range);
-      const pressSeconds = pointerSecondsAt(
-        event.clientX,
-        rect.left,
-        rect.width,
-        limits.limitSeconds
-      );
-      const grabOffset = pressSeconds - pressed.inSeconds;
-      const before = range;
-      const secondsFor = (moveEvent) => {
-        const at = pointerSecondsAt(
-          moveEvent.clientX,
-          rect.left,
-          rect.width,
-          limits.limitSeconds
-        );
-        return grip === "window" ? at - grabOffset : at;
-      };
-      const onMove = (moveEvent) => {
-        push(applyGrip(grip, range, secondsFor(moveEvent), limits));
-      };
-      const finish2 = (commit, moveEvent) => {
-        target.removeEventListener("pointermove", onMove);
-        target.removeEventListener("pointerup", onUp);
-        target.removeEventListener("pointercancel", onCancel);
-        document.removeEventListener("keydown", onKey, true);
-        target.releasePointerCapture?.(event.pointerId);
-        push(
-          commit && moveEvent ? applyGrip(grip, range, secondsFor(moveEvent), limits) : before
-        );
-      };
-      const onUp = (upEvent) => finish2(true, upEvent);
-      const onCancel = () => finish2(false);
-      const onKey = (keyEvent) => {
-        if (keyEvent.key === "Escape") {
-          keyEvent.preventDefault();
-          finish2(false);
-        }
-      };
-      target.addEventListener("pointermove", onMove);
-      target.addEventListener("pointerup", onUp);
-      target.addEventListener("pointercancel", onCancel);
-      document.addEventListener("keydown", onKey, true);
-    };
-    const onKeyGrip = (grip, event) => {
-      const step = event.shiftKey ? COARSE_NUDGE_SECONDS : NUDGE_SECONDS;
-      const { inSeconds, outSeconds } = toInOut(range);
-      const at = grip === "out" ? outSeconds : inSeconds;
-      let next = null;
-      if (event.key === "ArrowLeft") {
-        next = at - step;
-      } else if (event.key === "ArrowRight") {
-        next = at + step;
-      } else if (event.key === "Home") {
-        next = 0;
-      } else if (event.key === "End") {
-        next = limits.limitSeconds;
-      }
-      if (next === null) {
-        return;
-      }
-      event.preventDefault();
-      push(applyGrip(grip, range, next, limits));
-    };
-    for (const edge of ["in", "out"]) {
-      grips[edge].addEventListener(
-        "pointerdown",
-        (event) => startDrag(edge, event)
-      );
-      grips[edge].addEventListener(
-        "keydown",
-        (event) => onKeyGrip(edge, event)
-      );
-    }
-    window_.addEventListener(
-      "pointerdown",
-      (event) => startDrag("window", event)
-    );
-    window_.addEventListener("keydown", (event) => onKeyGrip("window", event));
-    track.addEventListener("pointerdown", (event) => {
-      if (event.target !== track || !(limits.limitSeconds > 0)) {
-        return;
-      }
-      const rect = track.getBoundingClientRect();
-      const at = pointerSecondsAt(
-        event.clientX,
-        rect.left,
-        rect.width,
-        limits.limitSeconds
-      );
-      const { inSeconds, outSeconds } = toInOut(range);
-      push(
-        applyGrip(
-          Math.abs(at - inSeconds) <= Math.abs(at - outSeconds) ? "in" : "out",
-          range,
-          at,
-          limits
-        )
-      );
-    });
-    paint();
-    return {
-      element: wrap,
-      sync: (next) => {
-        range = next;
-        paint();
-      }
-    };
-  };
-
-  // frontend/detailStrip/trimModal.ts
-  var MODAL_CLASS = "vst-trim-modal";
-  var BACKDROP_CLASS = "vst-trim-modal-backdrop";
-  var TITLE_ID = "vst_trim_modal_title";
-  var currentModal2 = null;
-  var seconds = (value) => value.toFixed(1);
-  var button = (label, title, dataAttribute) => {
-    const element = document.createElement("button");
-    element.type = "button";
-    element.className = "basic-button small-button";
-    element.textContent = label;
-    element.title = title;
-    if (dataAttribute) {
-      element.setAttribute(dataAttribute, "");
-    }
-    return element;
-  };
-  var numberField = (labelText, name, readOnly = false) => {
-    const wrap = document.createElement("label");
-    wrap.className = "vst-trim-modal-field";
-    const label = document.createElement("span");
-    label.textContent = labelText;
-    const input2 = document.createElement("input");
-    input2.type = "number";
-    input2.step = "0.1";
-    input2.dataset.vstTrimField = name;
-    input2.readOnly = readOnly;
-    wrap.append(label, input2);
-    return { wrap, input: input2 };
-  };
-  var buildTrimLauncher = (summary, onOpen) => {
-    const row = document.createElement("div");
-    row.className = "vst-trim-launcher";
-    const text2 = document.createElement("span");
-    text2.className = "vst-trim-launcher-summary vst-detail-field-hint";
-    text2.textContent = summary;
-    const open = button("Edit…", "Open the range editor");
-    open.setAttribute("data-vst-open-trim", "");
-    open.addEventListener("click", onOpen);
-    row.append(text2, open);
-    return row;
-  };
-  var closeTrimModal = () => {
-    currentModal2?.close();
-  };
-  var openTrimModal = (spec) => {
-    closeTrimModal();
-    const isAudio = spec.mediaKind === "audio";
-    let draft = { ...spec.range };
-    let bar = null;
-    let stopAt = null;
-    const heading = document.createElement("div");
-    const title = document.createElement("h5");
-    title.className = "modal-title";
-    title.id = TITLE_ID;
-    title.textContent = spec.title;
-    const fileName = document.createElement("small");
-    fileName.className = "vst-trim-modal-file";
-    fileName.textContent = spec.fileName;
-    heading.append(title, fileName);
-    const close = button("×", "Close without applying");
-    close.setAttribute("aria-label", close.title);
-    const playerWrap = document.createElement("div");
-    playerWrap.className = "vst-trim-modal-player-wrap";
-    if (isAudio) {
-      playerWrap.classList.add("vst-trim-modal-player-wrap-audio");
-    }
-    const player = isAudio ? document.createElement("audio") : getVideoStagesHostBridge().createInitVideoElement();
-    player.className = "vst-trim-modal-player";
-    player.controls = true;
-    player.preload = "auto";
-    if (!isAudio) {
-      player.setAttribute("playsinline", "");
-    }
-    if (spec.dataUri) {
-      player.src = mediaPreviewSrc(spec.dataUri);
-    }
-    player.currentTime = draft.startSeconds;
-    const mediaError = document.createElement("div");
-    mediaError.className = "vst-trim-modal-media-error";
-    mediaError.textContent = `This browser cannot preview the selected ${spec.mediaKind}.`;
-    mediaError.hidden = spec.dataUri !== null;
-    player.hidden = spec.dataUri === null;
-    playerWrap.append(player, mediaError);
-    const transport = document.createElement("div");
-    transport.className = "vst-trim-modal-transport";
-    const timecode = document.createElement("output");
-    timecode.className = "vst-trim-modal-timecode";
-    const stepLabel = isAudio ? "0.1 s" : "Frame";
-    const previousFrame = button(
-      `◀ ${stepLabel}`,
-      isAudio ? "Step backward 0.1 seconds" : "Step backward one frame"
-    );
-    const preview = button("▶ Preview range", "Play the selected range");
-    const nextFrame = button(
-      `${stepLabel} ▶`,
-      isAudio ? "Step forward 0.1 seconds" : "Step forward one frame"
-    );
-    const markIn = button("Mark In", "Set In at the playhead (I)");
-    const markOut = button("Mark Out", "Set Out at the playhead (O)");
-    transport.append(
-      timecode,
-      previousFrame,
-      preview,
-      nextFrame,
-      markIn,
-      markOut
-    );
-    const fields = document.createElement("div");
-    fields.className = "vst-trim-modal-fields";
-    const inField = numberField("In (s)", "in");
-    const outField = numberField("Out (s)", "out");
-    const durationField = numberField("Duration (s)", "duration", true);
-    inField.input.min = "0";
-    inField.input.max = `${spec.limits.limitSeconds}`;
-    outField.input.min = `${spec.limits.minLengthSeconds}`;
-    outField.input.max = `${spec.limits.limitSeconds}`;
-    fields.append(inField.wrap, outField.wrap, durationField.wrap);
-    const impact = document.createElement("small");
-    impact.className = "vst-trim-modal-impact";
-    const renderDraft = (syncBar = true) => {
-      const range = toInOut(draft);
-      inField.input.value = seconds(range.inSeconds);
-      outField.input.value = seconds(range.outSeconds);
-      durationField.input.value = seconds(draft.lengthSeconds);
-      impact.textContent = spec.impactText(draft);
-      if (syncBar) {
-        bar?.sync(draft);
-      }
-    };
-    const setDraft = (next, syncBar = true) => {
-      draft = next;
-      renderDraft(syncBar);
-    };
-    bar = buildTrimBar({
-      range: draft,
-      limits: spec.limits,
-      onChange: (next) => {
-        const before = toInOut(draft);
-        const after = toInOut(next);
-        setDraft(next, false);
-        if (after.inSeconds !== before.inSeconds && after.outSeconds === before.outSeconds) {
-          seek(after.inSeconds);
-        } else if (after.outSeconds !== before.outSeconds && after.inSeconds === before.inSeconds) {
-          seek(after.outSeconds);
-        }
-      }
-    });
-    const playhead = document.createElement("span");
-    playhead.className = "vst-trim-playhead";
-    playhead.setAttribute("aria-hidden", "true");
-    bar.element.querySelector(".vst-trim-track")?.appendChild(playhead);
-    const paintPlayhead = () => {
-      const at = Math.min(
-        spec.limits.limitSeconds,
-        Math.max(0, player.currentTime || 0)
-      );
-      timecode.textContent = `${seconds(at)} / ${seconds(spec.limits.limitSeconds)} s`;
-      const percent = spec.limits.limitSeconds > 0 ? at / spec.limits.limitSeconds * 100 : 0;
-      playhead.style.left = `${percent}%`;
-      if (stopAt !== null && at >= stopAt) {
-        player.pause();
-        stopAt = null;
-        player.currentTime = draft.startSeconds;
-        paintPlayhead();
-      }
-    };
-    const seek = (value) => {
-      player.currentTime = Math.min(
-        spec.limits.limitSeconds,
-        Math.max(0, value)
-      );
-      paintPlayhead();
-    };
-    const playRange = () => {
-      const range = toInOut(draft);
-      stopAt = range.outSeconds;
-      seek(range.inSeconds);
-      player.play()?.catch(() => {
-        stopAt = null;
-      });
-    };
-    const readNumber = (input2, apply2) => {
-      const value = Number(input2.value);
-      if (Number.isFinite(value)) {
-        setDraft(apply2(value));
-      }
-    };
-    inField.input.addEventListener(
-      "input",
-      () => readNumber(
-        inField.input,
-        (value) => setInPoint(draft, value, spec.limits)
-      )
-    );
-    outField.input.addEventListener(
-      "input",
-      () => readNumber(
-        outField.input,
-        (value) => setOutPoint(draft, value, spec.limits)
-      )
-    );
-    const reset = button(
-      `Use full ${spec.mediaKind}`,
-      "Reset In and Out to the whole source",
-      "data-vst-trim-reset"
-    );
-    reset.addEventListener(
-      "click",
-      () => setDraft({
-        startSeconds: 0,
-        lengthSeconds: spec.limits.limitSeconds
-      })
-    );
-    previousFrame.addEventListener(
-      "click",
-      () => seek(
-        player.currentTime - (spec.limits.fps > 0 ? 1 / spec.limits.fps : 0.1)
-      )
-    );
-    nextFrame.addEventListener(
-      "click",
-      () => seek(
-        player.currentTime + (spec.limits.fps > 0 ? 1 / spec.limits.fps : 0.1)
-      )
-    );
-    preview.addEventListener("click", playRange);
-    markIn.addEventListener(
-      "click",
-      () => setDraft(markInPoint(draft, player.currentTime, spec.limits))
-    );
-    markOut.addEventListener(
-      "click",
-      () => setDraft(setOutPoint(draft, player.currentTime, spec.limits))
-    );
-    const footer = document.createElement("div");
-    footer.className = "modal-footer vst-trim-modal-footer";
-    const cancel = button("Cancel", "Close without applying");
-    const apply = button("Apply", "Apply this range", "data-vst-trim-apply");
-    apply.classList.add("vst-trim-modal-apply");
-    footer.append(reset, cancel, apply);
-    let managed;
-    managed = createManagedModal({
-      modalClass: MODAL_CLASS,
-      backdropClass: BACKDROP_CLASS,
-      labelledBy: TITLE_ID,
-      onKeyDown: (event) => {
-        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) {
-          return;
-        }
-        const key = event.key.toLowerCase();
-        if (key === "i") {
-          event.preventDefault();
-          setDraft(markInPoint(draft, player.currentTime, spec.limits));
-        } else if (key === "o") {
-          event.preventDefault();
-          setDraft(setOutPoint(draft, player.currentTime, spec.limits));
-        } else if (event.key === " ") {
-          event.preventDefault();
-          if (player.paused) {
-            playRange();
-          } else {
-            player.pause();
-            stopAt = null;
-          }
-        }
-      },
-      onClose: () => {
-        player.removeEventListener("timeupdate", paintPlayhead);
-        player.removeEventListener("seeked", paintPlayhead);
-        player.pause();
-        player.removeAttribute("src");
-        player.load();
-        if (currentModal2 === managed) {
-          currentModal2 = null;
-        }
-      }
-    });
-    currentModal2 = managed;
-    managed.header.append(heading, close);
-    managed.body.append(playerWrap, transport, bar.element, fields, impact);
-    managed.content.appendChild(footer);
-    const dismiss = () => managed.close();
-    const applyAndClose = () => {
-      const applied = { ...draft };
-      dismiss();
-      spec.onApply(applied);
-    };
-    close.addEventListener("click", dismiss);
-    cancel.addEventListener("click", dismiss);
-    apply.addEventListener("click", applyAndClose);
-    player.addEventListener("loadedmetadata", () => seek(draft.startSeconds));
-    player.addEventListener("timeupdate", paintPlayhead);
-    player.addEventListener("seeked", paintPlayhead);
-    player.addEventListener("error", () => {
-      player.hidden = true;
-      mediaError.hidden = false;
-    });
-    renderDraft();
-    paintPlayhead();
-    managed.open(player);
-  };
-
-  // frontend/detailStrip/audioTracksPanel.ts
-  var timelineDuration2 = (state) => state.clips.reduce((sum, clip) => sum + Math.max(0, clip.duration || 0), 0);
-  var primarySpan = (track) => track.spans[0] ?? null;
-  var commitTrack = (ctx, trackId, mutate, debounceKey) => {
-    const apply = (state) => {
-      const track = state.audioTracks?.find((entry) => entry.id === trackId);
-      const span = track ? primarySpan(track) : null;
-      if (track && span) {
-        mutate(track, span);
-      }
-    };
-    if (debounceKey) {
-      ctx.debouncedCommitState(debounceKey, apply);
-    } else {
-      ctx.commitState(apply);
-    }
-  };
-  var buildTrackEditor = (ctx, state, track, trackIndex) => {
-    const trackId = track.id;
-    const span = primarySpan(track);
-    const fields = document.createElement("div");
-    fields.className = "vst-detail-col vst-detail-instance-fields vst-audio-track";
-    fields.dataset.vstAudioTrackId = trackId;
-    if (!span) {
-      const note = document.createElement("p");
-      note.className = "vst-detail-note";
-      note.textContent = "This audio track has no timeline window.";
-      fields.appendChild(note);
-      return fields;
-    }
-    const total = Math.max(AUDIO_SPAN_MIN_LENGTH, timelineDuration2(state));
-    const clamped = () => clampStartLength(
-      span.timelineStartSeconds ?? 0,
-      span.timelineLengthSeconds ?? AUDIO_SPAN_DEFAULT_LENGTH,
-      total,
-      AUDIO_SPAN_MIN_LENGTH
-    );
-    const aceReference = track.source.kind === "AceStepFun" ? track.source.reference : "";
-    const sourceSelect = buildOptionSelect(
-      buildAudioTrackSourceOptions(aceReference),
-      aceReference || AUDIO_SOURCE_UPLOAD,
-      (value) => {
-        commitTrack(ctx, trackId, (next) => {
-          if (isAceStepFunAudioSource(value)) {
-            next.source.kind = "AceStepFun";
-            next.source.reference = value;
-            next.source.uploadedAudio = null;
-            next.source.mediaDurationSeconds = 0;
-          } else {
-            next.source.kind = "Upload";
-            next.source.reference = next.source.uploadedAudio?.fileName ?? "";
-          }
-        });
-        ctx.render();
-      }
-    );
-    fields.appendChild(
-      buildField(
-        "Source",
-        sourceSelect,
-        void 0,
-        "Where this timeline-wide overlay comes from. It is cut at clip boundaries during generation and mixed additively."
-      )
-    );
-    if (!aceReference) {
-      fields.appendChild(
-        buildMediaPickRow(
-          "Audio Upload",
-          "audio/*",
-          ["audio"],
-          track.source.uploadedAudio?.fileName,
-          (data, fileName) => {
-            commitTrack(ctx, trackId, (next) => {
-              next.source.kind = "Upload";
-              next.source.reference = fileName ?? "";
-              next.source.uploadedAudio = { data, fileName };
-              next.source.mediaDurationSeconds = 0;
-            });
-            ctx.render();
-            void probeMediaDurationSeconds(data).then((duration) => {
-              commitTrack(ctx, trackId, (next) => {
-                if (next.source.uploadedAudio?.data !== data) {
-                  return;
-                }
-                const seconds2 = roundToTenth(duration);
-                if (seconds2 > 0) {
-                  next.source.mediaDurationSeconds = seconds2;
-                }
-              });
-              ctx.render();
-            });
-          },
-          () => {
-            commitTrack(ctx, trackId, (next) => {
-              next.source.reference = "";
-              next.source.uploadedAudio = null;
-              next.source.mediaDurationSeconds = 0;
-            });
-            ctx.render();
-          }
-        )
-      );
-    }
-    const volume = track.volume ?? AUDIO_SPAN_VOLUME_DEFAULT;
-    const volumeSlider = buildSlider(
-      "Volume",
-      volume,
-      AUDIO_SPAN_VOLUME_MIN,
-      AUDIO_SPAN_VOLUME_MAX,
-      AUDIO_SPAN_VOLUME_SLIDER_STEP,
-      (value) => {
-        commitTrack(
-          ctx,
-          trackId,
-          (next) => {
-            next.volume = Math.min(
-              AUDIO_SPAN_VOLUME_MAX,
-              Math.max(AUDIO_SPAN_VOLUME_MIN, value)
-            );
-          },
-          `audio-track-${trackId}-volume`
-        );
-      },
-      {
-        sliderMin: AUDIO_SPAN_VOLUME_SLIDER_MIN,
-        sliderMax: AUDIO_SPAN_VOLUME_SLIDER_MAX,
-        numberStep: "any"
-      }
-    );
-    volumeSlider.querySelector("input.auto-slider-number")?.setAttribute("data-vst-focus-key", `audio-track-${trackId}-volume`);
-    fields.appendChild(volumeSlider);
-    const geometry = clamped();
-    const shown = {
-      startSeconds: span.sourceStartSeconds,
-      lengthSeconds: geometry.length
-    };
-    const startInput = buildNumber(
-      geometry.start,
-      0,
-      Math.max(0, total - AUDIO_SPAN_MIN_LENGTH),
-      AUDIO_SPAN_STEP,
-      (value) => {
-        commitTrack(
-          ctx,
-          trackId,
-          (_next, nextSpan) => {
-            const next = clampStartLength(
-              value,
-              nextSpan.timelineLengthSeconds ?? AUDIO_SPAN_DEFAULT_LENGTH,
-              total,
-              AUDIO_SPAN_MIN_LENGTH
-            );
-            nextSpan.timelineStartSeconds = next.start;
-            nextSpan.timelineLengthSeconds = next.length;
-            shown.lengthSeconds = next.length;
-          },
-          `audio-track-${trackId}-start`
-        );
-      }
-    );
-    startInput.setAttribute(
-      "data-vst-focus-key",
-      `audio-track-${trackId}-start`
-    );
-    fields.appendChild(
-      buildField(
-        "Timeline start (s)",
-        startInput,
-        void 0,
-        "Seconds from the beginning of the complete multi-clip timeline."
-      )
-    );
-    const trimInput = buildNumber(
-      span.sourceStartSeconds,
-      0,
-      Number.MAX_SAFE_INTEGER,
-      AUDIO_SPAN_STEP,
-      (value) => {
-        commitTrack(
-          ctx,
-          trackId,
-          (_next, nextSpan) => {
-            shown.startSeconds = Math.max(0, value);
-            nextSpan.sourceStartSeconds = shown.startSeconds;
-          },
-          `audio-track-${trackId}-trim`
-        );
-      }
-    );
-    trimInput.setAttribute("data-vst-focus-key", `audio-track-${trackId}-trim`);
-    fields.appendChild(
-      buildField(
-        "Trim start (s)",
-        trimInput,
-        void 0,
-        "Skip this many seconds from the source before playback begins."
-      )
-    );
-    const lengthInput = buildNumber(
-      geometry.length,
-      AUDIO_SPAN_MIN_LENGTH,
-      total,
-      AUDIO_SPAN_STEP,
-      (value) => {
-        commitTrack(
-          ctx,
-          trackId,
-          (_next, nextSpan) => {
-            const next = clampStartLength(
-              nextSpan.timelineStartSeconds ?? 0,
-              value,
-              total,
-              AUDIO_SPAN_MIN_LENGTH
-            );
-            nextSpan.timelineStartSeconds = next.start;
-            nextSpan.timelineLengthSeconds = next.length;
-            shown.lengthSeconds = next.length;
-          },
-          `audio-track-${trackId}-length`
-        );
-      }
-    );
-    lengthInput.setAttribute(
-      "data-vst-focus-key",
-      `audio-track-${trackId}-length`
-    );
-    fields.appendChild(
-      buildField(
-        "Length (s)",
-        lengthInput,
-        void 0,
-        "How long this track plays across the complete timeline."
-      )
-    );
-    const uploadedAudio = track.source.uploadedAudio;
-    const durationSeconds = track.source.mediaDurationSeconds ?? 0;
-    if (uploadedAudio) {
-      fields.appendChild(
-        buildSidebarMediaPreview("audio", uploadedAudio.data, shown)
-      );
-      const limitSeconds = Math.max(
-        durationSeconds,
-        shown.startSeconds + shown.lengthSeconds
-      );
-      const limits = {
-        limitSeconds,
-        minLengthSeconds: AUDIO_SPAN_MIN_LENGTH,
-        fps: 0
-      };
-      const range = toInOut(shown);
-      const maxTimelineLength = total - geometry.start;
-      fields.appendChild(
-        buildTrimLauncher(
-          `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · Plays ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
-          () => openTrimModal({
-            mediaKind: "audio",
-            title: "Trim Audio Track",
-            fileName: uploadedAudio.fileName ?? "Audio track",
-            dataUri: uploadedAudio.data,
-            range: shown,
-            limits,
-            impactText: (next) => `Track length becomes ${Math.min(next.lengthSeconds, maxTimelineLength).toFixed(1)} s`,
-            onApply: (next) => {
-              commitTrack(ctx, trackId, (_next, nextSpan) => {
-                nextSpan.sourceStartSeconds = next.startSeconds;
-                nextSpan.timelineLengthSeconds = Math.min(
-                  next.lengthSeconds,
-                  maxTimelineLength
-                );
-              });
-              ctx.render();
-            }
-          })
-        )
-      );
-    }
-    fields.dataset.vstTrackIndex = `${trackIndex}`;
-    return fields;
-  };
-  var addAudioTrack = (ctx, state, clipWindow) => {
-    const total = Math.max(AUDIO_SPAN_MIN_LENGTH, timelineDuration2(state));
-    const start = Math.min(
-      Math.max(0, clipWindow?.startSeconds ?? 0),
-      Math.max(0, total - AUDIO_SPAN_MIN_LENGTH)
-    );
-    const availableLength = Math.max(
-      AUDIO_SPAN_MIN_LENGTH,
-      Math.min(
-        total - start,
-        clipWindow ? clipWindow.endSeconds - clipWindow.startSeconds : total
-      )
-    );
-    const nextIndex = state.audioTracks?.length ?? 0;
-    ctx.commitState((next) => {
-      next.audioTracks ??= [];
-      next.audioTracks.push({
-        id: createEntityId("audio_track"),
-        source: {
-          kind: "Upload",
-          reference: "",
-          uploadedAudio: null,
-          mediaDurationSeconds: 0
-        },
-        volume: AUDIO_SPAN_VOLUME_DEFAULT,
-        spans: [
-          {
-            id: createEntityId("audio_span"),
-            timelineStartSeconds: start,
-            timelineLengthSeconds: Math.min(
-              AUDIO_SPAN_DEFAULT_LENGTH,
-              availableLength
-            ),
-            sourceStartSeconds: 0
-          }
-        ]
-      });
-    });
-    return nextIndex;
-  };
-  var buildAudioTracksPanel = (ctx, state, selection = {
-    kind: "none"
-  }, options) => {
-    const tracks = state.audioTracks ?? [];
-    const visibleTrackIndices = options?.trackIndices ? options.trackIndices.filter(
-      (trackIndex) => trackIndex >= 0 && trackIndex < tracks.length
-    ) : tracks.map((_, trackIndex) => trackIndex);
-    const selectedTrackIndex = selection.kind === "audio-track" ? selection.trackIdx : null;
-    const activeTrackIndex = selectedTrackIndex !== null && visibleTrackIndices.includes(selectedTrackIndex) ? selectedTrackIndex : visibleTrackIndices[0] ?? null;
-    const built = buildRepeatingEditor({
-      key: "audio-tracks",
-      label: "Audio Tracks",
-      sectionClass: "vst-audio-tracks-panel",
-      open: selectedTrackIndex !== null,
-      items: visibleTrackIndices.map((trackIndex) => ({
-        label: `A${trackIndex + 1}`,
-        stateKey: `audio-track:${tracks[trackIndex].id}`,
-        focusKey: `audio-track-tab-${trackIndex}`,
-        title: `Edit audio track A${trackIndex + 1}`,
-        active: trackIndex === activeTrackIndex,
-        className: "vst-audio-track-tab",
-        onSelect: () => setSelection({ kind: "audio-track", trackIdx: trackIndex }),
-        onDelete: () => {
-          ctx.commitState((next) => {
-            next.audioTracks?.splice(trackIndex, 1);
-          });
-          setSelection(
-            selectionAfterRemoval(
-              trackIndex,
-              tracks.length - 1,
-              (index) => ({ kind: "audio-track", trackIdx: index }),
-              { kind: "none" }
-            )
-          );
-          ctx.render();
-        }
-      })),
-      editorForItem: (itemIndex) => {
-        const trackIndex = visibleTrackIndices[itemIndex];
-        const track = tracks[trackIndex];
-        return track ? buildTrackEditor(ctx, state, track, trackIndex) : void 0;
-      },
-      add: {
-        title: "Add an audio track spanning the timeline",
-        label: "+ Add Audio Track",
-        className: "vst-audio-track-add",
-        onClick: () => {
-          const trackIdx = addAudioTrack(ctx, state, options?.clipWindow);
-          setSelection({ kind: "audio-track", trackIdx });
-          ctx.render();
-        }
-      },
-      remove: {
-        title: activeTrackIndex === null ? "No audio track to delete" : `Delete audio track A${activeTrackIndex + 1}`,
-        className: "vst-audio-track-delete"
-      }
-    });
-    const note = document.createElement("p");
-    note.className = "vst-detail-note";
-    note.textContent = tracks.length === 0 ? "No audio tracks." : visibleTrackIndices.length === 0 ? "No audio tracks in this clip." : "Audio tracks are cut per clip during generation; overlapping tracks mix together.";
-    built.content.insertBefore(note, built.content.firstChild);
-    return built.section;
-  };
-  var buildTimelineAudioTracksBody = (ctx, state, selection) => {
-    const body = document.createElement("div");
-    body.className = "vst-detail-body vst-detail-audio-body";
-    body.appendChild(buildAudioTracksPanel(ctx, state, selection));
-    return body;
-  };
-
-  // frontend/detailStrip/capabilityUi.ts
-  var buildCapabilityNotice = (decision) => {
-    const notice = document.createElement("p");
-    notice.className = "vst-detail-note vst-capability-notice";
-    notice.textContent = decision.reason;
-    notice.dataset.vstCapabilityUnsupported = "true";
-    return notice;
-  };
-  var CAPABILITY_REPAIR_SELECTORS = [
-    ".vst-detail-delete"
-  ];
-  var buildCapabilityRepairButton = (action) => {
-    const button2 = document.createElement("button");
-    button2.type = "button";
-    button2.className = `interrupt-button vst-btn-tiny vst-capability-repair ${action.className ?? ""}`.trim();
-    button2.textContent = action.label;
-    button2.title = action.title ?? action.label;
-    button2.setAttribute("aria-label", button2.title);
-    button2.addEventListener("click", action.onRepair);
-    return button2;
-  };
-  var disableCapabilityControls = (root, decision, removableSelectors = []) => {
-    const removable = new Set(
-      removableSelectors.flatMap(
-        (selector) => Array.from(root.querySelectorAll(selector))
-      )
-    );
-    for (const control of root.querySelectorAll("input, select, textarea, button")) {
-      if (removable.has(control) || [...removable].some((element) => element.contains(control))) {
-        continue;
-      }
-      control.disabled = true;
-      control.title = decision.reason;
-    }
-    if (root instanceof DocumentFragment) {
-      for (const child of root.children) {
-        child.classList.add("vst-capability-readonly");
-      }
-    } else {
-      root.classList.add("vst-capability-readonly");
-    }
-    root.prepend(buildCapabilityNotice(decision));
-  };
-  var applyPersistedCapabilityRepair = (root, decision, options = {}) => {
-    disableCapabilityControls(
-      root,
-      decision,
-      options.keep ?? CAPABILITY_REPAIR_SELECTORS
-    );
-    if (options.repair) {
-      root.appendChild(buildCapabilityRepairButton(options.repair));
-    }
-  };
-
-  // frontend/detailStrip/audioPanel.ts
-  var buildAudioBody = (ctx, sel, state) => {
-    const clips = state.clips;
-    const { clipIdx } = sel;
-    const clip = clips[clipIdx];
-    const capabilityView = ctx.authoring().capabilities.forClip(clip);
-    const audioCapabilityDecision = capabilityView.clipAudio;
-    const reuseDecision = capabilityView.decision("audioReuse");
-    const durationDecision = capabilityView.decision("audioDerivedDuration");
-    const icLoraDecision = capabilityView.decision("icLora");
-    const controlDurationDecision = icLoraDecision.supported ? icLoraDecision : {
-      ...icLoraDecision,
-      reason: `Control-signal-derived clip duration is not supported by ${capabilityView.architectureLabel}.`
-    };
-    const controlSignalEnabled = hasArchitectureSlotSourcedIcLora(
-      capabilityView.architectureId,
-      clip.icLoras
-    );
-    const controlDurationIssueDecision = clip.clipLengthFromControlNet && !controlDurationDecision.supported ? controlDurationDecision : clip.clipLengthFromControlNet && !controlSignalEnabled ? {
-      ...controlDurationDecision,
-      supported: false,
-      reason: "No IC-LoRA supplies a ControlNet 1-3 drive source for clip duration."
-    } : null;
-    const options = buildAudioSourceOptions(clip.audioSource ?? "", {
-      controlNetEnabled: capabilityView.audioSourceKinds.includes(
-        AUDIO_SOURCE_CONTROLNET
-      ),
-      allowedKinds: capabilityView.audioSourceKinds
-    });
-    const source = options.find((option) => option.value === clip.audioSource)?.value ?? clip.audioSource ?? "";
-    const selectedAudioSourceAllowed = isAllowedAudioSource(
-      capabilityView.audioSourceKinds,
-      source
-    );
-    const audioDecision = audioCapabilityDecision.supported && !selectedAudioSourceAllowed ? {
-      ...audioCapabilityDecision,
-      supported: false,
-      reason: `Audio source '${source}' is not supported by ${capabilityView.architectureLabel}.`
-    } : audioCapabilityDecision;
-    const canLength = canUseClipLengthFromAudio(source);
-    const canDeriveDuration = durationDecision.supported && selectedAudioSourceAllowed && canLength;
-    const durationIssueDecision = selectedAudioSourceAllowed && !canDeriveDuration ? durationDecision.supported ? {
-      ...durationDecision,
-      supported: false,
-      reason: `Audio source '${source}' cannot determine video duration.`
-    } : durationDecision : null;
-    const durationUnavailableReason = durationIssueDecision?.reason ?? (!audioDecision.supported ? audioDecision.reason : "");
-    const isAce = isAceStepFunAudioSource(source);
-    const commitAudio = (mutate) => {
-      ctx.commit((cs) => {
-        const target = cs[clipIdx];
-        if (!target) {
-          return;
-        }
-        mutate(target);
-        const nextSource = target.audioSource;
-        target.clipLengthFromAudio = canUseClipLengthFromAudio(nextSource) && target.clipLengthFromAudio;
-        if (target.clipLengthFromAudio) {
-          target.clipLengthFromControlNet = false;
-        }
-        target.saveAudioTrack = isAceStepFunAudioSource(nextSource) && target.saveAudioTrack;
-        target.uploadedAudio = nextSource === AUDIO_SOURCE_UPLOAD ? target.uploadedAudio : null;
-        if (nextSource !== AUDIO_SOURCE_UPLOAD) {
-          target.uploadedAudioDurationSeconds = 0;
-          target.uploadedAudioStartSeconds = 0;
-          target.uploadedAudioLengthSeconds = 0;
-        }
-      });
-    };
-    const body = document.createElement("div");
-    body.className = "vst-detail-body vst-detail-audio-body";
-    const base = document.createElement("div");
-    base.className = "vst-detail-col vst-detail-audio";
-    const select2 = buildOptionSelect(
-      options.map((o) => ({ value: o.value, label: o.label })),
-      source,
-      (value) => {
-        commitAudio((c) => {
-          c.audioSource = value;
-        });
-        ctx.render();
-      }
-    );
-    base.appendChild(
-      buildField(
-        "Audio Source",
-        select2,
-        void 0,
-        "Where this clip's audio comes from: generated from the prompt, an uploaded file, or a connected generated-audio source."
-      )
-    );
-    const reuseRow = buildCheckbox(
-      "Reuse Captured Stage Audio",
-      clip.reuseAudio === true,
-      (value) => {
-        commitAudio((c) => {
-          c.reuseAudio = value;
-        });
-      },
-      {
-        disabled: !reuseDecision.supported,
-        help: "Capture this clip's audio after its second active stage and reuse that captured audio from the third active stage onward. Requires at least three active stages." + (reuseDecision.reason ? ` ${reuseDecision.reason}` : "")
-      }
-    );
-    reuseRow.classList.add("vst-detail-audio-reuse");
-    base.appendChild(reuseRow);
-    if (clip.reuseAudio && !reuseDecision.supported) {
-      reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
-      reuseRow.appendChild(
-        buildCapabilityRepairButton({
-          label: "Remove unsupported reuse",
-          className: "vst-detail-delete",
-          onRepair: () => {
-            commitAudio((target) => {
-              target.reuseAudio = false;
-            });
-            ctx.render();
-          }
-        })
-      );
-    }
-    const lengthRow = buildCheckbox(
-      "Clip Length from Audio",
-      clip.clipLengthFromAudio === true,
-      (value) => {
-        commitAudio((c) => {
-          c.clipLengthFromAudio = value;
-        });
-      },
-      {
-        disabled: !canDeriveDuration,
-        help: "Set the clip's duration to match the length of its audio instead of a fixed value. Available only for sources with a known length." + (durationUnavailableReason ? ` ${durationUnavailableReason}` : "")
-      }
-    );
-    lengthRow.classList.add("vst-detail-audio-derived-duration");
-    base.appendChild(lengthRow);
-    if (clip.clipLengthFromAudio && durationIssueDecision) {
-      lengthRow.appendChild(buildCapabilityNotice(durationIssueDecision));
-      lengthRow.appendChild(
-        buildCapabilityRepairButton({
-          label: "Remove unsupported audio-derived duration",
-          className: "vst-detail-delete",
-          onRepair: () => {
-            ctx.commit((items) => {
-              const target = items[clipIdx];
-              if (target) {
-                target.clipLengthFromAudio = false;
-              }
-            });
-            ctx.render();
-          }
-        })
-      );
-    }
-    if (clip.clipLengthFromControlNet) {
-      const controlLengthStatus = document.createElement("div");
-      controlLengthStatus.className = "vst-detail-control-signal-derived-duration";
-      const status = document.createElement("p");
-      status.className = "vst-detail-note";
-      status.textContent = "Control-signal-derived clip duration is active.";
-      controlLengthStatus.appendChild(status);
-      if (controlDurationIssueDecision) {
-        controlLengthStatus.appendChild(
-          buildCapabilityNotice(controlDurationIssueDecision)
-        );
-      }
-      controlLengthStatus.appendChild(
-        buildCapabilityRepairButton({
-          label: "Remove control-signal-derived duration",
-          className: "vst-detail-delete vst-remove-control-signal-derived-duration",
-          onRepair: () => {
-            ctx.commit((items) => {
-              const target = items[clipIdx];
-              if (target) {
-                target.clipLengthFromControlNet = false;
-              }
-            });
-            ctx.render();
-          }
-        })
-      );
-      base.appendChild(controlLengthStatus);
-    }
-    const saveRow = buildCheckbox(
-      "Save audio separately",
-      clip.saveAudioTrack === true && isAce,
-      (value) => {
-        commitAudio((c) => {
-          c.saveAudioTrack = value;
-        });
-      },
-      {
-        disabled: !isAce,
-        help: "Export the generated audio as its own output alongside the video. Only available for generated (AceStep) audio."
-      }
-    );
-    base.appendChild(saveRow);
-    if (source === AUDIO_SOURCE_UPLOAD) {
-      base.appendChild(
-        buildMediaPickRow(
-          "Audio Upload",
-          "audio/*",
-          ["audio"],
-          clip.uploadedAudio?.fileName,
-          (data, fileName) => {
-            commitAudio((c) => {
-              c.uploadedAudio = { data, fileName };
-              c.uploadedAudioDurationSeconds = 0;
-              c.uploadedAudioStartSeconds = 0;
-              c.uploadedAudioLengthSeconds = 0;
-            });
-            ctx.render();
-            if (clip.id) {
-              runClipMediaProbe({
-                clipId: clip.id,
-                slot: "base-audio",
-                probe: () => probeMediaDurationSeconds(data),
-                apply: (target, duration) => {
-                  if (target.uploadedAudio?.data !== data) {
-                    return;
-                  }
-                  target.uploadedAudioDurationSeconds = roundToTenth(duration);
-                },
-                onApplied: () => ctx.render()
-              });
-            }
-          },
-          () => {
-            commitAudio((c) => {
-              c.uploadedAudio = null;
-              c.uploadedAudioDurationSeconds = 0;
-              c.uploadedAudioStartSeconds = 0;
-              c.uploadedAudioLengthSeconds = 0;
-            });
-            ctx.render();
-          }
-        )
-      );
-      if (clip.uploadedAudio) {
-        const limitSeconds = clip.uploadedAudioDurationSeconds;
-        const shown = clip.uploadedAudioLengthSeconds > 0 ? {
-          startSeconds: clip.uploadedAudioStartSeconds,
-          lengthSeconds: clip.uploadedAudioLengthSeconds
-        } : { startSeconds: 0, lengthSeconds: limitSeconds };
-        base.appendChild(
-          buildSidebarMediaPreview(
-            "audio",
-            clip.uploadedAudio.data,
-            shown
-          )
-        );
-        if (limitSeconds > 0) {
-          const range = toInOut(shown);
-          base.appendChild(
-            buildTrimLauncher(
-              `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · Uses ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
-              () => openTrimModal({
-                mediaKind: "audio",
-                title: "Trim Base Audio",
-                fileName: clip.uploadedAudio?.fileName ?? "Base audio",
-                dataUri: clip.uploadedAudio?.data ?? null,
-                range: shown,
-                limits: {
-                  limitSeconds,
-                  minLengthSeconds: AUDIO_SPAN_MIN_LENGTH,
-                  fps: 0
-                },
-                impactText: (next) => `Uses ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
-                onApply: (next) => {
-                  const whole = next.startSeconds <= 0 && next.lengthSeconds >= limitSeconds;
-                  commitAudio((target) => {
-                    target.uploadedAudioStartSeconds = whole ? 0 : next.startSeconds;
-                    target.uploadedAudioLengthSeconds = whole ? 0 : next.lengthSeconds;
-                  });
-                  ctx.render();
-                }
-              })
-            )
-          );
-        }
-      }
-    }
-    if (!audioDecision.supported) {
-      applyPersistedCapabilityRepair(base, audioDecision, {
-        keep: [
-          ...CAPABILITY_REPAIR_SELECTORS,
-          ".vst-detail-audio-reuse",
-          ".vst-detail-audio-derived-duration",
-          ".vst-detail-control-signal-derived-duration"
-        ],
-        repair: {
-          label: "Remove unsupported clip audio",
-          className: "vst-remove-unsupported-audio",
-          onRepair: () => {
-            ctx.structuralCommit((items) => {
-              const target = items[clipIdx];
-              if (!target) {
-                return null;
-              }
-              target.audioSource = defaultAuthoringAudioSource(
-                capabilityView.audioSourceKinds
-              );
-              target.uploadedAudio = null;
-              target.saveAudioTrack = false;
-              return "render";
-            });
-          }
-        }
-      });
-    }
-    body.appendChild(
-      buildAccordionSection({
-        key: "base-audio",
-        label: "Base Audio",
-        content: base,
-        open: true,
-        flattenContent: true
-      }).section
-    );
-    body.appendChild(
-      buildAudioTracksPanel(
-        ctx,
-        state,
-        { kind: "none" },
-        {
-          trackIndices: audioTrackIndicesForClipWindow(state, clipIdx),
-          clipWindow: clipTimelineWindow(state.clips, clipIdx) ?? void 0
-        }
-      )
-    );
-    return body;
-  };
-
-  // frontend/skipVocabulary.ts
-  var skipGlyph = (skipped) => skipped ? "⟲" : "⏭︎";
-  var skipTitle = (subject, skipped) => `${skipped ? "Re-enable" : "Skip"} ${subject}`;
-
-  // frontend/timelineView/rendering.ts
-  var laneVisible = (clip, feature, persisted, capabilities) => {
-    const decision = capabilities?.forClip(clip).decision(feature);
-    return decision === void 0 || decision.supported || decision.code !== "" || persisted;
-  };
-  var clipInnerWidth = (widthPx) => Math.max(1, widthPx - 2);
-  var backgroundImageDataAttr = (source) => ` data-vst-background-image="${escapeHtml(source)}"`;
-  var applyBackgroundImages = (root) => {
-    for (const element of root.querySelectorAll(
-      "[data-vst-background-image]"
-    )) {
-      const source = element.dataset.vstBackgroundImage;
-      if (source) {
-        element.style.backgroundImage = `url(${JSON.stringify(source)})`;
-      }
-      element.removeAttribute("data-vst-background-image");
-    }
-  };
-  var renderWindowSpan = (options) => {
-    const { left, width, empty } = spanGeometry(
-      options.startSeconds,
-      options.lengthSeconds,
-      options.durationSeconds
-    );
-    if (empty) {
-      return "";
-    }
-    return `<div class="${options.className}${options.extraClassName ? ` ${options.extraClassName}` : ""}" ${options.dataAttrs} style="left:${left}%;width:${width}%" role="button" tabindex="0" title="${escapeHtml(options.title)}" aria-label="${escapeHtml(options.ariaLabel)}"><span class="${options.className}-resize ${options.className}-resize-l" ${options.edgeAttr}="left" aria-hidden="true"></span>` + (options.decoration ?? "") + `<span class="${options.labelClass}">${escapeHtml(options.label)}</span><span class="${options.className}-resize ${options.className}-resize-r" ${options.edgeAttr}="right" aria-hidden="true"></span></div>`;
-  };
-  var headTag = (kind, label, options) => {
-    const action = options?.action;
-    const classes = `vst-head-tag vst-head-tag-${kind}` + (options?.active ? " vst-head-tag-active" : "") + (options?.muted ? " vst-head-tag-muted" : "") + (action ? " vst-head-tag-action" : "");
-    const style = options?.style ? ` style="${options.style}"` : "";
-    return `<div class="${classes}"${style} ${action ? `${action} role="button" tabindex="0"` : `aria-hidden="true"`}><span class="vst-head-tag-pill">${label}</span><span class="vst-head-tag-tick"></span></div>`;
-  };
-  var renderTrackHead = (iconClass, icon, title, tags) => `<div class="vst-track-head"><div class="vst-head-top"><div class="vst-track-icon ${iconClass}" aria-hidden="true">${icon}</div><div class="vst-track-label"><strong>${title}</strong></div></div>` + (tags ? `<div class="vst-head-tags">${tags}</div>` : "") + `</div>`;
-
-  // frontend/timelineView/regionRenderer.ts
-  var refFrame = (ref) => Math.max(0, ref.frame ?? 0);
-  var hasRetake = (clip) => clip.retake != null;
-  var retakeLaneVisible = (clip, capabilities) => laneVisible(clip, "retake", hasRetake(clip), capabilities);
-  var renderRegionThumb = (clip) => {
-    const withImage = (clip.frameRefs ?? []).filter(
-      (ref) => !!ref.uploadedImage?.data
-    );
-    if (withImage.length === 0) {
-      return "";
-    }
-    const startPool = withImage.filter((ref) => ref.fromEnd !== true);
-    const startRef = (startPool.length > 0 ? startPool : withImage).reduce(
-      (best, ref) => refFrame(ref) < refFrame(best) ? ref : best
-    );
-    let endRef = withImage.find((ref) => ref.fromEnd === true) ?? null;
-    if (!endRef) {
-      const highest = withImage.reduce(
-        (best, ref) => refFrame(ref) > refFrame(best) ? ref : best
-      );
-      if (highest !== startRef) {
-        endRef = highest;
-      }
-    }
-    const cell = (ref, side) => {
-      const source = mediaPreviewSrc(ref.uploadedImage?.data ?? "");
-      return `<div class="vst-region-thumb-cell vst-region-thumb-${side}"${backgroundImageDataAttr(source)}></div>`;
-    };
-    const cells = cell(startRef, "start") + (endRef ? cell(endRef, "end") : "");
-    return `<div class="vst-region-thumb" data-cells="${endRef ? 2 : 1}" aria-hidden="true">${cells}</div>`;
-  };
-  var renderRetakeRegionShade = (clip, durationSeconds) => {
-    const retake = clip.retake;
-    if (!retake || durationSeconds <= 0) {
-      return "";
-    }
-    const { left, width, empty } = spanGeometry(
-      retake.startSeconds,
-      retake.lengthSeconds,
-      durationSeconds
-    );
-    if (empty) {
-      return "";
-    }
-    return `<div class="vst-region-off" style="left:${left}%;width:${width}%" aria-hidden="true"></div>`;
-  };
-  var renderRetakeOverlay = (clip, clipIdx, durationSeconds, editable) => {
-    const retake = clip.retake;
-    if (!retake || durationSeconds <= 0) {
-      return "";
-    }
-    const { startSeconds: start, endSeconds: end } = spanGeometry(
-      retake.startSeconds,
-      retake.lengthSeconds,
-      durationSeconds
-    );
-    const label = `RETAKE ${roundToTenth(start)}–${roundToTenth(end)} s`;
-    return renderWindowSpan({
-      className: "vst-retake",
-      dataAttrs: `data-vst-retake data-clip-idx="${clipIdx}"`,
-      edgeAttr: "data-vst-retake-edge",
-      labelClass: "vst-retake-label",
-      label,
-      title: editable ? `${label} · drag to move/resize · Shift+click to delete` : `${label} · unsupported by this architecture · click to inspect or Shift+click to delete`,
-      ariaLabel: editable ? label : `${label}. Unsupported persisted retake; available for inspection or removal.`,
-      startSeconds: retake.startSeconds,
-      lengthSeconds: retake.lengthSeconds,
-      durationSeconds
-    });
-  };
-  var renderKeyframes = (clip, clipIdx, durationSeconds, fps, unit) => {
-    const frameRefs = clip.frameRefs ?? [];
-    if (frameRefs.length === 0) {
-      return "";
-    }
-    const markers = frameRefs.map((ref, refIdx) => {
-      const time = keyframeTimeSeconds(
-        ref.frame,
-        ref.fromEnd === true,
-        durationSeconds,
-        fps
-      );
-      const left = keyframeLeftPercent(time, durationSeconds);
-      const isEnd = ref.fromEnd === true;
-      const isPrimary = (ref.frame ?? 0) === 1 && !isEnd;
-      const source = refSourceLabel(ref.source ?? "");
-      const title = `${source} · frame ${ref.frame ?? 0}${isEnd ? " (from end)" : ""}${isPrimary ? " (cover)" : ""} · ${formatTimeLabel(time, unit, fps)}`;
-      const kindClass = (isEnd ? " vst-key-end" : " vst-key-start") + (isPrimary ? " vst-key-primary" : "");
-      return `<span class="vst-key${kindClass}" data-clip-idx="${clipIdx}" data-ref-idx="${refIdx}" style="left:${left}%" title="${escapeHtml(title)}" aria-hidden="true"><span class="vst-key-dot" aria-hidden="true"></span></span>`;
-    }).join("");
-    return `<div class="vst-keys" title="Keyframe markers">${markers}</div>`;
-  };
-  var renderBadges = (clip, clipIdx) => {
-    const firstStage = (clip.stages ?? [])[0];
-    if (!firstStage) {
-      return `<div class="vst-badges"></div>`;
-    }
-    const model = firstStage.model ?? "";
-    const title = `Clip model: ${`${model}`.trim() || "(default)"} — click to change (applies to Stage 0)`;
-    const modelBadge = `<span class="vst-badge vst-badge-model" data-vst-model data-clip-idx="${clipIdx}" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">${escapeHtml(shortModelName(model))}</span>`;
-    const icLoraCount = (clip.icLoras ?? []).length;
-    const icLoraTitle = `${icLoraCount} IC-LoRA${icLoraCount === 1 ? "" : "s"} on this clip — edit in the clip panel`;
-    const icLoraBadge = icLoraCount > 0 ? `<span class="vst-badge vst-badge-iclora" title="${escapeHtml(icLoraTitle)}" aria-label="${escapeHtml(icLoraTitle)}">IC×${icLoraCount}</span>` : "";
-    return `<div class="vst-badges">${modelBadge}${icLoraBadge}</div>`;
-  };
-  var renderStageChips = (clip, clipIdx) => (clip.stages ?? []).map((stage, stageIdx) => {
-    const skipped = stage?.skipped === true;
-    const skippedClass = skipped ? " vst-stage-chip-skipped" : "";
-    const title = `${stageChipTitle(stage, stageIdx)}${skipped ? " (skipped)" : ""} · click to edit${stageIdx === 0 ? "" : " · Shift+click to delete"}`;
-    const label = `${skipped ? "⊘ " : ""}${stageChipLabel(stageIdx)}`;
-    return `<span class="vst-chip vst-stage-chip${skippedClass}" data-vst-stage data-clip-idx="${clipIdx}" data-stage-idx="${stageIdx}" role="button" tabindex="0" title="${escapeHtml(title)}">${escapeHtml(label)}</span>`;
-  }).join("");
-  var lengthDerived = (clip) => clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true;
-  var BOUNDARY_GLYPH = {
-    cut: "│",
-    continue: "→",
-    crossfade: "⤬"
-  };
-  var BOUNDARY_LABEL = {
-    cut: "Cut",
-    continue: "Continue",
-    crossfade: "Crossfade"
-  };
-  var renderBoundarySeams = (clips, layouts, capabilities, timing, pxPerSecond = 1) => executableBoundaries(clips).flatMap((seam) => {
-    const layout = layouts[seam.rightIdx];
-    if (!layout) {
-      return [];
-    }
-    const clip = clips[seam.leftIdx];
-    const value = clip.boundaryOut ?? "cut";
-    const capability = capabilities?.forBoundaryIndex(
-      clips,
-      seam.leftIdx
-    );
-    const policyEffective = capability?.effective(value) ?? value;
-    const impact = timing?.boundaries.find(
-      (boundary) => boundary.leftIdx === seam.leftIdx
-    );
-    const effective = impact?.effectiveMode ?? policyEffective;
-    const glyph = BOUNDARY_GLYPH[effective] ?? BOUNDARY_GLYPH.cut;
-    const label = BOUNDARY_LABEL[value] ?? BOUNDARY_LABEL.cut;
-    const effectiveLabel = BOUNDARY_LABEL[effective];
-    const fallback = value === effective ? "" : ` Requested ${label}; effective ${effectiveLabel}.`;
-    const shared = impact && impact.overlapFrames > 0 ? ` ${impact.overlapFrames} frames (${formatSecondsTenth(impact.overlapSeconds)}) shared.` : "";
-    const duration = impact && impact.overlapFrames > 0 ? formatSecondsTenth(impact.overlapSeconds) : "";
-    const sharedPixels = impact && impact.overlapFrames > 0 ? impact.overlapSeconds * pxPerSecond : 0;
-    const density = sharedPixels >= 88 ? "full" : sharedPixels >= 44 ? "compact" : "icon";
-    const title = `Boundary clip ${seam.leftIdx} → ${seam.rightIdx}: ${label}.${fallback}${shared} Click to edit.`;
-    const ariaLabel = `Clip ${seam.leftIdx} outgoing boundary: ${label}.${fallback}${shared} Click to edit.`;
-    const left = layout.startPx;
-    return [
-      `<button type="button" class="basic-button vst-boundary-chip vst-boundary-chip-${density} vst-boundary-${effective}${value === effective ? "" : " vst-boundary-fallback"}" data-vst-boundary-chip data-vst-boundary-density="${density}" data-vst-boundary-has-duration="${duration ? "true" : "false"}" data-left-clip-idx="${seam.leftIdx}" data-right-clip-idx="${seam.rightIdx}" data-boundary="${value}" data-effective-boundary="${effective}" style="left:${left}px" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}"><span class="vst-boundary-glyph" aria-hidden="true">${escapeHtml(glyph)}</span>` + (duration ? `<span class="vst-boundary-kind">${escapeHtml(effectiveLabel)}</span><span class="vst-boundary-divider" aria-hidden="true"></span><span class="vst-boundary-duration">${escapeHtml(duration)}</span>` : "") + `</button>`
-    ];
-  }).join("");
-  var renderBoundaryOverlapBands = (layouts, boundaries, pxPerSecond) => boundaries.filter((boundary) => boundary.overlapFrames > 0).map((boundary) => {
-    const right = layouts[boundary.rightIdx];
-    if (!right) {
-      return "";
-    }
-    const width = boundary.overlapSeconds * pxPerSecond;
-    const left = boundary.effectiveMode === "continue" ? right.startPx - width : right.startPx - width / 2;
-    return `<div class="vst-boundary-overlap vst-boundary-overlap-${boundary.effectiveMode}" style="left:${left}px;width:${width}px" aria-hidden="true"></div>`;
-  }).join("");
-  var renderRegions = (clips, layouts, fps, unit, capabilities) => layouts.map((layout) => {
-    const clip = clips[layout.index];
-    const skippedClass = layout.skipped ? " vst-region-skipped" : "";
-    const tinyClass = layout.widthPx <= 12 ? " vst-region-tiny" : "";
-    const skippedChip = layout.skipped ? `<span class="vst-chip vst-chip-skip">skipped</span>` : "";
-    const authoredDurationSeconds = layout.frameCount > 0 ? layout.frameCount / fps : layout.durationSeconds;
-    const duration = escapeHtml(
-      unit === "frames" && layout.frameCount > 0 ? `${layout.frameCount}f` : formatTimeLabel(authoredDurationSeconds, unit, fps)
-    );
-    const sharedAllocation = layout.timelineReductionSeconds;
-    const timingTitle = layout.incomingHandleSeconds > 0 ? ` · ${formatSecondsTenth(layout.generatedDurationSeconds)} generated · ${formatSecondsTenth(layout.timelineDurationSeconds)} timeline · ${formatSecondsTenth(layout.incomingHandleSeconds)} handle` : sharedAllocation > 0 ? ` · ${formatSecondsTenth(layout.generatedDurationSeconds)} generated · ${formatSecondsTenth(layout.timelineDurationSeconds)} unique · ${formatSecondsTenth(sharedAllocation)} shared` : ` · ${duration}`;
-    const skipLabel = skipTitle("clip", layout.skipped);
-    const skipMark = skipGlyph(layout.skipped);
-    const firstClip = layout.index === 0;
-    const controls = firstClip ? "" : `<div class="vst-region-controls"><button type="button" class="basic-button small-button vst-region-btn${layout.skipped ? " vst-btn-skip-active" : ""}" data-vst-region-action="skip" aria-pressed="${layout.skipped}" title="${skipLabel}" aria-label="${skipLabel}">${skipMark}</button></div>`;
-    const resizeGrip = lengthDerived(clip) ? "" : `<div class="vst-region-resize" title="${clip.initVideo ? "Drag to trim the end of the source video" : "Drag to change clip duration"}"></div>`;
-    const width = clipInnerWidth(layout.widthPx);
-    const retakeDecision = capabilities?.forClip(clip).decision("retake");
-    const retakeSupported = retakeDecision?.supported ?? true;
-    const canAddRetake = retakeSupported && !clip.retake;
-    const retakeLaneAttrs = canAddRetake ? " data-vst-retake-add" : retakeSupported ? " data-vst-retake-full" : ' data-vst-capability-disabled="retake"';
-    const retakeLaneTitle = canAddRetake ? "Click empty space to add a retake window" : retakeSupported ? "This clip already has a retake window" : retakeDecision?.reason ?? "Retake is unavailable for this clip";
-    return `<div class="vst-region${skippedClass}${tinyClass}" style="left:${layout.startPx}px;width:${width}px;--clip-hue:${clipHueCss(clip.hue)}" data-clip-idx="${layout.index}" data-vst-join-trim-seconds="${sharedAllocation}" title="Clip ${layout.index}${timingTitle} · Click to edit${firstClip ? "" : " · Shift+click to delete"}">` + renderRegionThumb(clip) + renderRetakeRegionShade(clip, layout.durationSeconds) + renderKeyframes(
-      clip,
-      layout.index,
-      authoredDurationSeconds,
-      fps,
-      unit
-    ) + `<div class="vst-region-head"><span class="vst-region-name">Clip ${layout.index}</span>` + renderStageChips(clip, layout.index) + `<span class="vst-chip" title="Keyframes">◆ ${layout.keyframeCount}</span>` + skippedChip + `<span class="vst-region-dur">${duration}</span></div>` + renderBadges(clip, layout.index) + controls + resizeGrip + `</div>` + (retakeLaneVisible(clip, capabilities) ? `<div class="vst-retake-lane${retakeSupported ? "" : " vst-capability-disabled"}"${retakeLaneAttrs}${retakeSupported || clip.retake ? "" : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(retakeLaneTitle)}">` + renderRetakeOverlay(
-      clip,
-      layout.index,
-      layout.durationSeconds,
-      retakeSupported
-    ) + `</div>` : "");
-  }).join("");
-  var renderVideoTrackRow = (clips, layouts, fps, unit, capabilities, timing, pxPerSecond = 1) => {
-    const retakeTrack = clips.some(
-      (clip) => retakeLaneVisible(clip, capabilities)
-    );
-    const head = renderTrackHead(
-      "vst-track-icon-video",
-      "▶",
-      "Video",
-      headTag("clip", "Clip", { active: true }) + (retakeTrack ? headTag("retake", "Retake", {
-        active: clips.some(hasRetake)
-      }) : "")
-    );
-    return `<div class="vst-track-row vst-track-video${retakeTrack ? "" : " vst-no-retake"}">${head}<div class="vst-track-cell">` + renderRegions(clips, layouts, fps, unit, capabilities) + renderBoundaryOverlapBands(
-      layouts,
-      timing?.outputGeometryAvailable === true ? timing.boundaries : [],
-      pxPerSecond
-    ) + renderBoundarySeams(clips, layouts, capabilities, timing, pxPerSecond) + `</div></div>`;
-  };
-
-  // frontend/detailStrip/boundaryPanel.ts
-  var buildBoundaryBody = (ctx, sel, state) => {
-    const clips = state.clips;
-    const { leftClipIdx } = sel;
-    const body = document.createElement("div");
-    body.className = "vst-detail-body";
-    const fields = document.createElement("div");
-    fields.className = "vst-detail-form-body vst-detail-boundary";
-    const clip = clips[leftClipIdx];
-    const value = clip?.boundaryOut ?? "cut";
-    const capabilities = ctx.authoring().capabilities;
-    const capability = capabilities.forBoundaryIndex(clips, leftClipIdx);
-    const seam = executableBoundaryForLeftClip(clips, leftClipIdx);
-    const fps = Math.round(safeFps(state.fps));
-    const overlapPolicy = capability.windowConstraints(value);
-    const isReferenceContinue = value === "continue" && overlapPolicy.continueMode === "reference";
-    const referenceTailLabel = clip?.boundaryOutReferenceIncludeSoundtrack === false ? "video tail" : "video and audio tail";
-    const carryTargetHasStage = capability.rightClipIdx !== null && capabilities.forClip(clips[capability.rightClipIdx]).hasGenerationStage;
-    const carryAudioSupported = clip !== void 0 && capabilities.forClip(clip).decision("audioBoundaryCarry").supported;
-    const carryAudioActive = carryAudioSupported && !isReferenceContinue && clip?.boundaryOutCarryAudio === true && carryTargetHasStage;
-    const joinSpecs = capability.modes.map((mode) => ({
-      value: mode,
-      label: `${BOUNDARY_LABEL[mode]} ${BOUNDARY_GLYPH[mode]}`
-    }));
-    if (!capability.modes.includes(value)) {
-      joinSpecs.unshift({
-        value,
-        label: `${BOUNDARY_LABEL[value]} ${BOUNDARY_GLYPH[value]} (unsupported persisted value)`,
-        disabled: true
-      });
-    }
-    const select2 = buildOptionSelect(joinSpecs, value, (next) => {
-      ctx.commit((cs) => {
-        const c = cs[leftClipIdx];
-        if (c) {
-          c.boundaryOut = next ?? "cut";
-        }
-      });
-      ctx.render();
-    });
-    fields.appendChild(
-      buildField(
-        "Join",
-        select2,
-        void 0,
-        "How this clip joins the next one. Cut: hard concatenation. Continue: the next clip is generated from this clip's last frames so motion carries through. Crossfade: the overlap is dissolved pixel-by-pixel."
-      )
-    );
-    if (!capability.modes.includes(value) && capability.reason) {
-      fields.appendChild(
-        buildCapabilityNotice({
-          supported: false,
-          reason: capability.reason,
-          code: ""
-        })
-      );
-    }
-    if (value !== "cut" && capability.modes.includes(value)) {
-      const overlapValue = clip?.boundaryOutOverlap ?? overlapPolicy.defaultFrames;
-      const overlapSpecs = boundaryWindowChoices(
-        overlapPolicy
-      ).map((frames) => ({
-        value: `${frames}`,
-        label: `${frames} frames (~${formatOverlapSeconds(frames, fps)})`
-      }));
-      if (overlapValue > 0 && !overlapSpecs.some((option) => option.value === `${overlapValue}`)) {
-        overlapSpecs.unshift({
-          value: `${overlapValue}`,
-          label: `${overlapValue} frames (unsupported persisted value)`,
-          disabled: true
-        });
-      }
-      const overlapSelect = buildOptionSelect(
-        overlapSpecs,
-        `${overlapValue}`,
-        (next) => {
-          ctx.commit((cs) => {
-            const c = cs[leftClipIdx];
-            if (c) {
-              c.boundaryOutOverlap = normalizeBoundaryWindow(
-                next,
-                overlapPolicy
-              );
-            }
-          });
-          ctx.render();
-        }
-      );
-      fields.appendChild(
-        buildField(
-          isReferenceContinue ? "Reference window" : "Overlap",
-          overlapSelect,
-          void 0,
-          isReferenceContinue ? `Requested duration of the previous clip's ${referenceTailLabel} used as reference context.` : "How many frames the clips share at the join. For Continue this is frozen context; for Crossfade it is the dissolve length."
-        )
-      );
-      if (carryAudioSupported && !isReferenceContinue) {
-        fields.appendChild(
-          buildCheckbox(
-            "Continue outgoing audio into next clip",
-            clip?.boundaryOutCarryAudio === true,
-            (enabled) => {
-              ctx.commit((cs) => {
-                const c = cs[leftClipIdx];
-                if (c) {
-                  c.boundaryOutCarryAudio = enabled;
-                }
-              });
-              ctx.render();
-            },
-            {
-              disabled: !carryTargetHasStage,
-              help: "Preserve this clip's audio tail at the start of the next clip's generation, then let its model generate the continuation. The next clip needs an active stage."
-            }
-          )
-        );
-      }
-    }
-    const timing = seam === null ? null : resolveTimelineTiming(clips, fps, capabilities);
-    const impact = timing === null ? null : boundaryImpactForLeftClip(timing, leftClipIdx);
-    const plannedWindow = impact === null ? 0 : value === "continue" ? impact.continuityWindowFrames : impact.overlapFrames;
-    const info = document.createElement("div");
-    info.className = "vst-boundary-info";
-    const effective = capability.effective(value);
-    if (effective !== value) {
-      info.classList.add("vst-boundary-warn");
-      info.textContent = `${BOUNDARY_LABEL[value]} is preserved for repair, but this join executes as ${BOUNDARY_LABEL[effective].toLowerCase()}. ${capability.reason}`;
-    } else if (value === "cut") {
-      info.textContent = "Hard cut — clips are concatenated with no overlap.";
-    } else if (value === "continue") {
-      const window2 = plannedWindow;
-      if (window2 <= 0) {
-        info.classList.add("vst-boundary-warn");
-        info.textContent = `This continue will fall back to a cut — a clip is too short for the requested ${isReferenceContinue ? "reference window" : "overlap"}.`;
-      } else {
-        const requested = (clip?.boundaryOutOverlap ?? overlapPolicy.defaultFrames) + (overlapPolicy.continueMode === "overlap" ? overlapPolicy.continuityExtraFrames : 0);
-        let text2 = isReferenceContinue ? `Continue — requests up to ~${formatOverlapSeconds(window2, fps)} of this clip's ${referenceTailLabel} as reference context.` : `Continue — the next clip is generated with this clip's last ${window2} frame${window2 === 1 ? "" : "s"} (~${formatOverlapSeconds(window2, fps)}) as frozen context, and the merge collapses the duplicated frames.`;
-        if (window2 < requested) {
-          text2 += " The window was reduced to fit clip or model limits.";
-        }
-        if (carryAudioActive) {
-          text2 += " Its audio tail becomes preserved opening context for the next clip's generated audio.";
-        }
-        info.textContent = text2;
-      }
-    } else {
-      const overlapFrames = plannedWindow;
-      if (overlapFrames <= 0) {
-        info.classList.add("vst-boundary-warn");
-        info.textContent = "This crossfade will fall back to a cut — a clip is too short for the overlap window.";
-      } else {
-        const requested = clip?.boundaryOutOverlap ?? capability.windowConstraints(value).defaultFrames;
-        let text2 = `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} (~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
-        if (overlapFrames < requested) {
-          text2 += " The window was reduced because a clip is too short.";
-        }
-        if (carryAudioActive) {
-          text2 += " Its audio tail becomes preserved opening context for the next clip's generated audio.";
-        }
-        info.textContent = text2;
-      }
-    }
-    fields.appendChild(info);
-    if (timing !== null && impact !== null) {
-      const leftFrames = timing.clipFrames[impact.leftIdx] ?? 0;
-      const rightFrames = timing.clipFrames[impact.rightIdx] ?? 0;
-      const combinedFrames = Math.max(
-        0,
-        leftFrames + rightFrames + impact.handleFrames - impact.overlapFrames
-      );
-      const impactBlock = document.createElement("div");
-      impactBlock.className = "vst-boundary-impact";
-      const heading = document.createElement("div");
-      heading.className = "vst-detail-crumb vst-detail-subsection-crumb vst-boundary-impact-title";
-      heading.textContent = "Output impact";
-      impactBlock.appendChild(heading);
-      const rows = document.createElement("div");
-      rows.className = "vst-boundary-impact-rows";
-      const addRow = (label, frames, sign = "", strong = false) => {
-        const row = document.createElement("div");
-        row.className = `vst-boundary-impact-row${strong ? " vst-boundary-impact-total" : ""}`;
-        const name = document.createElement("span");
-        name.textContent = label;
-        const value2 = document.createElement("span");
-        value2.textContent = `${sign}${frames}f · ${sign}${formatSecondsTenth(frames / fps)}`;
-        row.append(name, value2);
-        rows.appendChild(row);
-      };
-      addRow(`Clip ${impact.leftIdx}`, leftFrames);
-      addRow(`Clip ${impact.rightIdx}`, rightFrames, "+");
-      if (impact.handleFrames > 0) {
-        addRow("Incoming Continue handle", impact.handleFrames, "+");
-      }
-      addRow(
-        `${BOUNDARY_LABEL[impact.effectiveMode]} shared`,
-        impact.overlapFrames,
-        impact.overlapFrames > 0 ? "−" : ""
-      );
-      addRow("Pair after this join", combinedFrames, "", true);
-      impactBlock.appendChild(rows);
-      if (value === "continue" && impact.overlapFrames > 0 && overlapPolicy.continuityExtraFrames > 0) {
-        const note = document.createElement("div");
-        note.className = "vst-boundary-impact-note";
-        const selectedFrames = impact.handleFrames;
-        note.textContent = `${selectedFrames}f selected + ${overlapPolicy.continuityExtraFrames} LTX continuation frame = ${impact.overlapFrames}f effective shared window.`;
-        impactBlock.appendChild(note);
-      }
-      fields.appendChild(impactBlock);
-    }
-    body.appendChild(
-      buildStaticSection({
-        key: "boundary",
-        label: "Boundary",
-        className: "vst-detail-boundary-section",
-        content: fields,
-        flattenContent: true
-      }).section
-    );
-    return body;
-  };
-
-  // frontend/architectures/ltx2/icLoraAutoDownload.ts
-  var IC_LORA_AUTO_HINT_ATTR = "data-vst-iclora-auto";
-  var statuses = /* @__PURE__ */ new Map();
-  var clearIcLoraAutoFailure = (presetId) => {
-    if (statuses.get(`${presetId ?? ""}`.trim())?.state === "error") {
-      statuses.delete(`${presetId ?? ""}`.trim());
-    }
-  };
-  var installedAutoWeights = (preset, installedLoras) => {
-    const wanted = [
-      icLoraAutoModelName(preset).toLowerCase(),
-      icLoraLegacyAutoModelName(preset).toLowerCase()
-    ];
-    return installedLoras.find(
-      (name) => wanted.includes(`${name}`.toLowerCase())
-    ) ?? null;
-  };
-  var statusTextFor = (preset, status) => {
-    switch (status.state) {
-      case "downloading":
-        return `Downloading ${preset.displayName} weights… ${Math.round(status.percent * 100)}%`;
-      case "done":
-        return `Downloaded to ${icLoraAutoModelName(preset)}.`;
-      case "error":
-        return `Download failed: ${status.message} Reselect the preset to retry.`;
-    }
-  };
-  var setStatus = (preset, status) => {
-    statuses.set(preset.id, status);
-    const text2 = statusTextFor(preset, status);
-    document.querySelectorAll(`[${IC_LORA_AUTO_HINT_ATTR}="${preset.id}"]`).forEach((el) => {
-      el.textContent = text2;
-    });
-  };
-  var finish = (preset, onSettled) => {
-    setStatus(preset, { state: "done" });
-    refreshHostParameters();
-    onSettled();
-  };
-  var ensureIcLoraAutoWeights = (entry, installedLoras, onSettled) => {
-    if (entry.lora !== IC_LORA_AUTO) {
-      return;
-    }
-    const preset = findIcLoraPreset(entry.preset);
-    if (!preset || installedAutoWeights(preset, installedLoras) || statuses.has(preset.id)) {
-      return;
-    }
-    if (!canRequestHostWs()) {
-      statuses.set(preset.id, {
-        state: "error",
-        message: "Model downloader is unavailable."
-      });
-      return;
-    }
-    statuses.set(preset.id, { state: "downloading", percent: 0 });
-    requestHostWs(
-      "VideoStagesDownloadIcLoraWS",
-      { presetId: preset.id },
-      (data) => {
-        if (typeof data?.current_percent === "number") {
-          setStatus(preset, {
-            state: "downloading",
-            percent: data.current_percent
-          });
-        } else if (data?.success) {
-          finish(preset, onSettled);
-        }
-      },
-      (error) => {
-        if (`${error}` === "Model at that save path already exists.") {
-          finish(preset, onSettled);
-          return;
-        }
-        setStatus(preset, { state: "error", message: `${error}` });
-        onSettled();
-      }
-    );
-  };
-  var icLoraAutoHint = (entry, installedLoras) => {
-    if (entry.lora !== IC_LORA_AUTO) {
-      return "";
-    }
-    const preset = findIcLoraPreset(entry.preset);
-    if (!preset) {
-      return "[AUTO] needs a preset — pick one to download its weights.";
-    }
-    const installed = installedAutoWeights(preset, installedLoras);
-    if (installed) {
-      return `Using ${installed}.`;
-    }
-    const status = statuses.get(preset.id);
-    return status ? statusTextFor(preset, status) : "Preparing preset weights download…";
-  };
-
-  // frontend/architectures/ltx2/icLoraPanel.ts
-  var buildIcLorasSection = (context, clip, clipIdx, defaults, selectedEntryIdx = null, open = selectedEntryIdx !== null) => {
-    const authoring = context.authoring();
-    const clipCapabilities = authoring.capabilities.forClip(clip);
-    const icLoraDecision = clipCapabilities.decision("icLora");
-    const entryIdx = clip.icLoras.length === 0 ? null : Math.max(
-      0,
-      Math.min(selectedEntryIdx ?? 0, clip.icLoras.length - 1)
-    );
-    const buildSection = (editorForItem) => {
-      const built = buildRepeatingEditor({
-        key: "ic-loras",
-        label: "IC-LoRAs",
-        sectionClass: "vst-detail-iclora-section",
-        open,
-        items: clip.icLoras.map((entry, index) => ({
-          label: `IC${index}`,
-          stateKey: entry.id ? `ic-lora:${entry.id}` : void 0,
-          focusKey: `ic-lora-tab-${index}`,
-          title: `Edit IC-LoRA ${index}`,
-          active: index === entryIdx,
-          className: "vst-iclora-tab",
-          onSelect: () => setSelection({
-            kind: "ic-lora",
-            clipIdx,
-            entryIdx: index
-          }),
-          onDelete: () => {
-            context.structuralCommit(
-              (clips) => {
-                const target = clips[clipIdx];
-                if (!target?.icLoras[index]) {
-                  return null;
-                }
-                target.icLoras.splice(index, 1);
-                removeIcLoraStrengthAt(target, index);
-                return target.icLoras.length > 0 ? {
-                  kind: "ic-lora",
-                  clipIdx,
-                  entryIdx: Math.min(
-                    index,
-                    target.icLoras.length - 1
-                  )
-                } : { kind: "clip", clipIdx, stageIdx: 0 };
-              },
-              { rebuildAfterSelect: true }
-            );
-          }
-        })),
-        add: {
-          title: icLoraDecision.supported ? "Add an IC-LoRA" : icLoraDecision.reason,
-          label: "+ Add IC-LoRA",
-          className: "vst-detail-add-iclora",
-          disabled: !icLoraDecision.supported,
-          onClick: () => {
-            context.structuralCommit((clips) => {
-              const target = clips[clipIdx];
-              const defaultPreset = findIcLoraPreset(
-                IC_LORA_DEFAULT_PRESET_ID
-              );
-              if (!target || !defaultPreset || !authoring.capabilities.forClip(target).decision("icLora").supported) {
-                return null;
-              }
-              const defaultContract = icLoraDriveMediaContract(defaultPreset);
-              target.icLoras.push(
-                defaultIcLora({
-                  lora: IC_LORA_AUTO,
-                  preset: defaultPreset.id,
-                  strength: defaultPreset.strength,
-                  controlType: defaultPreset.controlType,
-                  driveData: defaultContract.driveData,
-                  driveMediaKinds: [
-                    ...defaultContract.acceptedKinds
-                  ]
-                })
-              );
-              appendIcLoraStrengthToClip(
-                target,
-                defaultLoraWeight(defaults, IC_LORA_AUTO)
-              );
-              return {
-                kind: "ic-lora",
-                clipIdx,
-                entryIdx: target.icLoras.length - 1
-              };
-            });
-          }
-        },
-        remove: {
-          title: entryIdx === null ? "No IC-LoRA to delete" : `Delete IC-LoRA ${entryIdx}`,
-          className: "vst-detail-delete-iclora"
-        },
-        editorForItem
-      });
-      appendHelp(
-        built.heading,
-        built.section,
-        "IC-LoRAs",
-        "In-context LoRAs use uploaded or incoming media for pose, depth, motion, style, audio, or other preset-specific conditioning. Add one per guide you want to apply."
-      );
-      return built.section;
-    };
-    if (entryIdx === null) {
-      return buildSection();
-    }
-    const buildEditor = (editorEntryIdx) => {
-      const entry = clip.icLoras[editorEntryIdx];
-      if (!entry) {
-        return void 0;
-      }
-      const entryIdx2 = editorEntryIdx;
-      const col = document.createElement("div");
-      col.className = "vst-detail-col vst-detail-instance-fields vst-detail-iclora vst-detail-iclora-col";
-      col.setAttribute("data-vst-iclora-idx", `${entryIdx2}`);
-      const entryAt = (clips, index) => clips[clipIdx]?.icLoras[index];
-      {
-        const fields = col;
-        const preset = findIcLoraPreset(entry.preset);
-        const driveMediaKinds = entry.driveMediaKinds;
-        const audioDriveMedia = entry.driveData === "audio";
-        const presetOptions = IC_LORA_PRESETS;
-        const presetSpecs = [
-          {
-            value: IC_LORA_PRESET_CUSTOM_ID,
-            label: "Custom",
-            disabled: defaults.loraValues.length === 0 && entry.preset !== IC_LORA_PRESET_CUSTOM_ID
-          },
-          ...presetOptions.map((preset2) => ({
-            value: preset2.id,
-            label: preset2.displayName
-          }))
-        ];
-        preserveSelectedOption(
-          presetSpecs,
-          entry.preset,
-          "start",
-          (value) => ({
-            value,
-            label: `${value} (unsupported persisted value)`,
-            disabled: true
-          })
-        );
-        const presetSelect = buildOptionSelect(
-          presetSpecs,
-          entry.preset,
-          (value) => {
-            context.commit((clips) => {
-              const target = entryAt(clips, entryIdx2);
-              if (!target) {
-                return;
-              }
-              target.preset = value;
-              const preset2 = findIcLoraPreset(value);
-              if (preset2) {
-                target.lora = IC_LORA_AUTO;
-                target.strength = preset2.strength;
-                target.controlType = preset2.controlType;
-              } else if (value === IC_LORA_PRESET_CUSTOM_ID) {
-                const customLora = defaults.loraValues[0];
-                if (customLora) {
-                  target.lora = customLora;
-                  const initialStrength = defaultLoraWeight(
-                    defaults,
-                    customLora
-                  );
-                  const targetClip2 = clips[clipIdx];
-                  for (const stage of targetClip2?.stages ?? []) {
-                    stage.icLoraStrengths[entryIdx2] = normalizeStageControlNetStrengthValue(
-                      initialStrength
-                    );
-                  }
-                }
-              }
-              const nextContract = icLoraDriveMediaContract(preset2);
-              target.driveData = nextContract.driveData;
-              target.driveMediaKinds = [
-                ...nextContract.acceptedKinds
-              ];
-              if (nextContract.driveData !== "visual") {
-                target.controlType = "none";
-              }
-              const driveData = target.driveMedia?.data ?? "";
-              if (driveData && !isAcceptedIcLoraDriveMedia(
-                driveData,
-                target.driveMedia?.fileName ?? null,
-                target.driveMediaKinds
-              )) {
-                target.driveMedia = null;
-              }
-              const targetClip = clips[clipIdx];
-              if (targetClip && target.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
-                target,
-                targetClip,
-                clipIdx,
-                clips,
-                authoring.generatedEntryMode
-              )) {
-                target.driveSource = MEDIA_SOURCE_UPLOAD;
-              }
-            });
-            clearIcLoraAutoFailure(value);
-            context.render();
-          }
-        );
-        fields.appendChild(
-          buildField(
-            "Preset",
-            presetSelect,
-            void 0,
-            "A curated IC-LoRA setup — picking one fills in the LoRA, strength, and control type for a known effect (pose, depth, style, etc.). Choose Custom to set everything yourself."
-          )
-        );
-        if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
-          const loraSpecs = defaults.loraValues.map(
-            (value, optionIdx) => ({
-              value,
-              label: defaults.loraLabels[optionIdx] ?? value
-            })
-          );
-          if (entry.lora !== IC_LORA_AUTO) {
-            preserveSelectedOption(
-              loraSpecs,
-              entry.lora,
-              "start",
-              (value) => ({
-                value,
-                label: `${value} (unsupported persisted value)`,
-                disabled: true
-              })
-            );
-          }
-          const loraSelect = buildOptionSelect(
-            loraSpecs,
-            entry.lora,
-            (value) => {
-              context.commit((clips) => {
-                const target = entryAt(clips, entryIdx2);
-                if (target) {
-                  target.lora = value;
-                  const initialStrength = defaultLoraWeight(
-                    defaults,
-                    value
-                  );
-                  const targetClip = clips[clipIdx];
-                  for (const stage of targetClip?.stages ?? []) {
-                    stage.icLoraStrengths[entryIdx2] = normalizeStageControlNetStrengthValue(
-                      initialStrength
-                    );
-                  }
-                }
-              });
-              context.render();
-            }
-          );
-          fields.appendChild(
-            buildField(
-              "LoRA",
-              loraSelect,
-              void 0,
-              "The in-context LoRA weights that turn the drive media into conditioning."
-            )
-          );
-        }
-        const strength = context.buildClampedNumber({
-          key: `iclora-${entryIdx2}-strength`,
-          value: entry.strength,
-          min: IC_LORA_STRENGTH_MIN,
-          max: IC_LORA_STRENGTH_MAX,
-          step: IC_LORA_STRENGTH_STEP,
-          readBack: (clips) => entryAt(clips, entryIdx2)?.strength ?? null,
-          mutate: (clips, value) => {
-            const target = entryAt(clips, entryIdx2);
-            if (target) {
-              target.strength = value;
-            }
-          }
-        });
-        fields.appendChild(
-          buildField(
-            "Strength",
-            strength,
-            void 0,
-            "How strongly this IC-LoRA steers generation. Higher follows the drive media more closely; too high can overpower the prompt."
-          )
-        );
-        if (entry.driveData === "visual") {
-          const attention = context.buildClampedNumber({
-            key: `iclora-${entryIdx2}-attention`,
-            value: entry.attentionStrength,
-            min: IC_LORA_ATTENTION_MIN,
-            max: IC_LORA_ATTENTION_MAX,
-            step: IC_LORA_ATTENTION_STEP,
-            readBack: (clips) => entryAt(clips, entryIdx2)?.attentionStrength ?? null,
-            mutate: (clips, value) => {
-              const target = entryAt(clips, entryIdx2);
-              if (target) {
-                target.attentionStrength = value;
-              }
-            }
-          });
-          fields.appendChild(
-            buildField(
-              "Attention",
-              attention,
-              void 0,
-              "Scales how much the IC-LoRA influences the model's attention layers. A finer control than Strength; leave at the default unless a preset tunes it."
-            )
-          );
-        }
-        if (entry.driveData === "visual" && (!preset || (preset.allowedControlTypes?.length ?? 0) > 1)) {
-          const allowedControlTypes = preset?.allowedControlTypes ?? ["none", "canny", "depth", "normal"];
-          const controlSelect = buildOptionSelect(
-            [
-              { value: "none", label: "None (raw video)" },
-              { value: "canny", label: "Canny edges" },
-              { value: "depth", label: "Depth map" },
-              { value: "normal", label: "Normal map" }
-            ].filter(
-              (option) => allowedControlTypes.includes(
-                option.value
-              )
-            ),
-            entry.controlType,
-            (value) => {
-              context.commit((clips) => {
-                const target = entryAt(clips, entryIdx2);
-                if (target) {
-                  target.controlType = value;
-                }
-              });
-            }
-          );
-          fields.appendChild(
-            buildField(
-              "Control",
-              controlSelect,
-              void 0,
-              "Preprocesses visual drive media into a control signal before conditioning: Canny edges, a depth map, or a normal map. None feeds the raw video straight in."
-            )
-          );
-        }
-        const applySelect = buildOptionSelect(
-          [
-            { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
-            ...clip.stages.map((_, stageIdx) => ({
-              value: `${stageIdx}`,
-              label: `Stage ${stageIdx}`
-            }))
-          ],
-          `${entry.stage}`,
-          (value) => {
-            context.commit((clips) => {
-              const target = entryAt(clips, entryIdx2);
-              if (!target) {
-                return;
-              }
-              const stage = Number(value);
-              target.stage = Number.isInteger(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
-              canonicalizeIcLoraFields(target);
-              const targetClip = clips[clipIdx];
-              if (targetClip && target.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
-                target,
-                targetClip,
-                clipIdx,
-                clips,
-                authoring.generatedEntryMode
-              )) {
-                target.driveSource = MEDIA_SOURCE_UPLOAD;
-              }
-            });
-            context.render();
-          }
-        );
-        fields.appendChild(
-          buildField(
-            "Apply on",
-            applySelect,
-            void 0,
-            "Which stage this IC-LoRA conditions — a single stage, or All stages of the clip."
-          )
-        );
-        if (!preset) {
-          const dataSelect = buildOptionSelect(
-            [
-              { value: "visual", label: "Visual frames" },
-              { value: "audio", label: "Audio" },
-              { value: "none", label: "None (model only)" }
-            ],
-            entry.driveData,
-            (value) => {
-              context.commit((clips) => {
-                const target = entryAt(clips, entryIdx2);
-                if (!target) {
-                  return;
-                }
-                target.driveData = value;
-                target.driveMediaKinds = [
-                  ...icLoraDriveMediaContractForData(
-                    target.driveData
-                  ).acceptedKinds
-                ];
-                if (target.driveData !== "visual") {
-                  target.controlType = "none";
-                }
-                if (target.driveData === "none") {
-                  target.driveSource = MEDIA_SOURCE_UPLOAD;
-                  target.driveMedia = null;
-                  return;
-                }
-                const data = target.driveMedia?.data ?? "";
-                if (data && !isAcceptedIcLoraDriveMedia(
-                  data,
-                  target.driveMedia?.fileName ?? null,
-                  target.driveMediaKinds
-                )) {
-                  target.driveMedia = null;
-                }
-                const targetClip = clips[clipIdx];
-                if (targetClip && target.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
-                  target,
-                  targetClip,
-                  clipIdx,
-                  clips,
-                  authoring.generatedEntryMode
-                )) {
-                  target.driveSource = MEDIA_SOURCE_UPLOAD;
-                }
-              });
-              context.render();
-            }
-          );
-          fields.appendChild(
-            buildField(
-              "Drive data",
-              dataSelect,
-              void 0,
-              "Which stream this custom IC-LoRA extracts from its drive source. Visual frames create an IC-LoRA guide; Audio creates speaker/audio reference tokens; None applies only the model patch."
-            )
-          );
-        }
-        if (entry.driveData !== "none") {
-          const currentClips = getClips();
-          const incomingAvailable = canUseIncomingIcLoraDrive(
-            entry,
-            clip,
-            clipIdx,
-            currentClips,
-            authoring.generatedEntryMode
-          );
-          const sourceSelect = buildOptionSelect(
-            [
-              { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
-              {
-                value: MEDIA_SOURCE_INCOMING,
-                label: incomingAvailable ? "Incoming media" : "Incoming media (unavailable)",
-                disabled: !incomingAvailable
-              }
-            ],
-            entry.driveSource,
-            (value) => {
-              context.commit((clips) => {
-                const target = entryAt(clips, entryIdx2);
-                if (target) {
-                  target.driveSource = value;
-                  if (value !== MEDIA_SOURCE_UPLOAD) {
-                    target.driveMedia = null;
-                  }
-                }
-              });
-              context.render();
-            }
-          );
-          fields.appendChild(
-            buildField(
-              "Source",
-              sourceSelect,
-              void 0,
-              "Where the selected drive data comes from: Upload your own media, or use compatible media already entering this generation point."
-            )
-          );
-        }
-        if (entry.driveData !== "none" && entry.driveSource === MEDIA_SOURCE_UPLOAD) {
-          const acceptedKinds = driveMediaKinds;
-          fields.appendChild(
-            buildMediaPickRow(
-              "Drive Media",
-              acceptedKinds.map((kind) => `${kind}/*`).join(","),
-              [...acceptedKinds],
-              entry.driveMedia?.fileName,
-              (data, fileName) => {
-                context.commit((clips) => {
-                  const target = entryAt(clips, entryIdx2);
-                  if (target) {
-                    target.driveMedia = { data, fileName };
-                  }
-                });
-                context.render();
-              },
-              () => {
-                context.commit((clips) => {
-                  const target = entryAt(clips, entryIdx2);
-                  if (target) {
-                    target.driveMedia = null;
-                  }
-                });
-                context.render();
-              }
-            )
-          );
-          if (audioDriveMedia) {
-            const hint = document.createElement("small");
-            hint.className = "vst-detail-field-hint";
-            hint.textContent = "Only this media's audio is used as the reference sample. For a video upload, its frames are ignored; the clip's normal text, image, or video entry path supplies visuals.";
-            fields.appendChild(hint);
-          }
-        } else if (entry.driveSource === MEDIA_SOURCE_INCOMING) {
-          const hint = document.createElement("small");
-          hint.className = "vst-detail-field-hint";
-          hint.textContent = entry.stage >= 0 ? `Uses ${entry.driveData} from stage ${entry.stage}'s incoming media.` : `Uses ${entry.driveData} from each stage's incoming media.`;
-          fields.appendChild(hint);
-        } else if (entry.driveData !== "none") {
-          const slot = document.createElement("small");
-          slot.className = "vst-detail-field-hint";
-          slot.textContent = `Driven by ${entry.driveSource} (legacy source)`;
-          fields.appendChild(slot);
-        }
-        const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)].filter(Boolean).join(" ");
-        if (hintText || preset) {
-          const hint = document.createElement("small");
-          hint.className = "vst-detail-field-hint";
-          hint.textContent = hintText ? `${hintText} ` : "";
-          if (preset) {
-            const link = document.createElement("a");
-            link.href = icLoraRepoUrl(preset);
-            link.target = "_blank";
-            link.rel = "noopener";
-            link.textContent = "repo";
-            hint.appendChild(link);
-          }
-          fields.appendChild(hint);
-        }
-        ensureIcLoraAutoWeights(entry, defaults.loraValues, context.render);
-        const autoText = icLoraAutoHint(entry, defaults.loraValues);
-        if (autoText) {
-          const autoHint = document.createElement("small");
-          autoHint.className = "vst-detail-field-hint";
-          if (preset) {
-            autoHint.setAttribute(IC_LORA_AUTO_HINT_ATTR, preset.id);
-          }
-          autoHint.textContent = autoText;
-          fields.appendChild(autoHint);
-        }
-      }
-      return col;
-    };
-    return buildSection(buildEditor);
-  };
-
-  // frontend/architectures/authoringPanels.ts
-  var persistedIcLoraRemovalPanel = (context, clip, clipIdx, selectedEntryIdx, open) => {
-    const entryIdx = clip.icLoras.length === 0 ? null : Math.max(
-      0,
-      Math.min(selectedEntryIdx ?? 0, clip.icLoras.length - 1)
-    );
-    const buildEditor = (index) => {
-      const entry = clip.icLoras[index];
-      if (!entry) {
-        return void 0;
-      }
-      const content = document.createElement("div");
-      content.className = "vst-detail-col vst-detail-iclora-col";
-      const note = document.createElement("p");
-      note.className = "vst-detail-note";
-      note.textContent = "This architecture has no IC-LoRA editor. Existing entries remain available for removal.";
-      content.appendChild(note);
-      const label = document.createElement("span");
-      label.textContent = entry.lora || `IC-LoRA ${index}`;
-      content.appendChild(label);
-      return content;
-    };
-    return buildRepeatingEditor({
-      key: "ic-loras",
-      label: "Persisted IC-LoRAs",
-      sectionClass: "vst-detail-iclora-section",
-      open,
-      items: clip.icLoras.map((entry, index) => ({
-        label: `IC${index}`,
-        stateKey: entry.id ? `ic-lora:${entry.id}` : void 0,
-        focusKey: `ic-lora-tab-${index}`,
-        title: `Inspect persisted IC-LoRA ${index}`,
-        active: index === entryIdx,
-        onSelect: () => setSelection({
-          kind: "ic-lora",
-          clipIdx,
-          entryIdx: index
-        }),
-        onDelete: () => {
-          context.structuralCommit(
-            (clips) => {
-              const target = clips[clipIdx];
-              if (!target?.icLoras[index]) return null;
-              target.icLoras.splice(index, 1);
-              removeIcLoraStrengthAt(target, index);
-              return target.icLoras.length > 0 ? {
-                kind: "ic-lora",
-                clipIdx,
-                entryIdx: Math.min(
-                  index,
-                  target.icLoras.length - 1
-                )
-              } : { kind: "clip", clipIdx, stageIdx: 0 };
-            },
-            { rebuildAfterSelect: true }
-          );
-        }
-      })),
-      add: {
-        title: "This architecture has no IC-LoRA editor",
-        label: "+ Add IC-LoRA",
-        className: "vst-detail-add-iclora",
-        disabled: true,
-        onClick: () => {
-        }
-      },
-      remove: {
-        title: entryIdx === null ? "No IC-LoRA to delete" : `Delete persisted IC-LoRA ${entryIdx}`,
-        className: "vst-detail-delete-iclora"
-      },
-      editorForItem: buildEditor
-    }).section;
-  };
-  var buildArchitectureIcLorasSection = (context, clip, clipIdx, defaults, selectedEntryIdx = null, open = selectedEntryIdx !== null) => {
-    const architectureId = context.authoring().capabilities.forClip(clip).architectureId;
-    return architectureId === LTX2_ARCHITECTURE_ID ? buildIcLorasSection(
-      context,
-      clip,
-      clipIdx,
-      defaults,
-      selectedEntryIdx,
-      open
-    ) : persistedIcLoraRemovalPanel(
-      context,
-      clip,
-      clipIdx,
-      selectedEntryIdx,
-      open
-    );
-  };
-
-  // frontend/timelineEdit.ts
-  var pxToDuration = (px, pxPerSecond, fps) => {
-    if (!Number.isFinite(px) || !Number.isFinite(pxPerSecond) || pxPerSecond <= 0) {
-      return CLIP_DURATION_MIN;
-    }
-    const seconds2 = Math.max(CLIP_DURATION_MIN, px / pxPerSecond);
-    return Math.max(CLIP_DURATION_MIN, snapDurationToFps(seconds2, fps));
-  };
-  var pxToFrame = (pointerXWithinRegion, regionWidthPx, durationSeconds, fps, fromEnd, frameGrid) => {
-    const safeFps2 = Number.isFinite(fps) && fps > 0 ? fps : 1;
-    const authoredDuration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
-    const frameMax = Math.max(
-      REF_FRAME_MIN,
-      framesForClip(authoredDuration, safeFps2, frameGrid)
-    );
-    if (!Number.isFinite(pointerXWithinRegion) || !Number.isFinite(regionWidthPx) || regionWidthPx <= 0) {
-      return REF_FRAME_MIN;
-    }
-    const fraction = clamp(pointerXWithinRegion / regionWidthPx, 0, 1);
-    const effectiveDuration = frameMax / safeFps2;
-    const time = fraction * effectiveDuration;
-    const rawFrame = fromEnd ? (effectiveDuration - time) * safeFps2 : time * safeFps2;
-    return clamp(Math.round(rawFrame), REF_FRAME_MIN, frameMax);
-  };
-  var clampClipRefsToDuration = (clip, defaults, effectiveFps) => {
-    const frameMax = getKnownReferenceFrameMax(defaults, clip, effectiveFps);
-    for (const ref of clip.frameRefs) {
-      ref.frame = frameMax === null ? Math.max(REF_FRAME_MIN, Math.round(ref.frame)) : clamp(ref.frame, REF_FRAME_MIN, frameMax);
-    }
-  };
-  var applyClipDurationResize = (clip, newDuration, defaults, effectiveFps) => {
-    const snapped = effectiveFps === void 0 ? newDuration : snapDurationToFps(newDuration, effectiveFps);
-    if (clip.duration === snapped) {
-      return false;
-    }
-    clip.duration = snapped;
-    clampClipRefsToDuration(clip, defaults, effectiveFps);
-    return true;
-  };
-
-  // frontend/detailStrip/clipBasics.ts
-  var DURATION_STEP = 0.1;
-  var REFERENCE_LENGTH_HINT = "(derived from a reference's media length)";
-  var CLIP_PROJ_REPO = "https://github.com/nicolab28/ComfyUI-ClipProj";
-  var appendClipProjRepoLink = (field) => {
-    const help = field.querySelector(".sui-info-popover");
-    if (!help) {
-      return;
-    }
-    const repo = document.createElement("a");
-    repo.href = CLIP_PROJ_REPO;
-    repo.target = "_blank";
-    repo.rel = "noopener noreferrer";
-    repo.textContent = "ComfyUI-ClipProj";
-    help.append(repo, ".");
-  };
-  var buildClipColumn = (context, clip, clipIdx, referenceFramingState, showH3AttentionWindow = false, h3TextEncoderState = "hidden") => {
-    const column = document.createElement("div");
-    column.className = "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
-    const initVideoClip = !!clip.initVideo;
-    const lengthReferenceIdx = clipLengthReferenceIndex(clip.references);
-    const lengthDerived2 = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || lengthReferenceIdx >= 0 || initVideoClip;
-    const durationHint = !lengthDerived2 ? null : initVideoClip ? "(derived from the source video range)" : lengthReferenceIdx >= 0 ? REFERENCE_LENGTH_HINT : "(derived from audio/ControlNet source)";
-    const durationField = buildSlider(
-      "Duration (s)",
-      clip.duration,
-      CLIP_DURATION_MIN,
-      CLIP_DURATION_MAX,
-      DURATION_STEP,
-      (value) => {
-        context.debouncedCommit("duration", (clips) => {
-          const target = clips[clipIdx];
-          if (target && !lengthDerived2) {
-            const defaults = context.authoring().defaults;
-            applyClipDurationResize(target, value, defaults);
-          }
-        });
-      },
-      {
-        sliderMax: 20,
-        hint: durationHint ?? REFERENCE_LENGTH_HINT
-      }
-    );
-    durationField.classList.add("vst-detail-field");
-    durationField.querySelector(".auto-input-name")?.classList.add("vst-detail-field-label");
-    const durationInput = durationField.querySelector(
-      "input.auto-slider-number"
-    );
-    if (!durationInput) {
-      throw new Error("duration slider number input missing");
-    }
-    durationInput.setAttribute("data-vst-focus-key", "duration");
-    durationField.querySelector(".vst-detail-field-hint")?.classList.toggle("vst-detail-field-hint-hidden", !durationHint);
-    if (lengthDerived2) {
-      durationField.querySelectorAll("input").forEach((input2) => {
-        input2.disabled = true;
-      });
-      durationField.classList.add("vst-field-disabled");
-    }
-    column.appendChild(durationField);
-    column.appendChild(
-      buildCheckbox("Use SeedVR", clip.useSeedVr, (value) => {
-        context.commit((clips) => {
-          const target = clips[clipIdx];
-          if (target) {
-            target.useSeedVr = value;
-          }
-        });
-      })
-    );
-    if (referenceFramingState?.visible) {
-      const framing = buildOptionSelect(
-        [
-          { value: "crop", label: "Crop" },
-          { value: "stretch", label: "Stretch" },
-          { value: "fit", label: "Fit (black padding)" },
-          { value: "fit-green", label: "Fit (green padding)" }
-        ],
-        clip.refFraming,
-        (value) => {
-          context.commit((clips) => {
-            const target = clips[clipIdx];
-            if (target) {
-              target.refFraming = value;
-            }
-          });
-        }
-      );
-      framing.dataset.vstReferenceFraming = "true";
-      const field = buildField(
-        "Reference resize",
-        framing,
-        void 0,
-        "Fit (green padding) preserves aspect ratio and pads with #66FF00 so outpainting IC-LoRAs treat the padded area as empty."
-      );
-      if (!referenceFramingState.enabled) {
-        applyPersistedCapabilityRepair(field, referenceFramingState, {
-          repair: {
-            label: "Reset reference resize",
-            className: "vst-reset-unsupported-reference-framing",
-            onRepair: () => {
-              context.commit((clips) => {
-                const target = clips[clipIdx];
-                if (target) {
-                  target.refFraming = "crop";
-                }
-              });
-            }
-          }
-        });
-      }
-      column.appendChild(field);
-    }
-    if (showH3AttentionWindow) {
-      const attentionWindow = buildSlider(
-        "Attention window (s)",
-        clip.h3AttentionWindowSeconds,
-        H3_ATTENTION_WINDOW_MIN_SECONDS,
-        H3_ATTENTION_WINDOW_MAX_SECONDS,
-        H3_ATTENTION_WINDOW_STEP_SECONDS,
-        (value) => {
-          context.debouncedCommit("h3AttentionWindowSeconds", (clips) => {
-            const target = clips[clipIdx];
-            if (target) {
-              target.h3AttentionWindowSeconds = value;
-            }
-          });
-        },
-        {
-          hint: "0 disables JuanAttn for this clip.",
-          help: "Total centered temporal attention window. Dense transformer layers remain fixed at 0,9,19,29,39,49."
-        }
-      );
-      attentionWindow.dataset.vstH3AttentionWindow = "true";
-      column.appendChild(attentionWindow);
-    }
-    if (h3TextEncoderState === "ready") {
-      const textEncoder = buildOptionSelect(
-        H3_TEXT_ENCODERS.map((value) => ({ value, label: value })),
-        clip.h3TextEncoder,
-        (value) => {
-          context.commit((clips) => {
-            const target = clips[clipIdx];
-            if (target) {
-              target.h3TextEncoder = normalizeH3TextEncoder(value);
-            }
-          });
-        }
-      );
-      textEncoder.dataset.vstH3TextEncoder = "true";
-      const textEncoderField = buildField(
-        "Text Encoder",
-        textEncoder,
-        void 0,
-        "Default uses MiniMax H3's full 32B encoder. The 8B and 4B options use less VRAM; VideoStages will download the matching projection automatically. Requires "
-      );
-      appendClipProjRepoLink(textEncoderField);
-      column.appendChild(textEncoderField);
-    } else if (h3TextEncoderState === "install") {
-      const install = document.createElement("button");
-      install.type = "button";
-      install.className = "basic-button";
-      install.dataset.vstInstallClipproj = "true";
-      install.textContent = "Install ComfyUI-ClipProj";
-      const installField = buildField(
-        "Text Encoder",
-        install,
-        void 0,
-        "Install the custom node required for MiniMax H3's smaller text encoders. SwarmUI will restart managed ComfyUI backends. See "
-      );
-      installField.id = `vst_clip_${clipIdx}_clipproj_install`;
-      appendClipProjRepoLink(installField);
-      install.addEventListener("click", () => {
-        if (!installHostFeature(H3_TEXT_ENCODER_FEATURE, installField.id)) {
-          getVideoStagesHostBridge().showError(
-            "SwarmUI's ComfyUI feature installer is unavailable."
-          );
-        }
-      });
-      column.appendChild(installField);
-    }
-    return column;
-  };
-  var buildClipSkipAction = (context, clip, clipIdx) => ({
-    label: skipGlyph(clip.skipped === true),
-    title: skipTitle("clip", clip.skipped === true),
-    className: "vst-detail-skip-clip",
-    active: clip.skipped === true,
-    onClick: () => context.toggleClipSkip(clipIdx)
-  });
-
-  // frontend/detailStrip/clipLorasPanel.ts
-  var buildClipLorasSection = (context, clip, clipIdx, stageIdx, defaults) => {
-    const selectedNames = new Set(clip.loras.map((entry) => entry.name));
-    const nextAvailableName = defaults.loraValues.find(
-      (value) => !selectedNames.has(value)
-    );
-    const content = document.createDocumentFragment();
-    clip.loras.forEach((lora, loraIdx) => {
-      const row = document.createElement("div");
-      row.className = "vst-clip-lora-entry";
-      const remove = buildDetailActionButton({
-        label: "×",
-        title: `Delete LoRA ${loraIdx}`,
-        className: "vst-btn-tiny vst-detail-delete vst-detail-delete-lora",
-        variant: "interrupt",
-        onClick: () => {
-          context.structuralCommit(
-            (clips) => {
-              const target = clips[clipIdx];
-              if (!target || !removeLoraAt(target, loraIdx)) {
-                return null;
-              }
-              return { kind: "clip", clipIdx, stageIdx };
-            },
-            { rebuildAfterSelect: true }
-          );
-        }
-      });
-      const options = defaults.loraValues.flatMap(
-        (value, optionIdx) => value === lora.name || !clip.loras.some(
-          (entry, index) => index !== loraIdx && entry.name === value
-        ) ? [
-          {
-            value,
-            label: defaults.loraLabels[optionIdx] ?? value
-          }
-        ] : []
-      );
-      preserveSelectedOption(options, lora.name, "start", (value) => ({
-        value,
-        label: `${value} (unsupported persisted value)`,
-        disabled: true
-      }));
-      const select2 = buildOptionSelect(options, lora.name, (value) => {
-        context.commit((clips) => {
-          const target = clips[clipIdx];
-          if (target) {
-            const initialWeight = defaultLoraWeight(defaults, value);
-            replaceLoraModelAt(target, loraIdx, value, initialWeight);
-          }
-        });
-        context.render();
-      });
-      select2.setAttribute(
-        "data-vst-focus-key",
-        `clip-${clipIdx}-lora-${loraIdx}-model`
-      );
-      const weight = tagFocus(
-        buildUnboundedNumber(lora.weight, LORA_WEIGHT_STEP, (value) => {
-          context.debouncedCommit(
-            `clip-${clipIdx}-lora-${loraIdx}-weight`,
-            (clips) => {
-              const target = clips[clipIdx]?.loras[loraIdx];
-              if (target) target.weight = value;
-            }
-          );
-        }),
-        `clip-${clipIdx}-lora-${loraIdx}-weight`
-      );
-      weight.classList.add("lora-weight-input", "vst-clip-lora-weight");
-      row.append(remove, select2, weight);
-      content.appendChild(row);
-    });
-    const add = buildDetailActionButton({
-      title: nextAvailableName ? "Add a LoRA to this clip" : "All available LoRAs are already on this clip",
-      label: "+ Add LoRA",
-      className: "small-button vst-detail-repeating-add vst-detail-add-lora",
-      disabled: !nextAvailableName,
-      onClick: () => {
-        context.structuralCommit(
-          (clips) => {
-            const target = clips[clipIdx];
-            const name = nextAvailableName;
-            if (!target || !name) {
-              return null;
-            }
-            appendLoraToClip(
-              target,
-              name,
-              defaultLoraWeight(defaults, name)
-            );
-            return { kind: "clip", clipIdx, stageIdx };
-          },
-          { rebuildAfterSelect: true }
-        );
-      }
-    });
-    content.appendChild(add);
-    const built = buildAccordionSection({
-      key: `clip-${clipIdx}-loras`,
-      label: "LoRAs",
-      content,
-      counter: clip.loras.length,
-      open: clip.loras.length === 0,
-      defaultOpen: true,
-      className: "vst-detail-loras-section"
-    });
-    appendHelp(
-      built.heading,
-      built.section,
-      "LoRAs",
-      "Each LoRA and weight applies to every stage in this clip."
-    );
-    return built.section;
-  };
-
-  // frontend/detailStrip/clipReferencePanel.ts
-  var REFERENCE_TRIM_MIN = 0.1;
-  var appendReferenceTrim = (ctx, fields, reference, shown, commitReference) => {
-    const mediaKind = reference.kind === "audio" ? "audio" : "video";
-    const mediaLabel = CLIP_REFERENCE_KIND_INFO[reference.kind].label;
-    const limitSeconds = reference.mediaDurationSeconds;
-    const limits = {
-      limitSeconds,
-      minLengthSeconds: reference.drivesClipLength ? CLIP_DURATION_MIN : REFERENCE_TRIM_MIN,
-      // Only a driving reference hands its length to a clip, so only then does
-      // the timeline's frame grid have any claim on it.
-      fps: reference.drivesClipLength ? getTimelineStore().getState().fps : 0
-    };
-    const write = (next) => {
-      const whole = next.startSeconds <= 0 && next.lengthSeconds >= limitSeconds;
-      Object.assign(shown, next);
-      commitReference((target, clip) => {
-        target.startSeconds = whole ? 0 : next.startSeconds;
-        target.lengthSeconds = whole ? 0 : next.lengthSeconds;
-        if (target.drivesClipLength) {
-          applyClipDurationResize(
-            clip,
-            Math.max(CLIP_DURATION_MIN, next.lengthSeconds),
-            ctx.authoring().defaults,
-            limits.fps
-          );
-        }
-      });
-    };
-    const range = toInOut(shown);
-    let inInput;
-    let outInput;
-    inInput = buildNumber(
-      range.inSeconds,
-      0,
-      limitSeconds,
-      REFERENCE_TRIM_MIN,
-      (value) => {
-        const next = setInPoint(shown, value, limits);
-        outInput.value = `${toInOut(next).outSeconds}`;
-        write(next);
-      }
-    );
-    outInput = buildNumber(
-      range.outSeconds,
-      REFERENCE_TRIM_MIN,
-      limitSeconds,
-      REFERENCE_TRIM_MIN,
-      (value) => {
-        const next = setOutPoint(shown, value, limits);
-        inInput.value = `${next.startSeconds}`;
-        write(next);
-      }
-    );
-    const disabled = reference.drivesClipLength === true;
-    inInput.disabled = disabled;
-    outInput.disabled = disabled;
-    const inField = buildField("In (s)", inInput);
-    const outField = buildField("Out (s)", outInput);
-    inField.classList.toggle("vst-field-disabled", disabled);
-    outField.classList.toggle("vst-field-disabled", disabled);
-    fields.append(inField, outField);
-    fields.appendChild(
-      buildTrimLauncher(
-        `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · References ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
-        () => openTrimModal({
-          mediaKind,
-          title: `Trim ${mediaLabel} Reference`,
-          fileName: reference.uploadedMedia?.fileName ?? `${mediaLabel} reference`,
-          dataUri: reference.uploadedMedia?.data ?? null,
-          range: shown,
-          limits,
-          impactText: (next) => `References ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
-          onApply: (next) => {
-            write(next);
-            ctx.render();
-          }
-        })
-      )
-    );
-  };
-  var claimClipLength = (clip, referenceIdx, defaults, fps) => {
-    clip.references.forEach((reference, index) => {
-      reference.drivesClipLength = index === referenceIdx;
-    });
-    if (referenceIdx < 0) {
-      return;
-    }
-    clip.clipLengthFromAudio = false;
-    clip.clipLengthFromControlNet = false;
-    const claimed = clip.references[referenceIdx];
-    const seconds2 = claimed ? clipReferenceUsedSeconds(claimed) : 0;
-    if (seconds2 > 0) {
-      applyClipDurationResize(
-        clip,
-        Math.max(CLIP_DURATION_MIN, seconds2),
-        defaults,
-        fps
-      );
-    }
-  };
-  var applyPickedReferenceMedia = (ctx, clipId, referenceId, data, fileName) => runClipMediaProbe({
-    clipId,
-    slot: referenceId,
-    probe: () => probeMediaDurationSeconds(data),
-    apply: (clip, seconds2, state) => {
-      const index = clip.references.findIndex(
-        (reference2) => reference2.id === referenceId
-      );
-      const reference = clip.references[index];
-      if (!reference) {
-        return;
-      }
-      reference.uploadedMedia = { data, fileName };
-      reference.mediaDurationSeconds = roundToTenth(seconds2);
-      if (reference.drivesClipLength) {
-        claimClipLength(
-          clip,
-          index,
-          ctx.authoring().defaults,
-          state.fps
-        );
-      }
-    },
-    onApplied: () => ctx.render()
-  });
-  var buildClipReferenceSection = (ctx, clipIdx, selectedIdx, clips, fps, open = selectedIdx !== null, incomingSelected = false) => {
-    const clip = clips[clipIdx];
-    const references = clip.references;
-    const { capabilities, defaults } = ctx.authoring();
-    const authoring = clipReferenceAuthoring(capabilities.forClip(clip));
-    const decision = authoring.decision;
-    const incomingBoundary = authoring.mode === "all" ? incomingReferenceContinueForClip(
-      clips,
-      fps,
-      capabilities,
-      clipIdx
-    ) : null;
-    const incomingReference = {
-      kind: "video",
-      includeSoundtrack: incomingBoundary ? clips[incomingBoundary.leftIdx].boundaryOutReferenceIncludeSoundtrack : false
-    };
-    const tags = clipReferenceTags(
-      references,
-      incomingBoundary ? [incomingReference] : []
-    );
-    const itemOffset = incomingBoundary ? 1 : 0;
-    const activeIdx = references.length === 0 || selectedIdx === null ? null : clamp(selectedIdx, 0, references.length - 1);
-    const buildIncomingEditor = () => {
-      if (!incomingBoundary) {
-        return void 0;
-      }
-      const sourceClip = clips[incomingBoundary.leftIdx];
-      const patchIncoming = (mutate) => {
-        ctx.commit((cs) => {
-          const source = cs[incomingBoundary.leftIdx];
-          if (source) {
-            mutate(source);
-          }
-        });
-      };
-      const fields = document.createElement("div");
-      fields.className = "vst-detail-col vst-detail-instance-fields vst-detail-clip-ref-editor vst-detail-join-ref-editor";
-      fields.appendChild(
-        buildField(
-          "Reference scale",
-          buildOptionSelect(
-            CLIP_REFERENCE_SCALES.map((scale) => ({
-              value: `${scale.value}`,
-              label: scale.label
-            })),
-            `${sourceClip.boundaryOutReferenceScale}`,
-            (value) => {
-              patchIncoming((source) => {
-                source.boundaryOutReferenceScale = Number(value);
-              });
-            }
-          )
-        )
-      );
-      fields.appendChild(
-        buildCheckbox(
-          "Include soundtrack",
-          sourceClip.boundaryOutReferenceIncludeSoundtrack,
-          (value) => {
-            patchIncoming((source) => {
-              source.boundaryOutReferenceIncludeSoundtrack = value;
-            });
-            ctx.render();
-          }
-        )
-      );
-      return fields;
-    };
-    const buildSection = (editorForItem) => {
-      const section = buildRepeatingEditor({
-        key: "clip-references",
-        label: authoring.mode === "identity-images" ? "Identity References" : "References",
-        sectionClass: "vst-detail-clip-ref-section",
-        open,
-        items: [
-          ...incomingBoundary ? [
-            {
-              label: `<Video 1> (from Join with Clip ${incomingBoundary.leftIdx})`,
-              stateKey: clips[incomingBoundary.leftIdx].id ? `join-reference:${clips[incomingBoundary.leftIdx].id}` : void 0,
-              title: `Edit the reference supplied by the Continue join from Clip ${incomingBoundary.leftIdx}`,
-              focusKey: `clip-reference-join-${incomingBoundary.leftIdx}`,
-              active: incomingSelected,
-              className: "vst-clip-ref-tab vst-clip-ref-join-tab",
-              onSelect: () => setSelection({
-                kind: "boundary-ref",
-                leftClipIdx: incomingBoundary.leftIdx
-              })
-            }
-          ] : [],
-          ...references.map((reference, index) => ({
-            label: tags[index],
-            stateKey: reference.id ? `clip-reference:${reference.id}` : void 0,
-            focusKey: `clip-reference-tab-${index}`,
-            title: `Edit ${CLIP_REFERENCE_KIND_INFO[reference.kind].label} reference ${tags[index]}`,
-            active: index === activeIdx,
-            className: "vst-clip-ref-tab",
-            onSelect: () => setSelection({
-              kind: "clip-ref",
-              clipIdx,
-              referenceIdx: index
-            }),
-            onDelete: () => ctx.deleteClipReference(clipIdx, index)
-          }))
-        ],
-        add: {
-          title: decision.supported ? "Add a reference the prompt can name by tag" : decision.reason,
-          label: "+ Add Reference",
-          className: "vst-detail-add-clip-ref",
-          disabled: !decision.supported,
-          onClick: () => ctx.addClipReference(clipIdx)
-        },
-        remove: {
-          title: activeIdx === null ? "No reference to delete" : `Delete reference ${tags[activeIdx]}`,
-          className: "vst-detail-delete-clip-ref"
-        },
-        editorForItem: incomingBoundary === null && editorForItem === void 0 ? void 0 : (itemIndex) => {
-          if (itemIndex < itemOffset) {
-            return buildIncomingEditor();
-          }
-          return editorForItem?.(itemIndex - itemOffset);
-        }
-      }).section;
-      const add = section.querySelector(
-        ".vst-detail-add-clip-ref"
-      );
-      if (add && clip.id) {
-        add.dataset.vstClipId = clip.id;
-      }
-      return section;
-    };
-    const buildEditor = (editorIdx) => {
-      const reference = references[editorIdx];
-      if (!reference) {
-        return void 0;
-      }
-      const shownRange = clipReferenceUsedRange(reference);
-      const commitReference = (mutate) => {
-        ctx.commit((cs) => {
-          const targetClip = cs[clipIdx];
-          const target = targetClip?.references[editorIdx];
-          if (target && targetClip) {
-            mutate(target, targetClip);
-          }
-        });
-      };
-      const fields = document.createElement("div");
-      fields.className = "vst-detail-col vst-detail-instance-fields vst-detail-clip-ref-editor";
-      fields.setAttribute("data-vst-clip-ref-index", `${editorIdx}`);
-      fields.appendChild(
-        buildField(
-          "Kind",
-          buildOptionSelect(
-            CLIP_REFERENCE_KINDS.filter(
-              (kind) => authoring.mode === "all" || kind === "image" || kind === reference.kind
-            ).map((kind) => ({
-              value: kind,
-              label: CLIP_REFERENCE_KIND_INFO[kind].label
-            })),
-            reference.kind,
-            (value) => {
-              commitReference((target) => {
-                target.kind = value;
-                target.uploadedMedia = null;
-                target.includeSoundtrack = false;
-                target.mediaDurationSeconds = 0;
-                target.drivesClipLength = false;
-                if (!clipReferenceSourceSupportsKind(
-                  target.kind,
-                  target.source
-                )) {
-                  target.source = MEDIA_SOURCE_UPLOAD;
-                }
-              });
-              ctx.render();
-            }
-          ),
-          void 0,
-          `What this reference is. The prompt names it as ${tags[editorIdx]} — a reference the prompt never mentions still costs sampling time.`
-        )
-      );
-      const options = buildClipReferenceSourceOptions(
-        reference.kind,
-        reference.source ?? "",
-        clipIdx > 0
-      );
-      const source = resolveClipReferenceSourceValue(
-        reference.source ?? "",
-        options
-      );
-      fields.appendChild(
-        buildField(
-          "Source",
-          buildOptionSelect(options, source, (value) => {
-            commitReference((target) => {
-              const resolved = resolveClipReferenceSourceValue(
-                value,
-                buildClipReferenceSourceOptions(
-                  target.kind,
-                  value,
-                  clipIdx > 0
-                )
-              );
-              target.source = resolved;
-              if (resolved !== MEDIA_SOURCE_UPLOAD) {
-                target.uploadedMedia = null;
-                target.mediaDurationSeconds = 0;
-                target.drivesClipLength = false;
-              }
-            });
-            ctx.render();
-          }),
-          void 0,
-          "Where this reference comes from — an upload, a ControlNet input, or another source available for this media kind."
-        )
-      );
-      if (source === MEDIA_SOURCE_UPLOAD) {
-        const data = reference.uploadedMedia?.data;
-        if (reference.kind === "image" && data) {
-          const preview = document.createElement("div");
-          preview.className = "vst-refs-thumb-preview vst-refs-thumb-preview-set";
-          preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
-          fields.appendChild(preview);
-        }
-        const media = CLIP_REFERENCE_KIND_INFO[reference.kind];
-        fields.appendChild(
-          buildMediaPickRow(
-            `${media.label} File`,
-            media.accept,
-            [...media.browserTypes],
-            reference.uploadedMedia?.fileName,
-            (pickedData, fileName) => {
-              if (clipReferenceCanDriveLength(reference) && clip.id && reference.id) {
-                applyPickedReferenceMedia(
-                  ctx,
-                  clip.id,
-                  reference.id,
-                  pickedData,
-                  fileName
-                );
-                return;
-              }
-              commitReference((target) => {
-                target.uploadedMedia = {
-                  data: pickedData,
-                  fileName
-                };
-              });
-              ctx.render();
-            },
-            () => {
-              commitReference((target) => {
-                target.uploadedMedia = null;
-                target.mediaDurationSeconds = 0;
-                target.drivesClipLength = false;
-              });
-              ctx.render();
-            }
-          )
-        );
-        if (reference.kind !== "image" && data) {
-          fields.appendChild(
-            buildSidebarMediaPreview(reference.kind, data, shownRange)
-          );
-        }
-      }
-      if (clipReferenceCanDriveLength(reference)) {
-        const seconds2 = reference.mediaDurationSeconds;
-        const hint = document.createElement("small");
-        hint.className = "vst-detail-field-hint";
-        hint.textContent = `Detected: ${seconds2 > 0 ? `${seconds2.toFixed(1)} s` : "unknown length"}`;
-        fields.appendChild(hint);
-        fields.appendChild(
-          buildCheckbox(
-            `Clip Length from ${CLIP_REFERENCE_KIND_INFO[reference.kind].label}`,
-            reference.drivesClipLength === true,
-            (value) => {
-              ctx.commit((cs) => {
-                const target = cs[clipIdx];
-                if (target) {
-                  claimClipLength(
-                    target,
-                    value ? editorIdx : -1,
-                    defaults,
-                    fps
-                  );
-                }
-              });
-              ctx.render();
-            },
-            {
-              disabled: !(seconds2 > 0) && reference.drivesClipLength !== true,
-              help: seconds2 > 0 ? "Set this clip's length to the reference's own length. Only one source can own the clip length, so this clears any other reference and the clip-level length options." : "This reference has no detected length to lend the clip. Pick a file the browser can read."
-            }
-          )
-        );
-      }
-      if (reference.kind !== "image" && reference.mediaDurationSeconds > 0) {
-        appendReferenceTrim(
-          ctx,
-          fields,
-          reference,
-          shownRange,
-          commitReference
-        );
-      }
-      if (reference.kind === "video") {
-        fields.appendChild(
-          buildField(
-            "Reference scale",
-            buildOptionSelect(
-              CLIP_REFERENCE_SCALES.map((scale) => ({
-                value: `${scale.value}`,
-                label: scale.label
-              })),
-              `${reference.mediaScale}`,
-              (value) => {
-                commitReference((target) => {
-                  target.mediaScale = Number(value);
-                });
-              }
-            ),
-            void 0,
-            "Downsample this video before it is referenced. Its tokens are re-encoded on every sampling step, so half or quarter resolution is markedly faster and costs detail the model may not need from a motion or style reference."
-          )
-        );
-        fields.appendChild(
-          buildCheckbox(
-            "Include soundtrack",
-            reference.includeSoundtrack === true,
-            (value) => {
-              commitReference((target) => {
-                target.includeSoundtrack = value;
-              });
-              ctx.render();
-            },
-            {
-              help: `Also reference this video's own audio. It is presented as its own Audio reference just before ${tags[editorIdx]}, ahead of every standalone audio reference — the tags shown here already account for it.`
-            }
-          )
-        );
-      }
-      return fields;
-    };
-    return buildSection(buildEditor);
-  };
-
-  // frontend/detailStrip/initVideoPanel.ts
-  var DURATION_STEP2 = 0.1;
-  var applyPickedInitVideo = (context, clipId, data, fileName) => runClipMediaProbe({
-    clipId,
-    slot: INIT_VIDEO_PROBE_SLOT,
-    probe: () => probeInitVideo(data),
-    apply: (target, probe, state) => {
-      const { capabilities, defaults } = context.authoring();
-      target.initVideo = initVideoFromProbe(
-        probe,
-        data,
-        fileName,
-        target.duration
-      );
-      reconcileClipArchitectureIdentity(target, capabilities.catalog);
-      applyClipDurationResize(
-        target,
-        Math.max(CLIP_DURATION_MIN, target.initVideo.lengthSeconds),
-        defaults,
-        state.fps
-      );
-    },
-    onApplied: () => context.render()
-  });
-  var buildInitVideoSection = (context, clip, clipIdx, open = false) => {
-    const { wrap, col } = buildStackSection(
-      "init-video",
-      "Source Video",
-      "vst-detail-source-col",
-      open
-    );
-    const sectionLabel = wrap.querySelector(
-      ":scope > .input-group-header .header-label"
-    );
-    if (sectionLabel) {
-      appendHelp(
-        sectionLabel,
-        wrap,
-        "Source Video",
-        "Start this clip from an existing video instead of generating it. Stages then refine/upscale the footage and a retake can regenerate part of it."
-      );
-    }
-    const source = clip.initVideo;
-    const removeSource = () => {
-      context.structuralCommit((clips) => {
-        const target = clips[clipIdx];
-        if (!target?.initVideo) {
-          return null;
-        }
-        const transaction = context.authoring();
-        target.initVideo = null;
-        reconcileClipArchitectureIdentity(
-          target,
-          transaction.capabilities.catalog
-        );
-        reconcileArchitectureIncomingIcLoraDrives(
-          clips,
-          transaction.generatedEntryMode,
-          transaction.capabilities.catalog
-        );
-        return "render";
-      });
-    };
-    const sourceKind = source?.source === MEDIA_SOURCE_PREVIOUS_CLIP ? MEDIA_SOURCE_PREVIOUS_CLIP : MEDIA_SOURCE_UPLOAD;
-    if (clipIdx > 0) {
-      const sourceSelect = buildOptionSelect(
-        [
-          { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
-          {
-            value: MEDIA_SOURCE_PREVIOUS_CLIP,
-            label: "Previous Clip Output"
-          }
-        ],
-        sourceKind,
-        (value) => {
-          context.structuralCommit((clips) => {
-            const target = clips[clipIdx];
-            const previous = clips[clipIdx - 1];
-            if (!target || !previous) {
-              return null;
-            }
-            if (value === MEDIA_SOURCE_PREVIOUS_CLIP) {
-              const duration = previous.duration;
-              target.initVideo = {
-                source: MEDIA_SOURCE_PREVIOUS_CLIP,
-                data: "",
-                fileName: null,
-                fps: getTimelineStore().getState().fps,
-                durationSeconds: duration,
-                startSeconds: 0,
-                lengthSeconds: duration
-              };
-              applyClipDurationResize(
-                target,
-                duration,
-                context.authoring().defaults
-              );
-            } else if (target.initVideo?.source === MEDIA_SOURCE_PREVIOUS_CLIP) {
-              target.initVideo = null;
-            }
-            reconcileClipArchitectureIdentity(
-              target,
-              context.authoring().capabilities.catalog
-            );
-            reconcileArchitectureIncomingIcLoraDrives(
-              clips,
-              context.authoring().generatedEntryMode,
-              context.authoring().capabilities.catalog
-            );
-            return "render";
-          });
-        }
-      );
-      sourceSelect.classList.add("vst-init-video-source");
-      col.appendChild(buildField("Video source", sourceSelect));
-    }
-    const hint = document.createElement("small");
-    hint.className = "vst-detail-field-hint";
-    const sourceIsPrevious = sourceKind === MEDIA_SOURCE_PREVIOUS_CLIP;
-    hint.textContent = sourceIsPrevious ? "Uses the previous clip's decoded output as this clip's starting footage." : "Use an existing video file as this clip instead of generating it.";
-    col.appendChild(hint);
-    if (!sourceIsPrevious) {
-      col.appendChild(
-        buildMediaPickRow(
-          "Video file",
-          "video/*",
-          ["video"],
-          source?.fileName ?? null,
-          (data, fileName) => {
-            if (clip.id) {
-              applyPickedInitVideo(context, clip.id, data, fileName);
-            }
-          },
-          removeSource
-        )
-      );
-    }
-    if (!source) {
-      return wrap;
-    }
-    const shown = {
-      startSeconds: source.startSeconds,
-      lengthSeconds: source.lengthSeconds
-    };
-    if (!sourceIsPrevious) {
-      col.appendChild(buildSidebarMediaPreview("video", source.data, shown));
-    }
-    const info = document.createElement("small");
-    info.className = "vst-detail-field-hint";
-    info.textContent = sourceIsPrevious ? `Previous output: ${source.durationSeconds.toFixed(1)} s` : `Detected: ${source.fps > 0 ? `${source.fps} fps` : "unknown fps"} · ${source.durationSeconds > 0 ? `${source.durationSeconds.toFixed(1)} s` : "unknown length"}`;
-    col.appendChild(info);
-    const fileLimit = sourceLimitSeconds(source);
-    const fps = getTimelineStore().getState().fps;
-    const limits = {
-      limitSeconds: fileLimit,
-      minLengthSeconds: CLIP_DURATION_MIN,
-      fps
-    };
-    const writeRange = (target, next) => {
-      const targetSource = target.initVideo;
-      if (!targetSource) {
-        return;
-      }
-      targetSource.startSeconds = next.startSeconds;
-      targetSource.lengthSeconds = next.lengthSeconds;
-      Object.assign(shown, next);
-      applyClipDurationResize(
-        target,
-        Math.max(CLIP_DURATION_MIN, next.lengthSeconds),
-        context.authoring().defaults,
-        fps
-      );
-    };
-    const edgeInput = (edge, apply) => context.buildClampedNumber({
-      key: `source-${edge}`,
-      value: toInOut(shown)[edge === "in" ? "inSeconds" : "outSeconds"],
-      min: edge === "in" ? 0 : CLIP_DURATION_MIN,
-      max: fileLimit,
-      step: DURATION_STEP2,
-      readBack: (clips) => {
-        const readSource = clips[clipIdx]?.initVideo;
-        return readSource ? toInOut(readSource)[edge === "in" ? "inSeconds" : "outSeconds"] : null;
-      },
-      mutate: (clips, value) => {
-        const target = clips[clipIdx];
-        if (target?.initVideo) {
-          writeRange(target, apply(target.initVideo, value, limits));
-        }
-      }
-    });
-    col.appendChild(
-      buildField(
-        "In (s)",
-        edgeInput("in", setInPoint),
-        void 0,
-        "Where inside the source file this clip's footage begins. Moving it leaves Out where it is, so the clip gets shorter."
-      )
-    );
-    col.appendChild(
-      buildField(
-        "Out (s)",
-        edgeInput("out", setOutPoint),
-        void 0,
-        "Where inside the source file this clip's footage ends. This also becomes the clip's duration."
-      )
-    );
-    if (!sourceIsPrevious && source.durationSeconds > 0) {
-      const range = toInOut(shown);
-      col.appendChild(
-        buildTrimLauncher(
-          `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · Uses ${shown.lengthSeconds.toFixed(1)} s of ${fileLimit.toFixed(1)} s`,
-          () => openTrimModal({
-            mediaKind: "video",
-            title: "Trim Source Video",
-            fileName: source.fileName ?? "Source video",
-            dataUri: source.data,
-            range: shown,
-            limits,
-            impactText: (next) => `Clip duration becomes ${next.lengthSeconds.toFixed(1)} s`,
-            onApply: (next) => {
-              context.commit((clips) => {
-                const target = clips[clipIdx];
-                if (target) {
-                  writeRange(target, next);
-                }
-              });
-              context.render();
-            }
-          })
-        )
-      );
-    }
-    const note = document.createElement("p");
-    note.className = "vst-detail-note";
-    note.textContent = "This range (conformed to the timeline fps and size) is the clip's starting point: the first stage refines it using its Control value, later stages refine or upscale it, and a retake regenerates part of it.";
-    col.appendChild(note);
-    return wrap;
-  };
-
   // frontend/architectures/referenceEndpoints.ts
   var referenceEndpointPolicy = (clip, catalog) => {
     const activeStages = clip.stages.slice(0, activeStageCount(clip));
@@ -14506,2197 +8848,6 @@ ${slot}`;
       return "Off means first frame; on means final frame.";
     }
     return policy.supportsFirst ? "This clip supports only the first frame. Turn this off to repair an older final-frame value." : "This clip supports only the final frame. Turn this on to repair an older first-frame value.";
-  };
-
-  // frontend/detailStrip/refPanel.ts
-  var buildRefSection = (ctx, clipIdx, selectedRefIdx, clips, fps, open = selectedRefIdx !== null) => {
-    const clip = clips[clipIdx];
-    const { capabilities, defaults } = ctx.authoring();
-    const decision = capabilities.forClip(clip).decision("frameReferences");
-    const endpointPolicy = referenceEndpointPolicy(clip, defaults.modelCatalog);
-    const hasSupportedEndpoint = endpointPolicy.available;
-    const activeRefIdx = clip.frameRefs.length === 0 ? null : clamp(selectedRefIdx ?? 0, 0, clip.frameRefs.length - 1);
-    const buildSection = (editorForItem) => {
-      const section = buildRepeatingEditor({
-        key: "references",
-        label: "Keyframes",
-        sectionClass: "vst-detail-ref-section",
-        open,
-        items: clip.frameRefs.map((ref, refIdx) => ({
-          label: `Keyframe ${refIdx}`,
-          stateKey: ref.id ? `keyframe:${ref.id}` : void 0,
-          focusKey: `reference-tab-${refIdx}`,
-          title: `Edit keyframe ${refIdx}`,
-          active: refIdx === activeRefIdx,
-          className: "vst-ref-tab",
-          onSelect: () => setSelection({ kind: "ref", clipIdx, refIdx }),
-          onDelete: () => ctx.deleteRefEntry(clipIdx, refIdx)
-        })),
-        add: {
-          title: !decision.supported ? decision.reason : hasSupportedEndpoint ? "Add a keyframe" : "The selected models do not publish a supported keyframe endpoint.",
-          label: "+ Add Keyframe",
-          className: "vst-detail-add-ref",
-          disabled: !decision.supported || !hasSupportedEndpoint,
-          onClick: () => ctx.addRefEntry(clipIdx)
-        },
-        remove: {
-          title: activeRefIdx === null ? "No keyframe to delete" : `Delete keyframe ${activeRefIdx}`,
-          className: "vst-detail-delete-ref"
-        },
-        editorForItem
-      }).section;
-      const add = section.querySelector(".vst-detail-add-ref");
-      if (add && clip.id) {
-        add.dataset.vstClipId = clip.id;
-      }
-      return section;
-    };
-    if (activeRefIdx === null) {
-      return buildSection();
-    }
-    const buildEditor = (editorRefIdx) => {
-      const ref = clip.frameRefs[editorRefIdx];
-      if (!ref) {
-        return void 0;
-      }
-      const options = buildImageSourceOptions(ref.source ?? "");
-      const source = resolveImageSourceValue(ref.source ?? "", options);
-      const isUpload = source === MEDIA_SOURCE_UPLOAD;
-      const fields = document.createElement("div");
-      fields.className = "vst-detail-col vst-detail-instance-fields vst-detail-ref-row vst-detail-ref-editor";
-      fields.setAttribute("data-vst-ref-index", `${editorRefIdx}`);
-      const select2 = buildOptionSelect(options, source, (value) => {
-        ctx.commit((cs) => {
-          const target = cs[clipIdx]?.frameRefs[editorRefIdx];
-          if (!target) {
-            return;
-          }
-          const resolved = resolveImageSourceValue(
-            value,
-            buildImageSourceOptions(value)
-          );
-          target.source = resolved;
-          if (resolved !== MEDIA_SOURCE_UPLOAD) {
-            target.uploadedImage = null;
-            target.uploadFileName = null;
-          }
-        });
-        ctx.render();
-      });
-      fields.appendChild(
-        buildField(
-          "Image Source",
-          select2,
-          void 0,
-          "Where this keyframe image comes from — an upload, or another clip's rendered frame. The image guides how the clip looks at its attach frame."
-        )
-      );
-      if (isUpload) {
-        const preview = document.createElement("div");
-        preview.className = "vst-refs-thumb-preview";
-        const data = ref.uploadedImage?.data;
-        if (data) {
-          preview.style.backgroundImage = `url('${mediaPreviewSrc(data)}')`;
-          preview.classList.add("vst-refs-thumb-preview-set");
-        }
-        fields.appendChild(preview);
-      }
-      const frameMax = getReferenceFrameMax(defaults, clip, fps);
-      const boundedPositions = endpointPolicy.bounded;
-      const supportsFirst = endpointPolicy.supportsFirst;
-      const supportsLast = endpointPolicy.supportsLast;
-      const currentPositionSupported = ref.fromEnd ? supportsLast : supportsFirst;
-      const editableFrameMax = endpointPolicy.available && !endpointPolicy.bounded ? frameMax : REF_FRAME_MIN;
-      const frameInput = buildNumber(
-        ref.frame,
-        REF_FRAME_MIN,
-        editableFrameMax,
-        1,
-        (value) => {
-          ctx.debouncedCommit(`ref-${editorRefIdx}-frame`, (cs) => {
-            const target = cs[clipIdx]?.frameRefs[editorRefIdx];
-            if (target) {
-              target.frame = clamp(
-                Math.round(value),
-                REF_FRAME_MIN,
-                editableFrameMax
-              );
-            }
-          });
-        }
-      );
-      frameInput.setAttribute(
-        "data-vst-focus-key",
-        `ref-${editorRefIdx}-frame`
-      );
-      frameInput.disabled = !hasSupportedEndpoint;
-      fields.appendChild(
-        buildField(
-          "Attach at Frame",
-          frameInput,
-          void 0,
-          boundedReferencePositionHelp(endpointPolicy) ?? (boundedPositions ? "This clip accepts an image only at a bounded endpoint." : "The frame within the clip where this keyframe is anchored. Frame 1 is the first frame; the image influences the clip most strongly around here.")
-        )
-      );
-      fields.appendChild(
-        buildCheckbox(
-          "Count from clip end",
-          ref.fromEnd === true,
-          (value) => {
-            ctx.commit((cs) => {
-              const target = cs[clipIdx]?.frameRefs[editorRefIdx];
-              if (target) {
-                target.fromEnd = value;
-              }
-            });
-          },
-          {
-            disabled: !hasSupportedEndpoint || boundedPositions && currentPositionSupported && !(supportsFirst && supportsLast),
-            help: boundedReferenceToggleHelp(endpointPolicy) ?? (boundedPositions ? "Choose the supported clip endpoint." : "Count the attach frame backwards from the last frame instead of forward from the first — so it stays anchored to the end even if the clip length changes.")
-          }
-        )
-      );
-      if (isUpload) {
-        fields.appendChild(
-          buildMediaPickRow(
-            "Image Upload",
-            "image/*",
-            ["image"],
-            ref.uploadedImage?.fileName,
-            (data, fileName) => {
-              ctx.commit((cs) => {
-                const target = cs[clipIdx]?.frameRefs[editorRefIdx];
-                if (target) {
-                  target.uploadedImage = { data, fileName };
-                  target.uploadFileName = fileName;
-                }
-              });
-              ctx.render();
-            },
-            () => {
-              ctx.commit((cs) => {
-                const target = cs[clipIdx]?.frameRefs[editorRefIdx];
-                if (target) {
-                  target.uploadedImage = null;
-                  target.uploadFileName = null;
-                }
-              });
-              ctx.render();
-            }
-          )
-        );
-      }
-      return fields;
-    };
-    return buildSection(buildEditor);
-  };
-
-  // frontend/detailStrip/retakePanel.ts
-  var buildRetakeSection = (context, clip, clipIdx, open = false) => {
-    const retake = clip.retake;
-    const decision = context.authoring().capabilities.forClip(clip).decision("retake");
-    const col = document.createElement("div");
-    col.className = "vst-detail-col vst-detail-retake-col";
-    const buildSection = () => {
-      const built = buildAccordionSection({
-        key: "retake",
-        label: "Retake",
-        className: "vst-detail-retake-section",
-        open,
-        content: col,
-        flattenContent: true,
-        headerAction: retake ? {
-          label: "×",
-          title: "Delete the retake window",
-          className: "vst-detail-delete vst-detail-delete-retake",
-          variant: "interrupt",
-          onClick: () => context.removeRetake(clipIdx)
-        } : void 0
-      });
-      appendHelp(
-        built.heading,
-        built.section,
-        "Retake",
-        "Regenerate just a time window of a base video, leaving the rest untouched — handy for fixing one bad stretch without redoing the whole clip."
-      );
-      return built.section;
-    };
-    if (!retake) {
-      const hint = document.createElement("small");
-      hint.className = "vst-detail-field-hint";
-      hint.textContent = "Regenerates a sub-range when refining a base video.";
-      col.appendChild(hint);
-      const add = buildDetailActionButton({
-        label: "+ Add Retake",
-        title: decision.supported ? "Add a retake window" : decision.reason,
-        className: "small-button vst-detail-repeating-add vst-detail-add-retake",
-        disabled: !decision.supported,
-        onClick: () => context.createRetake(clipIdx)
-      });
-      col.appendChild(add);
-      return buildSection();
-    }
-    const clipDuration = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
-    const clampRetake = (start, length) => clampStartLength(start, length, clipDuration, RETAKE_MIN_DURATION);
-    const startInput = context.buildClampedNumber({
-      key: "retake-start",
-      value: retake.startSeconds,
-      min: 0,
-      max: Math.max(0, clipDuration - RETAKE_MIN_DURATION),
-      step: RETAKE_DURATION_STEP,
-      readBack: (clips) => clips[clipIdx]?.retake?.startSeconds ?? null,
-      mutate: (clips, value) => {
-        const target = clips[clipIdx]?.retake;
-        if (target) {
-          const next = clampRetake(value, target.lengthSeconds);
-          target.startSeconds = next.start;
-          target.lengthSeconds = next.length;
-        }
-      }
-    });
-    col.appendChild(
-      buildField(
-        "Start (s)",
-        startInput,
-        void 0,
-        "Where the retake window begins inside the clip. Only this sub-range is regenerated."
-      )
-    );
-    const lengthInput = context.buildClampedNumber({
-      key: "retake-length",
-      value: retake.lengthSeconds,
-      min: RETAKE_MIN_DURATION,
-      max: clipDuration,
-      step: RETAKE_DURATION_STEP,
-      readBack: (clips) => clips[clipIdx]?.retake?.lengthSeconds ?? null,
-      mutate: (clips, value) => {
-        const target = clips[clipIdx]?.retake;
-        if (target) {
-          const next = clampRetake(target.startSeconds, value);
-          target.startSeconds = next.start;
-          target.lengthSeconds = next.length;
-        }
-      }
-    });
-    col.appendChild(
-      buildField(
-        "Length (s)",
-        lengthInput,
-        void 0,
-        "How long the retake window is, starting at Start. Frames outside the window are kept as-is."
-      )
-    );
-    col.appendChild(
-      buildSlider(
-        "Strength",
-        retake.strength,
-        RETAKE_STRENGTH_MIN,
-        RETAKE_STRENGTH_MAX,
-        RETAKE_STRENGTH_STEP,
-        (value) => {
-          context.debouncedCommit("retake-strength", (clips) => {
-            const target = clips[clipIdx]?.retake;
-            if (target) {
-              target.strength = clamp(
-                value,
-                RETAKE_STRENGTH_MIN,
-                RETAKE_STRENGTH_MAX
-              );
-            }
-          });
-        },
-        {
-          help: "How much of the window is regenerated. Higher changes the footage more; lower keeps it closer to the original."
-        }
-      )
-    );
-    const note = document.createElement("p");
-    note.className = "vst-detail-note";
-    note.textContent = "Applies when refining a base video; audio inside the window regenerates with the frames.";
-    col.appendChild(note);
-    return buildSection();
-  };
-
-  // frontend/detailStrip/stagePanel/characterRefineSection.ts
-  var referenceLabel = (reference) => reference.uploadedMedia?.fileName?.trim() || reference.source.trim() || "Image reference";
-  var textInput2 = (bindings, key, fallback) => {
-    const input2 = document.createElement("input");
-    input2.type = "text";
-    input2.className = "auto-text";
-    input2.maxLength = 120;
-    input2.placeholder = fallback;
-    input2.value = bindings.stage.characterRefine?.[key] ?? fallback;
-    input2.addEventListener("change", () => {
-      const value = input2.value.trim() || fallback;
-      input2.value = value;
-      bindings.commit((stage) => {
-        if (stage.characterRefine) stage.characterRefine[key] = value;
-      });
-    });
-    return input2;
-  };
-  var pictureRows = (bindings, imageReferences) => {
-    const rows = document.createElement("div");
-    rows.className = "vst-detail-span-full vst-character-refine-pictures";
-    const title = document.createElement("div");
-    title.className = "vst-character-refine-pictures-title";
-    title.setAttribute("role", "heading");
-    title.setAttribute("aria-level", "4");
-    title.textContent = "Reference Pictures";
-    rows.appendChild(title);
-    imageReferences.forEach((reference, index) => {
-      if (!reference.id) return;
-      const row = document.createElement("label");
-      row.className = "vst-character-refine-picture";
-      row.title = "Use this picture to guide how the person should look after the repair.";
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "auto-checkbox";
-      checkbox.checked = bindings.stage.characterRefine?.pictureReferenceIds.includes(
-        reference.id
-      ) ?? false;
-      checkbox.addEventListener(
-        "change",
-        () => bindings.commit((stage) => {
-          if (!stage.characterRefine || !reference.id) return;
-          const selected = new Set(
-            stage.characterRefine.pictureReferenceIds
-          );
-          if (checkbox.checked) selected.add(reference.id);
-          else selected.delete(reference.id);
-          stage.characterRefine.pictureReferenceIds = imageReferences.map((candidate) => candidate.id).filter(
-            (id) => Boolean(id && selected.has(id))
-          );
-        })
-      );
-      const text2 = document.createElement("span");
-      text2.textContent = `<picture ${index + 1}> ${referenceLabel(reference)}`;
-      row.append(checkbox, text2);
-      rows.appendChild(row);
-    });
-    return rows;
-  };
-  var appendCharacterRefineSection = (bindings) => {
-    const {
-      context,
-      clip,
-      clipIdx,
-      stage,
-      stageIdx,
-      fields: stageFields,
-      commit,
-      slider
-    } = bindings;
-    const sourceVideo = clip.initVideo;
-    const sourceVideoKind = sourceVideo?.source ?? MEDIA_SOURCE_UPLOAD;
-    const architecture = context.authoring().capabilities.forClip(clip);
-    const supportsAppearanceReferences = architecture.decision(
-      "characterRefineAppearanceReferences"
-    ).supported;
-    const hasDecodedVideo = clip.stages.slice(0, stageIdx).some(
-      (candidate) => stageProducesDecodedVideo(
-        candidate,
-        (feature) => architecture.decision(feature).supported
-      )
-    ) || sourceVideo !== null && (sourceVideoKind === MEDIA_SOURCE_UPLOAD || sourceVideoKind === MEDIA_SOURCE_PREVIOUS_CLIP);
-    if (!architecture.decision("characterRefine").supported || !CHARACTER_REFINE_REQUIRED_FEATURES.every(
-      (feature) => getVideoStagesHostBridge().hasBackendFeature(feature)
-    ) || !hasDecodedVideo) {
-      return;
-    }
-    const imageReferences = clip.references.filter(
-      (reference) => reference.kind === "image" && reference.id && clipReferenceIsUsable(reference)
-    );
-    const fields = document.createElement("div");
-    fields.className = "vst-detail-fields vst-character-refine-fields";
-    const appendGroup = () => {
-      const enabled = stage.characterRefine !== null;
-      const built = buildAccordionSection({
-        key: `bonita-${clip.id ?? clipIdx}-${stage.id ?? stageIdx}`,
-        label: "Make Them Bonita",
-        content: fields,
-        defaultOpen: enabled,
-        flattenContent: true,
-        className: "vst-character-refine-section vst-detail-span-full",
-        toggle: {
-          checked: enabled,
-          title: enabled ? "Turn off Make Them Bonita" : "Turn on Make Them Bonita",
-          onChange: (checked) => {
-            commit((target) => {
-              target.characterRefine = checked ? defaultCharacterRefine(
-                supportsAppearanceReferences ? imageReferences.flatMap(
-                  (reference) => reference.id ? [reference.id] : []
-                ) : []
-              ) : null;
-              if (checked) target.upscale = 1;
-            });
-            context.render();
-          }
-        }
-      });
-      built.section.hidden = stage.upscale !== 1;
-      appendHelp(
-        built.heading,
-        built.section,
-        "Make Them Bonita",
-        "Repair a person or character in this stage."
-      );
-      stageFields.appendChild(built.section);
-    };
-    if (!stage.characterRefine) {
-      appendGroup();
-      return;
-    }
-    fields.appendChild(
-      buildField(
-        "Finder",
-        buildOptionSelect(
-          [
-            { value: "sam3", label: "SAM3" },
-            { value: "yolo", label: "YOLO" }
-          ],
-          stage.characterRefine.finder,
-          (value) => commit((target) => {
-            if (target.characterRefine) {
-              target.characterRefine.finder = value;
-            }
-          })
-        ),
-        void 0,
-        "SAM3 is usually best for movement. YOLO is faster for simple shots."
-      )
-    );
-    fields.appendChild(
-      buildField(
-        "Subject",
-        textInput2(bindings, "subject", CHARACTER_REFINE_SUBJECT_DEFAULT),
-        void 0,
-        'Describe who or what to follow, such as "person" or "dog".'
-      )
-    );
-    fields.appendChild(
-      buildField(
-        "Part",
-        textInput2(bindings, "part", CHARACTER_REFINE_PART_DEFAULT),
-        void 0,
-        'Name the area you want to repair, such as "face" or "hand".'
-      )
-    );
-    fields.appendChild(
-      slider(
-        "Subject Confidence",
-        "character-refine-subject-confidence",
-        stage.characterRefine.subjectConfidence,
-        CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
-        CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
-        CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
-        (target, value) => {
-          if (target.characterRefine) {
-            target.characterRefine.subjectConfidence = value;
-          }
-        },
-        {
-          help: "Lower this if Bonita loses the subject. Raise it if Bonita follows the wrong one."
-        }
-      )
-    );
-    fields.appendChild(
-      slider(
-        "Part Confidence",
-        "character-refine-part-confidence",
-        stage.characterRefine.partConfidence,
-        CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
-        CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
-        CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
-        (target, value) => {
-          if (target.characterRefine) {
-            target.characterRefine.partConfidence = value;
-          }
-        },
-        {
-          help: "Lower this if Bonita misses the area. Raise it if Bonita chooses the wrong area."
-        }
-      )
-    );
-    for (const [label, key, help] of [
-      [
-        "Crop Width",
-        "cropWidth",
-        "Choose a wider repair image to include more space around the subject."
-      ],
-      [
-        "Crop Height",
-        "cropHeight",
-        "Choose a taller repair image to include more space above and below the subject."
-      ]
-    ]) {
-      fields.appendChild(
-        slider(
-          label,
-          `character-refine-${key}`,
-          stage.characterRefine[key],
-          CHARACTER_REFINE_CROP_DIMENSION_MIN,
-          CHARACTER_REFINE_CROP_DIMENSION_MAX,
-          CHARACTER_REFINE_CROP_DIMENSION_STEP,
-          (target, value) => {
-            if (target.characterRefine) {
-              target.characterRefine[key] = value;
-            }
-          },
-          {
-            help,
-            sliderMin: 256,
-            sliderMax: 2048,
-            isPot: true
-          }
-        )
-      );
-    }
-    if (supportsAppearanceReferences) {
-      fields.appendChild(pictureRows(bindings, imageReferences));
-    }
-    fields.appendChild(
-      buildCheckbox(
-        "Verify Identity",
-        stage.characterRefine.verifyIdentity,
-        (enabled) => commit((target) => {
-          if (target.characterRefine) {
-            target.characterRefine.verifyIdentity = enabled;
-          }
-        }),
-        {
-          disabled: imageReferences.length === 0,
-          help: "InsightFace adds a slower identity check. Turn it on only when the scene has more than one person."
-        }
-      )
-    );
-    appendGroup();
-  };
-
-  // frontend/detailStrip/stagePanel/modelSection.ts
-  var appendStageModelSection = ({
-    context,
-    clip,
-    clipIdx,
-    stageIdx,
-    stage,
-    defaults,
-    fields
-  }) => {
-    const rootModel = modelCatalogEntry(
-      defaults.modelCatalog,
-      clip.stages[0]?.model
-    );
-    const ownerArchitectureId = resolvedClipArchitectureId(
-      clip,
-      defaults.modelCatalog
-    );
-    const modelOptions = defaults.modelCatalog.entries.flatMap(
-      (entry) => {
-        const model = modelCatalogEntry(defaults.modelCatalog, entry.value);
-        const target = buildArchitectureRetargetPlan(
-          defaults.modelCatalog,
-          entry.value
-        );
-        if (!target || !model) return [];
-        const leavesAuthoredStagesCompatible = clip.stages.every(
-          (candidate, candidateIndex) => {
-            if (candidateIndex === stageIdx) return true;
-            const candidateModel = modelCatalogEntry(
-              defaults.modelCatalog,
-              candidate.model
-            );
-            return candidateModel?.architectureId === model.architectureId && candidateModel.compatibilityClassId !== null && candidateModel.compatibilityClassId === model.compatibilityClassId;
-          }
-        );
-        const requiresWholeClipConversion = stageIdx === 0 && (ownerArchitectureId === null || target.architectureId !== ownerArchitectureId);
-        const preservesClipLock = stageIdx === 0 ? requiresWholeClipConversion || leavesAuthoredStagesCompatible : model.architectureId === rootModel?.architectureId && model.compatibilityClassId !== null && model.compatibilityClassId === rootModel?.compatibilityClassId;
-        return preservesClipLock ? [{ value: entry.value, label: entry.label }] : [];
-      }
-    );
-    if (stage.model && !modelOptions.some((option) => option.value === stage.model)) {
-      modelOptions.unshift({
-        value: stage.model,
-        label: `${stage.model} (unsupported persisted value)`,
-        disabled: true
-      });
-    }
-    const modelSelect = buildOptionSelect(
-      modelOptions,
-      `${stage.model ?? ""}`,
-      (value) => {
-        const selectedModel = modelCatalogEntry(
-          defaults.modelCatalog,
-          value
-        );
-        const plan = buildArchitectureRetargetPlan(
-          defaults.modelCatalog,
-          value
-        );
-        if (!plan || !selectedModel) {
-          modelSelect.value = stage.model;
-          return;
-        }
-        if (stageIdx === 0 && (ownerArchitectureId === null || plan.architectureId !== ownerArchitectureId)) {
-          const conversion = planArchitectureConversion(
-            clip,
-            plan,
-            defaults.modelCatalog
-          );
-          if (!conversion) {
-            modelSelect.value = stage.model;
-            return;
-          }
-          context.structuralCommit((clips) => {
-            const clipId = clips[clipIdx]?.id;
-            if (!clipId) {
-              modelSelect.value = stage.model;
-              return null;
-            }
-            return {
-              command: {
-                type: "clip.convert-architecture",
-                clipId,
-                target: plan
-              },
-              selection: "render"
-            };
-          });
-          return;
-        }
-        context.structuralCommit((clips) => {
-          const clipId = clips[clipIdx]?.id;
-          const stageId = clips[clipIdx]?.stages[stageIdx]?.id;
-          if (!clipId || !stageId) {
-            modelSelect.value = stage.model;
-            return null;
-          }
-          return {
-            command: {
-              type: "stage.retarget-model",
-              clipId,
-              stageId,
-              target: plan
-            },
-            selection: "render"
-          };
-        });
-      }
-    );
-    const modelField = buildField("Model", modelSelect);
-    modelField.classList.add("vst-detail-span-2");
-    fields.appendChild(modelField);
-  };
-
-  // frontend/detailStrip/stagePanel/referenceGuideSection.ts
-  var appendSectionHeader = (fields, label) => {
-    const header = document.createElement("div");
-    header.className = "vst-detail-sec vst-detail-span-full vst-detail-crumb vst-detail-subsection-crumb";
-    header.setAttribute("role", "heading");
-    header.setAttribute("aria-level", "4");
-    header.textContent = label;
-    fields.appendChild(header);
-  };
-  var shortModelName2 = (modelName) => {
-    const parts = modelName.split(/[\\/]/);
-    return parts[parts.length - 1] || modelName;
-  };
-  var appendStageReferenceGuideSection = ({
-    context,
-    clip,
-    clipIdx,
-    stage,
-    stageIdx,
-    fields,
-    debouncedCommit
-  }) => {
-    const capabilityView = context.authoring().capabilities.forClip(clip);
-    if (stage.characterRefine === null && clip.frameRefs.length > 0 && capabilityView.decision("stageReferenceStrengths").supported) {
-      appendSectionHeader(fields, "Keyframe Strengths");
-      const setRefHover = (refIdx, on) => {
-        context.getBoundBody()?.querySelector(
-          `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
-        )?.classList.toggle("vst-ref-hover", on);
-      };
-      clip.frameRefs.forEach((ref, refIdx) => {
-        const current = refIdx < stage.frameRefStrengths.length ? stage.frameRefStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
-        const refSlider = buildSlider(
-          `Keyframe ${refIdx}`,
-          current,
-          STAGE_REF_STRENGTH_MIN,
-          STAGE_REF_STRENGTH_MAX,
-          STAGE_REF_STRENGTH_STEP,
-          (value) => {
-            debouncedCommit(`refstrength-${refIdx}`, (target) => {
-              if (refIdx < target.frameRefStrengths.length) {
-                target.frameRefStrengths[refIdx] = value;
-              }
-            });
-          },
-          {
-            title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`
-          }
-        );
-        refSlider.classList.add("vst-stage-ref-slider");
-        tagFocus(refSlider, `ref-${refIdx}`);
-        refSlider.addEventListener(
-          "mouseenter",
-          () => setRefHover(refIdx, true)
-        );
-        refSlider.addEventListener(
-          "mouseleave",
-          () => setRefHover(refIdx, false)
-        );
-        fields.appendChild(refSlider);
-      });
-    }
-    const applicableIcLoras = clip.icLoras.map((entry, entryIdx) => ({ entry, entryIdx })).filter(({ entry }) => entry.stage < 0 || entry.stage === stageIdx);
-    if (applicableIcLoras.length === 0) return;
-    appendSectionHeader(fields, "IC-LoRA Guide Strengths");
-    const icDecision = capabilityView.decision("icLora");
-    const icGroup = document.createDocumentFragment();
-    applicableIcLoras.forEach(({ entry, entryIdx }) => {
-      const displayName = architectureIcLoraDisplayName(
-        capabilityView.architectureId,
-        entry
-      );
-      const guideStrength = tagFocus(
-        buildNumber(
-          stage.icLoraStrengths[entryIdx] ?? 1,
-          STAGE_CONTROLNET_STRENGTH_MIN,
-          STAGE_CONTROLNET_STRENGTH_MAX,
-          STAGE_CONTROLNET_STRENGTH_STEP,
-          (value) => {
-            debouncedCommit(
-              `ic-lora-strength-${entryIdx}`,
-              (target) => {
-                target.icLoraStrengths[entryIdx] = value;
-              }
-            );
-          }
-        ),
-        `ic-lora-strength-${entryIdx}`
-      );
-      guideStrength.classList.add(
-        "lora-weight-input",
-        "vst-stage-iclora-strength"
-      );
-      const row = buildField(shortModelName2(displayName), guideStrength);
-      row.classList.add("vst-stage-iclora-strength-row");
-      row.title = displayName;
-      icGroup.appendChild(row);
-    });
-    if (!icDecision.supported) {
-      disableCapabilityControls(icGroup, icDecision);
-    }
-    fields.appendChild(icGroup);
-  };
-
-  // frontend/detailStrip/stagePanel/samplingSection.ts
-  var STEPS_SLIDER_MAX = 20;
-  var CFG_SCALE_SLIDER_MAX = 10;
-  var appendStageDenoisingSection = (bindings, isRefine) => {
-    const { stage, defaults, fields, slider } = bindings;
-    fields.appendChild(
-      slider(
-        "Steps",
-        "steps",
-        stage.steps,
-        defaults.stepsMin,
-        defaults.stepsMax,
-        defaults.stepsStep,
-        (target, value) => {
-          target.steps = Math.round(value);
-        },
-        { sliderMax: Math.min(STEPS_SLIDER_MAX, defaults.stepsMax) }
-      )
-    );
-    fields.appendChild(
-      slider(
-        "CFG Scale",
-        "cfg",
-        stage.cfgScale,
-        defaults.cfgScaleMin,
-        defaults.cfgScaleMax,
-        defaults.cfgScaleStep,
-        (target, value) => {
-          target.cfgScale = value;
-        },
-        { sliderMax: Math.min(CFG_SCALE_SLIDER_MAX, defaults.cfgScaleMax) }
-      )
-    );
-    if (isRefine) {
-      fields.appendChild(
-        slider(
-          "Control",
-          "control",
-          stage.control,
-          defaults.controlMin,
-          defaults.controlMax,
-          defaults.controlStep,
-          (target, value) => {
-            target.control = value;
-          },
-          {
-            title: "Regen strength — higher = more of the stage is re-generated",
-            help: "Regeneration strength for this refine stage. Higher re-generates more of the incoming frames (starting step = floor(Steps × (1 − Control))); at 0 the frames pass through untouched."
-          }
-        )
-      );
-    }
-  };
-  var appendStageSamplerSchedulerSection = ({
-    stage,
-    defaults,
-    fields,
-    stageCapabilities,
-    commit
-  }) => {
-    const persistedSelect = (values, labels, selected, assign) => {
-      const options = values.map((value, index) => ({
-        value,
-        label: labels[index] ?? value
-      }));
-      preserveSelectedOption(options, selected, "start", (value) => ({
-        value,
-        label: `${value} (unsupported persisted value)`,
-        disabled: true
-      }));
-      return buildOptionSelect(options, selected, assign);
-    };
-    const samplerField = buildField(
-      "Sampler",
-      persistedSelect(
-        defaults.samplerValues,
-        defaults.samplerLabels,
-        `${stage.sampler ?? ""}`,
-        (value) => commit((target) => {
-          target.sampler = value;
-        })
-      )
-    );
-    const samplerState = stageCapabilities.authoringState("sampler", true);
-    if (!samplerState.enabled) {
-      disableCapabilityControls(samplerField, samplerState);
-    }
-    fields.appendChild(samplerField);
-    const schedulerField = buildField(
-      "Scheduler",
-      persistedSelect(
-        defaults.schedulerValues,
-        defaults.schedulerLabels,
-        `${stage.scheduler ?? ""}`,
-        (value) => commit((target) => {
-          target.scheduler = value;
-        })
-      )
-    );
-    const schedulerState = stageCapabilities.authoringState("scheduler", true);
-    if (!schedulerState.enabled) {
-      disableCapabilityControls(schedulerField, schedulerState);
-    }
-    fields.appendChild(schedulerField);
-  };
-
-  // frontend/detailStrip/stagePanel/upscaleSection.ts
-  var UPSCALE_EPSILON = 1e-6;
-  var latentUpscaleFeature = (method) => {
-    const mode = upscaleModeForMethod(method);
-    return mode === "latent" ? "latentUpscale" : mode === "latent-model" ? "latentModelUpscale" : null;
-  };
-  var appendStageUpscaleSection = (bindings, isRefine) => {
-    if (!isRefine) return;
-    const { context, clip, stage, defaults, fields, slider, commit } = bindings;
-    const bonitaEnabled = stage.characterRefine !== null;
-    const capabilities = context.authoring().capabilities.forClip(clip);
-    const supportedMethods = defaults.upscaleMethodValues.flatMap(
-      (value, index) => {
-        const feature = latentUpscaleFeature(value);
-        return feature === null || capabilities.decision(feature).supported ? [
-          {
-            value,
-            label: defaults.upscaleMethodLabels[index] ?? value
-          }
-        ] : [];
-      }
-    );
-    if (stage.upscaleMethod && !supportedMethods.some((option) => option.value === stage.upscaleMethod)) {
-      supportedMethods.unshift({
-        value: stage.upscaleMethod,
-        label: `${stage.upscaleMethod} (unsupported persisted value)`,
-        disabled: true
-      });
-    }
-    const methodSelect = buildOptionSelect(
-      supportedMethods,
-      `${stage.upscaleMethod ?? ""}`,
-      (value) => {
-        commit((target) => {
-          target.upscaleMethod = value;
-        });
-      }
-    );
-    const methodField = buildField(
-      "Upscale Method",
-      methodSelect,
-      void 0,
-      "How frames are enlarged before this stage refines them. Only applies when Upscale is above 1×."
-    );
-    methodField.classList.add("vst-detail-span-2");
-    const syncMethod = (upscale) => {
-      fields.querySelector(".vst-character-refine-section")?.toggleAttribute("hidden", upscale !== 1);
-      const disabled = bonitaEnabled || Math.abs(upscale - 1) < UPSCALE_EPSILON;
-      methodSelect.disabled = disabled;
-      methodField.classList.toggle("vst-field-disabled", disabled);
-      methodField.title = bonitaEnabled ? "Upscale is unavailable while Make Them Bonita is on" : disabled ? "Set Upscale above 1× to choose a method" : "";
-    };
-    const upscaleSlider = slider(
-      "Upscale",
-      "upscale",
-      stage.upscale,
-      defaults.upscaleMin,
-      defaults.upscaleMax,
-      defaults.upscaleStep,
-      (target, value) => {
-        target.upscale = value;
-      },
-      {
-        onValue: syncMethod,
-        help: "Resolution multiplier applied to the incoming frames before this stage refines them. 1× keeps the size; above 1× enlarges using the Upscale Method."
-      }
-    );
-    if (bonitaEnabled) {
-      upscaleSlider.querySelectorAll("input").forEach((input2) => {
-        input2.disabled = true;
-      });
-      upscaleSlider.classList.add("vst-field-disabled");
-      upscaleSlider.title = "Upscale is unavailable while Make Them Bonita is on";
-    }
-    fields.append(upscaleSlider, methodField);
-    syncMethod(stage.upscale);
-  };
-
-  // frontend/detailStrip/stagePanel.ts
-  var buildStageParamsColumn = (context, clip, clipIdx, stageIdx, stage, defaults) => {
-    const column = document.createElement("div");
-    column.className = "vst-detail-fields vst-detail-params";
-    const initVideoStage0 = stageIdx === 0 && !!clip.initVideo && stage.skipped !== true;
-    const isRefine = stageIdx >= 1 || initVideoStage0;
-    const stageCapabilities = context.authoring().capabilities.forStage(clip, stage);
-    const commit = (mutate) => {
-      context.commit((clips) => {
-        const target = clips[clipIdx]?.stages[stageIdx];
-        if (target) mutate(target);
-      });
-    };
-    const debouncedCommit = (key, mutate) => {
-      context.debouncedCommit(key, (clips) => {
-        const target = clips[clipIdx]?.stages[stageIdx];
-        if (target) mutate(target);
-      });
-    };
-    const slider = (label, focusKey, value, min, max, step, assign, options) => tagFocus(
-      buildSlider(
-        label,
-        value,
-        min,
-        max,
-        step,
-        (nextValue) => {
-          options?.onValue?.(nextValue);
-          debouncedCommit(
-            focusKey,
-            (target) => assign(target, nextValue)
-          );
-        },
-        options ? {
-          title: options.title,
-          help: options.help,
-          sliderMin: options.sliderMin,
-          sliderMax: options.sliderMax,
-          isPot: options.isPot
-        } : void 0
-      ),
-      focusKey
-    );
-    const fields = column;
-    fields.classList.toggle("vst-stage-fields-muted", stage.skipped === true);
-    const bindings = {
-      context,
-      clip,
-      clipIdx,
-      stageIdx,
-      stage,
-      defaults,
-      fields,
-      stageCapabilities,
-      commit,
-      debouncedCommit,
-      slider
-    };
-    appendStageModelSection(bindings);
-    appendStageDenoisingSection(bindings, isRefine);
-    appendStageUpscaleSection(bindings, isRefine);
-    appendStageSamplerSchedulerSection(bindings);
-    appendCharacterRefineSection(bindings);
-    appendStageReferenceGuideSection(bindings);
-    if (initVideoStage0) {
-      const note = document.createElement("p");
-      note.className = "vst-detail-note vst-stage-passthrough-note";
-      note.textContent = "This stage starts from the source footage — Control sets how much is re-generated (0 passes it through).";
-      column.insertBefore(note, column.firstChild);
-    }
-    return column;
-  };
-
-  // frontend/detailStrip/stageRail.ts
-  var buildStageRail = (context, clip, clipIdx, stageIdx, editorForStage, open = true) => {
-    const addTitle = clip.stages.length === 0 ? "Add the first stage and choose its architecture" : "Add a refine stage";
-    return buildRepeatingEditor({
-      key: "stages",
-      label: "Stages",
-      sectionClass: "vst-detail-stage-groups",
-      open,
-      items: clip.stages.map((stage, index) => {
-        const firstStage = index === 0;
-        return {
-          label: `Stage ${stageChipLabel(index)}`,
-          stateKey: stage.id ? `stage:${stage.id}` : void 0,
-          focusKey: `stage-group-${index}`,
-          title: stageChipTitle(stage, index),
-          active: index === stageIdx,
-          className: `vst-stage-tab${stage.skipped ? " vst-stage-tab-skipped" : ""}`,
-          onSelect: () => context.selectStage(clipIdx, index),
-          onDelete: firstStage ? void 0 : () => context.deleteStage(clipIdx, index),
-          deleteTitle: firstStage ? void 0 : `Delete stage ${stageChipLabel(index)}`,
-          headerAction: firstStage ? void 0 : {
-            label: skipGlyph(stage.skipped === true),
-            title: skipTitle(
-              `stage ${stageChipLabel(index)}`,
-              stage.skipped === true
-            ),
-            className: "vst-detail-skip-stage",
-            active: stage.skipped,
-            onClick: () => context.toggleStageSkip(clipIdx, index)
-          }
-        };
-      }),
-      editorForItem: editorForStage,
-      add: {
-        title: addTitle,
-        label: "+ Add Video Stage",
-        className: "vst-detail-add-stage",
-        onClick: () => context.addStage(clipIdx)
-      },
-      remove: {
-        title: "Delete stage",
-        className: "vst-detail-delete-stage"
-      }
-    }).section;
-  };
-
-  // frontend/detailStrip/clipPanel.ts
-  var buildClipBody = (context, selection, state) => {
-    const clips = state.clips;
-    const body = document.createElement("div");
-    body.className = "vst-detail-body vst-detail-clip-body";
-    let clipIdx;
-    if (selection.kind === "boundary-ref") {
-      const incomingBoundary = executableBoundaryForLeftClip(
-        clips,
-        selection.leftClipIdx
-      );
-      if (!incomingBoundary) {
-        throw new Error(
-          "boundary reference selection has no executable seam"
-        );
-      }
-      clipIdx = incomingBoundary.rightIdx;
-    } else {
-      clipIdx = selection.clipIdx;
-    }
-    const stageIdx = selection.kind === "clip" ? selection.stageIdx : 0;
-    const clip = clips[clipIdx];
-    body.classList.toggle("vst-detail-clip-skipped", clip.skipped === true);
-    const { capabilities, defaults } = context.authoring();
-    const capabilityView = capabilities.forClip(clip);
-    const referenceFramingState = capabilityView.authoringState(
-      "referenceFraming",
-      clip.refFraming !== "crop"
-    );
-    body.appendChild(
-      buildStaticSection({
-        key: "clip",
-        label: "Clip",
-        className: "vst-detail-clip-section",
-        content: buildClipColumn(
-          context,
-          clip,
-          clipIdx,
-          referenceFramingState,
-          capabilityView.architectureId === "minimax" && getVideoStagesHostBridge().hasBackendFeature(
-            H3_ATTENTION_WINDOW_FEATURE
-          ),
-          capabilityView.architectureId !== "minimax" ? "hidden" : getVideoStagesHostBridge().hasBackendFeature(
-            H3_TEXT_ENCODER_FEATURE
-          ) ? "ready" : "install"
-        ),
-        flattenContent: true,
-        headerActions: clipIdx === 0 ? [] : [
-          buildClipSkipAction(context, clip, clipIdx),
-          {
-            label: "×",
-            title: `Delete clip ${clipIdx}`,
-            className: "vst-detail-delete vst-detail-repeating-group-delete vst-detail-delete-clip",
-            variant: "interrupt",
-            onClick: () => context.deleteClip?.(clipIdx)
-          }
-        ]
-      }).section
-    );
-    const stages = buildStageRail(
-      context,
-      clip,
-      clipIdx,
-      stageIdx,
-      (editorStageIdx) => {
-        const editorStage = clip.stages[editorStageIdx];
-        return editorStage ? buildStageParamsColumn(
-          context,
-          clip,
-          clipIdx,
-          editorStageIdx,
-          editorStage,
-          defaults
-        ) : void 0;
-      },
-      selection.kind === "clip"
-    );
-    if (!clip.stages[stageIdx]) {
-      const note = document.createElement("p");
-      note.className = "vst-detail-note vst-source-only-note";
-      note.textContent = "Source-only clip. Add a stage to choose an architecture and refine this footage.";
-      stages.appendChild(note);
-    }
-    body.appendChild(stages);
-    const appendCapabilitySection = (feature, persisted, content) => {
-      const state2 = capabilityView.authoringState(feature, persisted);
-      if (!state2.visible) {
-        return;
-      }
-      const section = content();
-      if (!state2.enabled) {
-        applyPersistedCapabilityRepair(section, state2);
-      }
-      body.appendChild(section);
-    };
-    body.appendChild(
-      buildClipLorasSection(context, clip, clipIdx, stageIdx, defaults)
-    );
-    appendCapabilitySection(
-      clipReferenceAuthoring(capabilityView).feature,
-      clip.references.length > 0,
-      () => buildClipReferenceSection(
-        context,
-        clipIdx,
-        selection.kind === "clip-ref" ? selection.referenceIdx : null,
-        clips,
-        state.fps,
-        selection.kind === "clip-ref" || selection.kind === "boundary-ref",
-        selection.kind === "boundary-ref"
-      )
-    );
-    appendCapabilitySection(
-      "frameReferences",
-      clip.frameRefs.length > 0,
-      () => buildRefSection(
-        context,
-        clipIdx,
-        selection.kind === "ref" ? selection.refIdx : null,
-        clips,
-        state.fps,
-        selection.kind === "ref"
-      )
-    );
-    appendCapabilitySection(
-      "icLora",
-      clip.icLoras.length > 0,
-      () => buildArchitectureIcLorasSection(
-        context,
-        clip,
-        clipIdx,
-        defaults,
-        selection.kind === "ic-lora" ? selection.entryIdx : null,
-        selection.kind === "ic-lora"
-      )
-    );
-    body.appendChild(buildInitVideoSection(context, clip, clipIdx, false));
-    appendCapabilitySection(
-      "retake",
-      clip.retake !== null,
-      () => buildRetakeSection(context, clip, clipIdx, selection.kind === "retake")
-    );
-    return body;
-  };
-
-  // frontend/intervals.ts
-  var freeIntervalAt = (spans, total, point) => {
-    const p = Math.min(Math.max(point, 0), total);
-    let lo = 0;
-    let hi = total;
-    for (const span of spans) {
-      if (span.end <= p) {
-        if (span.end > lo) {
-          lo = span.end;
-        }
-      } else if (span.start >= p) {
-        hi = span.start;
-        break;
-      } else {
-        return [p, p];
-      }
-    }
-    return [lo, hi];
-  };
-
-  // frontend/promptWindowEdits.ts
-  var otherSpans = (windows, excludeIdx, clipDuration) => windows.map((w, k) => ({
-    k,
-    start: clamp(w.start, 0, clipDuration),
-    end: clamp(w.start + w.duration, 0, clipDuration)
-  })).filter((s) => s.k !== excludeIdx && s.end > s.start).sort((a, b) => a.start - b.start).map((s) => ({ start: s.start, end: s.end }));
-  var applyPromptWindowBegin = (clip, windowIdx, desiredBegin) => {
-    const window2 = clip.promptWindows?.[windowIdx];
-    if (!window2) {
-      return;
-    }
-    const clipDur = clipDurationOf(clip);
-    const end = window2.start + window2.duration;
-    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
-    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
-    const start = clamp(desiredBegin, lo, end - PROMPT_WINDOW_MIN_DURATION);
-    window2.start = roundToTenth(start);
-    window2.duration = roundToTenth(end - start);
-  };
-  var applyPromptWindowEnd = (clip, windowIdx, desiredEnd) => {
-    const window2 = clip.promptWindows?.[windowIdx];
-    if (!window2) {
-      return;
-    }
-    const clipDur = clipDurationOf(clip);
-    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
-    const [, hi] = freeIntervalAt(spans, clipDur, window2.start);
-    const end = clamp(
-      desiredEnd,
-      window2.start + PROMPT_WINDOW_MIN_DURATION,
-      hi
-    );
-    window2.start = roundToTenth(window2.start);
-    window2.duration = roundToTenth(end - window2.start);
-  };
-  var promptWindowNeighborBounds = (clip, windowIdx) => {
-    const window2 = clip.promptWindows?.[windowIdx];
-    if (!window2) {
-      return null;
-    }
-    const clipDur = clipDurationOf(clip);
-    const end = window2.start + window2.duration;
-    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
-    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
-    const [, hi] = freeIntervalAt(spans, clipDur, window2.start);
-    return { beginMin: roundToTenth(lo), endMax: roundToTenth(hi) };
-  };
-
-  // frontend/detailStrip/promptPanels.ts
-  var buildMajorPromptSection = (ctx, clip, clipIdx, open) => {
-    const col = document.createElement("div");
-    col.className = "vst-detail-col vst-detail-prompt-body";
-    const prompt = buildTextarea(
-      clip.prompt ?? "",
-      "Clip prompt (blank inherits the global prompt)…",
-      "prompt-major",
-      (value) => {
-        ctx.debouncedCommit("prompt-major", (clips) => {
-          const target = clips[clipIdx];
-          if (target) {
-            target.prompt = value.trim();
-          }
-        });
-      }
-    );
-    prompt.rows = 8;
-    col.appendChild(buildField("Prompt", prompt));
-    const built = buildAccordionSection({
-      key: "major-prompt",
-      label: "Major Prompt",
-      content: col,
-      open,
-      flattenContent: true,
-      className: "vst-detail-prompt-major"
-    });
-    return built.section;
-  };
-  var buildRelayPromptSection = (ctx, clip, clipIdx, selectedWindowIdx, open) => {
-    const windows = clip.promptWindows ?? [];
-    const activeWindowIdx = windows.length === 0 ? null : clamp(selectedWindowIdx ?? 0, 0, windows.length - 1);
-    const buildSection = (editorForItem) => buildRepeatingEditor({
-      key: "relay-prompts",
-      label: "Relay Prompts",
-      sectionClass: "vst-detail-relay-section",
-      open,
-      items: windows.map((window2, index) => ({
-        label: `R${index}`,
-        stateKey: window2.id ? `relay:${window2.id}` : void 0,
-        focusKey: `relay-tab-${index}`,
-        title: `Relay prompt ${roundToTenth(window2.start)}–${roundToTenth(window2.start + window2.duration)} seconds`,
-        active: index === activeWindowIdx,
-        className: "vst-relay-tab",
-        onSelect: () => setSelection({
-          kind: "prompt-minor",
-          clipIdx,
-          windowIdx: index
-        }),
-        onDelete: () => ctx.deleteWindowEntry(clipIdx, index)
-      })),
-      add: {
-        title: "Add a relay prompt in the first available time window",
-        label: "+ Add Relay Prompt",
-        className: "vst-detail-add-relay",
-        onClick: () => ctx.addPromptWindow(clipIdx)
-      },
-      remove: {
-        title: activeWindowIdx === null ? "No relay prompt to delete" : `Delete relay prompt ${activeWindowIdx}`,
-        className: "vst-detail-delete-relay"
-      },
-      editorForItem
-    }).section;
-    if (activeWindowIdx === null) {
-      return buildSection();
-    }
-    const buildEditor = (editorWindowIdx) => {
-      const window2 = windows[editorWindowIdx];
-      if (!window2) {
-        return void 0;
-      }
-      const clipDuration = Math.max(
-        PROMPT_WINDOW_MIN_DURATION,
-        clip.duration || 0
-      );
-      const editorSection = document.createElement("div");
-      editorSection.className = "vst-detail-col vst-detail-prompt-body vst-detail-minor-window";
-      editorSection.setAttribute(
-        "data-vst-minor-window",
-        `${editorWindowIdx}`
-      );
-      const bounds = promptWindowNeighborBounds(clip, editorWindowIdx);
-      const beginInput = ctx.buildClampedNumber({
-        key: `minor-${editorWindowIdx}-begin`,
-        value: roundToTenth(window2.start),
-        min: bounds?.beginMin ?? 0,
-        max: gridFloor(
-          Math.max(0, clipDuration - PROMPT_WINDOW_MIN_DURATION)
-        ),
-        step: 0.1,
-        readBack: (clips) => {
-          const target = clips[clipIdx]?.promptWindows?.[editorWindowIdx];
-          return target ? roundToTenth(target.start) : null;
-        },
-        mutate: (clips, value) => {
-          const target = clips[clipIdx];
-          if (target) {
-            applyPromptWindowBegin(target, editorWindowIdx, value);
-          }
-        }
-      });
-      editorSection.appendChild(
-        buildField(
-          "Begin (s)",
-          beginInput,
-          void 0,
-          "When this relay prompt starts within the clip."
-        )
-      );
-      const endInput = ctx.buildClampedNumber({
-        key: `minor-${editorWindowIdx}-end`,
-        value: roundToTenth(window2.start + window2.duration),
-        min: gridCeil(PROMPT_WINDOW_MIN_DURATION),
-        max: bounds?.endMax ?? clipDuration,
-        step: 0.1,
-        readBack: (clips) => {
-          const target = clips[clipIdx]?.promptWindows?.[editorWindowIdx];
-          return target ? roundToTenth(target.start + target.duration) : null;
-        },
-        mutate: (clips, value) => {
-          const target = clips[clipIdx];
-          if (target) {
-            applyPromptWindowEnd(target, editorWindowIdx, value);
-          }
-        }
-      });
-      editorSection.appendChild(
-        buildField(
-          "End (s)",
-          endInput,
-          void 0,
-          "When this relay prompt ends. It cannot cross a neighbouring relay."
-        )
-      );
-      const editor = buildTextarea(
-        window2.prompt ?? "",
-        "Relay prompt for this window…",
-        `minor-${editorWindowIdx}`,
-        (value) => {
-          ctx.debouncedCommit(`minor-${editorWindowIdx}`, (clips) => {
-            const target = clips[clipIdx]?.promptWindows?.[editorWindowIdx];
-            if (target) {
-              target.prompt = value.trim();
-            }
-          });
-        }
-      );
-      editor.addEventListener("focus", () => {
-        setSelection({
-          kind: "prompt-minor",
-          clipIdx,
-          windowIdx: editorWindowIdx
-        });
-      });
-      editor.rows = 4;
-      editorSection.appendChild(buildField("Prompt", editor));
-      return editorSection;
-    };
-    return buildSection(buildEditor);
-  };
-  var buildPromptBody = (ctx, selection, clips) => {
-    const clipIdx = selection.clipIdx;
-    const clip = clips[clipIdx];
-    const supportsRelay = ctx.authoring().capabilities.forClip(clip).decision("promptRelay").supported;
-    const body = document.createElement("div");
-    body.className = "vst-detail-body vst-detail-prompts-body";
-    body.appendChild(
-      buildMajorPromptSection(
-        ctx,
-        clip,
-        clipIdx,
-        selection.kind === "prompt-major" || !supportsRelay
-      )
-    );
-    if (supportsRelay) {
-      body.appendChild(
-        buildRelayPromptSection(
-          ctx,
-          clip,
-          clipIdx,
-          selection.kind === "prompt-minor" ? selection.windowIdx : null,
-          selection.kind === "prompt-minor"
-        )
-      );
-    }
-    return body;
-  };
-  var buildPromptMajorBody = (ctx, selection, clips) => buildPromptBody(ctx, selection, clips);
-  var buildPromptMinorBody = (ctx, selection, clips) => buildPromptBody(ctx, selection, clips);
-
-  // frontend/detailStrip/settingsModal.ts
-  var MODAL_CLASS2 = "vst-timeline-settings-modal";
-  var BACKDROP_CLASS2 = "vst-timeline-settings-backdrop";
-  var TITLE_ID2 = "vst_timeline_settings_title";
-  var STORAGE_PREFIX = "videostages";
-  var currentModal3 = null;
-  var buildBonitaInstallSetting = () => {
-    const installed = CHARACTER_REFINE_REQUIRED_FEATURES.every(
-      (feature) => getVideoStagesHostBridge().hasBackendFeature(feature)
-    );
-    const section = document.createElement("fieldset");
-    section.id = "vst_bonita_install";
-    section.className = "vst-bonita-install-setting";
-    const legend = document.createElement("legend");
-    legend.textContent = "Make Them Bonita";
-    const hint = document.createElement("small");
-    if (installed) {
-      hint.textContent = "ComfyUI-Bonita is installed.";
-    } else {
-      const repository = document.createElement("a");
-      repository.href = CHARACTER_REFINE_REPOSITORY_URL;
-      repository.target = "_blank";
-      repository.rel = "noopener noreferrer";
-      repository.textContent = "ComfyUI-Bonita";
-      hint.append(
-        "Install ",
-        repository,
-        " - tracked detail repair for supported video models"
-      );
-    }
-    const install = buildDetailActionButton({
-      label: installed ? "ComfyUI-Bonita Installed" : "Install ComfyUI-Bonita",
-      title: installed ? "ComfyUI-Bonita is installed" : "Install ComfyUI-Bonita",
-      className: "vst-install-bonita",
-      disabled: installed,
-      onClick: () => {
-        if (!installHostFeature(
-          CHARACTER_REFINE_INSTALL_FEATURE,
-          section.id
-        )) {
-          getVideoStagesHostBridge().showError(
-            "SwarmUI's ComfyUI feature installer is unavailable."
-          );
-        }
-      }
-    });
-    install.dataset.vstInstallBonita = "true";
-    section.append(legend, hint, install);
-    return section;
-  };
-  var buildLoraFolderSetting = (onChange) => {
-    const folders = availableLoraFolders(
-      getDropdownOptions("loras", "input_loras").values
-    );
-    const saved = getTimelineAuthoringSettings().loraFolders;
-    const selected = new Set(saved ?? folders);
-    const section = document.createElement("fieldset");
-    section.className = "vst-lora-folder-setting";
-    const legend = document.createElement("legend");
-    legend.textContent = "LoRA folders";
-    const hint = document.createElement("small");
-    hint.textContent = "Only checked top-level folders appear in VideoStages LoRA dropdowns.";
-    const options = document.createElement("div");
-    options.className = "vst-lora-folder-options";
-    const actions = document.createElement("div");
-    actions.className = "vst-lora-folder-actions";
-    const save = () => {
-      const included = folders.filter((folder) => selected.has(folder));
-      setTimelineAuthoringSetting(
-        "loraFolders",
-        included.length === folders.length ? null : included
-      );
-      onChange();
-    };
-    for (const folder of folders) {
-      const row = buildCheckbox(
-        folder === ROOT_LORA_FOLDER ? "(Root)" : folder,
-        selected.has(folder),
-        (checked) => {
-          if (checked) {
-            selected.add(folder);
-          } else {
-            selected.delete(folder);
-          }
-          save();
-        }
-      );
-      row.classList.add("vst-lora-folder-option");
-      const input2 = row.querySelector(
-        "input[type='checkbox']"
-      );
-      if (input2) {
-        input2.value = folder;
-      }
-      options.appendChild(row);
-    }
-    const selectAll = (checked) => {
-      selected.clear();
-      if (checked) {
-        for (const folder of folders) {
-          selected.add(folder);
-        }
-      }
-      for (const input2 of options.querySelectorAll(
-        "input[type='checkbox']"
-      )) {
-        input2.checked = checked;
-      }
-      save();
-    };
-    actions.append(
-      buildDetailActionButton({
-        label: "All",
-        title: "Include every LoRA folder",
-        className: "small-button vst-lora-folders-all",
-        onClick: () => selectAll(true)
-      }),
-      buildDetailActionButton({
-        label: "None",
-        title: "Exclude every LoRA folder",
-        className: "small-button vst-lora-folders-none",
-        onClick: () => selectAll(false)
-      })
-    );
-    section.append(legend, hint, actions, options);
-    return section;
-  };
-  var resetVideoStages = () => {
-    const empty = getState();
-    empty.dimsExplicit = false;
-    empty.clips = [];
-    empty.audioTracks = [];
-    saveState(empty, {
-      notifyDomChange: true,
-      origin: "timeline"
-    });
-    try {
-      const keys = [];
-      for (let index = 0; index < localStorage.length; index++) {
-        const key = localStorage.key(index);
-        if (key?.toLowerCase().startsWith(STORAGE_PREFIX)) {
-          keys.push(key);
-        }
-      }
-      for (const key of keys) {
-        localStorage.removeItem(key);
-      }
-    } catch {
-    }
-    resetRememberedAccordionSections();
-  };
-  var closeTimelineAuthoringSettingsModal = () => {
-    currentModal3?.close();
-  };
-  var openTimelineAuthoringSettingsModal = () => {
-    closeTimelineAuthoringSettingsModal();
-    const settings = getTimelineAuthoringSettings();
-    let refreshOnClose = false;
-    let managed;
-    managed = createManagedModal({
-      modalClass: MODAL_CLASS2,
-      backdropClass: BACKDROP_CLASS2,
-      labelledBy: TITLE_ID2,
-      onClose: () => {
-        if (currentModal3 === managed) {
-          currentModal3 = null;
-        }
-        if (refreshOnClose) {
-          window.dispatchEvent(
-            new Event(TIMELINE_AUTHORING_SETTINGS_CHANGED)
-          );
-        }
-      }
-    });
-    currentModal3 = managed;
-    const { content, header, body } = managed;
-    const title = document.createElement("h5");
-    title.className = "modal-title";
-    title.id = TITLE_ID2;
-    title.textContent = "Timeline Settings";
-    const close = document.createElement("button");
-    close.type = "button";
-    close.className = "basic-button small-button";
-    close.textContent = "×";
-    close.title = "Close timeline settings";
-    close.setAttribute("aria-label", close.title);
-    header.append(title, close);
-    body.append(
-      buildCheckbox(
-        "Snap",
-        settings.snap,
-        (value) => setTimelineAuthoringSetting("snap", value)
-      ),
-      buildCheckbox("Auto-collapse", settings.autoCollapse, (value) => {
-        setTimelineAuthoringSetting("autoCollapse", value);
-        if (value) {
-          resetRememberedAccordionSections();
-        }
-      }),
-      buildBonitaInstallSetting(),
-      buildLoraFolderSetting(() => {
-        refreshOnClose = true;
-      })
-    );
-    const footer = document.createElement("div");
-    footer.className = "modal-footer";
-    footer.appendChild(
-      buildDetailActionButton({
-        label: "Reset VideoStages",
-        title: "Clear all saved VideoStages data and settings",
-        className: "small-button vst-reset-videostages",
-        variant: "interrupt",
-        onClick: () => {
-          resetVideoStages();
-          managed.close();
-        }
-      })
-    );
-    content.appendChild(footer);
-    close.addEventListener("click", managed.close);
-    managed.open(close);
-  };
-
-  // frontend/detailStrip/settingsPanel.ts
-  var SETTINGS_INHERIT = "inherit";
-  var SETTINGS_CUSTOM = "custom";
-  var clampDimension = (value) => clamp(
-    Math.round(value) || ROOT_DIMENSION_MIN,
-    ROOT_DIMENSION_MIN,
-    ROOT_DIMENSION_MAX
-  );
-  var clampFps = (value) => clamp(Math.round(value) || ROOT_FPS_MIN, ROOT_FPS_MIN, ROOT_FPS_MAX);
-  var clampSideLength = (value) => clamp(
-    Math.round((Math.round(value) || 1024) / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP,
-    ROOT_DIMENSION_MIN,
-    ROOT_DIMENSION_MAX
-  );
-  var setSliderDisabled = (slider, disabled) => {
-    slider.querySelectorAll("input").forEach((input2) => {
-      input2.disabled = disabled;
-    });
-    const box = slider.querySelector(".auto-slider-box");
-    if (box) {
-      box.dataset.disabled = `${disabled}`;
-    }
-  };
-  var FPS_WRITE_DEBOUNCE_MS = 300;
-  var fpsWriteTimer = null;
-  var scheduleCoreFpsWrite = (value) => {
-    if (fpsWriteTimer !== null) {
-      clearTimeout(fpsWriteTimer);
-    }
-    fpsWriteTimer = setTimeout(() => {
-      fpsWriteTimer = null;
-      const bridge2 = getVideoStagesHostBridge();
-      const core = bridge2.getRootVideoFpsInput();
-      if (!core || core.value === `${value}`) {
-        return;
-      }
-      core.value = `${value}`;
-      bridge2.notifyChanged(core);
-    }, FPS_WRITE_DEBOUNCE_MS);
-  };
-  var buildSettingsBody = (ctx, state, _selection = {
-    kind: "none"
-  }) => {
-    const defaults = ctx.authoring().defaults;
-    const core = {
-      width: defaults.width,
-      height: defaults.height,
-      fps: defaults.fps
-    };
-    const architectureMultiple = activeDocumentDimensionMultiple(
-      state.clips,
-      defaults.modelCatalog
-    );
-    const dimensionSnap = getTimelineAuthoringSettings().dimensionSnap;
-    const multiple = dimensionSnap === "disabled" ? architectureMultiple : Math.max(architectureMultiple, dimensionSnap);
-    const defaultMode = !state.dimsExplicit ? SETTINGS_INHERIT : matchAspectRatio(state.width, state.height, multiple) ?? SETTINGS_CUSTOM;
-    const mode = ctx.getSettingsMode() ?? defaultMode;
-    const isCustom = mode === SETTINGS_CUSTOM;
-    const isInherited = mode === SETTINGS_INHERIT;
-    const fallbackSideLength = defaults.sideLength ?? (defaults.aspectRatio ? sideLengthForDimensions(
-      defaults.aspectRatio,
-      core.width,
-      core.height
-    ) : 1024);
-    const selectedSideLength = !isInherited && !isCustom ? sideLengthForDimensions(mode, state.width, state.height) : clampSideLength(fallbackSideLength);
-    const rawDimensions = isInherited || isCustom ? {
-      width: clampDimension(isInherited ? core.width : state.width),
-      height: clampDimension(
-        isInherited ? core.height : state.height
-      )
-    } : dimensionsFor(mode, selectedSideLength) ?? {
-      width: clampDimension(state.width),
-      height: clampDimension(state.height)
-    };
-    const effectiveDimensions = snapDimensions(
-      rawDimensions.width,
-      rawDimensions.height,
-      multiple
-    );
-    const body = document.createElement("div");
-    body.className = "vst-detail-form-body vst-detail-settings";
-    const ratioSpecs = [
-      {
-        value: SETTINGS_INHERIT,
-        label: `Use image resolution (${core.width}×${core.height})`
-      },
-      ...ASPECT_RATIOS.map((ratio) => ({
-        value: ratio.id,
-        label: ratio.label
-      })),
-      { value: SETTINGS_CUSTOM, label: "Custom" }
-    ];
-    const ratioSelect = buildOptionSelect(ratioSpecs, mode, (value) => {
-      ctx.setSettingsMode(value);
-      ctx.commitState((next) => {
-        if (value === SETTINGS_INHERIT) {
-          next.dimsExplicit = false;
-        } else if (value === SETTINGS_CUSTOM) {
-          next.dimsExplicit = true;
-          next.width = effectiveDimensions.width;
-          next.height = effectiveDimensions.height;
-        } else {
-          const raw = dimensionsFor(value, fallbackSideLength) ?? {
-            width: effectiveDimensions.width,
-            height: effectiveDimensions.height
-          };
-          const snapped = snapDimensions(raw.width, raw.height, multiple);
-          next.dimsExplicit = true;
-          next.width = snapped.width;
-          next.height = snapped.height;
-        }
-      });
-      ctx.render();
-    });
-    body.appendChild(buildField("Aspect Ratio", ratioSelect));
-    const dimensionSnapSpecs = [
-      { value: "disabled", label: "Disabled" },
-      { value: "32", label: "Multiples of 32" },
-      { value: "64", label: "Multiples of 64" }
-    ];
-    const dimensionSnapSelect = buildOptionSelect(
-      dimensionSnapSpecs,
-      `${dimensionSnap}`,
-      (value) => {
-        const selected = value === "32" ? 32 : value === "64" ? 64 : "disabled";
-        setTimelineAuthoringSetting("dimensionSnap", selected);
-        ctx.render();
-      }
-    );
-    body.appendChild(buildField("Dimension Snap", dimensionSnapSelect));
-    if (isCustom) {
-      const widthSlider = tagFocus(
-        buildSlider(
-          "Width",
-          rawDimensions.width,
-          ROOT_DIMENSION_MIN,
-          ROOT_DIMENSION_MAX,
-          ROOT_DIMENSION_STEP,
-          (value) => {
-            ctx.debouncedCommitState("settings-width", (next) => {
-              const snapped = snapDimensions(
-                clampDimension(value),
-                clampDimension(next.height),
-                multiple
-              );
-              next.dimsExplicit = true;
-              next.width = snapped.width;
-              next.height = snapped.height;
-            });
-          },
-          { sliderMin: ROOT_DIMENSION_SLIDER_MIN }
-        ),
-        "settings-width"
-      );
-      const heightSlider = tagFocus(
-        buildSlider(
-          "Height",
-          rawDimensions.height,
-          ROOT_DIMENSION_MIN,
-          ROOT_DIMENSION_MAX,
-          ROOT_DIMENSION_STEP,
-          (value) => {
-            ctx.debouncedCommitState("settings-height", (next) => {
-              const snapped = snapDimensions(
-                clampDimension(next.width),
-                clampDimension(value),
-                multiple
-              );
-              next.dimsExplicit = true;
-              next.width = snapped.width;
-              next.height = snapped.height;
-            });
-          },
-          { sliderMin: ROOT_DIMENSION_SLIDER_MIN }
-        ),
-        "settings-height"
-      );
-      body.append(widthSlider, heightSlider);
-    } else if (!isInherited) {
-      const ratioHasReference = dimensionsFor(mode, selectedSideLength) !== null;
-      let calculatedDimensions = null;
-      const sideLengthSlider = tagFocus(
-        buildSlider(
-          "Side Length",
-          selectedSideLength,
-          ROOT_DIMENSION_MIN,
-          ROOT_DIMENSION_MAX,
-          ROOT_DIMENSION_STEP,
-          (value) => {
-            if (isInherited) {
-              return;
-            }
-            const raw = dimensionsFor(mode, clampSideLength(value));
-            if (!raw) {
-              return;
-            }
-            const snapped = snapDimensions(
-              raw.width,
-              raw.height,
-              multiple
-            );
-            if (calculatedDimensions) {
-              calculatedDimensions.textContent = `${snapped.width} × ${snapped.height}`;
-            }
-            ctx.debouncedCommitState("settings-side-length", (next) => {
-              next.dimsExplicit = true;
-              next.width = snapped.width;
-              next.height = snapped.height;
-            });
-          },
-          {
-            hint: !ratioHasReference ? "(the host has no 3:4 reference; current dimensions are retained)" : void 0,
-            sliderMin: ROOT_DIMENSION_SLIDER_MIN,
-            isPot: true
-          }
-        ),
-        "settings-side-length"
-      );
-      calculatedDimensions = document.createElement("span");
-      calculatedDimensions.className = "vst-settings-calculated-dims";
-      calculatedDimensions.textContent = `${effectiveDimensions.width} × ${effectiveDimensions.height}`;
-      sideLengthSlider.querySelector("label")?.appendChild(calculatedDimensions);
-      setSliderDisabled(sideLengthSlider, !ratioHasReference);
-      body.appendChild(sideLengthSlider);
-    }
-    const hasCoreFps = getVideoStagesHostBridge().getRootVideoFpsInput() !== null;
-    const fpsInput = buildNumber(
-      clampFps(state.fps),
-      ROOT_FPS_MIN,
-      ROOT_FPS_MAX,
-      1,
-      (value) => {
-        scheduleCoreFpsWrite(clampFps(value));
-      }
-    );
-    fpsInput.disabled = !hasCoreFps;
-    fpsInput.setAttribute("data-vst-focus-key", "settings-fps");
-    body.appendChild(
-      buildField(
-        "FPS",
-        fpsInput,
-        hasCoreFps ? void 0 : "(no core Video FPS parameter found)",
-        "Frames per second for the whole timeline. This is the same value as the core Video FPS parameter — editing either updates both."
-      )
-    );
-    return wrapForm("timeline-settings", "Timeline", body);
-  };
-
-  // frontend/detailStrip/panelRouter.ts
-  var clampDetailSelection = (selection, clips, audioTracks = [], fps, capabilities) => {
-    if (selection.kind === "none") {
-      return selection;
-    }
-    if (selection.kind === "boundary") {
-      return selection.leftClipIdx >= 0 && selection.leftClipIdx <= clips.length - 2 ? selection : { kind: "none" };
-    }
-    if (selection.kind === "boundary-ref") {
-      const seam = executableBoundaryForLeftClip(
-        clips,
-        selection.leftClipIdx
-      );
-      return seam && fps !== void 0 && capabilities !== void 0 ? incomingReferenceContinueForClip(
-        clips,
-        fps,
-        capabilities,
-        seam.rightIdx
-      ) ? selection : { kind: "none" } : { kind: "none" };
-    }
-    if (selection.kind === "audio-track") {
-      return audioTracks[selection.trackIdx] ? selection : { kind: "none" };
-    }
-    if (selection.clipIdx < 0 || selection.clipIdx >= clips.length) {
-      return { kind: "none" };
-    }
-    const clip = clips[selection.clipIdx];
-    if (selection.kind === "clip") {
-      if (clip.stages.length === 0) {
-        return { kind: "clip", clipIdx: selection.clipIdx, stageIdx: 0 };
-      }
-      const stageIdx = clamp(selection.stageIdx, 0, clip.stages.length - 1);
-      return stageIdx === selection.stageIdx ? selection : { kind: "clip", clipIdx: selection.clipIdx, stageIdx };
-    }
-    if (selection.kind === "ref") {
-      return selection.refIdx >= 0 && selection.refIdx < clip.frameRefs.length ? selection : { kind: "none" };
-    }
-    if (selection.kind === "clip-ref") {
-      return selection.referenceIdx >= 0 && selection.referenceIdx < clip.references.length ? selection : { kind: "clip", clipIdx: selection.clipIdx, stageIdx: 0 };
-    }
-    if (selection.kind === "ic-lora") {
-      return selection.entryIdx >= 0 && selection.entryIdx < clip.icLoras.length ? selection : { kind: "clip", clipIdx: selection.clipIdx, stageIdx: 0 };
-    }
-    if (selection.kind === "prompt-minor") {
-      const windows = clip.promptWindows ?? [];
-      return selection.windowIdx >= 0 && selection.windowIdx < windows.length ? selection : { kind: "none" };
-    }
-    if (selection.kind === "retake") {
-      return selection;
-    }
-    return selection;
-  };
-  var detailBreadcrumb = (selection, clips, fps, capabilities) => {
-    switch (selection.kind) {
-      case "clip":
-        return clips[selection.clipIdx]?.stages.length === 0 ? `Clip ${selection.clipIdx} · Source only` : `Clip ${selection.clipIdx} · ${stageChipLabel(selection.stageIdx)}`;
-      case "ref":
-        return `Keyframe ${selection.refIdx} · Clip ${selection.clipIdx}`;
-      case "clip-ref": {
-        const incomingBoundary = fps === void 0 || capabilities === void 0 ? null : incomingReferenceContinueForClip(
-          clips,
-          fps,
-          capabilities,
-          selection.clipIdx
-        );
-        const tag = clipReferenceTags(
-          clips[selection.clipIdx]?.references ?? [],
-          incomingBoundary ? [
-            {
-              kind: "video",
-              includeSoundtrack: clips[incomingBoundary.leftIdx].boundaryOutReferenceIncludeSoundtrack
-            }
-          ] : []
-        )[selection.referenceIdx];
-        return `${tag ?? "Reference"} · Clip ${selection.clipIdx}`;
-      }
-      case "boundary-ref": {
-        const seam = executableBoundaryForLeftClip(
-          clips,
-          selection.leftClipIdx
-        );
-        return seam ? `<Video 1> (from Join with Clip ${selection.leftClipIdx}) · Clip ${seam.rightIdx}` : "Reference";
-      }
-      case "ic-lora":
-        return `IC-LoRA ${selection.entryIdx} · Clip ${selection.clipIdx}`;
-      case "audio":
-        return `Audio · Clip ${selection.clipIdx}`;
-      case "audio-track":
-        return `Audio track A${selection.trackIdx + 1}`;
-      case "boundary": {
-        const seam = executableBoundaryForLeftClip(
-          clips,
-          selection.leftClipIdx
-        );
-        return `Boundary · Clip ${selection.leftClipIdx} → ${seam === null ? "end" : seam.rightIdx}`;
-      }
-      case "prompt-major":
-        return `Prompts · Clip ${selection.clipIdx}`;
-      case "prompt-minor": {
-        const window2 = clips[selection.clipIdx]?.promptWindows?.[selection.windowIdx];
-        if (!window2) {
-          return `Relay · Clip ${selection.clipIdx}`;
-        }
-        const start = roundToTenth(window2.start);
-        const end = roundToTenth(window2.start + window2.duration);
-        return `Relay ${start}–${end}s · Clip ${selection.clipIdx}`;
-      }
-      case "retake": {
-        const retake = clips[selection.clipIdx]?.retake;
-        if (!retake) {
-          return `Retake · Clip ${selection.clipIdx}`;
-        }
-        const start = roundToTenth(retake.startSeconds);
-        const end = roundToTenth(
-          retake.startSeconds + retake.lengthSeconds
-        );
-        return `Retake · Clip ${selection.clipIdx} · ${start}–${end} s`;
-      }
-      default:
-        return "Timeline settings";
-    }
-  };
-  var buildDetailHeader = (selection, state, capabilities) => {
-    const header = document.createElement("div");
-    header.className = "vst-detail-head";
-    const breadcrumb = document.createElement("span");
-    breadcrumb.className = "vst-detail-crumb";
-    breadcrumb.textContent = detailBreadcrumb(
-      selection,
-      state.clips,
-      state.fps,
-      capabilities
-    );
-    const settings = document.createElement("button");
-    settings.type = "button";
-    settings.className = "basic-button small-button vst-detail-settings-button";
-    settings.textContent = "⚙";
-    settings.title = "Timeline settings";
-    settings.setAttribute("aria-label", settings.title);
-    settings.addEventListener("click", openTimelineAuthoringSettingsModal);
-    header.append(breadcrumb, settings);
-    return header;
-  };
-  var buildDetailPanelBody = (context, selection, state) => {
-    const clips = state.clips;
-    switch (selection.kind) {
-      case "clip":
-        return buildClipBody(context, selection, state);
-      case "ref":
-        return buildClipBody(context, selection, state);
-      case "clip-ref":
-        return buildClipBody(context, selection, state);
-      case "boundary-ref":
-        return buildClipBody(context, selection, state);
-      case "ic-lora":
-        return buildClipBody(context, selection, state);
-      case "audio":
-        return buildAudioBody(context, selection, state);
-      case "audio-track":
-        return buildTimelineAudioTracksBody(context, state, selection);
-      case "prompt-major":
-        return buildPromptMajorBody(context, selection, clips);
-      case "prompt-minor":
-        return buildPromptMinorBody(context, selection, clips);
-      case "retake":
-        return buildClipBody(context, selection, state);
-      case "boundary":
-        return buildBoundaryBody(context, selection, state);
-      default:
-        return buildSettingsBody(context, state, { kind: "none" });
-    }
-  };
-
-  // frontend/detailStrip/renderShell.ts
-  var DETAIL_CLASS = "vst-detail";
-  var revealRepeaterKey = (selection) => {
-    switch (selection.kind) {
-      case "ref":
-        return "references";
-      case "boundary-ref":
-        return "clip-references";
-      case "audio-track":
-        return "audio-tracks";
-      case "prompt-minor":
-        return "relay-prompts";
-      case "ic-lora":
-        return "ic-loras";
-      default:
-        return null;
-    }
-  };
-  var renderDetailShell = (options) => {
-    const previousBody = options.detail.querySelector(".vst-detail-body");
-    const savedScroll = previousBody?.scrollTop ?? 0;
-    options.focus.capture();
-    options.detail.className = DETAIL_CLASS;
-    releaseSidebarMediaPreviews(options.detail);
-    options.detail.innerHTML = "";
-    options.detail.appendChild(
-      buildDetailHeader(
-        options.selection,
-        options.state,
-        options.context.authoring().capabilities
-      )
-    );
-    const body = buildDetailPanelBody(
-      options.context,
-      options.selection,
-      options.state
-    );
-    options.detail.appendChild(body);
-    getVideoStagesHostBridge().enableSliders(body);
-    options.focus.restore(options.detail);
-    const newBody = options.detail.querySelector(".vst-detail-body");
-    if (newBody && savedScroll > 0) {
-      newBody.scrollTop = savedScroll;
-    }
-    if (options.revealSelection) {
-      const key = revealRepeaterKey(options.selection);
-      const target = options.selection.kind === "retake" ? options.detail.querySelector(
-        '[data-vst-accordion-key="retake"]'
-      ) : key ? options.detail.querySelector(
-        `[data-vst-repeater-key="${key}"]`
-      ) : null;
-      if (target && typeof target.scrollIntoView === "function") {
-        target.scrollIntoView({ block: "nearest" });
-      }
-    }
-    options.focus.autoFocusSelection(options.detail, options.selection);
   };
 
   // frontend/referenceAuthoring.ts
@@ -17168,16 +9319,11 @@ ${slot}`;
             transaction.generatedEntryMode,
             transaction.capabilities.catalog
           );
-          return selectionAfterRemoval(
-            clipIdx,
-            clips.length,
-            (index) => ({
-              kind: "clip",
-              clipIdx: index,
-              stageIdx: 0
-            }),
-            { kind: "none" }
-          );
+          return {
+            kind: "clip",
+            clipIdx: clipIdx - 1,
+            stageIdx: 0
+          };
         },
         { rebuildAfterSelect: true }
       );
@@ -17331,67 +9477,5639 @@ ${slot}`;
     };
   };
 
-  // frontend/detailStrip/selectionOperations.ts
-  var STAGE_SELECTOR = "[data-vst-stage]";
-  var MODEL_SELECTOR = "[data-vst-model]";
-  var INTERACTIVE_SELECTOR = `${STAGE_SELECTOR}, ${MODEL_SELECTOR}`;
-  var createDetailSelectionOperations = (structuralCommit, captureAuthoringTransaction) => {
-    const domain = createDetailSelectionDomainOperations(
-      structuralCommit,
-      captureAuthoringTransaction
+  // frontend/detailStrip/authoringSession.ts
+  var createAuthoringSession = (host) => {
+    let settingsMode = null;
+    let boundRoot = null;
+    let draftQueue;
+    const focus = createDetailFocusSession({
+      getDock: host.getRoot,
+      isRendering: host.isRendering,
+      flushPending: () => draftQueue.flush()
+    });
+    draftQueue = createDetailDraftQueue({
+      focus,
+      getDock: host.getRoot,
+      isRendering: host.isRendering,
+      getRenderedSelection: getSelection,
+      syncValueDerivedUi: () => void 0,
+      render: host.render,
+      setSelectionSilently: host.setSelectionSilently ?? ((selection) => setSelection(selection))
+    });
+    const operations = createDetailSelectionDomainOperations(
+      draftQueue.structuralCommit,
+      captureAuthoringTransactionSnapshot
     );
-    const handleActivation = (target, shiftKey) => {
-      const stageChip = target.closest(STAGE_SELECTOR);
-      if (stageChip instanceof HTMLElement) {
-        const clipIdx = parseIntAttr(stageChip, "data-clip-idx");
-        const stageIdx = parseIntAttr(stageChip, "data-stage-idx");
-        if (clipIdx === null || stageIdx === null) return;
-        if (shiftKey) {
-          domain.deleteStage(clipIdx, stageIdx);
-        } else {
-          domain.selectStage(clipIdx, stageIdx);
-        }
-        return;
-      }
-      const modelBadge = target.closest(MODEL_SELECTOR);
-      if (modelBadge instanceof HTMLElement) {
-        const clipIdx = parseIntAttr(modelBadge, "data-clip-idx");
-        if (clipIdx !== null) domain.selectStage(clipIdx, 0);
+    const context = {
+      commit: draftQueue.commit,
+      commitState: draftQueue.commitState,
+      debouncedCommit: draftQueue.debouncedCommit,
+      debouncedCommitState: draftQueue.debouncedCommitState,
+      buildClampedNumber: draftQueue.buildClampedNumber,
+      structuralCommit: draftQueue.structuralCommit,
+      render: host.render,
+      authoring: captureAuthoringTransactionSnapshot,
+      ...operations,
+      getBoundBody: host.getRoot,
+      getSettingsMode: () => settingsMode,
+      setSettingsMode: (mode) => {
+        settingsMode = mode;
       }
     };
+    const unbindRoot = () => {
+      boundRoot?.removeEventListener("focusout", focus.onDockFocusOut);
+      boundRoot?.removeEventListener("focusin", focus.onDockFocusIn);
+      boundRoot?.removeEventListener("change", focus.onDockChange);
+      boundRoot = null;
+    };
+    const bindRoot = () => {
+      const root = host.getRoot();
+      if (root === boundRoot) {
+        return;
+      }
+      unbindRoot();
+      boundRoot = root;
+      boundRoot?.addEventListener("focusout", focus.onDockFocusOut);
+      boundRoot?.addEventListener("focusin", focus.onDockFocusIn);
+      boundRoot?.addEventListener("change", focus.onDockChange);
+    };
+    document.addEventListener("pointerdown", focus.onDocumentPointerDown, true);
+    document.addEventListener("pointerup", focus.onDocumentPointerUp, true);
+    document.addEventListener("pointercancel", focus.onDocumentPointerUp, true);
     return {
-      ...domain,
-      onMouseDownCapture: (event) => {
-        if (event.target instanceof Element && event.target.closest(INTERACTIVE_SELECTOR)) {
-          event.stopPropagation();
+      context,
+      flush: () => draftQueue.flush(),
+      beforeRender: () => {
+        bindRoot();
+        draftQueue.flush();
+        focus.capture();
+        draftQueue.markCurrentSource();
+      },
+      afterRender: () => {
+        const root = host.getRoot();
+        if (root) {
+          focus.restore(root);
         }
       },
-      onClickCapture: (event) => {
-        if (!(event.target instanceof Element) || !event.target.closest(INTERACTIVE_SELECTOR)) {
-          return;
-        }
-        event.stopPropagation();
-        handleActivation(event.target, event.shiftKey);
-      },
-      onKeyDownCapture: (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        if (!(event.target instanceof Element) || !event.target.closest(INTERACTIVE_SELECTOR)) {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        handleActivation(event.target, event.shiftKey);
-      },
-      onStripKeyDown: (event) => {
-        if (event.key !== "Escape" || event.target instanceof Element && event.target.closest(".sui-popover")) {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        setSelection({ kind: "none" });
+      dispose: () => {
+        draftQueue.dispose();
+        focus.reset();
+        unbindRoot();
+        document.removeEventListener(
+          "pointerdown",
+          focus.onDocumentPointerDown,
+          true
+        );
+        document.removeEventListener(
+          "pointerup",
+          focus.onDocumentPointerUp,
+          true
+        );
+        document.removeEventListener(
+          "pointercancel",
+          focus.onDocumentPointerUp,
+          true
+        );
       }
     };
   };
+
+  // frontend/clipEditor/components.ts
+  function element(tag, className, text2) {
+    const node = document.createElement(tag);
+    node.className = className;
+    if (text2 !== void 0) node.textContent = text2;
+    return node;
+  }
+  function actionButton(action) {
+    const button2 = element("button", "basic-button small-button", action.label);
+    button2.type = "button";
+    button2.disabled = action.disabled ?? false;
+    if (action.title) button2.title = action.title;
+    action.configure?.(button2);
+    button2.dataset.testid = action.key;
+    if (action.kind) button2.dataset.action = action.kind;
+    if (action.kind === "delete") {
+      const icon = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "svg"
+      );
+      icon.setAttribute("viewBox", "0 0 24 24");
+      icon.setAttribute("aria-hidden", "true");
+      icon.setAttribute("focusable", "false");
+      icon.innerHTML = '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>';
+      button2.prepend(icon);
+    }
+    button2.addEventListener("click", action.run);
+    return button2;
+  }
+  function scopeFields(context, scope) {
+    return {
+      ...context,
+      debouncedCommit: (key, mutate) => context.debouncedCommit(`${scope}/${key}`, mutate),
+      debouncedCommitState: (key, mutate) => context.debouncedCommitState(`${scope}/${key}`, mutate),
+      buildClampedNumber: (options) => context.buildClampedNumber({
+        ...options,
+        key: `${scope}/${options.key}`
+      })
+    };
+  }
+  function tagFields(root, scope) {
+    const keys = /* @__PURE__ */ new Map();
+    for (const control of root.querySelectorAll(
+      "input, select, textarea, button"
+    )) {
+      const focus = control.dataset.vstFocusKey;
+      if (focus && !focus.startsWith(`${scope}/`))
+        control.dataset.vstFocusKey = `${scope}/${focus}`;
+      const field = control.closest(
+        ".vst-detail-field, .auto-input"
+      );
+      const label = (field?.querySelector(".vst-detail-field-label, .auto-input-name") ?? field?.querySelector("label"))?.childNodes[0]?.textContent?.trim();
+      const name = focus?.split("/").at(-1) || label || control.getAttribute("aria-label") || control.textContent || control.tagName;
+      const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const kind = control instanceof HTMLInputElement ? control.type : control.tagName.toLowerCase();
+      const key = `field-${base}-${kind}`;
+      const duplicate = keys.get(key) || 0;
+      keys.set(key, duplicate + 1);
+      control.dataset.testid = `${key}${duplicate ? `-${duplicate}` : ""}`;
+      control.dataset.field = base;
+    }
+  }
+  function sectionPanel(section, clipId) {
+    const panel = element(
+      "section",
+      "input-group input-group-open vst-editor-section"
+    );
+    panel.dataset.section = section.key;
+    panel.dataset.testid = `section-${section.key}`;
+    panel.dataset.clipId = clipId;
+    const header = element(
+      "header",
+      "input-group-header vst-editor-section-heading"
+    );
+    const title = element("h3", "", section.label);
+    const currentItem = element("span", "vst-editor-current-item");
+    currentItem.dataset.testid = "sticky-item-label";
+    currentItem.hidden = true;
+    title.id = `vst-editor-heading-${section.key}`;
+    panel.setAttribute("aria-labelledby", title.id);
+    const actions = element("div", "vst-editor-actions");
+    actions.append(...(section.actions || []).map(actionButton));
+    header.addEventListener("click", (event) => event.stopPropagation());
+    header.append(title, actions, currentItem);
+    panel.append(header);
+    const rows = section.layout === "rows";
+    const items = rows ? element("div", "input-group-content vst-editor-card vst-editor-rows") : panel;
+    if (rows && section.items.length) panel.append(items);
+    for (const item of section.items) {
+      const body = element(
+        "article",
+        rows ? "vst-editor-item vst-editor-row" : "input-group-content vst-editor-card vst-editor-item"
+      );
+      body.dataset.itemId = item.key;
+      body.dataset.itemLabel = item.contextLabel ?? item.label;
+      body.dataset.testid = "editor-item";
+      if (item.selection)
+        body.dataset.selection = JSON.stringify(item.selection);
+      const itemHeading = element("div", "vst-editor-item-heading");
+      const itemTitle = element(
+        "h4",
+        "",
+        rows ? item.contextLabel : item.label
+      );
+      if (rows) itemTitle.setAttribute("aria-label", item.label);
+      itemHeading.append(itemTitle);
+      if (item.toggle) {
+        const action = item.toggle;
+        body.dataset.enabled = String(action.checked);
+        const state = element("div", "vst-editor-item-state");
+        const toggle = buildToggleSwitch({
+          checked: action.checked,
+          title: action.label,
+          onChange: action.run
+        });
+        const input2 = toggle.querySelector("input");
+        const label = element(
+          "label",
+          "",
+          action.checked ? "Enabled" : "Skipped"
+        );
+        if (input2) {
+          input2.dataset.testid = action.key;
+          input2.setAttribute("role", "switch");
+          input2.setAttribute("aria-checked", String(action.checked));
+          label.htmlFor = input2.id;
+        }
+        state.append(toggle, label);
+        itemHeading.append(state);
+      }
+      const controls = element("div", "vst-editor-actions");
+      controls.append(...(item.actions || []).map(actionButton));
+      if (!rows) itemHeading.append(controls);
+      if (section.items.length > 1 || item.actions?.length || item.label !== section.label)
+        body.append(itemHeading);
+      const panels = item.fields();
+      const fields = Array.isArray(panels) ? element("div", "vst-detail-fields") : panels;
+      if (Array.isArray(panels)) {
+        for (const panel2 of panels) fields.append(...panel2.childNodes);
+      }
+      fields.classList.remove("input-group-content");
+      fields.classList.add("vst-editor-fields");
+      tagFields(fields, item.key);
+      body.append(fields);
+      if (rows) body.append(controls);
+      items.append(body);
+    }
+    if (!section.items.length)
+      panel.append(
+        element(
+          "p",
+          "vst-editor-empty",
+          `No ${section.label.toLowerCase()} added.`
+        )
+      );
+    return panel;
+  }
+
+  // frontend/clipEditor/diagnostics.ts
+  function renderEditorDiagnostics(root, diagnostics, selectClip) {
+    const previous = root.querySelector(
+      ".vst-editor-diagnostics"
+    );
+    if (!diagnostics.length) {
+      previous?.remove();
+      return;
+    }
+    const panel = element("details", "vst-editor-diagnostics");
+    panel.open = previous?.open ?? false;
+    const errors = diagnostics.filter(
+      (item) => item.severity === "error"
+    ).length;
+    const warnings = diagnostics.length - errors;
+    const counts = [
+      errors ? `${errors} error${errors === 1 ? "" : "s"}` : "",
+      warnings ? `${warnings} warning${warnings === 1 ? "" : "s"}` : ""
+    ].filter(Boolean);
+    const summary = element("summary", "", `Authoring: ${counts.join(" · ")}`);
+    panel.append(summary);
+    const list2 = element("ul", "vst-editor-diagnostic-list");
+    for (const item of diagnostics) {
+      const row = element("li", `vst-editor-diagnostic-${item.severity}`);
+      row.dataset.vstDiagnostic = item.code;
+      row.append(
+        element(
+          "strong",
+          "",
+          `${item.severity === "error" ? "Error" : "Warning"}: `
+        )
+      );
+      if (item.clipIdx !== void 0) {
+        const clipIdx = item.clipIdx;
+        row.append(
+          actionButton({
+            key: `diagnostic-${item.code}-${clipIdx}`,
+            label: `Clip ${clipIdx}`,
+            title: `Open clip ${clipIdx} settings`,
+            run: () => selectClip(clipIdx, "stages")
+          })
+        );
+      }
+      row.append(element("span", "", item.message));
+      list2.append(row);
+    }
+    panel.append(list2);
+    if (previous) previous.replaceWith(panel);
+    else root.querySelector(".vst-editor-navigation")?.after(panel);
+  }
+
+  // frontend/timelineEdit.ts
+  var clampClipRefsToDuration = (clip, defaults, effectiveFps) => {
+    const frameMax = getKnownReferenceFrameMax(defaults, clip, effectiveFps);
+    for (const ref of clip.frameRefs) {
+      ref.frame = frameMax === null ? Math.max(REF_FRAME_MIN, Math.round(ref.frame)) : clamp(ref.frame, REF_FRAME_MIN, frameMax);
+    }
+  };
+  var applyClipDurationResize = (clip, newDuration, defaults, effectiveFps) => {
+    const snapped = effectiveFps === void 0 ? newDuration : snapDurationToFps(newDuration, effectiveFps);
+    if (clip.duration === snapped) {
+      return false;
+    }
+    clip.duration = snapped;
+    clampClipRefsToDuration(clip, defaults, effectiveFps);
+    return true;
+  };
+
+  // frontend/clipRelationships.ts
+  var SOURCE_VIDEO_RELATIONSHIP = "source-video";
+  var SOURCE_AUDIO_RELATIONSHIP = "source-audio";
+  var clipRelationship = (clips, leftClipIdx) => {
+    const left = clips[leftClipIdx];
+    const right = clips[leftClipIdx + 1];
+    if (!left || !right) {
+      return left?.boundaryOut ?? "cut";
+    }
+    if (leftClipIdx === 0 && left.audioOnly === true) {
+      return SOURCE_AUDIO_RELATIONSHIP;
+    }
+    if (right.initVideo?.source === MEDIA_SOURCE_PREVIOUS_CLIP) {
+      return SOURCE_VIDEO_RELATIONSHIP;
+    }
+    return left.boundaryOut;
+  };
+  var setPreviousClipVideoSource = (clips, targetClipIdx, enabled, transaction, fps) => {
+    const target = clips[targetClipIdx];
+    const previous = clips[targetClipIdx - 1];
+    if (!target || !previous) {
+      return false;
+    }
+    if (enabled) {
+      const duration = previous.duration;
+      target.initVideo = {
+        source: MEDIA_SOURCE_PREVIOUS_CLIP,
+        data: "",
+        fileName: null,
+        fps,
+        durationSeconds: duration,
+        startSeconds: 0,
+        lengthSeconds: duration
+      };
+      applyClipDurationResize(target, duration, transaction.defaults, fps);
+    } else if (target.initVideo?.source === MEDIA_SOURCE_PREVIOUS_CLIP) {
+      target.initVideo = null;
+    } else {
+      return false;
+    }
+    reconcileClipArchitectureIdentity(target, transaction.capabilities.catalog);
+    reconcileArchitectureIncomingIcLoraDrives(
+      clips,
+      transaction.generatedEntryMode,
+      transaction.capabilities.catalog
+    );
+    return true;
+  };
+  var setAudioOnlyLead = (clips, enabled, transaction, fps) => {
+    const lead = clips[0];
+    if (!lead) {
+      return false;
+    }
+    lead.audioOnly = enabled;
+    if (enabled) {
+      applySkipSuffix(lead.stages, 1, true);
+      setPreviousClipVideoSource(clips, 1, false, transaction, fps);
+    }
+    applyAudioOnlyLeadBase(clips);
+    return true;
+  };
+
+  // frontend/timelineDetail.ts
+  var DEFAULT_FPS = 24;
+  var safeFps = (fps) => typeof fps === "number" && Number.isFinite(fps) && fps > 0 ? fps : DEFAULT_FPS;
+  var formatSecondsTenth = (seconds2) => `${(Math.round((Number.isFinite(seconds2) ? seconds2 : 0) * 10) / 10).toFixed(1)}s`;
+  var formatOverlapSeconds = (frames, fps) => formatSecondsTenth(frames / Math.max(1, fps));
+  var refSourceLabel = (source) => {
+    const value = `${source ?? ""}`.trim();
+    if (!value) {
+      return MEDIA_SOURCE_REFINER;
+    }
+    const editStage = parseBase2EditStageIndex(value);
+    if (editStage != null) {
+      return `Base2Edit Edit ${editStage}`;
+    }
+    return value;
+  };
+
+  // frontend/boundaryPlan.ts
+  var boundaryPlanForClips = (clips, fps, resolveConstraints = (clip, _index, mode) => {
+    const generic = boundaryWindowConstraints(null);
+    const persisted = Math.trunc(Number(clip.boundaryOutOverlap));
+    return {
+      ...generic,
+      defaultFrames: mode === "cut" || !Number.isFinite(persisted) || persisted <= 0 ? generic.defaultFrames : persisted
+    };
+  }, resolveFrameGrid = () => NEUTRAL_FRAME_GRID) => {
+    const count = clips.length;
+    const boundaryCount = Math.max(0, count - 1);
+    const zeroBoundaries = () => new Array(boundaryCount).fill(0);
+    if (count < 2) {
+      return {
+        overlaps: zeroBoundaries(),
+        continuityWindows: zeroBoundaries(),
+        fallback: false
+      };
+    }
+    const modes = [];
+    for (let i = 0; i < count - 1; i++) {
+      const b = clips[i].boundaryOut ?? "cut";
+      modes[i] = b;
+    }
+    const frames = clips.map(
+      (clip, index) => framesForClip(clip.duration, fps, resolveFrameGrid(clip, index))
+    );
+    const constraints = clips.map(
+      (clip, index) => resolveConstraints(clip, index, clip.boundaryOut ?? "cut")
+    );
+    const prefs = clips.map(
+      (clip, index) => normalizeBoundaryWindow(clip.boundaryOutOverlap, constraints[index])
+    );
+    const hasRequestedBoundary = modes.some((mode) => mode !== "cut");
+    const active = (index) => modes[index] === "crossfade" || modes[index] === "continue" && constraints[index].continueMode === "overlap";
+    const trim = (index) => modes[index] === "continue" ? constraints[index].continueMode === "overlap" ? prefs[index] + constraints[index].continuityExtraFrames : 0 : modes[index] === "crossfade" ? prefs[index] : 0;
+    const hasBudgetedOverlap = modes.some((_mode, index) => active(index));
+    const continuityWindows = () => modes.slice(0, boundaryCount).map(
+      (mode, index) => mode === "continue" ? constraints[index].continueMode === "reference" ? prefs[index] : trim(index) : 0
+    );
+    if (!hasBudgetedOverlap) {
+      return {
+        overlaps: zeroBoundaries(),
+        continuityWindows: continuityWindows(),
+        fallback: false
+      };
+    }
+    while (true) {
+      let overBudgetClip = -1;
+      for (let i = 0; i < count; i++) {
+        const left = i > 0 ? trim(i - 1) : 0;
+        const right = i < boundaryCount ? trim(i) : 0;
+        const incomingHandle = i > 0 && modes[i - 1] === "continue" && constraints[i - 1].continueMode === "overlap" ? prefs[i - 1] : 0;
+        if (left + right > frames[i] + incomingHandle - 1) {
+          overBudgetClip = i;
+          break;
+        }
+      }
+      if (overBudgetClip < 0) break;
+      const candidate = overBudgetClip < boundaryCount && active(overBudgetClip) ? overBudgetClip : overBudgetClip > 0 && active(overBudgetClip - 1) ? overBudgetClip - 1 : -1;
+      if (candidate < 0) {
+        for (let i = 0; i < boundaryCount; i++) {
+          if (active(i)) modes[i] = "cut";
+        }
+        return {
+          overlaps: zeroBoundaries(),
+          continuityWindows: continuityWindows(),
+          fallback: !modes.some((mode) => mode !== "cut")
+        };
+      }
+      const reduced = prefs[candidate] - constraints[candidate].frameStep;
+      if (reduced < constraints[candidate].minFrames) {
+        modes[candidate] = "cut";
+        prefs[candidate] = 0;
+      } else {
+        prefs[candidate] = reduced;
+      }
+    }
+    const overlaps = modes.slice(0, boundaryCount).map((_mode, index) => trim(index));
+    return {
+      overlaps,
+      continuityWindows: continuityWindows(),
+      fallback: hasRequestedBoundary && !modes.some((mode) => mode !== "cut")
+    };
+  };
+
+  // frontend/timelinePublication.ts
+  var resolveTimelinePublication = (clips) => {
+    const executable = executableClipIndexes(clips);
+    const output = [];
+    const dependencies = [];
+    for (let position = 0; position < executable.length; position++) {
+      const clipIdx = executable[position];
+      const clip = clips[clipIdx];
+      const previousIdx = executable[position - 1];
+      const previous = clips[previousIdx];
+      const hasPrevious = previous !== void 0;
+      const usesPreviousVideo = hasPrevious && previous.audioOnly !== true && clip.initVideo?.source === MEDIA_SOURCE_PREVIOUS_CLIP;
+      if (hasPrevious) {
+        if (usesPreviousVideo) {
+          dependencies.push({
+            sourceClipIdx: previousIdx,
+            targetClipIdx: clipIdx,
+            kind: "video-source"
+          });
+        }
+        const selectedAudio = audioSourceKind(clip.audioSource);
+        if (previous.audioOnly === true || selectedAudio === AUDIO_SOURCE_PREVIOUS_CLIP) {
+          dependencies.push({
+            sourceClipIdx: previousIdx,
+            targetClipIdx: clipIdx,
+            kind: "audio-base"
+          });
+        }
+      }
+      if (clip.audioOnly === true) {
+        continue;
+      }
+      if (usesPreviousVideo && output.at(-1) === previousIdx) {
+        output.pop();
+      }
+      output.push(clipIdx);
+    }
+    if (output.length === 0 && executable.length > 0) {
+      output.push(executable.at(-1));
+    }
+    const published = new Set(output);
+    return {
+      executableClipIndexes: executable,
+      outputClipIndexes: output,
+      consumedClipIndexes: executable.filter(
+        (index) => !published.has(index)
+      ),
+      dependencies
+    };
+  };
+
+  // frontend/timelineTiming.ts
+  var resolveTimelineTiming = (clips, rawFps, capabilities) => {
+    const fps = safeFps(rawFps);
+    const publication = resolveTimelinePublication(clips);
+    const executable = new Set(publication.executableClipIndexes);
+    const indexes = publication.outputClipIndexes;
+    const compacted = indexes.map((clipIdx, position) => {
+      const clip = clips[clipIdx];
+      const requested = clip.boundaryOut ?? "cut";
+      let effective = position < indexes.length - 1 ? capabilities?.forBoundaryIndex(clips, clipIdx).effective(requested) ?? requested : "cut";
+      const target = clips[indexes[position + 1]];
+      if (effective === "continue" && (target?.clipLengthFromAudio === true || target?.clipLengthFromControlNet === true)) {
+        effective = "cut";
+      }
+      return { ...clip, boundaryOut: effective };
+    });
+    const plan = capabilities ? boundaryPlanForClips(
+      compacted,
+      fps,
+      (_left, position, mode) => capabilities.forBoundaryIndex(clips, indexes[position]).windowConstraints(mode),
+      (clip) => capabilities.forClip(clip).frameGrid
+    ) : boundaryPlanForClips(compacted, fps);
+    const seams = indexes.slice(0, -1).map((leftIdx, position) => ({
+      position,
+      leftIdx,
+      rightIdx: indexes[position + 1],
+      leftId: clips[leftIdx]?.id,
+      rightId: clips[indexes[position + 1]]?.id
+    }));
+    const boundaries = seams.map((seam) => {
+      const requestedMode = clips[seam.leftIdx].boundaryOut ?? "cut";
+      const policyEffective = compacted[seam.position].boundaryOut ?? "cut";
+      const overlapFrames = Math.max(0, plan.overlaps[seam.position] ?? 0);
+      const continuityWindowFrames = Math.max(
+        0,
+        plan.continuityWindows[seam.position] ?? 0
+      );
+      const effectiveMode = overlapFrames > 0 || continuityWindowFrames > 0 ? policyEffective : "cut";
+      const continuityExtraFrames = effectiveMode === "continue" ? capabilities?.forBoundaryIndex(clips, seam.leftIdx).windowConstraints(effectiveMode).continuityExtraFrames ?? 1 : 0;
+      const handleFrames = effectiveMode === "continue" ? Math.max(0, overlapFrames - continuityExtraFrames) : 0;
+      const timelineReductionFrames = Math.max(
+        0,
+        overlapFrames - handleFrames
+      );
+      return {
+        ...seam,
+        requestedMode,
+        effectiveMode,
+        continuityWindowFrames,
+        continuityWindowSeconds: continuityWindowFrames / fps,
+        overlapFrames,
+        overlapSeconds: overlapFrames / fps,
+        handleFrames,
+        handleSeconds: handleFrames / fps,
+        timelineReductionFrames,
+        timelineReductionSeconds: timelineReductionFrames / fps
+      };
+    });
+    const clipFrames = clips.map(
+      (clip, clipIdx) => executable.has(clipIdx) ? framesForClip(
+        clip.duration,
+        fps,
+        capabilities?.forClip(clip).frameGrid ?? NEUTRAL_FRAME_GRID
+      ) : 0
+    );
+    const generatedFrames = publication.executableClipIndexes.reduce(
+      (sum, clipIdx) => sum + clipFrames[clipIdx],
+      0
+    ) + boundaries.reduce((sum, boundary) => sum + boundary.handleFrames, 0);
+    const outputGeneratedFrames = indexes.reduce((sum, clipIdx) => sum + clipFrames[clipIdx], 0) + boundaries.reduce((sum, boundary) => sum + boundary.handleFrames, 0);
+    const joinFrames = boundaries.reduce(
+      (sum, boundary) => sum + boundary.overlapFrames,
+      0
+    );
+    const outputFrames = Math.max(0, outputGeneratedFrames - joinFrames);
+    return {
+      fps,
+      executableClipIndexes: publication.executableClipIndexes,
+      outputClipIndexes: publication.outputClipIndexes,
+      consumedClipIndexes: publication.consumedClipIndexes,
+      dependencies: publication.dependencies,
+      clipFrames,
+      boundaries,
+      authoredSeconds: publication.executableClipIndexes.reduce(
+        (sum, clipIdx) => sum + Math.max(0, clips[clipIdx].duration || 0),
+        0
+      ),
+      generatedFrames,
+      joinFrames,
+      joinSeconds: joinFrames / fps,
+      outputFrames,
+      outputSeconds: outputFrames / fps,
+      outputGeometryAvailable: publication.consumedClipIndexes.length > 0 || publication.executableClipIndexes.length === clips.length
+    };
+  };
+  var boundaryImpactForLeftClip = (timing, leftClipIdx) => timing.boundaries.find((boundary) => boundary.leftIdx === leftClipIdx) ?? null;
+  var incomingReferenceContinueForClip = (clips, rawFps, capabilities, rightClipIdx) => resolveTimelineTiming(clips, rawFps, capabilities).boundaries.find(
+    (boundary) => boundary.rightIdx === rightClipIdx && boundary.effectiveMode === "continue" && capabilities.forBoundaryIndex(clips, boundary.leftIdx).windowConstraints("continue").continueMode === "reference"
+  ) ?? null;
+
+  // frontend/clipEditor/flowMap.ts
+  function flowMap(state, selected, navigation, collapsed) {
+    const strip = element("aside", "vst-editor-strip");
+    strip.dataset.testid = "clip-strip";
+    strip.setAttribute("aria-label", "Clip flow");
+    const output = element("div", "vst-editor-output");
+    const enabled = isVideoStagesEnabled();
+    strip.dataset.enabled = String(enabled);
+    const timing = resolveTimelineTiming(
+      state.clips,
+      state.fps,
+      captureAuthoringTransactionSnapshot().capabilities
+    );
+    const status = element("div", "vst-editor-status");
+    const statusLabel = element("label", "");
+    statusLabel.append(element("strong", "", enabled ? "Enabled" : "Disabled"));
+    const toggle = buildToggleSwitch({
+      checked: enabled,
+      title: enabled ? "Disable VideoStages" : "Enable VideoStages",
+      onChange: navigation.setEnabled
+    });
+    const input2 = toggle.querySelector("input");
+    if (input2) {
+      statusLabel.htmlFor = input2.id;
+      input2.dataset.testid = "toggle-enabled";
+      input2.setAttribute("role", "switch");
+      input2.setAttribute("aria-checked", String(enabled));
+      input2.setAttribute(
+        "aria-describedby",
+        "vst-editor-disabled-description"
+      );
+    }
+    status.append(statusLabel, toggle);
+    const dimensions = actionButton({
+      key: "output-settings",
+      label: `${state.width}×${state.height} · ${state.fps} fps`,
+      run: () => navigation.jump("output")
+    });
+    dimensions.title = "Edit output dimensions and frame rate";
+    const duration = element(
+      "span",
+      "vst-editor-output-duration",
+      `${formatSecondsTenth(timing.outputSeconds)} output`
+    );
+    duration.dataset.testid = "output-duration";
+    duration.title = "Final output length, accounting for joins and skipped clips";
+    const collapse = actionButton({
+      key: "toggle-map",
+      label: collapsed ? "»" : "«",
+      run: navigation.toggleMap
+    });
+    collapse.classList.add("vst-editor-collapse");
+    collapse.setAttribute(
+      "aria-label",
+      collapsed ? "Expand clip map" : "Collapse clip map"
+    );
+    collapse.setAttribute("aria-expanded", String(!collapsed));
+    collapse.setAttribute("aria-controls", "vst-editor-sequence");
+    status.append(collapse);
+    dimensions.classList.add("vst-editor-dimensions", "btn-primary");
+    const dimensionText = dimensions.textContent || "";
+    dimensions.textContent = "";
+    const compactDimensions = element("span", "vst-editor-dimensions-compact");
+    compactDimensions.append(
+      element("span", "", `${state.width}×${state.height}`),
+      element("span", "", `${state.fps} fps`)
+    );
+    dimensions.append(
+      element("span", "vst-editor-dimensions-label", dimensionText),
+      compactDimensions
+    );
+    dimensions.setAttribute("aria-label", `Output settings: ${dimensionText}`);
+    output.append(status, dimensions);
+    const description = element(
+      "span",
+      "visually-hidden",
+      enabled ? "VideoStages is enabled." : "VideoStages disabled. Use the switch above to enable. Editing is still available."
+    );
+    description.id = "vst-editor-disabled-description";
+    const sequence = element("div", "vst-editor-sequence");
+    sequence.id = "vst-editor-sequence";
+    sequence.dataset.testid = "clip-sequence";
+    sequence.setAttribute("aria-label", "Video clips");
+    strip.append(output, description, sequence);
+    state.clips.forEach((clip, index) => {
+      const relationship = clipRelationship(state.clips, index);
+      const sourceUsage = relationship === SOURCE_VIDEO_RELATIONSHIP ? "video" : relationship === SOURCE_AUDIO_RELATIONSHIP ? "audio" : "";
+      const sourceDescription = sourceUsage ? `Source ${sourceUsage} for Clip ${index + 1}; this clip does not extend the final video` : "";
+      const card = element("div", "vst-editor-clip");
+      card.dataset.clipId = clip.id;
+      card.dataset.clipIndex = String(index);
+      card.dataset.testid = "clip-card";
+      card.classList.toggle("selected", index === selected);
+      card.dataset.sourceUsage = sourceUsage;
+      card.dataset.mediaKind = clip.audioOnly ? "audio" : "video";
+      card.title = [
+        sourceDescription,
+        index > 0 ? "Shift-click to delete this clip" : "The first clip cannot be deleted"
+      ].filter(Boolean).join(". ");
+      card.addEventListener(
+        "mousedown",
+        (event) => {
+          if (event.shiftKey && event.button === 0)
+            event.preventDefault();
+        },
+        { capture: true }
+      );
+      card.addEventListener(
+        "click",
+        (event) => {
+          if (event.shiftKey) {
+            event.preventDefault();
+            event.stopPropagation();
+            navigation.deleteClip(index);
+          } else if (!event.target.closest("button")) {
+            navigation.selectClip(index);
+          }
+        },
+        { capture: true }
+      );
+      const header = element("div", "vst-editor-clip-heading");
+      const role = clip.skipped ? " · skipped" : sourceUsage ? ` · ${sourceUsage} source` : timing.consumedClipIndexes.includes(index) ? " · input only" : clip.audioOnly ? " · audio only" : "";
+      const choose = actionButton({
+        key: "select-clip",
+        label: String(index),
+        run: () => navigation.selectClip(index)
+      });
+      choose.setAttribute("aria-current", String(index === selected));
+      choose.setAttribute("aria-label", `Select Clip ${index}${role}`);
+      choose.textContent = "";
+      choose.append(element("span", "vst-editor-clip-index", String(index)));
+      if (role)
+        header.append(
+          element("span", "vst-editor-clip-label", role.slice(3))
+        );
+      header.append(
+        actionButton({
+          key: "clip-stages",
+          label: `${clip.stages.length} stage${clip.stages.length === 1 ? "" : "s"}`,
+          run: () => navigation.selectClip(index, "stages")
+        }),
+        element(
+          "span",
+          "vst-editor-duration",
+          formatSecondsTenth(clip.duration)
+        )
+      );
+      const prompt = actionButton({
+        key: "clip-prompt",
+        label: `Prompt · ${clip.prompt || "Using global prompt"}`,
+        run: () => navigation.selectClip(index, "prompt", true)
+      });
+      prompt.classList.add("vst-editor-prompt-link");
+      prompt.title = clip.prompt || "Using global prompt";
+      prompt.setAttribute("aria-label", `Edit clip ${index} prompt`);
+      if (index > 0) {
+        const remove = actionButton({
+          key: "delete-clip",
+          label: "×",
+          run: () => navigation.deleteClip(index)
+        });
+        remove.classList.add("vst-editor-delete-clip");
+        remove.setAttribute("aria-label", `Delete Clip ${index}`);
+        remove.title = `Delete Clip ${index} · Shift-click also deletes`;
+        header.append(remove);
+      }
+      if (state.clips.length > 1) {
+        const actions = [];
+        if (index > 0) {
+          actions.push(
+            {
+              key: `Delete Clip ${index}`,
+              action: () => navigation.deleteClip(index)
+            },
+            {
+              key: "Move earlier",
+              action: () => navigation.moveClip(index, index - 1)
+            }
+          );
+        }
+        if (index < state.clips.length - 1) {
+          actions.push({
+            key: "Move later",
+            action: () => navigation.moveClip(index, index + 1)
+          });
+        }
+        const more = actionButton({
+          key: "clip-actions",
+          label: "…",
+          run: () => showHostActionMenu(more, actions)
+        });
+        more.classList.add("vst-editor-clip-actions");
+        more.setAttribute("aria-label", `Actions for Clip ${index}`);
+        more.setAttribute("aria-haspopup", "true");
+        more.title = `Clip ${index} actions`;
+        card.append(more);
+      }
+      const media = element(
+        "small",
+        "vst-editor-clip-media",
+        sourceUsage ? `${sourceUsage} source` : clip.audioOnly ? "audio only" : clip.skipped ? "skipped" : "video"
+      );
+      card.append(choose, header, prompt, media);
+      sequence.append(card);
+      if (index < state.clips.length - 1) {
+        const nextClipIdx = sourceUsage ? index + 1 : executableBoundaryForLeftClip(state.clips, index)?.rightIdx ?? index + 1;
+        const join = actionButton({
+          key: "edit-join",
+          label: `↓ ${sourceUsage ? `Source ${sourceUsage}` : relationship} ↓`,
+          run: () => navigation.selectClip(nextClipIdx, "join")
+        });
+        join.dataset.leftClipId = clip.id;
+        join.dataset.sourceUsage = sourceUsage;
+        join.dataset.mediaKind = sourceUsage;
+        join.title = sourceDescription || "Edit how these clips join";
+        join.classList.add("vst-editor-join");
+        join.textContent = "";
+        const joinLabel = element("span", "vst-editor-join-label");
+        joinLabel.append(
+          element("span", "vst-editor-join-arrow", "↓ "),
+          element(
+            "span",
+            "",
+            sourceUsage ? `Source ${sourceUsage}` : relationship
+          ),
+          element("span", "vst-editor-join-arrow", " ↓")
+        );
+        join.append(joinLabel);
+        if (sourceUsage) {
+          join.append(
+            element("span", "vst-editor-join-hint", " Feeds next")
+          );
+          join.setAttribute(
+            "aria-label",
+            `Source ${sourceUsage}; feeds Clip ${index + 1}; excluded from output`
+          );
+        }
+        sequence.append(join);
+      }
+    });
+    sequence.append(
+      actionButton({
+        key: "add-clip",
+        label: "+ Add clip",
+        run: navigation.addClip
+      })
+    );
+    const footer = element("footer", "vst-editor-result");
+    footer.dataset.testid = "flow-output";
+    const included = timing.outputClipIndexes.map((index) => `Clip ${index}`);
+    footer.append(
+      duration,
+      element(
+        "span",
+        "vst-editor-result-clips",
+        included.join(" + ") || "No output clips"
+      )
+    );
+    strip.append(footer);
+    return strip;
+  }
+
+  // frontend/clipEditor/navigation.ts
+  function updateStickyItemLabels(pane) {
+    const top = pane.getBoundingClientRect().top;
+    for (const section of pane.querySelectorAll(
+      ":scope > [data-section]"
+    )) {
+      const header = section.querySelector(
+        ".vst-editor-section-heading"
+      );
+      const label = header?.querySelector(
+        ".vst-editor-current-item"
+      );
+      if (!header || !label) continue;
+      const bounds = header.getBoundingClientRect();
+      let current = "";
+      if (section.dataset.section === "stages" && bounds.top <= top + 1 && bounds.bottom > top) {
+        for (const item of section.querySelectorAll(
+          ".vst-editor-item[data-item-id]"
+        )) {
+          const title = item.querySelector(
+            ".vst-editor-item-heading h4"
+          );
+          if (title && title.getBoundingClientRect().bottom <= bounds.bottom && item.getBoundingClientRect().bottom > bounds.bottom) {
+            current = `· ${item.dataset.itemLabel || title.textContent}`;
+            break;
+          }
+        }
+      }
+      if (label.textContent !== current) label.textContent = current;
+      label.hidden = !current;
+    }
+  }
+  function sectionAtTop(pane) {
+    const top = pane.getBoundingClientRect().top + 12;
+    const panels = [
+      ...pane.querySelectorAll(":scope > [data-section]")
+    ];
+    return (panels.filter((panel) => panel.getBoundingClientRect().top <= top).at(-1) || panels[0])?.dataset.section || null;
+  }
+  function jumpToSection(pane, key) {
+    const panel = [
+      ...pane.querySelectorAll(":scope > [data-section]")
+    ].find((node) => node.dataset.section === key);
+    if (panel)
+      pane.scrollTop += panel.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+  }
+  function markNavigation(nav, key) {
+    for (const link of nav.querySelectorAll(
+      "[data-section-link]"
+    )) {
+      const active = link.dataset.sectionLink === key;
+      link.classList.toggle("active", active);
+      if (active) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+    }
+  }
+  function revealSelectedItem(pane, selection) {
+    const item = Array.from(
+      pane.querySelectorAll("[data-selection]")
+    ).find((node) => node.dataset.selection === JSON.stringify(selection));
+    if (!item) return;
+    const header = item.closest("[data-section]")?.querySelector(".vst-editor-section-heading");
+    const top = pane.getBoundingClientRect().top + (header?.getBoundingClientRect().height || 0);
+    const bounds = item.getBoundingClientRect();
+    if (bounds.top < top || bounds.bottom > pane.getBoundingClientRect().bottom)
+      pane.scrollTop += bounds.top - top;
+  }
+  function revealSelectedClip(root) {
+    const sequence = root.querySelector(".vst-editor-sequence");
+    const selected = sequence?.querySelector(
+      ".vst-editor-clip.selected"
+    );
+    if (!sequence || !selected) return;
+    const area = sequence.getBoundingClientRect();
+    const bounds = selected.getBoundingClientRect();
+    if (bounds.top < area.top) sequence.scrollTop += bounds.top - area.top;
+    else if (bounds.bottom > area.bottom)
+      sequence.scrollTop += bounds.bottom - area.bottom;
+  }
+
+  // frontend/architectures/ltx2/icLoraAutoDownload.ts
+  var IC_LORA_AUTO_HINT_ATTR = "data-vst-iclora-auto";
+  var statuses = /* @__PURE__ */ new Map();
+  var clearIcLoraAutoFailure = (presetId) => {
+    if (statuses.get(`${presetId ?? ""}`.trim())?.state === "error") {
+      statuses.delete(`${presetId ?? ""}`.trim());
+    }
+  };
+  var installedAutoWeights = (preset, installedLoras) => {
+    const wanted = [
+      icLoraAutoModelName(preset).toLowerCase(),
+      icLoraLegacyAutoModelName(preset).toLowerCase()
+    ];
+    return installedLoras.find(
+      (name) => wanted.includes(`${name}`.toLowerCase())
+    ) ?? null;
+  };
+  var statusTextFor = (preset, status) => {
+    switch (status.state) {
+      case "downloading":
+        return `Downloading ${preset.displayName} weights… ${Math.round(status.percent * 100)}%`;
+      case "done":
+        return `Downloaded to ${icLoraAutoModelName(preset)}.`;
+      case "error":
+        return `Download failed: ${status.message} Reselect the preset to retry.`;
+    }
+  };
+  var setStatus = (preset, status) => {
+    statuses.set(preset.id, status);
+    const text2 = statusTextFor(preset, status);
+    document.querySelectorAll(`[${IC_LORA_AUTO_HINT_ATTR}="${preset.id}"]`).forEach((el) => {
+      el.textContent = text2;
+    });
+  };
+  var finish = (preset, onSettled) => {
+    setStatus(preset, { state: "done" });
+    refreshHostParameters();
+    onSettled();
+  };
+  var ensureIcLoraAutoWeights = (entry, installedLoras, onSettled) => {
+    if (entry.lora !== IC_LORA_AUTO) {
+      return;
+    }
+    const preset = findIcLoraPreset(entry.preset);
+    if (!preset || installedAutoWeights(preset, installedLoras) || statuses.has(preset.id)) {
+      return;
+    }
+    if (!canRequestHostWs()) {
+      statuses.set(preset.id, {
+        state: "error",
+        message: "Model downloader is unavailable."
+      });
+      return;
+    }
+    statuses.set(preset.id, { state: "downloading", percent: 0 });
+    requestHostWs(
+      "VideoStagesDownloadIcLoraWS",
+      { presetId: preset.id },
+      (data) => {
+        if (typeof data?.current_percent === "number") {
+          setStatus(preset, {
+            state: "downloading",
+            percent: data.current_percent
+          });
+        } else if (data?.success) {
+          finish(preset, onSettled);
+        }
+      },
+      (error) => {
+        if (`${error}` === "Model at that save path already exists.") {
+          finish(preset, onSettled);
+          return;
+        }
+        setStatus(preset, { state: "error", message: `${error}` });
+        onSettled();
+      }
+    );
+  };
+  var icLoraAutoHint = (entry, installedLoras) => {
+    if (entry.lora !== IC_LORA_AUTO) {
+      return "";
+    }
+    const preset = findIcLoraPreset(entry.preset);
+    if (!preset) {
+      return "[AUTO] needs a preset — pick one to download its weights.";
+    }
+    const installed = installedAutoWeights(preset, installedLoras);
+    if (installed) {
+      return `Using ${installed}.`;
+    }
+    const status = statuses.get(preset.id);
+    return status ? statusTextFor(preset, status) : "Preparing preset weights download…";
+  };
+
+  // frontend/architectures/ltx2/icLoraPanel.ts
+  var createIcLoraEditor = (context, clip, clipIdx, defaults) => {
+    const authoring = context.authoring();
+    const buildEditor = (editorEntryIdx) => {
+      const entry = clip.icLoras[editorEntryIdx];
+      if (!entry) {
+        return void 0;
+      }
+      const entryIdx = editorEntryIdx;
+      const col = document.createElement("div");
+      col.className = "vst-detail-fields vst-detail-col vst-detail-instance-fields vst-detail-iclora vst-detail-iclora-col";
+      col.setAttribute("data-vst-iclora-idx", `${entryIdx}`);
+      const entryAt = (clips, index) => clips[clipIdx]?.icLoras[index];
+      {
+        const fields = col;
+        const preset = findIcLoraPreset(entry.preset);
+        const driveMediaKinds = entry.driveMediaKinds;
+        const audioDriveMedia = entry.driveData === "audio";
+        const presetOptions = IC_LORA_PRESETS;
+        const presetSpecs = [
+          {
+            value: IC_LORA_PRESET_CUSTOM_ID,
+            label: "Custom",
+            disabled: defaults.loraValues.length === 0 && entry.preset !== IC_LORA_PRESET_CUSTOM_ID
+          },
+          ...presetOptions.map((preset2) => ({
+            value: preset2.id,
+            label: preset2.displayName
+          }))
+        ];
+        preserveSelectedOption(
+          presetSpecs,
+          entry.preset,
+          "start",
+          (value) => ({
+            value,
+            label: `${value} (unsupported persisted value)`,
+            disabled: true
+          })
+        );
+        const presetSelect = buildOptionSelect(
+          presetSpecs,
+          entry.preset,
+          (value) => {
+            context.commit((clips) => {
+              const target = entryAt(clips, entryIdx);
+              if (!target) {
+                return;
+              }
+              target.preset = value;
+              const preset2 = findIcLoraPreset(value);
+              if (preset2) {
+                target.lora = IC_LORA_AUTO;
+                target.strength = preset2.strength;
+                target.controlType = preset2.controlType;
+              } else if (value === IC_LORA_PRESET_CUSTOM_ID) {
+                const customLora = defaults.loraValues[0];
+                if (customLora) {
+                  target.lora = customLora;
+                  const initialStrength = defaultLoraWeight(
+                    defaults,
+                    customLora
+                  );
+                  const targetClip2 = clips[clipIdx];
+                  for (const stage of targetClip2?.stages ?? []) {
+                    stage.icLoraStrengths[entryIdx] = normalizeStageControlNetStrengthValue(
+                      initialStrength
+                    );
+                  }
+                }
+              }
+              const nextContract = icLoraDriveMediaContract(preset2);
+              target.driveData = nextContract.driveData;
+              target.driveMediaKinds = [
+                ...nextContract.acceptedKinds
+              ];
+              if (nextContract.driveData !== "visual") {
+                target.controlType = "none";
+              }
+              const driveData = target.driveMedia?.data ?? "";
+              if (driveData && !isAcceptedIcLoraDriveMedia(
+                driveData,
+                target.driveMedia?.fileName ?? null,
+                target.driveMediaKinds
+              )) {
+                target.driveMedia = null;
+              }
+              const targetClip = clips[clipIdx];
+              if (targetClip && target.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+                target,
+                targetClip,
+                clipIdx,
+                clips,
+                authoring.generatedEntryMode
+              )) {
+                target.driveSource = MEDIA_SOURCE_UPLOAD;
+              }
+            });
+            clearIcLoraAutoFailure(value);
+            context.render();
+          }
+        );
+        fields.appendChild(
+          buildField(
+            "Preset",
+            presetSelect,
+            void 0,
+            "A curated IC-LoRA setup — picking one fills in the LoRA, strength, and control type for a known effect (pose, depth, style, etc.). Choose Custom to set everything yourself."
+          )
+        );
+        if (entry.preset === IC_LORA_PRESET_CUSTOM_ID) {
+          const loraSpecs = defaults.loraValues.map(
+            (value, optionIdx) => ({
+              value,
+              label: defaults.loraLabels[optionIdx] ?? value
+            })
+          );
+          if (entry.lora !== IC_LORA_AUTO) {
+            preserveSelectedOption(
+              loraSpecs,
+              entry.lora,
+              "start",
+              (value) => ({
+                value,
+                label: `${value} (unsupported persisted value)`,
+                disabled: true
+              })
+            );
+          }
+          const loraSelect = buildOptionSelect(
+            loraSpecs,
+            entry.lora,
+            (value) => {
+              context.commit((clips) => {
+                const target = entryAt(clips, entryIdx);
+                if (target) {
+                  target.lora = value;
+                  const initialStrength = defaultLoraWeight(
+                    defaults,
+                    value
+                  );
+                  const targetClip = clips[clipIdx];
+                  for (const stage of targetClip?.stages ?? []) {
+                    stage.icLoraStrengths[entryIdx] = normalizeStageControlNetStrengthValue(
+                      initialStrength
+                    );
+                  }
+                }
+              });
+              context.render();
+            }
+          );
+          fields.appendChild(
+            buildField(
+              "LoRA",
+              loraSelect,
+              void 0,
+              "The in-context LoRA weights that turn the drive media into conditioning."
+            )
+          );
+        }
+        const strength = context.buildClampedNumber({
+          key: `iclora-${entryIdx}-strength`,
+          value: entry.strength,
+          min: IC_LORA_STRENGTH_MIN,
+          max: IC_LORA_STRENGTH_MAX,
+          step: IC_LORA_STRENGTH_STEP,
+          readBack: (clips) => entryAt(clips, entryIdx)?.strength ?? null,
+          mutate: (clips, value) => {
+            const target = entryAt(clips, entryIdx);
+            if (target) {
+              target.strength = value;
+            }
+          }
+        });
+        fields.appendChild(
+          buildField(
+            "Strength",
+            strength,
+            void 0,
+            "How strongly this IC-LoRA steers generation. Higher follows the drive media more closely; too high can overpower the prompt."
+          )
+        );
+        if (entry.driveData === "visual") {
+          const attention = context.buildClampedNumber({
+            key: `iclora-${entryIdx}-attention`,
+            value: entry.attentionStrength,
+            min: IC_LORA_ATTENTION_MIN,
+            max: IC_LORA_ATTENTION_MAX,
+            step: IC_LORA_ATTENTION_STEP,
+            readBack: (clips) => entryAt(clips, entryIdx)?.attentionStrength ?? null,
+            mutate: (clips, value) => {
+              const target = entryAt(clips, entryIdx);
+              if (target) {
+                target.attentionStrength = value;
+              }
+            }
+          });
+          fields.appendChild(
+            buildField(
+              "Attention",
+              attention,
+              void 0,
+              "Scales how much the IC-LoRA influences the model's attention layers. A finer control than Strength; leave at the default unless a preset tunes it."
+            )
+          );
+        }
+        if (entry.driveData === "visual" && (!preset || (preset.allowedControlTypes?.length ?? 0) > 1)) {
+          const allowedControlTypes = preset?.allowedControlTypes ?? ["none", "canny", "depth", "normal"];
+          const controlSelect = buildOptionSelect(
+            [
+              { value: "none", label: "None (raw video)" },
+              { value: "canny", label: "Canny edges" },
+              { value: "depth", label: "Depth map" },
+              { value: "normal", label: "Normal map" }
+            ].filter(
+              (option) => allowedControlTypes.includes(
+                option.value
+              )
+            ),
+            entry.controlType,
+            (value) => {
+              context.commit((clips) => {
+                const target = entryAt(clips, entryIdx);
+                if (target) {
+                  target.controlType = value;
+                }
+              });
+            }
+          );
+          fields.appendChild(
+            buildField(
+              "Control",
+              controlSelect,
+              void 0,
+              "Preprocesses visual drive media into a control signal before conditioning: Canny edges, a depth map, or a normal map. None feeds the raw video straight in."
+            )
+          );
+        }
+        const applySelect = buildOptionSelect(
+          [
+            { value: `${IC_LORA_STAGE_ALL}`, label: "All stages" },
+            ...clip.stages.map((_, stageIdx) => ({
+              value: `${stageIdx}`,
+              label: `Stage ${stageIdx}`
+            }))
+          ],
+          `${entry.stage}`,
+          (value) => {
+            context.commit((clips) => {
+              const target = entryAt(clips, entryIdx);
+              if (!target) {
+                return;
+              }
+              const stage = Number(value);
+              target.stage = Number.isInteger(stage) && stage >= 0 ? stage : IC_LORA_STAGE_ALL;
+              canonicalizeIcLoraFields(target);
+              const targetClip = clips[clipIdx];
+              if (targetClip && target.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+                target,
+                targetClip,
+                clipIdx,
+                clips,
+                authoring.generatedEntryMode
+              )) {
+                target.driveSource = MEDIA_SOURCE_UPLOAD;
+              }
+            });
+            context.render();
+          }
+        );
+        fields.appendChild(
+          buildField(
+            "Apply on",
+            applySelect,
+            void 0,
+            "Which stage this IC-LoRA conditions — a single stage, or All stages of the clip."
+          )
+        );
+        if (!preset) {
+          const dataSelect = buildOptionSelect(
+            [
+              { value: "visual", label: "Visual frames" },
+              { value: "audio", label: "Audio" },
+              { value: "none", label: "None (model only)" }
+            ],
+            entry.driveData,
+            (value) => {
+              context.commit((clips) => {
+                const target = entryAt(clips, entryIdx);
+                if (!target) {
+                  return;
+                }
+                target.driveData = value;
+                target.driveMediaKinds = [
+                  ...icLoraDriveMediaContractForData(
+                    target.driveData
+                  ).acceptedKinds
+                ];
+                if (target.driveData !== "visual") {
+                  target.controlType = "none";
+                }
+                if (target.driveData === "none") {
+                  target.driveSource = MEDIA_SOURCE_UPLOAD;
+                  target.driveMedia = null;
+                  return;
+                }
+                const data = target.driveMedia?.data ?? "";
+                if (data && !isAcceptedIcLoraDriveMedia(
+                  data,
+                  target.driveMedia?.fileName ?? null,
+                  target.driveMediaKinds
+                )) {
+                  target.driveMedia = null;
+                }
+                const targetClip = clips[clipIdx];
+                if (targetClip && target.driveSource === MEDIA_SOURCE_INCOMING && !canUseIncomingIcLoraDrive(
+                  target,
+                  targetClip,
+                  clipIdx,
+                  clips,
+                  authoring.generatedEntryMode
+                )) {
+                  target.driveSource = MEDIA_SOURCE_UPLOAD;
+                }
+              });
+              context.render();
+            }
+          );
+          fields.appendChild(
+            buildField(
+              "Drive data",
+              dataSelect,
+              void 0,
+              "Which stream this custom IC-LoRA extracts from its drive source. Visual frames create an IC-LoRA guide; Audio creates speaker/audio reference tokens; None applies only the model patch."
+            )
+          );
+        }
+        if (entry.driveData !== "none") {
+          const currentClips = getClips();
+          const incomingAvailable = canUseIncomingIcLoraDrive(
+            entry,
+            clip,
+            clipIdx,
+            currentClips,
+            authoring.generatedEntryMode
+          );
+          const sourceSelect = buildOptionSelect(
+            [
+              { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
+              {
+                value: MEDIA_SOURCE_INCOMING,
+                label: incomingAvailable ? "Incoming media" : "Incoming media (unavailable)",
+                disabled: !incomingAvailable
+              }
+            ],
+            entry.driveSource,
+            (value) => {
+              context.commit((clips) => {
+                const target = entryAt(clips, entryIdx);
+                if (target) {
+                  target.driveSource = value;
+                  if (value !== MEDIA_SOURCE_UPLOAD) {
+                    target.driveMedia = null;
+                  }
+                }
+              });
+              context.render();
+            }
+          );
+          fields.appendChild(
+            buildField(
+              "Source",
+              sourceSelect,
+              void 0,
+              "Where the selected drive data comes from: Upload your own media, or use compatible media already entering this generation point."
+            )
+          );
+        }
+        if (entry.driveData !== "none" && entry.driveSource === MEDIA_SOURCE_UPLOAD) {
+          const acceptedKinds = driveMediaKinds;
+          fields.appendChild(
+            buildMediaPickRow(
+              "Drive Media",
+              acceptedKinds.map((kind) => `${kind}/*`).join(","),
+              [...acceptedKinds],
+              entry.driveMedia?.fileName,
+              (data, fileName) => {
+                context.commit((clips) => {
+                  const target = entryAt(clips, entryIdx);
+                  if (target) {
+                    target.driveMedia = { data, fileName };
+                  }
+                });
+                context.render();
+              },
+              () => {
+                context.commit((clips) => {
+                  const target = entryAt(clips, entryIdx);
+                  if (target) {
+                    target.driveMedia = null;
+                  }
+                });
+                context.render();
+              },
+              entry.driveMedia?.data,
+              audioDriveMedia ? {
+                kind: "audio",
+                range: { startSeconds: 0, lengthSeconds: 0 }
+              } : void 0
+            )
+          );
+          if (audioDriveMedia) {
+            const hint = document.createElement("small");
+            hint.className = "vst-detail-field-hint";
+            hint.textContent = "Only this media's audio is used as the reference sample. For a video upload, its frames are ignored; the clip's normal text, image, or video entry path supplies visuals.";
+            fields.appendChild(hint);
+          }
+        } else if (entry.driveSource === MEDIA_SOURCE_INCOMING) {
+          const hint = document.createElement("small");
+          hint.className = "vst-detail-field-hint";
+          hint.textContent = entry.stage >= 0 ? `Uses ${entry.driveData} from stage ${entry.stage}'s incoming media.` : `Uses ${entry.driveData} from each stage's incoming media.`;
+          fields.appendChild(hint);
+        } else if (entry.driveData !== "none") {
+          const slot = document.createElement("small");
+          slot.className = "vst-detail-field-hint";
+          slot.textContent = `Driven by ${entry.driveSource} (legacy source)`;
+          fields.appendChild(slot);
+        }
+        const hintText = [preset?.note ?? "", icLoraTriggerHint(preset)].filter(Boolean).join(" ");
+        if (hintText || preset) {
+          const hint = document.createElement("small");
+          hint.className = "vst-detail-field-hint";
+          hint.textContent = hintText ? `${hintText} ` : "";
+          if (preset) {
+            const link = document.createElement("a");
+            link.href = icLoraRepoUrl(preset);
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.textContent = "repo";
+            hint.appendChild(link);
+          }
+          fields.appendChild(hint);
+        }
+        ensureIcLoraAutoWeights(entry, defaults.loraValues, context.render);
+        const autoText = icLoraAutoHint(entry, defaults.loraValues);
+        if (autoText) {
+          const autoHint = document.createElement("small");
+          autoHint.className = "vst-detail-field-hint";
+          if (preset) {
+            autoHint.setAttribute(IC_LORA_AUTO_HINT_ATTR, preset.id);
+          }
+          autoHint.textContent = autoText;
+          fields.appendChild(autoHint);
+        }
+      }
+      return col;
+    };
+    return { buildEditor };
+  };
+  var buildIcLoraFields = (context, clip, clipIdx, defaults, entryIdx) => {
+    const fields = createIcLoraEditor(
+      context,
+      clip,
+      clipIdx,
+      defaults
+    ).buildEditor(entryIdx);
+    if (!fields) {
+      throw new Error(`IC-LoRA ${entryIdx} does not exist`);
+    }
+    return fields;
+  };
+
+  // frontend/architectures/authoringPanels.ts
+  var buildPersistedIcLoraFields = (entry, index) => {
+    const content = document.createElement("div");
+    content.className = "vst-detail-fields vst-detail-col vst-detail-iclora-col";
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent = "This architecture has no IC-LoRA editor. Existing entries remain available for removal.";
+    content.appendChild(note);
+    const label = document.createElement("span");
+    label.textContent = entry.lora || `IC-LoRA ${index}`;
+    content.appendChild(label);
+    return content;
+  };
+  var buildArchitectureIcLoraFields = (context, clip, clipIdx, defaults, entryIdx) => {
+    const entry = clip.icLoras[entryIdx];
+    if (!entry) {
+      throw new Error(`IC-LoRA ${entryIdx} does not exist`);
+    }
+    const architectureId = context.authoring().capabilities.forClip(clip).architectureId;
+    return architectureId === LTX2_ARCHITECTURE_ID ? buildIcLoraFields(context, clip, clipIdx, defaults, entryIdx) : buildPersistedIcLoraFields(entry, entryIdx);
+  };
+
+  // frontend/architectures/ltx2/icLoraEntries.ts
+  var appendDefaultIcLora = (clip, defaults) => {
+    const preset = findIcLoraPreset(IC_LORA_DEFAULT_PRESET_ID);
+    if (!preset) {
+      return false;
+    }
+    const contract = icLoraDriveMediaContract(preset);
+    clip.icLoras.push(
+      defaultIcLora({
+        lora: IC_LORA_AUTO,
+        preset: preset.id,
+        strength: preset.strength,
+        controlType: preset.controlType,
+        driveData: contract.driveData,
+        driveMediaKinds: [...contract.acceptedKinds]
+      })
+    );
+    appendIcLoraStrengthToClip(clip, defaultLoraWeight(defaults, IC_LORA_AUTO));
+    return true;
+  };
+  var removeIcLoraEntryAt = (clip, index) => {
+    if (!clip.icLoras[index]) {
+      return false;
+    }
+    clip.icLoras.splice(index, 1);
+    removeIcLoraStrengthAt(clip, index);
+    return true;
+  };
+
+  // frontend/clipMediaProbeGuard.ts
+  var INIT_VIDEO_PROBE_SLOT = "init-video";
+  var nextOperationId = 0;
+  var currentOperations = /* @__PURE__ */ new Map();
+  var findClipByStableId = (clips, clipId) => clips.find((clip) => clip.id === clipId);
+  var beginClipMediaProbe = (clipId, slot, revisionAtStart) => {
+    const operationId = ++nextOperationId;
+    const key = `${clipId}
+${slot}`;
+    currentOperations.set(key, operationId);
+    const release = () => {
+      if (currentOperations.get(key) === operationId) {
+        currentOperations.delete(key);
+      }
+    };
+    return {
+      clipId,
+      claim: (currentRevision) => {
+        const current = currentRevision === revisionAtStart && currentOperations.get(key) === operationId;
+        release();
+        return current;
+      },
+      cancel: release
+    };
+  };
+  var runClipMediaProbe = ({
+    clipId,
+    slot,
+    probe,
+    apply,
+    onApplied
+  }) => {
+    const store2 = getTimelineStore();
+    const operation = beginClipMediaProbe(
+      clipId,
+      slot,
+      store2.getSnapshot().revision
+    );
+    void probe().then((result) => {
+      if (!operation.claim(store2.revision())) {
+        return;
+      }
+      const state = store2.getState();
+      const clip = findClipByStableId(state.clips, operation.clipId);
+      if (!clip) {
+        return;
+      }
+      apply(clip, result, state);
+      saveClips(state.clips, { origin: "detail-strip" });
+      onApplied?.();
+    }, operation.cancel);
+  };
+
+  // frontend/mediaProbe.ts
+  var initVideoFromProbe = (probe, data, fileName, clipDuration) => {
+    const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
+    return {
+      source: MEDIA_SOURCE_UPLOAD,
+      data,
+      fileName,
+      fps: probe?.fps ?? 0,
+      durationSeconds,
+      startSeconds: 0,
+      lengthSeconds: durationSeconds > 0 ? durationSeconds : clipDuration
+    };
+  };
+  var FPS_SAMPLE_FRAMES = 12;
+  var MIN_FRAME_DELTA_SECONDS = 5e-4;
+  var MAX_PLAUSIBLE_FPS = 240;
+  var estimateFpsFromMediaTimes = (mediaTimes) => {
+    const deltas = [];
+    for (let i = 1; i < mediaTimes.length; i++) {
+      const delta = mediaTimes[i] - mediaTimes[i - 1];
+      if (delta > MIN_FRAME_DELTA_SECONDS) {
+        deltas.push(delta);
+      }
+    }
+    if (deltas.length < 4) {
+      return null;
+    }
+    deltas.sort((a, b) => a - b);
+    const median = deltas[Math.floor(deltas.length / 2)];
+    const fps = Math.round(1 / median);
+    return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
+  };
+  var withProbedMedia = (src, timeoutMs, empty, onMetadata) => new Promise((resolve) => {
+    const video = getVideoStagesHostBridge().createInitVideoElement();
+    video.muted = true;
+    video.preload = "auto";
+    let settled = false;
+    const finish2 = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      resolve(result);
+    };
+    const timer = setTimeout(() => finish2(empty), timeoutMs);
+    video.addEventListener("error", () => finish2(empty));
+    video.addEventListener("loadedmetadata", () => {
+      const durationSeconds = Number.isFinite(video.duration) ? video.duration : 0;
+      if (!(durationSeconds > 0)) {
+        finish2(empty);
+        return;
+      }
+      onMetadata(video, durationSeconds, finish2);
+    });
+    video.src = mediaPreviewSrc(src);
+  });
+  var probeInitVideo = (src, timeoutMs = 8e3) => withProbedMedia(
+    src,
+    timeoutMs,
+    null,
+    (video, durationSeconds, finish2) => {
+      const dimensions = {
+        width: video.videoWidth > 0 ? video.videoWidth : null,
+        height: video.videoHeight > 0 ? video.videoHeight : null
+      };
+      const requestFrame = video.requestVideoFrameCallback?.bind(video);
+      if (!requestFrame) {
+        finish2({ durationSeconds, fps: null, ...dimensions });
+        return;
+      }
+      const mediaTimes = [];
+      const step = (_now, metadata) => {
+        mediaTimes.push(metadata.mediaTime);
+        if (mediaTimes.length >= FPS_SAMPLE_FRAMES || metadata.mediaTime >= durationSeconds) {
+          finish2({
+            durationSeconds,
+            fps: estimateFpsFromMediaTimes(mediaTimes),
+            ...dimensions
+          });
+          return;
+        }
+        requestFrame(step);
+      };
+      requestFrame(step);
+      video.play()?.catch(
+        () => finish2({ durationSeconds, fps: null, ...dimensions })
+      );
+    }
+  );
+  var probeReferenceVideo = (src, timeoutMs = 8e3) => withProbedMedia(
+    src,
+    timeoutMs,
+    null,
+    (video, durationSeconds, finish2) => {
+      const requestFrame = video.requestVideoFrameCallback?.bind(video);
+      if (!requestFrame) {
+        finish2({ durationSeconds, hasMultipleFrames: true });
+        return;
+      }
+      let firstMediaTime = null;
+      const inspect = (_now, metadata) => {
+        if (firstMediaTime === null) {
+          firstMediaTime = metadata.mediaTime;
+          requestFrame(inspect);
+          video.currentTime = Math.max(
+            0,
+            durationSeconds - Math.min(1e-3, durationSeconds / 2)
+          );
+          return;
+        }
+        finish2({
+          durationSeconds,
+          hasMultipleFrames: Math.abs(metadata.mediaTime - firstMediaTime) >= MIN_FRAME_DELTA_SECONDS
+        });
+      };
+      requestFrame(inspect);
+      video.play()?.catch(
+        () => finish2({ durationSeconds, hasMultipleFrames: true })
+      );
+    }
+  );
+  var probeMediaDurationSeconds = (src, timeoutMs = 8e3) => withProbedMedia(
+    src,
+    timeoutMs,
+    0,
+    (_video, duration, finish2) => finish2(duration)
+  );
+
+  // frontend/detailStrip/capabilityUi.ts
+  var buildCapabilityNotice = (decision) => {
+    const notice = document.createElement("p");
+    notice.className = "vst-detail-note vst-capability-notice";
+    notice.textContent = decision.reason;
+    notice.dataset.vstCapabilityUnsupported = "true";
+    return notice;
+  };
+  var CAPABILITY_REPAIR_SELECTORS = [
+    ".vst-detail-delete"
+  ];
+  var buildCapabilityRepairButton = (action) => {
+    const button2 = document.createElement("button");
+    button2.type = "button";
+    button2.className = `interrupt-button vst-btn-tiny vst-capability-repair ${action.className ?? ""}`.trim();
+    button2.textContent = action.label;
+    button2.title = action.title ?? action.label;
+    button2.setAttribute("aria-label", button2.title);
+    button2.addEventListener("click", action.onRepair);
+    return button2;
+  };
+  var disableCapabilityControls = (root, decision, removableSelectors = []) => {
+    const removable = new Set(
+      removableSelectors.flatMap(
+        (selector) => Array.from(root.querySelectorAll(selector))
+      )
+    );
+    for (const control of root.querySelectorAll("input, select, textarea, button")) {
+      if (removable.has(control) || [...removable].some((element2) => element2.contains(control))) {
+        continue;
+      }
+      control.disabled = true;
+      control.title = decision.reason;
+    }
+    if (root instanceof DocumentFragment) {
+      for (const child of root.children) {
+        child.classList.add("vst-capability-readonly");
+      }
+    } else {
+      root.classList.add("vst-capability-readonly");
+    }
+    root.prepend(buildCapabilityNotice(decision));
+  };
+  var applyPersistedCapabilityRepair = (root, decision, options = {}) => {
+    disableCapabilityControls(
+      root,
+      decision,
+      options.keep ?? CAPABILITY_REPAIR_SELECTORS
+    );
+    if (options.repair) {
+      root.appendChild(buildCapabilityRepairButton(options.repair));
+    }
+  };
+
+  // frontend/detailStrip/trimBar.ts
+  var NUDGE_SECONDS = 0.1;
+  var COARSE_NUDGE_SECONDS = 1;
+  var pointerSecondsAt = (clientX, trackLeft, trackWidth, limitSeconds) => {
+    if (!(trackWidth > 0) || !(limitSeconds > 0)) {
+      return 0;
+    }
+    const ratio = (clientX - trackLeft) / trackWidth;
+    return Math.min(limitSeconds, Math.max(0, ratio * limitSeconds));
+  };
+  var trimBarGeometry = (range, limitSeconds) => {
+    if (!(limitSeconds > 0)) {
+      return { leftPct: 0, widthPct: 100 };
+    }
+    const { inSeconds, outSeconds } = toInOut(range);
+    const leftPct = Math.min(
+      100,
+      Math.max(0, inSeconds / limitSeconds * 100)
+    );
+    const rightPct = Math.min(
+      100,
+      Math.max(0, outSeconds / limitSeconds * 100)
+    );
+    return { leftPct, widthPct: Math.max(0, rightPct - leftPct) };
+  };
+  var applyGrip = (grip, range, seconds2, limits) => {
+    if (grip === "in") {
+      return setInPoint(range, seconds2, limits);
+    }
+    if (grip === "out") {
+      return setOutPoint(range, seconds2, limits);
+    }
+    return slideRange(range, seconds2, limits);
+  };
+  var buildTrimBar = (spec) => {
+    let range = spec.range;
+    const { limits } = spec;
+    const wrap = document.createElement("div");
+    wrap.className = "vst-trim";
+    const track = document.createElement("div");
+    track.className = "vst-trim-track";
+    wrap.appendChild(track);
+    const window_ = document.createElement("div");
+    window_.className = "vst-trim-window";
+    window_.setAttribute("role", "slider");
+    window_.setAttribute("aria-label", "Trimmed range position");
+    window_.tabIndex = 0;
+    track.appendChild(window_);
+    const grips = {
+      in: document.createElement("span"),
+      out: document.createElement("span")
+    };
+    for (const edge of ["in", "out"]) {
+      const grip = grips[edge];
+      grip.className = `vst-trim-grip vst-trim-grip-${edge}`;
+      grip.dataset.vstTrimGrip = edge;
+      grip.setAttribute("role", "slider");
+      grip.setAttribute(
+        "aria-label",
+        edge === "in" ? "In point" : "Out point"
+      );
+      grip.tabIndex = 0;
+      track.appendChild(grip);
+    }
+    const scale = document.createElement("div");
+    scale.className = "vst-trim-scale";
+    const scaleStart = document.createElement("span");
+    scaleStart.textContent = "0.0";
+    const scaleEnd = document.createElement("span");
+    scaleEnd.textContent = `${limits.limitSeconds.toFixed(1)}`;
+    scale.append(scaleStart, scaleEnd);
+    wrap.appendChild(scale);
+    const paint = () => {
+      const { leftPct, widthPct } = trimBarGeometry(
+        range,
+        limits.limitSeconds
+      );
+      window_.style.left = `${leftPct}%`;
+      window_.style.width = `${widthPct}%`;
+      grips.in.style.left = `${leftPct}%`;
+      grips.out.style.left = `${leftPct + widthPct}%`;
+      const { inSeconds, outSeconds } = toInOut(range);
+      const describe = (element2, now, max, text2) => {
+        element2.setAttribute("aria-valuemin", "0");
+        element2.setAttribute("aria-valuemax", `${max}`);
+        element2.setAttribute("aria-valuenow", `${now}`);
+        element2.setAttribute("aria-valuetext", text2);
+      };
+      describe(
+        grips.in,
+        inSeconds,
+        limits.limitSeconds,
+        `In point, ${inSeconds.toFixed(1)} seconds`
+      );
+      describe(
+        grips.out,
+        outSeconds,
+        limits.limitSeconds,
+        `Out point, ${outSeconds.toFixed(1)} seconds`
+      );
+      describe(
+        window_,
+        inSeconds,
+        limits.limitSeconds,
+        `Trimmed range, ${inSeconds.toFixed(1)} to ${outSeconds.toFixed(1)} seconds`
+      );
+      grips.in.title = `In point — ${inSeconds.toFixed(1)} s`;
+      grips.out.title = `Out point — ${outSeconds.toFixed(1)} s`;
+      window_.title = "Drag to slide the range without changing its length";
+    };
+    const push = (next) => {
+      if (next.startSeconds === range.startSeconds && next.lengthSeconds === range.lengthSeconds) {
+        return;
+      }
+      range = next;
+      paint();
+      spec.onChange(next);
+    };
+    const startDrag = (grip, event) => {
+      if (!(limits.limitSeconds > 0) || event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const target = event.currentTarget;
+      target.setPointerCapture?.(event.pointerId);
+      const rect = track.getBoundingClientRect();
+      const pressed = toInOut(range);
+      const pressSeconds = pointerSecondsAt(
+        event.clientX,
+        rect.left,
+        rect.width,
+        limits.limitSeconds
+      );
+      const grabOffset = pressSeconds - pressed.inSeconds;
+      const before = range;
+      const secondsFor = (moveEvent) => {
+        const at = pointerSecondsAt(
+          moveEvent.clientX,
+          rect.left,
+          rect.width,
+          limits.limitSeconds
+        );
+        return grip === "window" ? at - grabOffset : at;
+      };
+      const onMove = (moveEvent) => {
+        push(applyGrip(grip, range, secondsFor(moveEvent), limits));
+      };
+      const finish2 = (commit, moveEvent) => {
+        target.removeEventListener("pointermove", onMove);
+        target.removeEventListener("pointerup", onUp);
+        target.removeEventListener("pointercancel", onCancel);
+        document.removeEventListener("keydown", onKey, true);
+        target.releasePointerCapture?.(event.pointerId);
+        push(
+          commit && moveEvent ? applyGrip(grip, range, secondsFor(moveEvent), limits) : before
+        );
+      };
+      const onUp = (upEvent) => finish2(true, upEvent);
+      const onCancel = () => finish2(false);
+      const onKey = (keyEvent) => {
+        if (keyEvent.key === "Escape") {
+          keyEvent.preventDefault();
+          finish2(false);
+        }
+      };
+      target.addEventListener("pointermove", onMove);
+      target.addEventListener("pointerup", onUp);
+      target.addEventListener("pointercancel", onCancel);
+      document.addEventListener("keydown", onKey, true);
+    };
+    const onKeyGrip = (grip, event) => {
+      const step = event.shiftKey ? COARSE_NUDGE_SECONDS : NUDGE_SECONDS;
+      const { inSeconds, outSeconds } = toInOut(range);
+      const at = grip === "out" ? outSeconds : inSeconds;
+      let next = null;
+      if (event.key === "ArrowLeft") {
+        next = at - step;
+      } else if (event.key === "ArrowRight") {
+        next = at + step;
+      } else if (event.key === "Home") {
+        next = 0;
+      } else if (event.key === "End") {
+        next = limits.limitSeconds;
+      }
+      if (next === null) {
+        return;
+      }
+      event.preventDefault();
+      push(applyGrip(grip, range, next, limits));
+    };
+    for (const edge of ["in", "out"]) {
+      grips[edge].addEventListener(
+        "pointerdown",
+        (event) => startDrag(edge, event)
+      );
+      grips[edge].addEventListener(
+        "keydown",
+        (event) => onKeyGrip(edge, event)
+      );
+    }
+    window_.addEventListener(
+      "pointerdown",
+      (event) => startDrag("window", event)
+    );
+    window_.addEventListener("keydown", (event) => onKeyGrip("window", event));
+    track.addEventListener("pointerdown", (event) => {
+      if (event.target !== track || !(limits.limitSeconds > 0)) {
+        return;
+      }
+      const rect = track.getBoundingClientRect();
+      const at = pointerSecondsAt(
+        event.clientX,
+        rect.left,
+        rect.width,
+        limits.limitSeconds
+      );
+      const { inSeconds, outSeconds } = toInOut(range);
+      push(
+        applyGrip(
+          Math.abs(at - inSeconds) <= Math.abs(at - outSeconds) ? "in" : "out",
+          range,
+          at,
+          limits
+        )
+      );
+    });
+    paint();
+    return {
+      element: wrap,
+      sync: (next) => {
+        range = next;
+        paint();
+      }
+    };
+  };
+
+  // frontend/detailStrip/trimModal.ts
+  var MODAL_CLASS = "vst-trim-modal";
+  var BACKDROP_CLASS = "vst-trim-modal-backdrop";
+  var TITLE_ID = "vst_trim_modal_title";
+  var currentModal2 = null;
+  var seconds = (value) => value.toFixed(1);
+  var button = (label, title, dataAttribute) => {
+    const element2 = document.createElement("button");
+    element2.type = "button";
+    element2.className = "basic-button small-button";
+    element2.textContent = label;
+    element2.title = title;
+    if (dataAttribute) {
+      element2.setAttribute(dataAttribute, "");
+    }
+    return element2;
+  };
+  var numberField = (labelText, name, readOnly = false) => {
+    const wrap = document.createElement("label");
+    wrap.className = "vst-trim-modal-field";
+    const label = document.createElement("span");
+    label.textContent = labelText;
+    const input2 = document.createElement("input");
+    input2.type = "number";
+    input2.step = "0.1";
+    input2.dataset.vstTrimField = name;
+    input2.readOnly = readOnly;
+    wrap.append(label, input2);
+    return { wrap, input: input2 };
+  };
+  var buildTrimLauncher = (summary, onOpen) => {
+    const row = document.createElement("div");
+    row.className = "vst-trim-launcher";
+    const text2 = document.createElement("span");
+    text2.className = "vst-trim-launcher-summary vst-detail-field-hint";
+    text2.textContent = summary;
+    const open = button("Edit…", "Open the range editor");
+    open.setAttribute("data-vst-open-trim", "");
+    open.addEventListener("click", onOpen);
+    row.append(text2, open);
+    return row;
+  };
+  var closeTrimModal = () => {
+    currentModal2?.close();
+  };
+  var openTrimModal = (spec) => {
+    closeTrimModal();
+    const isAudio = spec.mediaKind === "audio";
+    let draft = { ...spec.range };
+    let bar = null;
+    let stopAt = null;
+    const heading = document.createElement("div");
+    const title = document.createElement("h5");
+    title.className = "modal-title";
+    title.id = TITLE_ID;
+    title.textContent = spec.title;
+    const fileName = document.createElement("small");
+    fileName.className = "vst-trim-modal-file";
+    fileName.textContent = spec.fileName;
+    heading.append(title, fileName);
+    const close = button("×", "Close without applying");
+    close.setAttribute("aria-label", close.title);
+    const playerWrap = document.createElement("div");
+    playerWrap.className = "vst-trim-modal-player-wrap";
+    if (isAudio) {
+      playerWrap.classList.add("vst-trim-modal-player-wrap-audio");
+    }
+    const player = isAudio ? document.createElement("audio") : getVideoStagesHostBridge().createInitVideoElement();
+    player.className = "vst-trim-modal-player";
+    player.controls = true;
+    player.preload = "auto";
+    if (!isAudio) {
+      player.setAttribute("playsinline", "");
+    }
+    if (spec.dataUri) {
+      player.src = mediaPreviewSrc(spec.dataUri);
+    }
+    player.currentTime = draft.startSeconds;
+    const mediaError = document.createElement("div");
+    mediaError.className = "vst-trim-modal-media-error";
+    mediaError.textContent = `This browser cannot preview the selected ${spec.mediaKind}.`;
+    mediaError.hidden = spec.dataUri !== null;
+    player.hidden = spec.dataUri === null;
+    playerWrap.append(player, mediaError);
+    const transport = document.createElement("div");
+    transport.className = "vst-trim-modal-transport";
+    const timecode = document.createElement("output");
+    timecode.className = "vst-trim-modal-timecode";
+    const stepLabel = isAudio ? "0.1 s" : "Frame";
+    const previousFrame = button(
+      `◀ ${stepLabel}`,
+      isAudio ? "Step backward 0.1 seconds" : "Step backward one frame"
+    );
+    const preview = button("▶ Preview range", "Play the selected range");
+    const nextFrame = button(
+      `${stepLabel} ▶`,
+      isAudio ? "Step forward 0.1 seconds" : "Step forward one frame"
+    );
+    const markIn = button("Mark In", "Set In at the playhead (I)");
+    const markOut = button("Mark Out", "Set Out at the playhead (O)");
+    transport.append(
+      timecode,
+      previousFrame,
+      preview,
+      nextFrame,
+      markIn,
+      markOut
+    );
+    const fields = document.createElement("div");
+    fields.className = "vst-trim-modal-fields";
+    const inField = numberField("In (s)", "in");
+    const outField = numberField("Out (s)", "out");
+    const durationField = numberField("Duration (s)", "duration", true);
+    inField.input.min = "0";
+    inField.input.max = `${spec.limits.limitSeconds}`;
+    outField.input.min = `${spec.limits.minLengthSeconds}`;
+    outField.input.max = `${spec.limits.limitSeconds}`;
+    fields.append(inField.wrap, outField.wrap, durationField.wrap);
+    const impact = document.createElement("small");
+    impact.className = "vst-trim-modal-impact";
+    const renderDraft = (syncBar = true) => {
+      const range = toInOut(draft);
+      inField.input.value = seconds(range.inSeconds);
+      outField.input.value = seconds(range.outSeconds);
+      durationField.input.value = seconds(draft.lengthSeconds);
+      impact.textContent = spec.impactText(draft);
+      if (syncBar) {
+        bar?.sync(draft);
+      }
+    };
+    const setDraft = (next, syncBar = true) => {
+      draft = next;
+      renderDraft(syncBar);
+    };
+    bar = buildTrimBar({
+      range: draft,
+      limits: spec.limits,
+      onChange: (next) => {
+        const before = toInOut(draft);
+        const after = toInOut(next);
+        setDraft(next, false);
+        if (after.inSeconds !== before.inSeconds && after.outSeconds === before.outSeconds) {
+          seek(after.inSeconds);
+        } else if (after.outSeconds !== before.outSeconds && after.inSeconds === before.inSeconds) {
+          seek(after.outSeconds);
+        }
+      }
+    });
+    const playhead = document.createElement("span");
+    playhead.className = "vst-trim-playhead";
+    playhead.setAttribute("aria-hidden", "true");
+    bar.element.querySelector(".vst-trim-track")?.appendChild(playhead);
+    const paintPlayhead = () => {
+      const at = Math.min(
+        spec.limits.limitSeconds,
+        Math.max(0, player.currentTime || 0)
+      );
+      timecode.textContent = `${seconds(at)} / ${seconds(spec.limits.limitSeconds)} s`;
+      const percent = spec.limits.limitSeconds > 0 ? at / spec.limits.limitSeconds * 100 : 0;
+      playhead.style.left = `${percent}%`;
+      if (stopAt !== null && at >= stopAt) {
+        player.pause();
+        stopAt = null;
+        player.currentTime = draft.startSeconds;
+        paintPlayhead();
+      }
+    };
+    const seek = (value) => {
+      player.currentTime = Math.min(
+        spec.limits.limitSeconds,
+        Math.max(0, value)
+      );
+      paintPlayhead();
+    };
+    const playRange = () => {
+      const range = toInOut(draft);
+      stopAt = range.outSeconds;
+      seek(range.inSeconds);
+      player.play()?.catch(() => {
+        stopAt = null;
+      });
+    };
+    const readNumber = (input2, apply2) => {
+      const value = Number(input2.value);
+      if (Number.isFinite(value)) {
+        setDraft(apply2(value));
+      }
+    };
+    inField.input.addEventListener(
+      "input",
+      () => readNumber(
+        inField.input,
+        (value) => setInPoint(draft, value, spec.limits)
+      )
+    );
+    outField.input.addEventListener(
+      "input",
+      () => readNumber(
+        outField.input,
+        (value) => setOutPoint(draft, value, spec.limits)
+      )
+    );
+    const reset = button(
+      `Use full ${spec.mediaKind}`,
+      "Reset In and Out to the whole source",
+      "data-vst-trim-reset"
+    );
+    reset.addEventListener(
+      "click",
+      () => setDraft({
+        startSeconds: 0,
+        lengthSeconds: spec.limits.limitSeconds
+      })
+    );
+    previousFrame.addEventListener(
+      "click",
+      () => seek(
+        player.currentTime - (spec.limits.fps > 0 ? 1 / spec.limits.fps : 0.1)
+      )
+    );
+    nextFrame.addEventListener(
+      "click",
+      () => seek(
+        player.currentTime + (spec.limits.fps > 0 ? 1 / spec.limits.fps : 0.1)
+      )
+    );
+    preview.addEventListener("click", playRange);
+    markIn.addEventListener(
+      "click",
+      () => setDraft(markInPoint(draft, player.currentTime, spec.limits))
+    );
+    markOut.addEventListener(
+      "click",
+      () => setDraft(setOutPoint(draft, player.currentTime, spec.limits))
+    );
+    const footer = document.createElement("div");
+    footer.className = "modal-footer vst-trim-modal-footer";
+    const cancel = button("Cancel", "Close without applying");
+    const apply = button("Apply", "Apply this range", "data-vst-trim-apply");
+    apply.classList.add("vst-trim-modal-apply");
+    footer.append(reset, cancel, apply);
+    let managed;
+    managed = createManagedModal({
+      modalClass: MODAL_CLASS,
+      backdropClass: BACKDROP_CLASS,
+      labelledBy: TITLE_ID,
+      onKeyDown: (event) => {
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement) {
+          return;
+        }
+        const key = event.key.toLowerCase();
+        if (key === "i") {
+          event.preventDefault();
+          setDraft(markInPoint(draft, player.currentTime, spec.limits));
+        } else if (key === "o") {
+          event.preventDefault();
+          setDraft(setOutPoint(draft, player.currentTime, spec.limits));
+        } else if (event.key === " ") {
+          event.preventDefault();
+          if (player.paused) {
+            playRange();
+          } else {
+            player.pause();
+            stopAt = null;
+          }
+        }
+      },
+      onClose: () => {
+        player.removeEventListener("timeupdate", paintPlayhead);
+        player.removeEventListener("seeked", paintPlayhead);
+        player.pause();
+        player.removeAttribute("src");
+        player.load();
+        if (currentModal2 === managed) {
+          currentModal2 = null;
+        }
+      }
+    });
+    currentModal2 = managed;
+    managed.header.append(heading, close);
+    managed.body.append(playerWrap, transport, bar.element, fields, impact);
+    managed.content.appendChild(footer);
+    const dismiss = () => managed.close();
+    const applyAndClose = () => {
+      const applied = { ...draft };
+      dismiss();
+      spec.onApply(applied);
+    };
+    close.addEventListener("click", dismiss);
+    cancel.addEventListener("click", dismiss);
+    apply.addEventListener("click", applyAndClose);
+    player.addEventListener("loadedmetadata", () => seek(draft.startSeconds));
+    player.addEventListener("timeupdate", paintPlayhead);
+    player.addEventListener("seeked", paintPlayhead);
+    player.addEventListener("error", () => {
+      player.hidden = true;
+      mediaError.hidden = false;
+    });
+    renderDraft();
+    paintPlayhead();
+    managed.open(player);
+  };
+
+  // frontend/detailStrip/audioPanel.ts
+  var buildBaseAudioFields = (ctx, clipIdx, state) => {
+    const clips = state.clips;
+    const clip = clips[clipIdx];
+    const capabilityView = ctx.authoring().capabilities.forClip(clip);
+    const audioCapabilityDecision = capabilityView.clipAudio;
+    const reuseDecision = capabilityView.decision("audioReuse");
+    const durationDecision = capabilityView.decision("audioDerivedDuration");
+    const icLoraDecision = capabilityView.decision("icLora");
+    const controlDurationDecision = icLoraDecision.supported ? icLoraDecision : {
+      ...icLoraDecision,
+      reason: `Control-signal-derived clip duration is not supported by ${capabilityView.architectureLabel}.`
+    };
+    const controlSignalEnabled = hasArchitectureSlotSourcedIcLora(
+      capabilityView.architectureId,
+      clip.icLoras
+    );
+    const controlDurationIssueDecision = clip.clipLengthFromControlNet && !controlDurationDecision.supported ? controlDurationDecision : clip.clipLengthFromControlNet && !controlSignalEnabled ? {
+      ...controlDurationDecision,
+      supported: false,
+      reason: "No IC-LoRA supplies a ControlNet 1-3 drive source for clip duration."
+    } : null;
+    const usesAudioOnlyLead = clipIdx === 1 && clips[0]?.audioOnly === true;
+    const options = usesAudioOnlyLead ? [{ value: AUDIO_SOURCE_PREVIOUS_CLIP, label: "Clip 0 audio" }] : buildAudioSourceOptions(clip.audioSource ?? "", {
+      controlNetEnabled: capabilityView.audioSourceKinds.includes(
+        AUDIO_SOURCE_CONTROLNET
+      ),
+      previousClipEnabled: clipIdx > 0,
+      allowedKinds: capabilityView.audioSourceKinds
+    });
+    const source = usesAudioOnlyLead ? AUDIO_SOURCE_PREVIOUS_CLIP : options.find((option) => option.value === clip.audioSource)?.value ?? clip.audioSource ?? "";
+    const selectedAudioSourceAllowed = isAllowedAudioSource(
+      capabilityView.audioSourceKinds,
+      source
+    );
+    const audioDecision = audioCapabilityDecision.supported && !selectedAudioSourceAllowed ? {
+      ...audioCapabilityDecision,
+      supported: false,
+      reason: `Audio source '${source}' is not supported by ${capabilityView.architectureLabel}.`
+    } : audioCapabilityDecision;
+    const canLength = canUseClipLengthFromAudio(source);
+    const canDeriveDuration = durationDecision.supported && selectedAudioSourceAllowed && canLength;
+    const durationIssueDecision = selectedAudioSourceAllowed && !canDeriveDuration ? durationDecision.supported ? {
+      ...durationDecision,
+      supported: false,
+      reason: `Audio source '${source}' cannot determine video duration.`
+    } : durationDecision : null;
+    const durationUnavailableReason = durationIssueDecision?.reason ?? (!audioDecision.supported ? audioDecision.reason : "");
+    const isAce = isAceStepFunAudioSource(source);
+    const commitAudio = (mutate) => {
+      ctx.commit((cs) => {
+        const target = cs[clipIdx];
+        if (!target) {
+          return;
+        }
+        mutate(target);
+        const nextSource = target.audioSource;
+        target.clipLengthFromAudio = canUseClipLengthFromAudio(nextSource) && target.clipLengthFromAudio;
+        if (target.clipLengthFromAudio) {
+          target.clipLengthFromControlNet = false;
+        }
+        target.saveAudioTrack = isAceStepFunAudioSource(nextSource) && target.saveAudioTrack;
+        target.uploadedAudio = nextSource === AUDIO_SOURCE_UPLOAD ? target.uploadedAudio : null;
+        if (nextSource !== AUDIO_SOURCE_UPLOAD) {
+          target.uploadedAudioDurationSeconds = 0;
+          target.uploadedAudioStartSeconds = 0;
+          target.uploadedAudioLengthSeconds = 0;
+        }
+      });
+    };
+    const base = document.createElement("div");
+    base.className = "vst-detail-fields vst-detail-col vst-detail-audio";
+    const select2 = buildOptionSelect(
+      options.map((o) => ({ value: o.value, label: o.label })),
+      source,
+      (value) => {
+        commitAudio((c) => {
+          c.audioSource = value;
+        });
+        ctx.render();
+      }
+    );
+    select2.disabled = usesAudioOnlyLead;
+    const sourceField = buildField(
+      "Audio Source",
+      select2,
+      void 0,
+      usesAudioOnlyLead ? "Clip 0 is audio-only, so its output is always Clip 1's base audio." : "Where this clip's audio comes from: generated from the prompt, an uploaded file, or a connected generated-audio source."
+    );
+    sourceField.classList.toggle("vst-field-disabled", usesAudioOnlyLead);
+    base.appendChild(sourceField);
+    const reuseRow = buildCheckbox(
+      "Reuse Captured Stage Audio",
+      clip.reuseAudio === true,
+      (value) => {
+        commitAudio((c) => {
+          c.reuseAudio = value;
+        });
+      },
+      {
+        disabled: !reuseDecision.supported,
+        help: "Capture this clip's audio after its second active stage and reuse that captured audio from the third active stage onward. Requires at least three active stages." + (reuseDecision.reason ? ` ${reuseDecision.reason}` : "")
+      }
+    );
+    reuseRow.classList.add("vst-detail-audio-reuse");
+    base.appendChild(reuseRow);
+    if (clip.reuseAudio && !reuseDecision.supported) {
+      reuseRow.appendChild(buildCapabilityNotice(reuseDecision));
+      reuseRow.appendChild(
+        buildCapabilityRepairButton({
+          label: "Remove unsupported reuse",
+          className: "vst-detail-delete",
+          onRepair: () => {
+            commitAudio((target) => {
+              target.reuseAudio = false;
+            });
+            ctx.render();
+          }
+        })
+      );
+    }
+    const lengthRow = buildCheckbox(
+      "Clip Length from Audio",
+      clip.clipLengthFromAudio === true,
+      (value) => {
+        commitAudio((c) => {
+          c.clipLengthFromAudio = value;
+        });
+      },
+      {
+        disabled: !canDeriveDuration,
+        help: "Set the clip's duration to match the length of its audio instead of a fixed value. Available only for sources with a known length." + (durationUnavailableReason ? ` ${durationUnavailableReason}` : "")
+      }
+    );
+    lengthRow.classList.add("vst-detail-audio-derived-duration");
+    base.appendChild(lengthRow);
+    if (clip.clipLengthFromAudio && durationIssueDecision) {
+      lengthRow.appendChild(buildCapabilityNotice(durationIssueDecision));
+      lengthRow.appendChild(
+        buildCapabilityRepairButton({
+          label: "Remove unsupported audio-derived duration",
+          className: "vst-detail-delete",
+          onRepair: () => {
+            ctx.commit((items) => {
+              const target = items[clipIdx];
+              if (target) {
+                target.clipLengthFromAudio = false;
+              }
+            });
+            ctx.render();
+          }
+        })
+      );
+    }
+    const saveRow = buildCheckbox(
+      "Save audio separately",
+      clip.saveAudioTrack === true && isAce,
+      (value) => {
+        commitAudio((c) => {
+          c.saveAudioTrack = value;
+        });
+      },
+      {
+        disabled: !isAce,
+        help: "Export the generated audio as its own output alongside the video. Only available for generated (AceStep) audio."
+      }
+    );
+    base.appendChild(saveRow);
+    if (clip.clipLengthFromControlNet) {
+      const controlLengthStatus = document.createElement("div");
+      controlLengthStatus.className = "vst-detail-control-signal-derived-duration";
+      const status = document.createElement("p");
+      status.className = "vst-detail-note";
+      status.textContent = "Control-signal-derived clip duration is active.";
+      controlLengthStatus.appendChild(status);
+      if (controlDurationIssueDecision) {
+        controlLengthStatus.appendChild(
+          buildCapabilityNotice(controlDurationIssueDecision)
+        );
+      }
+      controlLengthStatus.appendChild(
+        buildCapabilityRepairButton({
+          label: "Remove control-signal-derived duration",
+          className: "vst-detail-delete vst-remove-control-signal-derived-duration",
+          onRepair: () => {
+            ctx.commit((items) => {
+              const target = items[clipIdx];
+              if (target) {
+                target.clipLengthFromControlNet = false;
+              }
+            });
+            ctx.render();
+          }
+        })
+      );
+      base.appendChild(controlLengthStatus);
+    }
+    if (source === AUDIO_SOURCE_UPLOAD) {
+      const limitSeconds = clip.uploadedAudioDurationSeconds;
+      const shown = clip.uploadedAudioLengthSeconds > 0 ? {
+        startSeconds: clip.uploadedAudioStartSeconds,
+        lengthSeconds: clip.uploadedAudioLengthSeconds
+      } : { startSeconds: 0, lengthSeconds: limitSeconds };
+      base.appendChild(
+        buildMediaPickRow(
+          "Audio Upload",
+          "audio/*",
+          ["audio"],
+          clip.uploadedAudio?.fileName,
+          (data, fileName) => {
+            commitAudio((c) => {
+              c.uploadedAudio = { data, fileName };
+              c.uploadedAudioDurationSeconds = 0;
+              c.uploadedAudioStartSeconds = 0;
+              c.uploadedAudioLengthSeconds = 0;
+            });
+            ctx.render();
+            if (clip.id) {
+              runClipMediaProbe({
+                clipId: clip.id,
+                slot: "base-audio",
+                probe: () => probeMediaDurationSeconds(data),
+                apply: (target, duration) => {
+                  if (target.uploadedAudio?.data !== data) {
+                    return;
+                  }
+                  target.uploadedAudioDurationSeconds = roundToTenth(duration);
+                },
+                onApplied: () => ctx.render()
+              });
+            }
+          },
+          () => {
+            commitAudio((c) => {
+              c.uploadedAudio = null;
+              c.uploadedAudioDurationSeconds = 0;
+              c.uploadedAudioStartSeconds = 0;
+              c.uploadedAudioLengthSeconds = 0;
+            });
+            ctx.render();
+          },
+          clip.uploadedAudio?.data,
+          { kind: "audio", range: shown }
+        )
+      );
+      if (clip.uploadedAudio) {
+        if (limitSeconds > 0) {
+          const range = toInOut(shown);
+          base.appendChild(
+            buildTrimLauncher(
+              `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · Uses ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+              () => openTrimModal({
+                mediaKind: "audio",
+                title: "Trim Base Audio",
+                fileName: clip.uploadedAudio?.fileName ?? "Base audio",
+                dataUri: clip.uploadedAudio?.data ?? null,
+                range: shown,
+                limits: {
+                  limitSeconds,
+                  minLengthSeconds: AUDIO_SPAN_MIN_LENGTH,
+                  fps: 0
+                },
+                impactText: (next) => `Uses ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+                onApply: (next) => {
+                  const whole = next.startSeconds <= 0 && next.lengthSeconds >= limitSeconds;
+                  commitAudio((target) => {
+                    target.uploadedAudioStartSeconds = whole ? 0 : next.startSeconds;
+                    target.uploadedAudioLengthSeconds = whole ? 0 : next.lengthSeconds;
+                  });
+                  ctx.render();
+                }
+              })
+            )
+          );
+        }
+      }
+    }
+    if (!audioDecision.supported) {
+      applyPersistedCapabilityRepair(base, audioDecision, {
+        keep: [
+          ...CAPABILITY_REPAIR_SELECTORS,
+          ".vst-detail-audio-reuse",
+          ".vst-detail-audio-derived-duration",
+          ".vst-detail-control-signal-derived-duration"
+        ],
+        repair: {
+          label: "Remove unsupported clip audio",
+          className: "vst-remove-unsupported-audio",
+          onRepair: () => {
+            ctx.structuralCommit((items) => {
+              const target = items[clipIdx];
+              if (!target) {
+                return null;
+              }
+              target.audioSource = defaultAuthoringAudioSource(
+                capabilityView.audioSourceKinds
+              );
+              target.uploadedAudio = null;
+              target.saveAudioTrack = false;
+              return "render";
+            });
+          }
+        }
+      });
+    }
+    return base;
+  };
+
+  // frontend/boundaryVocabulary.ts
+  var BOUNDARY_GLYPH = {
+    cut: "│",
+    continue: "→",
+    crossfade: "⤬"
+  };
+  var BOUNDARY_LABEL = {
+    cut: "Cut",
+    continue: "Continue",
+    crossfade: "Crossfade"
+  };
+
+  // frontend/detailStrip/boundaryPanel.ts
+  var buildBoundaryFields = (ctx, sel, state) => {
+    const clips = state.clips;
+    const { leftClipIdx } = sel;
+    const fields = document.createElement("div");
+    fields.className = "vst-detail-form-body vst-detail-boundary";
+    const clip = clips[leftClipIdx];
+    const rightClip = clips[leftClipIdx + 1];
+    const value = clip?.boundaryOut ?? "cut";
+    const capabilities = ctx.authoring().capabilities;
+    const capability = capabilities.forBoundaryIndex(clips, leftClipIdx);
+    const seam = executableBoundaryForLeftClip(clips, leftClipIdx);
+    const adjacent = !seam || seam.rightIdx === leftClipIdx + 1;
+    const fps = Math.round(safeFps(state.fps));
+    const overlapPolicy = capability.windowConstraints(value);
+    const isReferenceContinue = value === "continue" && overlapPolicy.continueMode === "reference";
+    const referenceTailLabel = clip?.boundaryOutReferenceIncludeSoundtrack === false ? "video tail" : "video and audio tail";
+    const carryTargetHasStage = capability.rightClipIdx !== null && capabilities.forClip(clips[capability.rightClipIdx]).hasGenerationStage;
+    const carryAudioSupported = clip !== void 0 && capabilities.forClip(clip).decision("audioBoundaryCarry").supported;
+    const carryAudioActive = carryAudioSupported && !isReferenceContinue && clip?.boundaryOutCarryAudio === true && carryTargetHasStage;
+    const sourceAudioAllowed = adjacent && leftClipIdx === 0 && rightClip !== void 0 && clip !== void 0 && capabilities.forClip(clip).hasGenerationStage && capabilities.forClip(clip).audioSourceKinds.includes(AUDIO_SOURCE_NATIVE);
+    const detectedRelationship = clipRelationship(clips, leftClipIdx);
+    const selectedRelationship = detectedRelationship === SOURCE_AUDIO_RELATIONSHIP && !sourceAudioAllowed ? value : detectedRelationship;
+    const isJoin = selectedRelationship !== SOURCE_VIDEO_RELATIONSHIP && selectedRelationship !== SOURCE_AUDIO_RELATIONSHIP;
+    const joinSpecs = capability.modes.map((mode) => ({
+      value: mode,
+      label: `${BOUNDARY_LABEL[mode]} ${BOUNDARY_GLYPH[mode]}`
+    }));
+    if (!capability.modes.includes(value)) {
+      joinSpecs.unshift({
+        value,
+        label: `${BOUNDARY_LABEL[value]} ${BOUNDARY_GLYPH[value]} (unsupported persisted value)`,
+        disabled: true
+      });
+    }
+    if (adjacent && rightClip) {
+      joinSpecs.push({
+        value: SOURCE_VIDEO_RELATIONSHIP,
+        label: "As source video"
+      });
+    }
+    if (sourceAudioAllowed) {
+      joinSpecs.push({
+        value: SOURCE_AUDIO_RELATIONSHIP,
+        label: "As source audio"
+      });
+    }
+    const select2 = buildOptionSelect(
+      joinSpecs,
+      selectedRelationship,
+      (next) => {
+        ctx.structuralCommit((nextClips) => {
+          const left = nextClips[leftClipIdx];
+          if (!left || !nextClips[leftClipIdx + 1]) {
+            return null;
+          }
+          const transaction = ctx.authoring();
+          const current = clipRelationship(nextClips, leftClipIdx);
+          if (next === SOURCE_VIDEO_RELATIONSHIP) {
+            if (leftClipIdx === 0) {
+              setAudioOnlyLead(
+                nextClips,
+                false,
+                transaction,
+                state.fps
+              );
+            }
+            setPreviousClipVideoSource(
+              nextClips,
+              leftClipIdx + 1,
+              true,
+              transaction,
+              state.fps
+            );
+          } else if (next === SOURCE_AUDIO_RELATIONSHIP && sourceAudioAllowed) {
+            setPreviousClipVideoSource(
+              nextClips,
+              leftClipIdx + 1,
+              false,
+              transaction,
+              state.fps
+            );
+            setAudioOnlyLead(nextClips, true, transaction, state.fps);
+          } else {
+            if (current === SOURCE_VIDEO_RELATIONSHIP) {
+              setPreviousClipVideoSource(
+                nextClips,
+                leftClipIdx + 1,
+                false,
+                transaction,
+                state.fps
+              );
+            }
+            if (current === SOURCE_AUDIO_RELATIONSHIP && leftClipIdx === 0) {
+              setAudioOnlyLead(
+                nextClips,
+                false,
+                transaction,
+                state.fps
+              );
+            }
+            left.boundaryOut = next ?? "cut";
+          }
+          return "render";
+        });
+      }
+    );
+    fields.appendChild(
+      buildField(
+        "Join",
+        select2,
+        void 0,
+        "How this clip joins the next one. Cut: hard concatenation. Continue: the next clip is generated from this clip's last frames so motion carries through. Crossfade: the overlap is dissolved pixel-by-pixel."
+      )
+    );
+    if (isJoin && !capability.modes.includes(value) && capability.reason) {
+      fields.appendChild(
+        buildCapabilityNotice({
+          supported: false,
+          reason: capability.reason,
+          code: ""
+        })
+      );
+    }
+    if (isJoin && value !== "cut" && capability.modes.includes(value)) {
+      const overlapValue = clip?.boundaryOutOverlap ?? overlapPolicy.defaultFrames;
+      const overlapSpecs = boundaryWindowChoices(
+        overlapPolicy
+      ).map((frames) => ({
+        value: `${frames}`,
+        label: `${frames} frames (~${formatOverlapSeconds(frames, fps)})`
+      }));
+      if (overlapValue > 0 && !overlapSpecs.some((option) => option.value === `${overlapValue}`)) {
+        overlapSpecs.unshift({
+          value: `${overlapValue}`,
+          label: `${overlapValue} frames (unsupported persisted value)`,
+          disabled: true
+        });
+      }
+      const overlapSelect = buildOptionSelect(
+        overlapSpecs,
+        `${overlapValue}`,
+        (next) => {
+          ctx.commit((cs) => {
+            const c = cs[leftClipIdx];
+            if (c) {
+              c.boundaryOutOverlap = normalizeBoundaryWindow(
+                next,
+                overlapPolicy
+              );
+            }
+          });
+          ctx.render();
+        }
+      );
+      fields.appendChild(
+        buildField(
+          isReferenceContinue ? "Reference window" : "Overlap",
+          overlapSelect,
+          void 0,
+          isReferenceContinue ? `Requested duration of the previous clip's ${referenceTailLabel} used as reference context.` : "How many frames the clips share at the join. For Continue this is frozen context; for Crossfade it is the dissolve length."
+        )
+      );
+      if (carryAudioSupported && !isReferenceContinue) {
+        fields.appendChild(
+          buildCheckbox(
+            "Continue outgoing audio into next clip",
+            clip?.boundaryOutCarryAudio === true,
+            (enabled) => {
+              ctx.commit((cs) => {
+                const c = cs[leftClipIdx];
+                if (c) {
+                  c.boundaryOutCarryAudio = enabled;
+                }
+              });
+              ctx.render();
+            },
+            {
+              disabled: !carryTargetHasStage,
+              help: "Preserve this clip's audio tail at the start of the next clip's generation, then let its model generate the continuation. The next clip needs an active stage."
+            }
+          )
+        );
+      }
+    }
+    const timing = !isJoin || seam === null ? null : resolveTimelineTiming(clips, fps, capabilities);
+    const impact = timing === null ? null : boundaryImpactForLeftClip(timing, leftClipIdx);
+    const plannedWindow = impact === null ? 0 : value === "continue" ? impact.continuityWindowFrames : impact.overlapFrames;
+    const info = document.createElement("div");
+    info.className = "vst-boundary-info vst-detail-span-full";
+    const effective = capability.effective(value);
+    if (selectedRelationship === SOURCE_VIDEO_RELATIONSHIP) {
+      info.textContent = `Clip ${leftClipIdx} is consumed as Clip ${leftClipIdx + 1}'s source video and does not extend the final video.`;
+    } else if (selectedRelationship === SOURCE_AUDIO_RELATIONSHIP) {
+      info.textContent = `Clip ${leftClipIdx} is consumed as Clip ${leftClipIdx + 1}'s source audio and does not extend the final video.`;
+    } else if (effective !== value) {
+      info.classList.add("vst-boundary-warn");
+      info.textContent = `${BOUNDARY_LABEL[value]} is preserved for repair, but this join executes as ${BOUNDARY_LABEL[effective].toLowerCase()}. ${capability.reason}`;
+    } else if (value === "cut") {
+      info.textContent = "Hard cut — clips are concatenated with no overlap.";
+    } else if (value === "continue") {
+      const window2 = plannedWindow;
+      if (window2 <= 0) {
+        info.classList.add("vst-boundary-warn");
+        info.textContent = `This continue will fall back to a cut — a clip is too short for the requested ${isReferenceContinue ? "reference window" : "overlap"}.`;
+      } else {
+        const requested = (clip?.boundaryOutOverlap ?? overlapPolicy.defaultFrames) + (overlapPolicy.continueMode === "overlap" ? overlapPolicy.continuityExtraFrames : 0);
+        let text2 = isReferenceContinue ? `Continue — requests up to ~${formatOverlapSeconds(window2, fps)} of this clip's ${referenceTailLabel} as reference context.` : `Continue — the next clip is generated with this clip's last ${window2} frame${window2 === 1 ? "" : "s"} (~${formatOverlapSeconds(window2, fps)}) as frozen context, and the merge collapses the duplicated frames.`;
+        if (window2 < requested) {
+          text2 += " The window was reduced to fit clip or model limits.";
+        }
+        if (carryAudioActive) {
+          text2 += " Its audio tail becomes preserved opening context for the next clip's generated audio.";
+        }
+        info.textContent = text2;
+      }
+    } else {
+      const overlapFrames = plannedWindow;
+      if (overlapFrames <= 0) {
+        info.classList.add("vst-boundary-warn");
+        info.textContent = "This crossfade will fall back to a cut — a clip is too short for the overlap window.";
+      } else {
+        const requested = clip?.boundaryOutOverlap ?? capability.windowConstraints(value).defaultFrames;
+        let text2 = `Crossfade — ${overlapFrames} frame${overlapFrames === 1 ? "" : "s"} (~${formatOverlapSeconds(overlapFrames, fps)}) pixel dissolve.`;
+        if (overlapFrames < requested) {
+          text2 += " The window was reduced because a clip is too short.";
+        }
+        if (carryAudioActive) {
+          text2 += " Its audio tail becomes preserved opening context for the next clip's generated audio.";
+        }
+        info.textContent = text2;
+      }
+    }
+    fields.appendChild(info);
+    if (timing !== null && impact !== null) {
+      const leftFrames = timing.clipFrames[impact.leftIdx] ?? 0;
+      const rightFrames = timing.clipFrames[impact.rightIdx] ?? 0;
+      const combinedFrames = Math.max(
+        0,
+        leftFrames + rightFrames + impact.handleFrames - impact.overlapFrames
+      );
+      const impactBlock = document.createElement("div");
+      impactBlock.className = "vst-boundary-impact vst-detail-span-full";
+      const heading = document.createElement("div");
+      heading.className = "vst-detail-crumb vst-detail-subsection-crumb vst-boundary-impact-title";
+      heading.textContent = "Output impact";
+      impactBlock.appendChild(heading);
+      const rows = document.createElement("div");
+      rows.className = "vst-boundary-impact-rows";
+      const addRow = (label, frames, sign = "", strong = false) => {
+        const row = document.createElement("div");
+        row.className = `vst-boundary-impact-row${strong ? " vst-boundary-impact-total" : ""}`;
+        const name = document.createElement("span");
+        name.textContent = label;
+        const value2 = document.createElement("span");
+        value2.textContent = `${sign}${frames}f · ${sign}${formatSecondsTenth(frames / fps)}`;
+        row.append(name, value2);
+        rows.appendChild(row);
+      };
+      addRow(`Clip ${impact.leftIdx}`, leftFrames);
+      addRow(`Clip ${impact.rightIdx}`, rightFrames, "+");
+      if (impact.handleFrames > 0) {
+        addRow("Incoming Continue handle", impact.handleFrames, "+");
+      }
+      addRow(
+        `${BOUNDARY_LABEL[impact.effectiveMode]} shared`,
+        impact.overlapFrames,
+        impact.overlapFrames > 0 ? "−" : ""
+      );
+      addRow("Pair after this join", combinedFrames, "", true);
+      impactBlock.appendChild(rows);
+      if (value === "continue" && impact.overlapFrames > 0 && overlapPolicy.continuityExtraFrames > 0) {
+        const note = document.createElement("div");
+        note.className = "vst-boundary-impact-note";
+        const selectedFrames = impact.handleFrames;
+        note.textContent = `${selectedFrames}f selected + ${overlapPolicy.continuityExtraFrames} LTX continuation frame = ${impact.overlapFrames}f effective shared window.`;
+        impactBlock.appendChild(note);
+      }
+      fields.appendChild(impactBlock);
+    }
+    return fields;
+  };
+
+  // frontend/detailStrip/clipBasics.ts
+  var DURATION_STEP = 0.1;
+  var REFERENCE_LENGTH_HINT = "(derived from a reference's media length)";
+  var CLIP_PROJ_REPO = "https://github.com/nicolab28/ComfyUI-ClipProj";
+  var appendClipProjRepoLink = (field) => {
+    const help = field.querySelector(".sui-info-popover");
+    if (!help) {
+      return;
+    }
+    const repo = document.createElement("a");
+    repo.href = CLIP_PROJ_REPO;
+    repo.target = "_blank";
+    repo.rel = "noopener noreferrer";
+    repo.textContent = "ComfyUI-ClipProj";
+    help.append(repo, ".");
+  };
+  var buildClipColumn = (context, clip, clipIdx, referenceFramingState, showH3AttentionWindow = false, h3TextEncoderState = "hidden", supportsAudioOnly = false) => {
+    const column = document.createElement("div");
+    column.className = "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
+    const audioOnly = clipIdx === 0 && clip.audioOnly === true;
+    const initVideoClip = !!clip.initVideo;
+    const lengthReferenceIdx = clipLengthReferenceIndex(clip.references);
+    const lengthDerived = clip.clipLengthFromAudio === true || clip.clipLengthFromControlNet === true || lengthReferenceIdx >= 0 || initVideoClip;
+    const durationHint = !lengthDerived ? null : initVideoClip ? "(derived from the source video range)" : lengthReferenceIdx >= 0 ? REFERENCE_LENGTH_HINT : "(derived from audio/ControlNet source)";
+    const durationField = buildSlider(
+      "Duration (s)",
+      clip.duration,
+      CLIP_DURATION_MIN,
+      CLIP_DURATION_MAX,
+      DURATION_STEP,
+      (value) => {
+        context.debouncedCommit("duration", (clips) => {
+          const target = clips[clipIdx];
+          if (target && !lengthDerived) {
+            const defaults = context.authoring().defaults;
+            applyClipDurationResize(target, value, defaults);
+          }
+        });
+      },
+      {
+        sliderMax: 20,
+        hint: durationHint ?? REFERENCE_LENGTH_HINT
+      }
+    );
+    const durationInput = durationField.querySelector(
+      "input.auto-slider-number"
+    );
+    if (!durationInput) {
+      throw new Error("duration slider number input missing");
+    }
+    durationInput.setAttribute("data-vst-focus-key", "duration");
+    durationField.querySelector(".vst-detail-field-hint")?.classList.toggle("vst-detail-field-hint-hidden", !durationHint);
+    if (lengthDerived) {
+      durationField.querySelectorAll("input").forEach((input2) => {
+        input2.disabled = true;
+      });
+      durationField.classList.add("vst-field-disabled");
+    }
+    column.appendChild(durationField);
+    column.appendChild(
+      buildCheckbox(
+        "Use SeedVR",
+        clip.useSeedVr,
+        (value) => {
+          context.commit((clips) => {
+            const target = clips[clipIdx];
+            if (target) {
+              target.useSeedVr = value;
+            }
+          });
+        },
+        { disabled: audioOnly }
+      )
+    );
+    if (referenceFramingState?.visible) {
+      const framing = buildOptionSelect(
+        [
+          { value: "crop", label: "Crop" },
+          { value: "stretch", label: "Stretch" },
+          { value: "fit", label: "Fit (black padding)" },
+          { value: "fit-green", label: "Fit (green padding)" }
+        ],
+        clip.refFraming,
+        (value) => {
+          context.commit((clips) => {
+            const target = clips[clipIdx];
+            if (target) {
+              target.refFraming = value;
+            }
+          });
+        }
+      );
+      framing.dataset.vstReferenceFraming = "true";
+      const field = buildField(
+        "Reference resize",
+        framing,
+        void 0,
+        "Fit (green padding) preserves aspect ratio and pads with #66FF00 so outpainting IC-LoRAs treat the padded area as empty."
+      );
+      if (!referenceFramingState.enabled) {
+        applyPersistedCapabilityRepair(field, referenceFramingState, {
+          repair: {
+            label: "Reset reference resize",
+            className: "vst-reset-unsupported-reference-framing",
+            onRepair: () => {
+              context.commit((clips) => {
+                const target = clips[clipIdx];
+                if (target) {
+                  target.refFraming = "crop";
+                }
+              });
+            }
+          }
+        });
+      }
+      column.appendChild(field);
+    }
+    if (supportsAudioOnly && clipIdx === 0) {
+      column.appendChild(
+        buildCheckbox(
+          "Audio Only",
+          clip.audioOnly === true,
+          (value) => {
+            context.structuralCommit((clips) => {
+              const transaction = context.authoring();
+              return setAudioOnlyLead(
+                clips,
+                value,
+                transaction,
+                transaction.defaults.fps
+              ) ? "render" : null;
+            });
+          },
+          { disabled: clip.initVideo !== null }
+        )
+      );
+    }
+    if (showH3AttentionWindow) {
+      const attentionWindow = buildSlider(
+        "Attention window (s)",
+        clip.h3AttentionWindowSeconds,
+        H3_ATTENTION_WINDOW_MIN_SECONDS,
+        H3_ATTENTION_WINDOW_MAX_SECONDS,
+        H3_ATTENTION_WINDOW_STEP_SECONDS,
+        (value) => {
+          context.debouncedCommit("h3AttentionWindowSeconds", (clips) => {
+            const target = clips[clipIdx];
+            if (target) {
+              target.h3AttentionWindowSeconds = value;
+            }
+          });
+        },
+        {
+          hint: "0 disables JuanAttn for this clip.",
+          help: "Total centered temporal attention window. Dense transformer layers remain fixed at 0,9,19,29,39,49."
+        }
+      );
+      attentionWindow.dataset.vstH3AttentionWindow = "true";
+      column.appendChild(attentionWindow);
+    }
+    if (h3TextEncoderState === "ready") {
+      const textEncoder = buildOptionSelect(
+        H3_TEXT_ENCODERS.map((value) => ({ value, label: value })),
+        clip.h3TextEncoder,
+        (value) => {
+          context.commit((clips) => {
+            const target = clips[clipIdx];
+            if (target) {
+              target.h3TextEncoder = normalizeH3TextEncoder(value);
+            }
+          });
+        }
+      );
+      textEncoder.dataset.vstH3TextEncoder = "true";
+      const textEncoderField = buildField(
+        "Text Encoder",
+        textEncoder,
+        void 0,
+        "Default uses MiniMax H3's full 32B encoder. The 8B and 4B options use less VRAM; VideoStages will download the matching projection automatically. Requires "
+      );
+      appendClipProjRepoLink(textEncoderField);
+      column.appendChild(textEncoderField);
+    } else if (h3TextEncoderState === "install") {
+      const install = document.createElement("button");
+      install.type = "button";
+      install.className = "basic-button";
+      install.dataset.vstInstallClipproj = "true";
+      install.textContent = "Install ComfyUI-ClipProj";
+      const installField = buildField(
+        "Text Encoder",
+        install,
+        void 0,
+        "Install the custom node required for MiniMax H3's smaller text encoders. SwarmUI will restart managed ComfyUI backends. See "
+      );
+      installField.id = `vst_clip_${clipIdx}_clipproj_install`;
+      appendClipProjRepoLink(installField);
+      install.addEventListener("click", () => {
+        if (!installHostFeature(H3_TEXT_ENCODER_FEATURE, installField.id)) {
+          getVideoStagesHostBridge().showError(
+            "SwarmUI's ComfyUI feature installer is unavailable."
+          );
+        }
+      });
+      column.appendChild(installField);
+    }
+    return column;
+  };
+
+  // frontend/detailStrip/clipLorasPanel.ts
+  var buildClipLoraControls = (context, clip, clipIdx, loraIdx, defaults) => {
+    const lora = clip.loras[loraIdx];
+    const options = defaults.loraValues.flatMap(
+      (value, optionIdx) => value === lora.name || !clip.loras.some(
+        (entry, index) => index !== loraIdx && entry.name === value
+      ) ? [
+        {
+          value,
+          label: defaults.loraLabels[optionIdx] ?? value
+        }
+      ] : []
+    );
+    preserveSelectedOption(options, lora.name, "start", (value) => ({
+      value,
+      label: `${value} (unsupported persisted value)`,
+      disabled: true
+    }));
+    const model = buildOptionSelect(options, lora.name, (value) => {
+      context.commit((clips) => {
+        const target = clips[clipIdx];
+        if (target) {
+          const initialWeight = defaultLoraWeight(defaults, value);
+          replaceLoraModelAt(target, loraIdx, value, initialWeight);
+        }
+      });
+      context.render();
+    });
+    model.setAttribute(
+      "data-vst-focus-key",
+      `clip-${clipIdx}-lora-${loraIdx}-model`
+    );
+    const weight = tagFocus(
+      buildUnboundedNumber(lora.weight, LORA_WEIGHT_STEP, (value) => {
+        context.debouncedCommit(
+          `clip-${clipIdx}-lora-${loraIdx}-weight`,
+          (clips) => {
+            const target = clips[clipIdx]?.loras[loraIdx];
+            if (target) target.weight = value;
+          }
+        );
+      }),
+      `clip-${clipIdx}-lora-${loraIdx}-weight`
+    );
+    weight.classList.add("lora-weight-input", "vst-clip-lora-weight");
+    return { model, weight };
+  };
+
+  // frontend/detailStrip/clipReferencePanel.ts
+  var REFERENCE_TRIM_MIN = 0.1;
+  var appendReferenceTrim = (ctx, fields, reference, shown, commitReference) => {
+    const mediaKind = reference.kind === "audio" ? "audio" : "video";
+    const mediaLabel = CLIP_REFERENCE_KIND_INFO[reference.kind].label;
+    const limitSeconds = reference.mediaDurationSeconds;
+    const limits = {
+      limitSeconds,
+      minLengthSeconds: reference.drivesClipLength ? CLIP_DURATION_MIN : REFERENCE_TRIM_MIN,
+      // Only duration-owning references must align to the clip's frame grid.
+      fps: reference.drivesClipLength ? getTimelineStore().getState().fps : 0
+    };
+    const write = (next) => {
+      const whole = next.startSeconds <= 0 && next.lengthSeconds >= limitSeconds;
+      Object.assign(shown, next);
+      commitReference((target, clip) => {
+        target.startSeconds = whole ? 0 : next.startSeconds;
+        target.lengthSeconds = whole ? 0 : next.lengthSeconds;
+        if (target.drivesClipLength) {
+          applyClipDurationResize(
+            clip,
+            Math.max(CLIP_DURATION_MIN, next.lengthSeconds),
+            ctx.authoring().defaults,
+            limits.fps
+          );
+        }
+      });
+    };
+    const range = toInOut(shown);
+    let inInput;
+    let outInput;
+    inInput = buildNumber(
+      range.inSeconds,
+      0,
+      limitSeconds,
+      REFERENCE_TRIM_MIN,
+      (value) => {
+        const next = setInPoint(shown, value, limits);
+        outInput.value = `${toInOut(next).outSeconds}`;
+        write(next);
+      }
+    );
+    outInput = buildNumber(
+      range.outSeconds,
+      REFERENCE_TRIM_MIN,
+      limitSeconds,
+      REFERENCE_TRIM_MIN,
+      (value) => {
+        const next = setOutPoint(shown, value, limits);
+        inInput.value = `${next.startSeconds}`;
+        write(next);
+      }
+    );
+    const disabled = reference.drivesClipLength === true;
+    inInput.disabled = disabled;
+    outInput.disabled = disabled;
+    const inField = buildField("In (s)", inInput);
+    const outField = buildField("Out (s)", outInput);
+    inField.classList.toggle("vst-field-disabled", disabled);
+    outField.classList.toggle("vst-field-disabled", disabled);
+    fields.append(inField, outField);
+    fields.appendChild(
+      buildTrimLauncher(
+        `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · References ${shown.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+        () => openTrimModal({
+          mediaKind,
+          title: `Trim ${mediaLabel} Reference`,
+          fileName: reference.uploadedMedia?.fileName ?? `${mediaLabel} reference`,
+          dataUri: reference.uploadedMedia?.data ?? null,
+          range: shown,
+          limits,
+          impactText: (next) => `References ${next.lengthSeconds.toFixed(1)} s of ${limitSeconds.toFixed(1)} s`,
+          onApply: (next) => {
+            write(next);
+            ctx.render();
+          }
+        })
+      )
+    );
+  };
+  var claimClipLength = (clip, referenceIdx, defaults, fps) => {
+    clip.references.forEach((reference, index) => {
+      reference.drivesClipLength = index === referenceIdx;
+    });
+    if (referenceIdx < 0) {
+      return;
+    }
+    clip.clipLengthFromAudio = false;
+    clip.clipLengthFromControlNet = false;
+    const claimed = clip.references[referenceIdx];
+    const seconds2 = claimed ? clipReferenceUsedSeconds(claimed) : 0;
+    if (seconds2 > 0) {
+      applyClipDurationResize(
+        clip,
+        Math.max(CLIP_DURATION_MIN, seconds2),
+        defaults,
+        fps
+      );
+    }
+  };
+  var applyPickedReferenceMedia = (ctx, clipId, referenceId, data, fileName) => runClipMediaProbe({
+    clipId,
+    slot: referenceId,
+    probe: () => probeMediaDurationSeconds(data),
+    apply: (clip, seconds2, state) => {
+      const index = clip.references.findIndex(
+        (reference2) => reference2.id === referenceId
+      );
+      const reference = clip.references[index];
+      if (!reference) {
+        return;
+      }
+      reference.uploadedMedia = { data, fileName };
+      reference.mediaDurationSeconds = roundToTenth(seconds2);
+      if (reference.drivesClipLength) {
+        claimClipLength(
+          clip,
+          index,
+          ctx.authoring().defaults,
+          state.fps
+        );
+      }
+    },
+    onApplied: () => ctx.render()
+  });
+  var createClipReferenceEditor = (ctx, clipIdx, clips, fps) => {
+    const clip = clips[clipIdx];
+    const references = clip.references;
+    const { capabilities, defaults } = ctx.authoring();
+    const authoring = clipReferenceAuthoring(capabilities.forClip(clip));
+    const incomingBoundary = authoring.mode === "all" ? incomingReferenceContinueForClip(
+      clips,
+      fps,
+      capabilities,
+      clipIdx
+    ) : null;
+    const incomingReference = {
+      kind: "video",
+      includeSoundtrack: incomingBoundary ? clips[incomingBoundary.leftIdx].boundaryOutReferenceIncludeSoundtrack : false
+    };
+    const tags = clipReferenceTags(
+      references,
+      incomingBoundary ? [incomingReference] : []
+    );
+    const buildIncomingEditor = () => {
+      if (!incomingBoundary) {
+        return void 0;
+      }
+      const sourceClip = clips[incomingBoundary.leftIdx];
+      const patchIncoming = (mutate) => {
+        ctx.commit((cs) => {
+          const source = cs[incomingBoundary.leftIdx];
+          if (source) {
+            mutate(source);
+          }
+        });
+      };
+      const fields = document.createElement("div");
+      fields.className = "vst-detail-col vst-detail-instance-fields vst-detail-clip-ref-editor vst-detail-join-ref-editor";
+      fields.appendChild(
+        buildField(
+          "Reference scale",
+          buildOptionSelect(
+            CLIP_REFERENCE_SCALES.map((scale) => ({
+              value: `${scale.value}`,
+              label: scale.label
+            })),
+            `${sourceClip.boundaryOutReferenceScale}`,
+            (value) => {
+              patchIncoming((source) => {
+                source.boundaryOutReferenceScale = Number(value);
+              });
+            }
+          )
+        )
+      );
+      fields.appendChild(
+        buildCheckbox(
+          "Include soundtrack",
+          sourceClip.boundaryOutReferenceIncludeSoundtrack,
+          (value) => {
+            patchIncoming((source) => {
+              source.boundaryOutReferenceIncludeSoundtrack = value;
+            });
+            ctx.render();
+          }
+        )
+      );
+      return fields;
+    };
+    const buildEditor = (editorIdx) => {
+      const reference = references[editorIdx];
+      if (!reference) {
+        return void 0;
+      }
+      const shownRange = clipReferenceUsedRange(reference);
+      const commitReference = (mutate) => {
+        ctx.commit((cs) => {
+          const targetClip = cs[clipIdx];
+          const target = targetClip?.references[editorIdx];
+          if (target && targetClip) {
+            mutate(target, targetClip);
+          }
+        });
+      };
+      const fields = document.createElement("div");
+      fields.className = "vst-detail-fields vst-detail-col vst-detail-instance-fields vst-detail-clip-ref-editor";
+      fields.setAttribute("data-vst-clip-ref-index", `${editorIdx}`);
+      fields.appendChild(
+        buildField(
+          "Kind",
+          buildOptionSelect(
+            CLIP_REFERENCE_KINDS.filter(
+              (kind) => authoring.mode === "all" || kind === "image" || kind === reference.kind
+            ).map((kind) => ({
+              value: kind,
+              label: CLIP_REFERENCE_KIND_INFO[kind].label
+            })),
+            reference.kind,
+            (value) => {
+              commitReference((target) => {
+                target.kind = value;
+                target.uploadedMedia = null;
+                target.includeSoundtrack = false;
+                target.mediaDurationSeconds = 0;
+                target.drivesClipLength = false;
+                if (!clipReferenceSourceSupportsKind(
+                  target.kind,
+                  target.source
+                )) {
+                  target.source = MEDIA_SOURCE_UPLOAD;
+                }
+              });
+              ctx.render();
+            }
+          ),
+          void 0,
+          `What this reference is. The prompt names it as ${tags[editorIdx]} — a reference the prompt never mentions still costs sampling time.`
+        )
+      );
+      const options = buildClipReferenceSourceOptions(
+        reference.kind,
+        reference.source ?? "",
+        clipIdx > 0
+      );
+      const source = resolveClipReferenceSourceValue(
+        reference.source ?? "",
+        options
+      );
+      fields.appendChild(
+        buildField(
+          "Source",
+          buildOptionSelect(options, source, (value) => {
+            commitReference((target) => {
+              const resolved = resolveClipReferenceSourceValue(
+                value,
+                buildClipReferenceSourceOptions(
+                  target.kind,
+                  value,
+                  clipIdx > 0
+                )
+              );
+              target.source = resolved;
+              if (resolved !== MEDIA_SOURCE_UPLOAD) {
+                target.uploadedMedia = null;
+                target.mediaDurationSeconds = 0;
+                target.drivesClipLength = false;
+              }
+            });
+            ctx.render();
+          }),
+          void 0,
+          "Where this reference comes from — an upload, a ControlNet input, or another source available for this media kind."
+        )
+      );
+      if (source === MEDIA_SOURCE_UPLOAD) {
+        const data = reference.uploadedMedia?.data;
+        const media = CLIP_REFERENCE_KIND_INFO[reference.kind];
+        fields.appendChild(
+          buildMediaPickRow(
+            `${media.label} File`,
+            media.accept,
+            [...media.browserTypes],
+            reference.uploadedMedia?.fileName,
+            (pickedData, fileName) => {
+              if (clipReferenceCanDriveLength(reference) && clip.id && reference.id) {
+                applyPickedReferenceMedia(
+                  ctx,
+                  clip.id,
+                  reference.id,
+                  pickedData,
+                  fileName
+                );
+                return;
+              }
+              commitReference((target) => {
+                target.uploadedMedia = {
+                  data: pickedData,
+                  fileName
+                };
+              });
+              ctx.render();
+            },
+            () => {
+              commitReference((target) => {
+                target.uploadedMedia = null;
+                target.mediaDurationSeconds = 0;
+                target.drivesClipLength = false;
+              });
+              ctx.render();
+            },
+            data,
+            reference.kind === "image" ? void 0 : { kind: reference.kind, range: shownRange }
+          )
+        );
+      }
+      if (clipReferenceCanDriveLength(reference)) {
+        const seconds2 = reference.mediaDurationSeconds;
+        const hint = document.createElement("small");
+        hint.className = "vst-detail-field-hint";
+        hint.textContent = `Detected: ${seconds2 > 0 ? `${seconds2.toFixed(1)} s` : "unknown length"}`;
+        fields.appendChild(hint);
+        fields.appendChild(
+          buildCheckbox(
+            `Clip Length from ${CLIP_REFERENCE_KIND_INFO[reference.kind].label}`,
+            reference.drivesClipLength === true,
+            (value) => {
+              ctx.commit((cs) => {
+                const target = cs[clipIdx];
+                if (target) {
+                  claimClipLength(
+                    target,
+                    value ? editorIdx : -1,
+                    defaults,
+                    fps
+                  );
+                }
+              });
+              ctx.render();
+            },
+            {
+              disabled: !(seconds2 > 0) && reference.drivesClipLength !== true,
+              help: seconds2 > 0 ? "Set this clip's length to the reference's own length. Only one source can own the clip length, so this clears any other reference and the clip-level length options." : "This reference has no detected length to lend the clip. Pick a file the browser can read."
+            }
+          )
+        );
+      }
+      if (reference.kind !== "image" && reference.mediaDurationSeconds > 0) {
+        appendReferenceTrim(
+          ctx,
+          fields,
+          reference,
+          shownRange,
+          commitReference
+        );
+      }
+      if (reference.kind === "video") {
+        fields.appendChild(
+          buildField(
+            "Reference scale",
+            buildOptionSelect(
+              CLIP_REFERENCE_SCALES.map((scale) => ({
+                value: `${scale.value}`,
+                label: scale.label
+              })),
+              `${reference.mediaScale}`,
+              (value) => {
+                commitReference((target) => {
+                  target.mediaScale = Number(value);
+                });
+              }
+            ),
+            void 0,
+            "Downsample this video before it is referenced. Its tokens are re-encoded on every sampling step, so half or quarter resolution is markedly faster and costs detail the model may not need from a motion or style reference."
+          )
+        );
+        fields.appendChild(
+          buildCheckbox(
+            "Include soundtrack",
+            reference.includeSoundtrack === true,
+            (value) => {
+              commitReference((target) => {
+                target.includeSoundtrack = value;
+              });
+              ctx.render();
+            },
+            {
+              help: `Also reference this video's own audio. It is presented as its own Audio reference just before ${tags[editorIdx]}, ahead of every standalone audio reference — the tags shown here already account for it.`
+            }
+          )
+        );
+      }
+      return fields;
+    };
+    return { buildEditor, buildIncomingEditor };
+  };
+  var buildClipReferenceFields = (ctx, clipIdx, referenceIdx, clips, fps) => {
+    const fields = createClipReferenceEditor(
+      ctx,
+      clipIdx,
+      clips,
+      fps
+    ).buildEditor(referenceIdx);
+    if (!fields) {
+      throw new Error(`Reference ${referenceIdx} does not exist`);
+    }
+    return fields;
+  };
+  var buildIncomingReferenceFields = (ctx, clipIdx, clips, fps) => {
+    const fields = createClipReferenceEditor(
+      ctx,
+      clipIdx,
+      clips,
+      fps
+    ).buildIncomingEditor();
+    if (!fields) throw new Error(`Clip ${clipIdx} has no incoming reference`);
+    fields.classList.add("vst-detail-fields");
+    return fields;
+  };
+
+  // frontend/detailStrip/initVideoPanel.ts
+  var DURATION_STEP2 = 0.1;
+  var applyPickedInitVideo = (context, clipId, data, fileName) => runClipMediaProbe({
+    clipId,
+    slot: INIT_VIDEO_PROBE_SLOT,
+    probe: () => probeInitVideo(data),
+    apply: (target, probe, state) => {
+      const { capabilities, defaults } = context.authoring();
+      target.initVideo = initVideoFromProbe(
+        probe,
+        data,
+        fileName,
+        target.duration
+      );
+      reconcileClipArchitectureIdentity(target, capabilities.catalog);
+      applyClipDurationResize(
+        target,
+        Math.max(CLIP_DURATION_MIN, target.initVideo.lengthSeconds),
+        defaults,
+        state.fps
+      );
+    },
+    onApplied: () => context.render()
+  });
+  var buildInitVideoFields = (context, clip, clipIdx, disabled = false) => {
+    const source = clip.initVideo;
+    const col = document.createElement("div");
+    col.className = "vst-detail-fields vst-detail-col vst-detail-source-col";
+    const removeSource = () => {
+      context.structuralCommit((clips) => {
+        const target = clips[clipIdx];
+        if (!target?.initVideo) {
+          return null;
+        }
+        const transaction = context.authoring();
+        target.initVideo = null;
+        reconcileClipArchitectureIdentity(
+          target,
+          transaction.capabilities.catalog
+        );
+        reconcileArchitectureIncomingIcLoraDrives(
+          clips,
+          transaction.generatedEntryMode,
+          transaction.capabilities.catalog
+        );
+        return "render";
+      });
+    };
+    const sourceKind = source?.source === MEDIA_SOURCE_PREVIOUS_CLIP ? MEDIA_SOURCE_PREVIOUS_CLIP : MEDIA_SOURCE_UPLOAD;
+    if (clipIdx > 0) {
+      const sourceSelect = buildOptionSelect(
+        [
+          { value: MEDIA_SOURCE_UPLOAD, label: "Upload" },
+          {
+            value: MEDIA_SOURCE_PREVIOUS_CLIP,
+            label: "Previous Clip Output"
+          }
+        ],
+        sourceKind,
+        (value) => {
+          context.structuralCommit((clips) => {
+            const changed = setPreviousClipVideoSource(
+              clips,
+              clipIdx,
+              value === MEDIA_SOURCE_PREVIOUS_CLIP,
+              context.authoring(),
+              getTimelineStore().getState().fps
+            );
+            return changed ? "render" : null;
+          });
+        }
+      );
+      sourceSelect.classList.add("vst-init-video-source");
+      col.appendChild(buildField("Video source", sourceSelect));
+    }
+    const shown = {
+      startSeconds: source?.startSeconds ?? 0,
+      lengthSeconds: source?.lengthSeconds ?? 0
+    };
+    const hint = document.createElement("small");
+    hint.className = "vst-detail-field-hint vst-detail-span-full";
+    const sourceIsPrevious = sourceKind === MEDIA_SOURCE_PREVIOUS_CLIP;
+    hint.textContent = sourceIsPrevious ? "Uses the previous clip's decoded output as this clip's starting footage." : "Use an existing video file as this clip instead of generating it.";
+    col.appendChild(hint);
+    if (!sourceIsPrevious) {
+      col.appendChild(
+        buildMediaPickRow(
+          "Video file",
+          "video/*",
+          ["video"],
+          source?.fileName ?? null,
+          (data, fileName) => {
+            if (clip.id) {
+              applyPickedInitVideo(context, clip.id, data, fileName);
+            }
+          },
+          removeSource,
+          source?.data,
+          {
+            kind: "video",
+            range: shown
+          }
+        )
+      );
+    }
+    const disableSection = () => {
+      if (!disabled) {
+        return;
+      }
+      col.classList.add("vst-field-disabled");
+      col.setAttribute("aria-disabled", "true");
+      col.querySelectorAll("input, button, select").forEach((control) => {
+        control.disabled = true;
+      });
+    };
+    if (!source) {
+      disableSection();
+      return col;
+    }
+    const info = document.createElement("small");
+    info.className = "vst-detail-field-hint";
+    info.textContent = sourceIsPrevious ? `Previous output: ${source.durationSeconds.toFixed(1)} s` : `Detected: ${source.fps > 0 ? `${source.fps} fps` : "unknown fps"} · ${source.durationSeconds > 0 ? `${source.durationSeconds.toFixed(1)} s` : "unknown length"}`;
+    col.appendChild(info);
+    const fileLimit = sourceLimitSeconds(source);
+    const fps = getTimelineStore().getState().fps;
+    const limits = {
+      limitSeconds: fileLimit,
+      minLengthSeconds: CLIP_DURATION_MIN,
+      fps
+    };
+    const writeRange = (target, next) => {
+      const targetSource = target.initVideo;
+      if (!targetSource) {
+        return;
+      }
+      targetSource.startSeconds = next.startSeconds;
+      targetSource.lengthSeconds = next.lengthSeconds;
+      Object.assign(shown, next);
+      applyClipDurationResize(
+        target,
+        Math.max(CLIP_DURATION_MIN, next.lengthSeconds),
+        context.authoring().defaults,
+        fps
+      );
+    };
+    const edgeInput = (edge, apply) => context.buildClampedNumber({
+      key: `source-${edge}`,
+      value: toInOut(shown)[edge === "in" ? "inSeconds" : "outSeconds"],
+      min: edge === "in" ? 0 : CLIP_DURATION_MIN,
+      max: fileLimit,
+      step: DURATION_STEP2,
+      readBack: (clips) => {
+        const readSource = clips[clipIdx]?.initVideo;
+        return readSource ? toInOut(readSource)[edge === "in" ? "inSeconds" : "outSeconds"] : null;
+      },
+      mutate: (clips, value) => {
+        const target = clips[clipIdx];
+        if (target?.initVideo) {
+          writeRange(target, apply(target.initVideo, value, limits));
+        }
+      }
+    });
+    col.appendChild(
+      buildField(
+        "In (s)",
+        edgeInput("in", setInPoint),
+        void 0,
+        "Where inside the source file this clip's footage begins. Moving it leaves Out where it is, so the clip gets shorter."
+      )
+    );
+    col.appendChild(
+      buildField(
+        "Out (s)",
+        edgeInput("out", setOutPoint),
+        void 0,
+        "Where inside the source file this clip's footage ends. This also becomes the clip's duration."
+      )
+    );
+    if (!sourceIsPrevious && source.durationSeconds > 0) {
+      const range = toInOut(shown);
+      col.appendChild(
+        buildTrimLauncher(
+          `Range ${range.inSeconds.toFixed(1)}–${range.outSeconds.toFixed(1)} s · Uses ${shown.lengthSeconds.toFixed(1)} s of ${fileLimit.toFixed(1)} s`,
+          () => openTrimModal({
+            mediaKind: "video",
+            title: "Trim Source Video",
+            fileName: source.fileName ?? "Source video",
+            dataUri: source.data,
+            range: shown,
+            limits,
+            impactText: (next) => `Clip duration becomes ${next.lengthSeconds.toFixed(1)} s`,
+            onApply: (next) => {
+              context.commit((clips) => {
+                const target = clips[clipIdx];
+                if (target) {
+                  writeRange(target, next);
+                }
+              });
+              context.render();
+            }
+          })
+        )
+      );
+    }
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent = "This range (conformed to the timeline fps and size) is the clip's starting point: the first stage refines it using its Control value, later stages refine or upscale it, and a retake regenerates part of it.";
+    col.appendChild(note);
+    disableSection();
+    return col;
+  };
+
+  // frontend/intervals.ts
+  var freeIntervalAt = (spans, total, point) => {
+    const p = Math.min(Math.max(point, 0), total);
+    let lo = 0;
+    let hi = total;
+    for (const span of spans) {
+      if (span.end <= p) {
+        if (span.end > lo) {
+          lo = span.end;
+        }
+      } else if (span.start >= p) {
+        hi = span.start;
+        break;
+      } else {
+        return [p, p];
+      }
+    }
+    return [lo, hi];
+  };
+
+  // frontend/promptWindowEdits.ts
+  var otherSpans = (windows, excludeIdx, clipDuration) => windows.map((w, k) => ({
+    k,
+    start: clamp(w.start, 0, clipDuration),
+    end: clamp(w.start + w.duration, 0, clipDuration)
+  })).filter((s) => s.k !== excludeIdx && s.end > s.start).sort((a, b) => a.start - b.start).map((s) => ({ start: s.start, end: s.end }));
+  var applyPromptWindowBegin = (clip, windowIdx, desiredBegin) => {
+    const window2 = clip.promptWindows?.[windowIdx];
+    if (!window2) {
+      return;
+    }
+    const clipDur = clipDurationOf(clip);
+    const end = window2.start + window2.duration;
+    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
+    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
+    const start = clamp(desiredBegin, lo, end - PROMPT_WINDOW_MIN_DURATION);
+    window2.start = roundToTenth(start);
+    window2.duration = roundToTenth(end - start);
+  };
+  var applyPromptWindowEnd = (clip, windowIdx, desiredEnd) => {
+    const window2 = clip.promptWindows?.[windowIdx];
+    if (!window2) {
+      return;
+    }
+    const clipDur = clipDurationOf(clip);
+    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
+    const [, hi] = freeIntervalAt(spans, clipDur, window2.start);
+    const end = clamp(
+      desiredEnd,
+      window2.start + PROMPT_WINDOW_MIN_DURATION,
+      hi
+    );
+    window2.start = roundToTenth(window2.start);
+    window2.duration = roundToTenth(end - window2.start);
+  };
+  var promptWindowNeighborBounds = (clip, windowIdx) => {
+    const window2 = clip.promptWindows?.[windowIdx];
+    if (!window2) {
+      return null;
+    }
+    const clipDur = clipDurationOf(clip);
+    const end = window2.start + window2.duration;
+    const spans = otherSpans(clip.promptWindows, windowIdx, clipDur);
+    const [lo] = freeIntervalAt(spans, clipDur, Math.max(0, end - 1e-3));
+    const [, hi] = freeIntervalAt(spans, clipDur, window2.start);
+    return { beginMin: roundToTenth(lo), endMax: roundToTenth(hi) };
+  };
+
+  // frontend/detailStrip/promptPanels.ts
+  var buildMajorPromptFields = (ctx, clip, clipIdx, layout = { rows: 8 }) => {
+    const col = document.createElement("div");
+    col.className = "vst-detail-col vst-detail-prompt-body";
+    const prompt = buildTextarea(
+      clip.prompt ?? "",
+      readGlobalPrompt().trim() || "Clip prompt (blank inherits the global prompt)…",
+      "prompt-major",
+      (value) => {
+        ctx.debouncedCommit("prompt-major", (clips) => {
+          const target = clips[clipIdx];
+          if (target) {
+            target.prompt = value.trim();
+          }
+        });
+      },
+      layout
+    );
+    col.appendChild(buildField("Prompt", prompt));
+    return col;
+  };
+  var buildRelayPromptFields = (ctx, clip, clipIdx, windowIdx) => {
+    const window2 = clip.promptWindows[windowIdx];
+    if (!window2) {
+      throw new Error(`Relay prompt ${windowIdx} does not exist`);
+    }
+    const clipDuration = Math.max(
+      PROMPT_WINDOW_MIN_DURATION,
+      clip.duration || 0
+    );
+    const fields = document.createElement("div");
+    fields.className = "vst-detail-col vst-detail-fields vst-detail-prompt-body vst-detail-minor-window";
+    fields.setAttribute("data-vst-minor-window", `${windowIdx}`);
+    const bounds = promptWindowNeighborBounds(clip, windowIdx);
+    const beginInput = ctx.buildClampedNumber({
+      key: `minor-${windowIdx}-begin`,
+      value: roundToTenth(window2.start),
+      min: bounds?.beginMin ?? 0,
+      max: gridFloor(Math.max(0, clipDuration - PROMPT_WINDOW_MIN_DURATION)),
+      step: 0.1,
+      readBack: (clips) => {
+        const target = clips[clipIdx]?.promptWindows?.[windowIdx];
+        return target ? roundToTenth(target.start) : null;
+      },
+      mutate: (clips, value) => {
+        const target = clips[clipIdx];
+        if (target) {
+          applyPromptWindowBegin(target, windowIdx, value);
+        }
+      }
+    });
+    fields.appendChild(
+      buildField(
+        "Begin (s)",
+        beginInput,
+        void 0,
+        "When this relay prompt starts within the clip."
+      )
+    );
+    const endInput = ctx.buildClampedNumber({
+      key: `minor-${windowIdx}-end`,
+      value: roundToTenth(window2.start + window2.duration),
+      min: gridCeil(PROMPT_WINDOW_MIN_DURATION),
+      max: bounds?.endMax ?? clipDuration,
+      step: 0.1,
+      readBack: (clips) => {
+        const target = clips[clipIdx]?.promptWindows?.[windowIdx];
+        return target ? roundToTenth(target.start + target.duration) : null;
+      },
+      mutate: (clips, value) => {
+        const target = clips[clipIdx];
+        if (target) {
+          applyPromptWindowEnd(target, windowIdx, value);
+        }
+      }
+    });
+    fields.appendChild(
+      buildField(
+        "End (s)",
+        endInput,
+        void 0,
+        "When this relay prompt ends. It cannot cross a neighbouring relay."
+      )
+    );
+    const editor = buildTextarea(
+      window2.prompt ?? "",
+      "Relay prompt for this window…",
+      `minor-${windowIdx}`,
+      (value) => {
+        ctx.debouncedCommit(`minor-${windowIdx}`, (clips) => {
+          const target = clips[clipIdx]?.promptWindows?.[windowIdx];
+          if (target) {
+            target.prompt = value.trim();
+          }
+        });
+      },
+      { rows: 4 }
+    );
+    editor.addEventListener("focus", () => {
+      setSelection({ kind: "prompt-minor", clipIdx, windowIdx });
+    });
+    const prompt = buildField("Prompt", editor);
+    prompt.classList.add("vst-detail-span-full");
+    fields.appendChild(prompt);
+    return fields;
+  };
+
+  // frontend/detailStrip/refPanel.ts
+  var buildKeyframeFields = (ctx, clip, clipIdx, ref, refIdx, fps) => {
+    const { defaults } = ctx.authoring();
+    const endpointPolicy = referenceEndpointPolicy(clip, defaults.modelCatalog);
+    const hasSupportedEndpoint = endpointPolicy.available;
+    const options = buildImageSourceOptions(ref.source ?? "");
+    const source = resolveImageSourceValue(ref.source ?? "", options);
+    const isUpload = source === MEDIA_SOURCE_UPLOAD;
+    const fields = document.createElement("div");
+    fields.className = "vst-detail-fields vst-detail-col vst-detail-instance-fields vst-detail-ref-row vst-detail-ref-editor";
+    fields.setAttribute("data-vst-ref-index", `${refIdx}`);
+    const select2 = buildOptionSelect(options, source, (value) => {
+      ctx.commit((cs) => {
+        const target = cs[clipIdx]?.frameRefs[refIdx];
+        if (!target) {
+          return;
+        }
+        const resolved = resolveImageSourceValue(
+          value,
+          buildImageSourceOptions(value)
+        );
+        target.source = resolved;
+        if (resolved !== MEDIA_SOURCE_UPLOAD) {
+          target.uploadedImage = null;
+          target.uploadFileName = null;
+        }
+      });
+      ctx.render();
+    });
+    fields.appendChild(
+      buildField(
+        "Image Source",
+        select2,
+        void 0,
+        "Where this keyframe image comes from — an upload, or another clip's rendered frame. The image guides how the clip looks at its attach frame."
+      )
+    );
+    const frameMax = getReferenceFrameMax(defaults, clip, fps);
+    const boundedPositions = endpointPolicy.bounded;
+    const supportsFirst = endpointPolicy.supportsFirst;
+    const supportsLast = endpointPolicy.supportsLast;
+    const currentPositionSupported = ref.fromEnd ? supportsLast : supportsFirst;
+    const editableFrameMax = endpointPolicy.available && !endpointPolicy.bounded ? frameMax : REF_FRAME_MIN;
+    const frameInput = buildNumber(
+      ref.frame,
+      REF_FRAME_MIN,
+      editableFrameMax,
+      1,
+      (value) => {
+        ctx.debouncedCommit(`ref-${refIdx}-frame`, (cs) => {
+          const target = cs[clipIdx]?.frameRefs[refIdx];
+          if (target) {
+            target.frame = clamp(
+              Math.round(value),
+              REF_FRAME_MIN,
+              editableFrameMax
+            );
+          }
+        });
+      }
+    );
+    frameInput.setAttribute("data-vst-focus-key", `ref-${refIdx}-frame`);
+    frameInput.disabled = !hasSupportedEndpoint;
+    fields.appendChild(
+      buildField(
+        "Attach at Frame",
+        frameInput,
+        void 0,
+        boundedReferencePositionHelp(endpointPolicy) ?? (boundedPositions ? "This clip accepts an image only at a bounded endpoint." : "The frame within the clip where this keyframe is anchored. Frame 1 is the first frame; the image influences the clip most strongly around here.")
+      )
+    );
+    fields.appendChild(
+      buildCheckbox(
+        "Count from clip end",
+        ref.fromEnd === true,
+        (value) => {
+          ctx.commit((cs) => {
+            const target = cs[clipIdx]?.frameRefs[refIdx];
+            if (target) {
+              target.fromEnd = value;
+            }
+          });
+        },
+        {
+          disabled: !hasSupportedEndpoint || boundedPositions && currentPositionSupported && !(supportsFirst && supportsLast),
+          help: boundedReferenceToggleHelp(endpointPolicy) ?? (boundedPositions ? "Choose the supported clip endpoint." : "Count the attach frame backwards from the last frame instead of forward from the first — so it stays anchored to the end even if the clip length changes.")
+        }
+      )
+    );
+    if (isUpload) {
+      fields.appendChild(
+        buildMediaPickRow(
+          "Image Upload",
+          "image/*",
+          ["image"],
+          ref.uploadedImage?.fileName,
+          (data, fileName) => {
+            ctx.commit((cs) => {
+              const target = cs[clipIdx]?.frameRefs[refIdx];
+              if (target) {
+                target.uploadedImage = { data, fileName };
+                target.uploadFileName = fileName;
+              }
+            });
+            ctx.render();
+          },
+          () => {
+            ctx.commit((cs) => {
+              const target = cs[clipIdx]?.frameRefs[refIdx];
+              if (target) {
+                target.uploadedImage = null;
+                target.uploadFileName = null;
+              }
+            });
+            ctx.render();
+          },
+          ref.uploadedImage?.data
+        )
+      );
+    }
+    return fields;
+  };
+
+  // frontend/detailStrip/retakePanel.ts
+  var buildRetakeFields = (context, clip, clipIdx) => {
+    const retake = clip.retake;
+    const decision = context.authoring().capabilities.forClip(clip).decision("retake");
+    const col = document.createElement("div");
+    col.className = "vst-detail-fields vst-detail-col vst-detail-retake-col";
+    if (!retake) {
+      const hint = document.createElement("small");
+      hint.className = "vst-detail-field-hint";
+      hint.textContent = "Regenerates a sub-range when refining a base video.";
+      col.appendChild(hint);
+      const add = buildDetailActionButton({
+        label: "+ Add Retake",
+        title: decision.supported ? "Add a retake window" : decision.reason,
+        className: "small-button vst-detail-repeating-add vst-detail-add-retake",
+        disabled: !decision.supported,
+        onClick: () => context.createRetake(clipIdx)
+      });
+      col.appendChild(add);
+      return col;
+    }
+    const clipDuration = Math.max(RETAKE_MIN_DURATION, clip.duration || 0);
+    const clampRetake = (start, length) => clampStartLength(start, length, clipDuration, RETAKE_MIN_DURATION);
+    const startInput = context.buildClampedNumber({
+      key: "retake-start",
+      value: retake.startSeconds,
+      min: 0,
+      max: Math.max(0, clipDuration - RETAKE_MIN_DURATION),
+      step: RETAKE_DURATION_STEP,
+      readBack: (clips) => clips[clipIdx]?.retake?.startSeconds ?? null,
+      mutate: (clips, value) => {
+        const target = clips[clipIdx]?.retake;
+        if (target) {
+          const next = clampRetake(value, target.lengthSeconds);
+          target.startSeconds = next.start;
+          target.lengthSeconds = next.length;
+        }
+      }
+    });
+    col.appendChild(
+      buildField(
+        "Start (s)",
+        startInput,
+        void 0,
+        "Where the retake window begins inside the clip. Only this sub-range is regenerated."
+      )
+    );
+    const lengthInput = context.buildClampedNumber({
+      key: "retake-length",
+      value: retake.lengthSeconds,
+      min: RETAKE_MIN_DURATION,
+      max: clipDuration,
+      step: RETAKE_DURATION_STEP,
+      readBack: (clips) => clips[clipIdx]?.retake?.lengthSeconds ?? null,
+      mutate: (clips, value) => {
+        const target = clips[clipIdx]?.retake;
+        if (target) {
+          const next = clampRetake(target.startSeconds, value);
+          target.startSeconds = next.start;
+          target.lengthSeconds = next.length;
+        }
+      }
+    });
+    col.appendChild(
+      buildField(
+        "Length (s)",
+        lengthInput,
+        void 0,
+        "How long the retake window is, starting at Start. Frames outside the window are kept as-is."
+      )
+    );
+    col.appendChild(
+      buildSlider(
+        "Strength",
+        retake.strength,
+        RETAKE_STRENGTH_MIN,
+        RETAKE_STRENGTH_MAX,
+        RETAKE_STRENGTH_STEP,
+        (value) => {
+          context.debouncedCommit("retake-strength", (clips) => {
+            const target = clips[clipIdx]?.retake;
+            if (target) {
+              target.strength = clamp(
+                value,
+                RETAKE_STRENGTH_MIN,
+                RETAKE_STRENGTH_MAX
+              );
+            }
+          });
+        },
+        {
+          help: "How much of the window is regenerated. Higher changes the footage more; lower keeps it closer to the original."
+        }
+      )
+    );
+    const note = document.createElement("p");
+    note.className = "vst-detail-note";
+    note.textContent = "Applies when refining a base video; audio inside the window regenerates with the frames.";
+    col.appendChild(note);
+    return col;
+  };
+
+  // frontend/detailStrip/settingsPanel.ts
+  var SETTINGS_INHERIT = "inherit";
+  var SETTINGS_CUSTOM = "custom";
+  var clampDimension = (value) => clamp(
+    Math.round(value) || ROOT_DIMENSION_MIN,
+    ROOT_DIMENSION_MIN,
+    ROOT_DIMENSION_MAX
+  );
+  var clampFps = (value) => clamp(Math.round(value) || ROOT_FPS_MIN, ROOT_FPS_MIN, ROOT_FPS_MAX);
+  var clampSideLength = (value) => clamp(
+    Math.round((Math.round(value) || 1024) / ROOT_DIMENSION_STEP) * ROOT_DIMENSION_STEP,
+    ROOT_DIMENSION_MIN,
+    ROOT_DIMENSION_MAX
+  );
+  var setSliderDisabled = (slider, disabled) => {
+    slider.querySelectorAll("input").forEach((input2) => {
+      input2.disabled = disabled;
+    });
+    const box = slider.querySelector(".auto-slider-box");
+    if (box) {
+      box.dataset.disabled = `${disabled}`;
+    }
+  };
+  var FPS_WRITE_DEBOUNCE_MS = 300;
+  var fpsWriteTimer = null;
+  var scheduleCoreFpsWrite = (value) => {
+    if (fpsWriteTimer !== null) {
+      clearTimeout(fpsWriteTimer);
+    }
+    fpsWriteTimer = setTimeout(() => {
+      fpsWriteTimer = null;
+      const bridge2 = getVideoStagesHostBridge();
+      const core = bridge2.getRootVideoFpsInput();
+      if (!core || core.value === `${value}`) {
+        return;
+      }
+      core.value = `${value}`;
+      bridge2.notifyChanged(core);
+    }, FPS_WRITE_DEBOUNCE_MS);
+  };
+  var buildSettingsFields = (ctx, state, _selection = {
+    kind: "none"
+  }) => {
+    const defaults = ctx.authoring().defaults;
+    const core = {
+      width: defaults.width,
+      height: defaults.height,
+      fps: defaults.fps
+    };
+    const architectureMultiple = activeDocumentDimensionMultiple(
+      state.clips,
+      defaults.modelCatalog
+    );
+    const dimensionSnap = getTimelineAuthoringSettings().dimensionSnap;
+    const multiple = dimensionSnap === "disabled" ? architectureMultiple : Math.max(architectureMultiple, dimensionSnap);
+    const defaultMode = !state.dimsExplicit ? SETTINGS_INHERIT : matchAspectRatio(state.width, state.height, multiple) ?? SETTINGS_CUSTOM;
+    const mode = ctx.getSettingsMode() ?? defaultMode;
+    const isCustom = mode === SETTINGS_CUSTOM;
+    const isInherited = mode === SETTINGS_INHERIT;
+    const fallbackSideLength = defaults.sideLength ?? (defaults.aspectRatio ? sideLengthForDimensions(
+      defaults.aspectRatio,
+      core.width,
+      core.height
+    ) : 1024);
+    const selectedSideLength = !isInherited && !isCustom ? sideLengthForDimensions(mode, state.width, state.height) : clampSideLength(fallbackSideLength);
+    const rawDimensions = isInherited || isCustom ? {
+      width: clampDimension(isInherited ? core.width : state.width),
+      height: clampDimension(
+        isInherited ? core.height : state.height
+      )
+    } : dimensionsFor(mode, selectedSideLength) ?? {
+      width: clampDimension(state.width),
+      height: clampDimension(state.height)
+    };
+    const effectiveDimensions = snapDimensions(
+      rawDimensions.width,
+      rawDimensions.height,
+      multiple
+    );
+    const body = document.createElement("div");
+    body.className = "vst-detail-form-body vst-detail-settings";
+    const ratioSpecs = [
+      {
+        value: SETTINGS_INHERIT,
+        label: `Use image resolution (${core.width}×${core.height})`
+      },
+      ...ASPECT_RATIOS.map((ratio) => ({
+        value: ratio.id,
+        label: ratio.label
+      })),
+      { value: SETTINGS_CUSTOM, label: "Custom" }
+    ];
+    const ratioSelect = buildOptionSelect(ratioSpecs, mode, (value) => {
+      ctx.setSettingsMode(value);
+      ctx.commitState((next) => {
+        if (value === SETTINGS_INHERIT) {
+          next.dimsExplicit = false;
+        } else if (value === SETTINGS_CUSTOM) {
+          next.dimsExplicit = true;
+          next.width = effectiveDimensions.width;
+          next.height = effectiveDimensions.height;
+        } else {
+          const raw = dimensionsFor(value, fallbackSideLength) ?? {
+            width: effectiveDimensions.width,
+            height: effectiveDimensions.height
+          };
+          const snapped = snapDimensions(raw.width, raw.height, multiple);
+          next.dimsExplicit = true;
+          next.width = snapped.width;
+          next.height = snapped.height;
+        }
+      });
+      ctx.render();
+    });
+    body.appendChild(buildField("Aspect Ratio", ratioSelect));
+    const dimensionSnapSpecs = [
+      { value: "disabled", label: "Disabled" },
+      { value: "32", label: "Multiples of 32" },
+      { value: "64", label: "Multiples of 64" }
+    ];
+    const dimensionSnapSelect = buildOptionSelect(
+      dimensionSnapSpecs,
+      `${dimensionSnap}`,
+      (value) => {
+        const selected = value === "32" ? 32 : value === "64" ? 64 : "disabled";
+        setTimelineAuthoringSetting("dimensionSnap", selected);
+        ctx.render();
+      }
+    );
+    body.appendChild(buildField("Dimension Snap", dimensionSnapSelect));
+    if (isCustom) {
+      const widthSlider = tagFocus(
+        buildSlider(
+          "Width",
+          rawDimensions.width,
+          ROOT_DIMENSION_MIN,
+          ROOT_DIMENSION_MAX,
+          ROOT_DIMENSION_STEP,
+          (value) => {
+            ctx.debouncedCommitState("settings-width", (next) => {
+              const snapped = snapDimensions(
+                clampDimension(value),
+                clampDimension(next.height),
+                multiple
+              );
+              next.dimsExplicit = true;
+              next.width = snapped.width;
+              next.height = snapped.height;
+            });
+          },
+          { sliderMin: ROOT_DIMENSION_SLIDER_MIN }
+        ),
+        "settings-width"
+      );
+      const heightSlider = tagFocus(
+        buildSlider(
+          "Height",
+          rawDimensions.height,
+          ROOT_DIMENSION_MIN,
+          ROOT_DIMENSION_MAX,
+          ROOT_DIMENSION_STEP,
+          (value) => {
+            ctx.debouncedCommitState("settings-height", (next) => {
+              const snapped = snapDimensions(
+                clampDimension(next.width),
+                clampDimension(value),
+                multiple
+              );
+              next.dimsExplicit = true;
+              next.width = snapped.width;
+              next.height = snapped.height;
+            });
+          },
+          { sliderMin: ROOT_DIMENSION_SLIDER_MIN }
+        ),
+        "settings-height"
+      );
+      body.append(widthSlider, heightSlider);
+    } else if (!isInherited) {
+      const ratioHasReference = dimensionsFor(mode, selectedSideLength) !== null;
+      let calculatedDimensions = null;
+      const sideLengthSlider = tagFocus(
+        buildSlider(
+          "Side Length",
+          selectedSideLength,
+          ROOT_DIMENSION_MIN,
+          ROOT_DIMENSION_MAX,
+          ROOT_DIMENSION_STEP,
+          (value) => {
+            if (isInherited) {
+              return;
+            }
+            const raw = dimensionsFor(mode, clampSideLength(value));
+            if (!raw) {
+              return;
+            }
+            const snapped = snapDimensions(
+              raw.width,
+              raw.height,
+              multiple
+            );
+            if (calculatedDimensions) {
+              calculatedDimensions.textContent = `${snapped.width} × ${snapped.height}`;
+            }
+            ctx.debouncedCommitState("settings-side-length", (next) => {
+              next.dimsExplicit = true;
+              next.width = snapped.width;
+              next.height = snapped.height;
+            });
+          },
+          {
+            hint: !ratioHasReference ? "(the host has no 3:4 reference; current dimensions are retained)" : void 0,
+            sliderMin: ROOT_DIMENSION_SLIDER_MIN,
+            isPot: true
+          }
+        ),
+        "settings-side-length"
+      );
+      calculatedDimensions = document.createElement("span");
+      calculatedDimensions.className = "vst-settings-calculated-dims";
+      calculatedDimensions.textContent = `${effectiveDimensions.width} × ${effectiveDimensions.height}`;
+      sideLengthSlider.querySelector("label")?.appendChild(calculatedDimensions);
+      setSliderDisabled(sideLengthSlider, !ratioHasReference);
+      body.appendChild(sideLengthSlider);
+    }
+    const hasCoreFps = getVideoStagesHostBridge().getRootVideoFpsInput() !== null;
+    const fpsInput = buildNumber(
+      clampFps(state.fps),
+      ROOT_FPS_MIN,
+      ROOT_FPS_MAX,
+      1,
+      (value) => {
+        scheduleCoreFpsWrite(clampFps(value));
+      }
+    );
+    fpsInput.disabled = !hasCoreFps;
+    fpsInput.setAttribute("data-vst-focus-key", "settings-fps");
+    body.appendChild(
+      buildField(
+        "FPS",
+        fpsInput,
+        hasCoreFps ? void 0 : "(no core Video FPS parameter found)",
+        "Frames per second for the whole timeline. This is the same value as the core Video FPS parameter — editing either updates both."
+      )
+    );
+    return body;
+  };
+
+  // frontend/detailStrip/stagePanel/characterRefineSection.ts
+  var updateCharacterRefineAvailability = (section, upscale) => {
+    setFieldDisabled(
+      section,
+      upscale !== 1,
+      "Set Upscale to 1× to use Make Them Bonita"
+    );
+  };
+  var referenceLabel = (reference) => reference.uploadedMedia?.fileName?.trim() || reference.source.trim() || "Image reference";
+  var textInput2 = (bindings, key, fallback) => {
+    const input2 = document.createElement("input");
+    input2.type = "text";
+    input2.className = "auto-text";
+    input2.maxLength = 120;
+    input2.placeholder = fallback;
+    input2.value = bindings.stage.characterRefine?.[key] ?? fallback;
+    input2.addEventListener("change", () => {
+      const value = input2.value.trim() || fallback;
+      input2.value = value;
+      bindings.commit((stage) => {
+        if (stage.characterRefine) stage.characterRefine[key] = value;
+      });
+    });
+    return input2;
+  };
+  var pictureRows = (bindings, imageReferences) => {
+    const rows = document.createElement("div");
+    rows.className = "vst-detail-span-full vst-character-refine-pictures";
+    const title = document.createElement("div");
+    title.className = "vst-character-refine-pictures-title";
+    title.setAttribute("role", "heading");
+    title.setAttribute("aria-level", "4");
+    title.textContent = "Reference Pictures";
+    rows.appendChild(title);
+    imageReferences.forEach((reference, index) => {
+      if (!reference.id) return;
+      const row = document.createElement("label");
+      row.className = "vst-character-refine-picture";
+      row.title = "Use this picture to guide how the person should look after the repair.";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "auto-checkbox";
+      checkbox.checked = bindings.stage.characterRefine?.pictureReferenceIds.includes(
+        reference.id
+      ) ?? false;
+      checkbox.addEventListener(
+        "change",
+        () => bindings.commit((stage) => {
+          if (!stage.characterRefine || !reference.id) return;
+          const selected = new Set(
+            stage.characterRefine.pictureReferenceIds
+          );
+          if (checkbox.checked) selected.add(reference.id);
+          else selected.delete(reference.id);
+          stage.characterRefine.pictureReferenceIds = imageReferences.map((candidate) => candidate.id).filter(
+            (id) => Boolean(id && selected.has(id))
+          );
+        })
+      );
+      const text2 = document.createElement("span");
+      text2.textContent = `<picture ${index + 1}> ${referenceLabel(reference)}`;
+      row.append(checkbox, text2);
+      rows.appendChild(row);
+    });
+    return rows;
+  };
+  var appendCharacterRefineSection = (bindings) => {
+    const {
+      context,
+      clip,
+      clipIdx,
+      stage,
+      stageIdx,
+      fields: stageFields,
+      commit,
+      slider
+    } = bindings;
+    const sourceVideo = clip.initVideo;
+    const sourceVideoKind = sourceVideo?.source ?? MEDIA_SOURCE_UPLOAD;
+    const architecture = context.authoring().capabilities.forClip(clip);
+    const supportsAppearanceReferences = architecture.decision(
+      "characterRefineAppearanceReferences"
+    ).supported;
+    const hasDecodedVideo = clip.stages.slice(0, stageIdx).some(
+      (candidate) => stageProducesDecodedVideo(
+        candidate,
+        (feature) => architecture.decision(feature).supported
+      )
+    ) || sourceVideo !== null && (sourceVideoKind === MEDIA_SOURCE_UPLOAD || sourceVideoKind === MEDIA_SOURCE_PREVIOUS_CLIP);
+    if (!architecture.decision("characterRefine").supported || !CHARACTER_REFINE_REQUIRED_FEATURES.every(
+      (feature) => getVideoStagesHostBridge().hasBackendFeature(feature)
+    ) || !hasDecodedVideo) {
+      return;
+    }
+    const imageReferences = clip.references.filter(
+      (reference) => reference.kind === "image" && reference.id && clipReferenceIsUsable(reference)
+    );
+    const fields = document.createElement("div");
+    fields.className = "vst-detail-fields vst-character-refine-fields";
+    const appendGroup = () => {
+      const enabled = stage.characterRefine !== null;
+      const built = buildAccordionSection({
+        key: `bonita-${clip.id ?? clipIdx}-${stage.id ?? stageIdx}`,
+        label: "Make Them Bonita",
+        content: fields,
+        defaultOpen: enabled,
+        flattenContent: true,
+        className: "vst-character-refine-section vst-detail-span-full",
+        toggle: {
+          checked: enabled,
+          title: enabled ? "Turn off Make Them Bonita" : "Turn on Make Them Bonita",
+          onChange: (checked) => {
+            commit((target) => {
+              target.characterRefine = checked ? defaultCharacterRefine(
+                supportsAppearanceReferences ? imageReferences.flatMap(
+                  (reference) => reference.id ? [reference.id] : []
+                ) : []
+              ) : null;
+              if (checked) target.upscale = 1;
+            });
+            context.render();
+          }
+        }
+      });
+      if (stage.upscale !== 1)
+        updateCharacterRefineAvailability(built.section, stage.upscale);
+      appendHelp(
+        built.heading,
+        built.section,
+        "Make Them Bonita",
+        "Repair a person or character in this stage."
+      );
+      stageFields.appendChild(built.section);
+    };
+    const settings = stage.characterRefine ?? defaultCharacterRefine([]);
+    fields.appendChild(
+      buildField(
+        "Finder",
+        buildOptionSelect(
+          [
+            { value: "sam3", label: "SAM3" },
+            { value: "yolo", label: "YOLO" }
+          ],
+          settings.finder,
+          (value) => commit((target) => {
+            if (target.characterRefine) {
+              target.characterRefine.finder = value;
+            }
+          })
+        ),
+        void 0,
+        "SAM3 is usually best for movement. YOLO is faster for simple shots."
+      )
+    );
+    fields.appendChild(
+      buildField(
+        "Subject",
+        textInput2(bindings, "subject", CHARACTER_REFINE_SUBJECT_DEFAULT),
+        void 0,
+        'Describe who or what to follow, such as "person" or "dog".'
+      )
+    );
+    fields.appendChild(
+      buildField(
+        "Part",
+        textInput2(bindings, "part", CHARACTER_REFINE_PART_DEFAULT),
+        void 0,
+        'Name the area you want to repair, such as "face" or "hand".'
+      )
+    );
+    fields.appendChild(
+      slider(
+        "Subject Confidence",
+        "character-refine-subject-confidence",
+        settings.subjectConfidence,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
+        (target, value) => {
+          if (target.characterRefine) {
+            target.characterRefine.subjectConfidence = value;
+          }
+        },
+        {
+          help: "Lower this if Bonita loses the subject. Raise it if Bonita follows the wrong one."
+        }
+      )
+    );
+    fields.appendChild(
+      slider(
+        "Part Confidence",
+        "character-refine-part-confidence",
+        settings.partConfidence,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MIN,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_MAX,
+        CHARACTER_REFINE_DETECTION_THRESHOLD_STEP,
+        (target, value) => {
+          if (target.characterRefine) {
+            target.characterRefine.partConfidence = value;
+          }
+        },
+        {
+          help: "Lower this if Bonita misses the area. Raise it if Bonita chooses the wrong area."
+        }
+      )
+    );
+    for (const [label, key, help] of [
+      [
+        "Crop Width",
+        "cropWidth",
+        "Choose a wider repair image to include more space around the subject."
+      ],
+      [
+        "Crop Height",
+        "cropHeight",
+        "Choose a taller repair image to include more space above and below the subject."
+      ]
+    ]) {
+      fields.appendChild(
+        slider(
+          label,
+          `character-refine-${key}`,
+          settings[key],
+          CHARACTER_REFINE_CROP_DIMENSION_MIN,
+          CHARACTER_REFINE_CROP_DIMENSION_MAX,
+          CHARACTER_REFINE_CROP_DIMENSION_STEP,
+          (target, value) => {
+            if (target.characterRefine) {
+              target.characterRefine[key] = value;
+            }
+          },
+          {
+            help,
+            sliderMin: 256,
+            sliderMax: 2048,
+            isPot: true
+          }
+        )
+      );
+    }
+    fields.appendChild(
+      buildCheckbox(
+        "Verify Identity",
+        settings.verifyIdentity,
+        (enabled) => commit((target) => {
+          if (target.characterRefine) {
+            target.characterRefine.verifyIdentity = enabled;
+          }
+        }),
+        {
+          disabled: imageReferences.length === 0,
+          help: "InsightFace adds a slower identity check. Turn it on only when the scene has more than one person."
+        }
+      )
+    );
+    if (supportsAppearanceReferences) {
+      fields.appendChild(pictureRows(bindings, imageReferences));
+    }
+    appendGroup();
+  };
+
+  // frontend/detailStrip/stagePanel/modelSection.ts
+  var appendStageModelSection = ({
+    context,
+    clip,
+    clipIdx,
+    stageIdx,
+    stage,
+    defaults,
+    fields
+  }) => {
+    const rootModel = modelCatalogEntry(
+      defaults.modelCatalog,
+      clip.stages[0]?.model
+    );
+    const ownerArchitectureId = resolvedClipArchitectureId(
+      clip,
+      defaults.modelCatalog
+    );
+    const modelOptions = defaults.modelCatalog.entries.flatMap(
+      (entry) => {
+        const model = modelCatalogEntry(defaults.modelCatalog, entry.value);
+        const target = buildArchitectureRetargetPlan(
+          defaults.modelCatalog,
+          entry.value
+        );
+        if (!target || !model) return [];
+        const leavesAuthoredStagesCompatible = clip.stages.every(
+          (candidate, candidateIndex) => {
+            if (candidateIndex === stageIdx) return true;
+            const candidateModel = modelCatalogEntry(
+              defaults.modelCatalog,
+              candidate.model
+            );
+            return candidateModel?.architectureId === model.architectureId && candidateModel.compatibilityClassId !== null && candidateModel.compatibilityClassId === model.compatibilityClassId;
+          }
+        );
+        const requiresWholeClipConversion = stageIdx === 0 && (ownerArchitectureId === null || target.architectureId !== ownerArchitectureId);
+        const preservesClipLock = stageIdx === 0 ? requiresWholeClipConversion || leavesAuthoredStagesCompatible : model.architectureId === rootModel?.architectureId && model.compatibilityClassId !== null && model.compatibilityClassId === rootModel?.compatibilityClassId;
+        return preservesClipLock ? [{ value: entry.value, label: entry.label }] : [];
+      }
+    );
+    if (stage.model && !modelOptions.some((option) => option.value === stage.model)) {
+      modelOptions.unshift({
+        value: stage.model,
+        label: `${stage.model} (unsupported persisted value)`,
+        disabled: true
+      });
+    }
+    const modelSelect = buildOptionSelect(
+      modelOptions,
+      `${stage.model ?? ""}`,
+      (value) => {
+        const selectedModel = modelCatalogEntry(
+          defaults.modelCatalog,
+          value
+        );
+        const plan = buildArchitectureRetargetPlan(
+          defaults.modelCatalog,
+          value
+        );
+        if (!plan || !selectedModel) {
+          modelSelect.value = stage.model;
+          return;
+        }
+        if (stageIdx === 0 && (ownerArchitectureId === null || plan.architectureId !== ownerArchitectureId)) {
+          const conversion = planArchitectureConversion(
+            clip,
+            plan,
+            defaults.modelCatalog
+          );
+          if (!conversion) {
+            modelSelect.value = stage.model;
+            return;
+          }
+          context.structuralCommit((clips) => {
+            const clipId = clips[clipIdx]?.id;
+            if (!clipId) {
+              modelSelect.value = stage.model;
+              return null;
+            }
+            return {
+              command: {
+                type: "clip.convert-architecture",
+                clipId,
+                target: plan
+              },
+              selection: "render"
+            };
+          });
+          return;
+        }
+        context.structuralCommit((clips) => {
+          const clipId = clips[clipIdx]?.id;
+          const stageId = clips[clipIdx]?.stages[stageIdx]?.id;
+          if (!clipId || !stageId) {
+            modelSelect.value = stage.model;
+            return null;
+          }
+          return {
+            command: {
+              type: "stage.retarget-model",
+              clipId,
+              stageId,
+              target: plan
+            },
+            selection: "render"
+          };
+        });
+      }
+    );
+    const modelField = buildField("Model", modelSelect);
+    modelField.classList.add("vst-detail-span-2");
+    fields.appendChild(modelField);
+  };
+
+  // frontend/detailStrip/stagePanel/referenceGuideSection.ts
+  var appendSectionHeader = (fields, label) => {
+    const header = document.createElement("div");
+    header.className = "vst-detail-sec vst-detail-span-full vst-detail-crumb vst-detail-subsection-crumb";
+    header.setAttribute("role", "heading");
+    header.setAttribute("aria-level", "4");
+    header.textContent = label;
+    fields.appendChild(header);
+  };
+  var shortModelName = (modelName) => {
+    const parts = modelName.split(/[\\/]/);
+    return parts[parts.length - 1] || modelName;
+  };
+  var appendStageReferenceGuideSection = ({
+    context,
+    clip,
+    clipIdx,
+    stage,
+    stageIdx,
+    fields,
+    debouncedCommit
+  }) => {
+    const capabilityView = context.authoring().capabilities.forClip(clip);
+    if (clip.frameRefs.length > 0 && capabilityView.decision("stageReferenceStrengths").supported) {
+      appendSectionHeader(fields, "Keyframe Strengths");
+      const inactiveReason = "Keyframe strengths are inactive while Make Them Bonita is enabled.";
+      if (stage.characterRefine !== null) {
+        const note = document.createElement("p");
+        note.className = "vst-detail-note vst-detail-span-full";
+        note.textContent = inactiveReason;
+        fields.append(note);
+      }
+      const setRefHover = (refIdx, on) => {
+        context.getBoundBody()?.querySelector(
+          `.vst-refs-mark[data-clip-idx="${clipIdx}"][data-ref-idx="${refIdx}"]`
+        )?.classList.toggle("vst-ref-hover", on);
+      };
+      clip.frameRefs.forEach((ref, refIdx) => {
+        const current = refIdx < stage.frameRefStrengths.length ? stage.frameRefStrengths[refIdx] : STAGE_REF_STRENGTH_MAX;
+        const refSlider = buildSlider(
+          `Keyframe ${refIdx}`,
+          current,
+          STAGE_REF_STRENGTH_MIN,
+          STAGE_REF_STRENGTH_MAX,
+          STAGE_REF_STRENGTH_STEP,
+          (value) => {
+            debouncedCommit(`refstrength-${refIdx}`, (target) => {
+              if (refIdx < target.frameRefStrengths.length) {
+                target.frameRefStrengths[refIdx] = value;
+              }
+            });
+          },
+          {
+            title: `${refSourceLabel(ref.source ?? "")} · frame ${ref.frame ?? 0}${ref.fromEnd ? " (from end)" : ""}`
+          }
+        );
+        refSlider.classList.add("vst-stage-ref-slider");
+        if (stage.characterRefine !== null)
+          setFieldDisabled(refSlider, true, inactiveReason);
+        tagFocus(refSlider, `ref-${refIdx}`);
+        refSlider.addEventListener(
+          "mouseenter",
+          () => setRefHover(refIdx, true)
+        );
+        refSlider.addEventListener(
+          "mouseleave",
+          () => setRefHover(refIdx, false)
+        );
+        fields.appendChild(refSlider);
+      });
+    }
+    const applicableIcLoras = clip.icLoras.map((entry, entryIdx) => ({ entry, entryIdx })).filter(({ entry }) => entry.stage < 0 || entry.stage === stageIdx);
+    const icDecision = capabilityView.decision("icLora");
+    if (applicableIcLoras.length === 0 || !icDecision.supported) return;
+    appendSectionHeader(fields, "IC-LoRA Guide Strengths");
+    const icGroup = document.createDocumentFragment();
+    applicableIcLoras.forEach(({ entry, entryIdx }) => {
+      const displayName = architectureIcLoraDisplayName(
+        capabilityView.architectureId,
+        entry
+      );
+      const guideStrength = tagFocus(
+        buildNumber(
+          stage.icLoraStrengths[entryIdx] ?? 1,
+          STAGE_CONTROLNET_STRENGTH_MIN,
+          STAGE_CONTROLNET_STRENGTH_MAX,
+          STAGE_CONTROLNET_STRENGTH_STEP,
+          (value) => {
+            debouncedCommit(
+              `ic-lora-strength-${entryIdx}`,
+              (target) => {
+                target.icLoraStrengths[entryIdx] = value;
+              }
+            );
+          }
+        ),
+        `ic-lora-strength-${entryIdx}`
+      );
+      guideStrength.classList.add(
+        "lora-weight-input",
+        "vst-stage-iclora-strength"
+      );
+      const row = buildField(shortModelName(displayName), guideStrength);
+      row.classList.add("vst-stage-iclora-strength-row");
+      row.title = displayName;
+      icGroup.appendChild(row);
+    });
+    fields.appendChild(icGroup);
+  };
+
+  // frontend/detailStrip/stagePanel/samplingSection.ts
+  var STEPS_SLIDER_MAX = 20;
+  var CFG_SCALE_SLIDER_MAX = 10;
+  var appendStageDenoisingSection = (bindings) => {
+    const { stage, defaults, fields, slider } = bindings;
+    fields.appendChild(
+      slider(
+        "Steps",
+        "steps",
+        stage.steps,
+        defaults.stepsMin,
+        defaults.stepsMax,
+        defaults.stepsStep,
+        (target, value) => {
+          target.steps = Math.round(value);
+        },
+        { sliderMax: Math.min(STEPS_SLIDER_MAX, defaults.stepsMax) }
+      )
+    );
+    fields.appendChild(
+      slider(
+        "CFG Scale",
+        "cfg",
+        stage.cfgScale,
+        defaults.cfgScaleMin,
+        defaults.cfgScaleMax,
+        defaults.cfgScaleStep,
+        (target, value) => {
+          target.cfgScale = value;
+        },
+        { sliderMax: Math.min(CFG_SCALE_SLIDER_MAX, defaults.cfgScaleMax) }
+      )
+    );
+  };
+  var appendStageRefinementControls = (bindings) => {
+    const { stage, defaults, fields, slider } = bindings;
+    fields.appendChild(
+      slider(
+        "Control",
+        "control",
+        stage.control,
+        defaults.controlMin,
+        defaults.controlMax,
+        defaults.controlStep,
+        (target, value) => {
+          target.control = value;
+        },
+        {
+          title: "Regen strength — higher = more of the stage is re-generated",
+          help: "Regeneration strength for this refine stage. Higher re-generates more of the incoming frames (starting step = floor(Steps × (1 − Control))); at 0 the frames pass through untouched."
+        }
+      )
+    );
+  };
+  var appendStageSamplerSchedulerSection = ({
+    stage,
+    defaults,
+    fields,
+    stageCapabilities,
+    commit
+  }) => {
+    const persistedSelect = (values, labels, selected, assign) => {
+      const options = values.map((value, index) => ({
+        value,
+        label: labels[index] ?? value
+      }));
+      preserveSelectedOption(options, selected, "start", (value) => ({
+        value,
+        label: `${value} (unsupported persisted value)`,
+        disabled: true
+      }));
+      return buildOptionSelect(options, selected, assign);
+    };
+    const samplerField = buildField(
+      "Sampler",
+      persistedSelect(
+        defaults.samplerValues,
+        defaults.samplerLabels,
+        `${stage.sampler ?? ""}`,
+        (value) => commit((target) => {
+          target.sampler = value;
+        })
+      )
+    );
+    const samplerState = stageCapabilities.authoringState("sampler", true);
+    if (!samplerState.enabled) {
+      disableCapabilityControls(samplerField, samplerState);
+    }
+    fields.appendChild(samplerField);
+    const schedulerField = buildField(
+      "Scheduler",
+      persistedSelect(
+        defaults.schedulerValues,
+        defaults.schedulerLabels,
+        `${stage.scheduler ?? ""}`,
+        (value) => commit((target) => {
+          target.scheduler = value;
+        })
+      )
+    );
+    const schedulerState = stageCapabilities.authoringState("scheduler", true);
+    if (!schedulerState.enabled) {
+      disableCapabilityControls(schedulerField, schedulerState);
+    }
+    fields.appendChild(schedulerField);
+  };
+
+  // frontend/detailStrip/stagePanel/upscaleSection.ts
+  var UPSCALE_EPSILON = 1e-6;
+  var latentUpscaleFeature = (method) => {
+    const mode = upscaleModeForMethod(method);
+    return mode === "latent" ? "latentUpscale" : mode === "latent-model" ? "latentModelUpscale" : null;
+  };
+  var appendStageUpscaleSection = (bindings, isRefine) => {
+    if (!isRefine) return;
+    const { context, clip, stage, defaults, fields, slider, commit } = bindings;
+    const bonitaEnabled = stage.characterRefine !== null;
+    const capabilities = context.authoring().capabilities.forClip(clip);
+    const supportedMethods = defaults.upscaleMethodValues.flatMap(
+      (value, index) => {
+        const feature = latentUpscaleFeature(value);
+        return feature === null || capabilities.decision(feature).supported ? [
+          {
+            value,
+            label: defaults.upscaleMethodLabels[index] ?? value
+          }
+        ] : [];
+      }
+    );
+    if (stage.upscaleMethod && !supportedMethods.some((option) => option.value === stage.upscaleMethod)) {
+      supportedMethods.unshift({
+        value: stage.upscaleMethod,
+        label: `${stage.upscaleMethod} (unsupported persisted value)`,
+        disabled: true
+      });
+    }
+    const methodSelect = buildOptionSelect(
+      supportedMethods,
+      `${stage.upscaleMethod ?? ""}`,
+      (value) => {
+        commit((target) => {
+          target.upscaleMethod = value;
+        });
+      }
+    );
+    const methodField = buildField(
+      "Upscale Method",
+      methodSelect,
+      void 0,
+      "How frames are enlarged before this stage refines them. Only applies when Upscale is above 1×."
+    );
+    methodField.classList.add("vst-detail-span-2");
+    const syncMethod = (upscale) => {
+      const bonita = fields.querySelector(
+        ".vst-character-refine-section"
+      );
+      if (bonita) updateCharacterRefineAvailability(bonita, upscale);
+      const disabled = bonitaEnabled || Math.abs(upscale - 1) < UPSCALE_EPSILON;
+      setFieldDisabled(
+        methodField,
+        disabled,
+        bonitaEnabled ? "Upscale is unavailable while Make Them Bonita is on" : "Set Upscale above 1× to choose a method"
+      );
+    };
+    const upscaleSlider = slider(
+      "Upscale",
+      "upscale",
+      stage.upscale,
+      defaults.upscaleMin,
+      defaults.upscaleMax,
+      defaults.upscaleStep,
+      (target, value) => {
+        target.upscale = value;
+      },
+      {
+        onValue: syncMethod,
+        help: "Resolution multiplier applied to the incoming frames before this stage refines them. 1× keeps the size; above 1× enlarges using the Upscale Method."
+      }
+    );
+    setFieldDisabled(
+      upscaleSlider,
+      bonitaEnabled,
+      "Upscale is unavailable while Make Them Bonita is on"
+    );
+    fields.append(upscaleSlider, methodField);
+    syncMethod(stage.upscale);
+  };
+
+  // frontend/detailStrip/stagePanel.ts
+  var buildStageParamsColumn = (context, clip, clipIdx, stageIdx, stage, defaults) => {
+    const column = document.createElement("div");
+    column.className = "vst-detail-fields vst-detail-params";
+    const initVideoStage0 = stageIdx === 0 && !!clip.initVideo && stage.skipped !== true;
+    const isRefine = stageIdx >= 1 || initVideoStage0;
+    const stageCapabilities = context.authoring().capabilities.forStage(clip, stage);
+    const commit = (mutate) => {
+      context.commit((clips) => {
+        const target = clips[clipIdx]?.stages[stageIdx];
+        if (target) mutate(target);
+      });
+    };
+    const debouncedCommit = (key, mutate) => {
+      context.debouncedCommit(key, (clips) => {
+        const target = clips[clipIdx]?.stages[stageIdx];
+        if (target) mutate(target);
+      });
+    };
+    const slider = (label, focusKey, value, min, max, step, assign, options) => tagFocus(
+      buildSlider(
+        label,
+        value,
+        min,
+        max,
+        step,
+        (nextValue) => {
+          options?.onValue?.(nextValue);
+          debouncedCommit(
+            focusKey,
+            (target) => assign(target, nextValue)
+          );
+        },
+        options ? {
+          title: options.title,
+          help: options.help,
+          sliderMin: options.sliderMin,
+          sliderMax: options.sliderMax,
+          isPot: options.isPot
+        } : void 0
+      ),
+      focusKey
+    );
+    const fields = column;
+    fields.classList.toggle("vst-stage-fields-muted", stage.skipped === true);
+    const bindings = {
+      context,
+      clip,
+      clipIdx,
+      stageIdx,
+      stage,
+      defaults,
+      fields,
+      stageCapabilities,
+      commit,
+      debouncedCommit,
+      slider
+    };
+    appendStageModelSection(bindings);
+    appendStageDenoisingSection(bindings);
+    appendStageSamplerSchedulerSection(bindings);
+    if (isRefine) {
+      const heading = document.createElement("div");
+      heading.className = "vst-detail-sec vst-detail-span-full vst-detail-crumb vst-detail-subsection-crumb";
+      heading.setAttribute("role", "heading");
+      heading.setAttribute("aria-level", "4");
+      heading.textContent = "Refinement";
+      fields.append(heading);
+      appendStageRefinementControls(bindings);
+      appendStageUpscaleSection(bindings, isRefine);
+    }
+    appendStageReferenceGuideSection(bindings);
+    appendCharacterRefineSection(bindings);
+    if (initVideoStage0) {
+      const note = document.createElement("p");
+      note.className = "vst-detail-note vst-stage-passthrough-note";
+      note.textContent = "This stage starts from the source footage — Control sets how much is re-generated (0 passes it through).";
+      column.insertBefore(note, column.firstChild);
+    }
+    return column;
+  };
+
+  // frontend/multiSelectPicker.ts
+  var pickerSequence = 0;
+  var selectedValues = (picker) => Array.from(
+    picker.querySelectorAll(
+      "[data-vst-multi-select-option]"
+    )
+  ).filter((input2) => input2.checked).map((input2) => input2.value);
+  var setOptionChecked = (picker, value, checked) => {
+    for (const input2 of picker.querySelectorAll(
+      "[data-vst-multi-select-option]"
+    )) {
+      if (input2.value === value) {
+        input2.checked = checked;
+      }
+    }
+  };
+  var buildMultiSelectPicker = (options) => {
+    const picker = document.createElement("div");
+    picker.className = "vst-multi-select";
+    picker.dataset.vstMultiSelect = "true";
+    const nativeSelect = document.createElement("select");
+    nativeSelect.className = "vst-multi-select-native";
+    nativeSelect.multiple = true;
+    nativeSelect.hidden = true;
+    const trigger = document.createElement("div");
+    trigger.className = "vst-multi-select-trigger";
+    trigger.dataset.vstMultiSelectTrigger = "true";
+    trigger.role = "combobox";
+    trigger.tabIndex = 0;
+    trigger.title = `${options.label} - click to edit`;
+    trigger.setAttribute("aria-haspopup", "listbox");
+    trigger.setAttribute("aria-expanded", "false");
+    const pills = document.createElement("span");
+    pills.className = "vst-multi-select-pills";
+    const caret = document.createElement("span");
+    caret.className = "vst-multi-select-caret";
+    caret.textContent = "▾";
+    trigger.append(pills, caret);
+    const panel = document.createElement("div");
+    panel.className = "vst-multi-select-panel";
+    panel.dataset.vstMultiSelectPanel = "true";
+    panel.hidden = true;
+    panel.setAttribute("popover", "manual");
+    panel.id = `vst_multi_select_panel_${++pickerSequence}`;
+    trigger.setAttribute("aria-controls", panel.id);
+    const filter = document.createElement("input");
+    filter.type = "text";
+    filter.className = "auto-text vst-multi-select-filter";
+    filter.dataset.vstMultiSelectFilter = "true";
+    filter.placeholder = options.filterPlaceholder;
+    filter.autocomplete = "off";
+    const list2 = document.createElement("div");
+    list2.className = "vst-multi-select-list";
+    list2.role = "listbox";
+    list2.setAttribute("aria-multiselectable", "true");
+    const selected = new Set(options.selected);
+    for (const option of options.options) {
+      const nativeOption = document.createElement("option");
+      nativeOption.value = option.value;
+      nativeOption.textContent = option.label;
+      nativeOption.selected = selected.has(option.value);
+      nativeSelect.appendChild(nativeOption);
+      const row = document.createElement("label");
+      row.className = "vst-multi-select-option";
+      const input2 = document.createElement("input");
+      input2.type = "checkbox";
+      input2.className = "auto-checkbox";
+      input2.dataset.vstMultiSelectOption = "true";
+      input2.value = option.value;
+      input2.checked = selected.has(option.value);
+      const text2 = document.createElement("span");
+      text2.textContent = option.label;
+      row.append(input2, text2);
+      list2.appendChild(row);
+    }
+    const actions = document.createElement("div");
+    actions.className = "vst-multi-select-actions";
+    const count = document.createElement("span");
+    count.className = "vst-multi-select-count";
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "basic-button small-button vst-multi-select-clear";
+    clear.textContent = "Clear";
+    actions.append(count, clear);
+    panel.append(filter, list2, actions);
+    picker.append(nativeSelect, trigger, panel);
+    const renderSelection = () => {
+      const values = selectedValues(picker);
+      const selectedSet = new Set(values);
+      for (const option of Array.from(nativeSelect.options)) {
+        option.selected = selectedSet.has(option.value);
+      }
+      pills.replaceChildren();
+      for (const option of options.options) {
+        if (!selectedSet.has(option.value)) {
+          continue;
+        }
+        const pill = document.createElement("span");
+        pill.className = "vst-multi-select-pill";
+        pill.append(option.label);
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "vst-multi-select-pill-remove";
+        remove.dataset.vstMultiSelectRemove = option.value;
+        remove.title = `Remove ${option.label}`;
+        remove.setAttribute("aria-label", remove.title);
+        remove.textContent = "×";
+        pill.appendChild(remove);
+        pills.appendChild(pill);
+      }
+      if (values.length === 0) {
+        const placeholder = document.createElement("span");
+        placeholder.className = "vst-multi-select-placeholder";
+        placeholder.textContent = options.placeholder;
+        pills.appendChild(placeholder);
+      }
+      count.textContent = `${values.length} selected`;
+      return values;
+    };
+    const applyFilter = () => {
+      const wanted = filter.value.trim().toLowerCase();
+      for (const row of list2.querySelectorAll(
+        ".vst-multi-select-option"
+      )) {
+        row.style.display = !wanted || row.textContent?.toLowerCase().includes(wanted) ? "" : "none";
+      }
+    };
+    const positionPanel = () => {
+      const rect = trigger.getBoundingClientRect();
+      const edge = 8;
+      const gap = 4;
+      const width = Math.min(rect.width, window.innerWidth - edge * 2);
+      panel.style.width = `${width}px`;
+      panel.style.left = `${Math.max(edge, Math.min(rect.left, window.innerWidth - width - edge))}px`;
+      panel.style.maxHeight = "none";
+      const height = panel.offsetHeight;
+      const below = Math.max(
+        0,
+        window.innerHeight - rect.bottom - gap - edge
+      );
+      const above = Math.max(0, rect.top - gap - edge);
+      const upward = height > below && above > below;
+      const available = upward ? above : below;
+      panel.style.maxHeight = `${available}px`;
+      panel.style.top = `${Math.max(edge, upward ? rect.top - gap - Math.min(height, available) : rect.bottom + gap)}px`;
+    };
+    let cleanup = null;
+    const setOpen = (open) => {
+      panel.hidden = !open;
+      trigger.setAttribute("aria-expanded", `${open}`);
+      cleanup?.();
+      cleanup = null;
+      if (!open) {
+        panel.hidePopover?.();
+        return;
+      }
+      filter.value = "";
+      applyFilter();
+      panel.showPopover?.();
+      positionPanel();
+      const closeOutside = (event) => {
+        if (!picker.contains(event.target)) {
+          setOpen(false);
+        }
+      };
+      const closeOnScroll = (event) => {
+        if (!panel.contains(event.target)) setOpen(false);
+      };
+      const observer = new MutationObserver(() => {
+        if (!picker.isConnected) setOpen(false);
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      document.addEventListener("pointerdown", closeOutside);
+      document.addEventListener("scroll", closeOnScroll, true);
+      window.addEventListener("resize", positionPanel);
+      cleanup = () => {
+        observer.disconnect();
+        document.removeEventListener("pointerdown", closeOutside);
+        document.removeEventListener("scroll", closeOnScroll, true);
+        window.removeEventListener("resize", positionPanel);
+      };
+      filter.focus({ preventScroll: true });
+    };
+    const commitSelection = () => {
+      options.onChange(renderSelection());
+    };
+    picker.addEventListener("click", (event) => {
+      const target = event.target;
+      const remove = target.closest(
+        "[data-vst-multi-select-remove]"
+      );
+      if (remove) {
+        setOptionChecked(
+          picker,
+          remove.dataset.vstMultiSelectRemove ?? "",
+          false
+        );
+        commitSelection();
+        event.stopPropagation();
+        return;
+      }
+      if (target.closest("[data-vst-multi-select-trigger]")) {
+        setOpen(panel.hidden !== false);
+        return;
+      }
+      if (target.closest(".vst-multi-select-clear")) {
+        for (const input2 of picker.querySelectorAll(
+          "[data-vst-multi-select-option]"
+        )) {
+          input2.checked = false;
+        }
+        commitSelection();
+      }
+    });
+    picker.addEventListener("change", (event) => {
+      if (event.target.matches(
+        "[data-vst-multi-select-option]"
+      )) {
+        commitSelection();
+      }
+    });
+    filter.addEventListener("input", () => {
+      applyFilter();
+      if (!panel.hidden) positionPanel();
+    });
+    picker.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        trigger.focus();
+        return;
+      }
+      if ((event.key === "Enter" || event.key === " ") && event.target === trigger) {
+        event.preventDefault();
+        setOpen(panel.hidden !== false);
+      }
+    });
+    renderSelection();
+    return picker;
+  };
+
+  // frontend/detailStrip/videoStagesSettings.ts
+  var STORAGE_PREFIX = "videostages";
+  var buildBonitaInstallSetting = () => {
+    const installed = CHARACTER_REFINE_REQUIRED_FEATURES.every(
+      (feature) => getVideoStagesHostBridge().hasBackendFeature(feature)
+    );
+    const section = document.createElement("fieldset");
+    section.id = "vst_bonita_install";
+    section.className = "vst-bonita-install-setting";
+    const legend = document.createElement("legend");
+    legend.textContent = "Make Them Bonita";
+    const hint = document.createElement("small");
+    if (installed) {
+      hint.textContent = "ComfyUI-Bonita is installed.";
+    } else {
+      const repository = document.createElement("a");
+      repository.href = CHARACTER_REFINE_REPOSITORY_URL;
+      repository.target = "_blank";
+      repository.rel = "noopener noreferrer";
+      repository.textContent = "ComfyUI-Bonita";
+      hint.append(
+        "Install ",
+        repository,
+        " - tracked detail repair for supported video models"
+      );
+    }
+    const install = buildDetailActionButton({
+      label: installed ? "ComfyUI-Bonita Installed" : "Install ComfyUI-Bonita",
+      title: installed ? "ComfyUI-Bonita is installed" : "Install ComfyUI-Bonita",
+      className: "vst-install-bonita",
+      disabled: installed,
+      onClick: () => {
+        if (!installHostFeature(
+          CHARACTER_REFINE_INSTALL_FEATURE,
+          section.id
+        )) {
+          getVideoStagesHostBridge().showError(
+            "SwarmUI's ComfyUI feature installer is unavailable."
+          );
+        }
+      }
+    });
+    install.dataset.vstInstallBonita = "true";
+    section.append(legend, hint, install);
+    return section;
+  };
+  var buildLoraFolderSetting = (onChange) => {
+    const folders = availableLoraFolders(
+      getDropdownOptions("loras", "input_loras").values
+    );
+    const saved = getTimelineAuthoringSettings().loraFolders;
+    const section = document.createElement("fieldset");
+    section.className = "vst-lora-folder-setting";
+    const legend = document.createElement("legend");
+    legend.textContent = "LoRA folders";
+    const hint = document.createElement("small");
+    hint.textContent = "Only checked top-level folders appear in VideoStages LoRA dropdowns.";
+    const picker = buildMultiSelectPicker({
+      label: "LoRA folders",
+      placeholder: "No folders selected",
+      filterPlaceholder: "Filter LoRA folders...",
+      options: folders.map((folder) => ({
+        value: folder,
+        label: folder === ROOT_LORA_FOLDER ? "(Root)" : folder
+      })),
+      selected: saved ?? folders,
+      onChange: (included) => {
+        setTimelineAuthoringSetting(
+          "loraFolders",
+          included.length === folders.length ? null : included
+        );
+        onChange();
+      }
+    });
+    section.append(legend, hint, picker);
+    return section;
+  };
+  var resetVideoStages = () => {
+    const empty = getState();
+    empty.dimsExplicit = false;
+    empty.clips = [];
+    empty.audioTracks = [];
+    saveState(empty, {
+      notifyDomChange: true,
+      origin: "timeline"
+    });
+    try {
+      const keys = [];
+      for (let index = 0; index < localStorage.length; index++) {
+        const key = localStorage.key(index);
+        if (key?.toLowerCase().startsWith(STORAGE_PREFIX)) {
+          keys.push(key);
+        }
+      }
+      for (const key of keys) {
+        localStorage.removeItem(key);
+      }
+    } catch {
+    }
+    resetRememberedAccordionSections();
+  };
+  var buildVideoStagesSettingsFields = (onLoraFoldersChanged) => {
+    const fields = document.createElement("div");
+    fields.className = "vst-videostages-settings-fields";
+    fields.append(
+      buildLoraFolderSetting(onLoraFoldersChanged),
+      buildBonitaInstallSetting()
+    );
+    return fields;
+  };
+  var buildResetVideoStagesButton = (afterReset) => buildDetailActionButton({
+    label: "Reset VideoStages",
+    title: "Clear all saved VideoStages data and settings",
+    className: "small-button vst-reset-videostages",
+    variant: "interrupt",
+    onClick: () => {
+      resetVideoStages();
+      afterReset();
+    }
+  });
 
   // frontend/droppedReferenceMedia.ts
   var EXTENSION_KINDS = Object.fromEntries(
@@ -17479,377 +15197,1272 @@ ${slot}`;
     };
   };
 
-  // frontend/timelineDetailStrip.ts
-  var DETAIL_CLASS2 = "vst-detail";
-  var REFERENCE_DROP_TARGET = ".vst-detail-add-ref, .vst-detail-add-clip-ref";
-  var FILE_DROP_HOVER_CLASS = "vst-file-drop-hover";
-  var createTimelineDetailStrip = () => {
-    let boundBody = null;
-    let dockEl = null;
-    let unsubscribe = null;
-    let rendering = false;
-    let suppressSelectionRender = false;
-    let settingsMode = null;
-    let revealSelectionOnNextRender = false;
-    let activeFileDropTarget = null;
-    let renderEnabled = true;
-    let activeSnapshot = null;
-    let draftQueue;
-    let renderImplementation = () => {
-    };
-    const render = (meta, snapshot = captureAuthoringTransactionSnapshot()) => {
-      renderEnabled = true;
-      renderImplementation(meta, snapshot);
-    };
-    const authoring = () => activeSnapshot ?? captureAuthoringTransactionSnapshot();
-    let renderedSelection = null;
-    const focus = createDetailFocusSession({
-      getDock: () => dockEl,
-      isRendering: () => rendering,
-      flushPending: () => draftQueue?.flush()
-    });
-    const syncValueDerivedUi = (selection) => {
-      if (!selection || !dockEl) {
+  // frontend/clipEditor/referenceDrops.ts
+  var bindReferenceDrop = (button2, clipId, kind, operations) => {
+    const addFiles = async (transfer) => {
+      const files = await collectDroppedFiles(transfer);
+      if (kind === "keyframe") {
+        const uploads = await Promise.all(
+          files.map(async (file) => {
+            const data = await fileAsDataUri(file);
+            return data ? { data: storeBrowserMedia(data), fileName: file.name } : null;
+          })
+        );
+        const added2 = operations.addRefEntries(
+          clipId,
+          uploads.flatMap((upload) => upload ? [upload] : [])
+        );
+        if (added2 < files.length) {
+          const skipped2 = files.length - added2;
+          getVideoStagesHostBridge().showError(
+            `Added ${added2} of ${files.length} keyframes. ${skipped2} ${skipped2 === 1 ? "file" : "files"} could not be read or no supported keyframe position remained.`
+          );
+        }
         return;
       }
-      const state = getState();
-      const breadcrumb = dockEl.querySelector(".vst-detail-crumb");
-      if (breadcrumb) {
-        breadcrumb.textContent = detailBreadcrumb(
-          selection,
-          state.clips,
-          state.fps,
-          authoring().capabilities
+      const results = await Promise.all(
+        files.map(async (file) => ({
+          file,
+          media: await readDroppedReferenceMedia(file).catch(() => null)
+        }))
+      );
+      const references = results.flatMap(
+        ({ media }) => media ? [media] : []
+      );
+      const added = operations.addClipReferences(clipId, references);
+      if (added < references.length) {
+        getVideoStagesHostBridge().showError(
+          "This architecture accepts only image references for identity verification."
+        );
+      }
+      const skipped = results.filter(({ media }) => !media).map(({ file }) => file.name);
+      if (skipped.length > 0) {
+        getVideoStagesHostBridge().showError(
+          `Unsupported reference files: ${skipped.join(", ")}`
         );
       }
     };
-    draftQueue = createDetailDraftQueue({
-      focus,
-      getDock: () => dockEl,
-      isRendering: () => rendering,
-      getRenderedSelection: () => renderedSelection,
-      syncValueDerivedUi,
-      render,
-      setSelectionSilently: (selection) => {
-        suppressSelectionRender = true;
-        setSelection(selection);
-        suppressSelectionRender = false;
-      }
-    });
-    const selectionOperations = createDetailSelectionOperations(
-      draftQueue.structuralCommit,
-      captureAuthoringTransactionSnapshot
-    );
-    const context = {
-      commit: draftQueue.commit,
-      commitState: draftQueue.commitState,
-      debouncedCommit: draftQueue.debouncedCommit,
-      debouncedCommitState: draftQueue.debouncedCommitState,
-      buildClampedNumber: draftQueue.buildClampedNumber,
-      structuralCommit: draftQueue.structuralCommit,
-      render,
-      authoring,
-      addRefEntry: selectionOperations.addRefEntry,
-      deleteRefEntry: selectionOperations.deleteRefEntry,
-      addClipReference: selectionOperations.addClipReference,
-      deleteClipReference: selectionOperations.deleteClipReference,
-      addPromptWindow: selectionOperations.addPromptWindow,
-      deleteWindowEntry: selectionOperations.deleteWindowEntry,
-      createRetake: selectionOperations.createRetake,
-      removeRetake: selectionOperations.removeRetake,
-      deleteClip: selectionOperations.deleteClip,
-      addStage: selectionOperations.addStage,
-      deleteStage: selectionOperations.deleteStage,
-      selectStage: selectionOperations.selectStage,
-      toggleClipSkip: selectionOperations.toggleClipSkip,
-      toggleStageSkip: selectionOperations.toggleStageSkip,
-      getBoundBody: () => boundBody,
-      getSettingsMode: () => settingsMode,
-      setSettingsMode: (mode) => {
-        settingsMode = mode;
-      }
-    };
-    const ensureDetail = () => {
-      if (!dockEl) {
-        throw new Error("detail strip not attached");
-      }
-      return dockEl;
-    };
-    const referenceDropButton = (event) => {
-      const button2 = event.target instanceof Element ? event.target.closest(REFERENCE_DROP_TARGET) : null;
-      return button2?.disabled === false ? button2 : null;
-    };
-    const setFileDropTarget = (button2) => {
-      if (activeFileDropTarget === button2) {
-        return;
-      }
-      activeFileDropTarget?.classList.remove(FILE_DROP_HOVER_CLASS);
-      activeFileDropTarget = button2;
-      activeFileDropTarget?.classList.add(FILE_DROP_HOVER_CLASS);
-    };
-    const dropTarget = (button2) => {
-      const clipId = button2.dataset.vstClipId;
-      if (!clipId) {
-        return null;
-      }
-      const kind = button2.classList.contains("vst-detail-add-ref") ? "keyframe" : "clip-reference";
-      return { clipId, kind };
-    };
-    const onDockDragOver = (event) => {
-      const button2 = referenceDropButton(event);
-      if (!button2 || !hasDroppedFiles(event.dataTransfer) || !dropTarget(button2)) {
+    button2.addEventListener("dragover", (event) => {
+      if (button2.disabled || !hasDroppedFiles(event.dataTransfer)) {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
-      setFileDropTarget(button2);
+      button2.classList.add("vst-file-drop-hover");
       if (event.dataTransfer) {
         event.dataTransfer.dropEffect = "copy";
       }
-    };
-    const onDockDragLeave = (event) => {
-      const button2 = activeFileDropTarget;
-      if (!button2) {
+    });
+    button2.addEventListener("dragleave", (event) => {
+      if (event.relatedTarget instanceof Node && button2.contains(event.relatedTarget)) {
         return;
       }
-      const related = event.relatedTarget;
-      if (related instanceof Node && button2.contains(related)) {
-        return;
-      }
-      if (event.target instanceof Node && button2.contains(event.target)) {
-        setFileDropTarget(null);
-      }
-    };
-    const onDockDrop = (event) => {
-      const button2 = referenceDropButton(event);
-      const target = button2 ? dropTarget(button2) : null;
-      const transfer = event.dataTransfer;
-      if (!button2 || !transfer || !hasDroppedFiles(transfer) || !target) {
+      button2.classList.remove("vst-file-drop-hover");
+    });
+    button2.addEventListener("drop", (event) => {
+      button2.classList.remove("vst-file-drop-hover");
+      if (button2.disabled || !event.dataTransfer || !hasDroppedFiles(event.dataTransfer)) {
         return;
       }
       event.preventDefault();
       event.stopPropagation();
-      setFileDropTarget(null);
-      void collectDroppedFiles(transfer).then(async (files) => {
-        if (target.kind === "keyframe") {
-          const uploads = await Promise.all(
-            files.map(async (file) => {
-              const data = await fileAsDataUri(file);
-              return data ? {
-                data: storeBrowserMedia(data),
-                fileName: file.name
-              } : null;
-            })
-          );
-          const added = selectionOperations.addRefEntries(
-            target.clipId,
-            uploads.flatMap((upload) => upload ? [upload] : [])
-          );
-          if (added < files.length) {
-            const skipped = files.length - added;
-            getVideoStagesHostBridge().showError(
-              `Added ${added} of ${files.length} keyframes. ${skipped} ${skipped === 1 ? "file" : "files"} could not be read or no supported keyframe position remained.`
-            );
-          }
-          return;
-        }
-        return Promise.all(
-          files.map(async (file) => ({
-            file,
-            media: await readDroppedReferenceMedia(file).catch(
-              () => null
-            )
-          }))
-        ).then((results) => {
-          const references = results.flatMap(
-            ({ media }) => media ? [media] : []
-          );
-          const added = selectionOperations.addClipReferences(
-            target.clipId,
-            references
-          );
-          if (added < references.length) {
-            getVideoStagesHostBridge().showError(
-              "This architecture accepts only image references for identity verification."
-            );
-          }
-          const skipped = results.filter(({ media }) => !media).map(({ file }) => file.name);
-          if (skipped.length > 0) {
-            getVideoStagesHostBridge().showError(
-              `Unsupported reference files: ${skipped.join(", ")}`
-            );
-          }
-        });
+      void addFiles(event.dataTransfer).catch(() => {
+        getVideoStagesHostBridge().showError(
+          "Could not read dropped files."
+        );
       });
-    };
-    renderImplementation = (meta, snapshot) => {
-      if (!dockEl) {
-        return;
-      }
-      activeSnapshot = snapshot;
-      try {
-        if (meta?.origin === "detail-strip" && meta.hint === "value-only" && renderedSelection && isSameSelection(getSelection(), renderedSelection)) {
-          draftQueue.markCurrentSource();
-          syncValueDerivedUi(renderedSelection);
-          return;
-        }
-        draftQueue.flush();
-        rendering = true;
-        draftQueue.markCurrentSource();
-        const detail = ensureDetail();
-        const state = getState();
-        const clips = state.clips;
-        const rawSelection = getSelection();
-        const selection = clampDetailSelection(
-          rawSelection,
-          clips,
-          state.audioTracks,
-          state.fps,
-          snapshot.capabilities
-        );
-        if (!isSameSelection(rawSelection, selection)) {
-          setSelection(selection);
-          return;
-        }
-        const revealSelection = revealSelectionOnNextRender;
-        revealSelectionOnNextRender = false;
-        renderDetailShell({
-          detail,
-          context,
-          focus,
-          state,
+    });
+  };
+
+  // frontend/clipEditor/sections.ts
+  function clipSections(state, clipIdx, context) {
+    const clip = state.clips[clipIdx];
+    const snapshot = context.authoring();
+    const capabilities = snapshot.capabilities.forClip(clip);
+    const singleton = (key, label, build, selection) => ({
+      key,
+      label,
+      items: [
+        {
+          key: `${clip.id}/${key}`,
+          label,
           selection,
-          revealSelection
+          fields: () => build(scopeFields(context, `${clip.id}/${key}`))
+        }
+      ]
+    });
+    const remove = (run) => ({
+      key: "remove-item",
+      label: "Delete",
+      kind: "delete",
+      run
+    });
+    const repeated = (key, label, entries, build, selection, add, removeAt, visible = true, layout = "cards") => visible ? [
+      {
+        key,
+        label,
+        layout,
+        actions: [
+          {
+            key: `add-${key}`,
+            label: `+ Add ${label === "Stages" ? "stage" : label === "Keyframes" ? "keyframe" : label === "References" ? "reference" : label === "Relay prompts" ? "relay prompt" : label === "LoRAs" ? "LoRA" : "IC-LoRA"}`,
+            kind: "add",
+            run: add
+          }
+        ],
+        items: entries.map((entry, index) => {
+          const scope = `${clip.id}/${key}/${entry.id || index}`;
+          const contextLabel = key === "stages" ? `S${index}` : String(index);
+          return {
+            key: scope,
+            contextLabel,
+            label: key === "stages" ? `Stage ${contextLabel}` : `${label} ${contextLabel}`,
+            selection: selection(index),
+            fields: () => build(
+              scopeFields(context, scope),
+              entry,
+              index
+            ),
+            actions: key === "stages" && index === 0 ? [] : [remove(() => removeAt(index))]
+          };
+        })
+      }
+    ] : [];
+    const structural = (edit) => context.structuralCommit((clips) => {
+      const target = clips[clipIdx];
+      if (!target) return null;
+      edit(target);
+      return "render";
+    });
+    const prompt = singleton(
+      "prompt",
+      "Prompt & clip",
+      (ctx) => [
+        buildMajorPromptFields(ctx, clip, clipIdx, { rows: 3 }),
+        buildClipColumn(
+          ctx,
+          clip,
+          clipIdx,
+          capabilities.authoringState(
+            "referenceFraming",
+            clip.refFraming !== "crop"
+          ),
+          capabilities.architectureId === "minimax" && getVideoStagesHostBridge().hasBackendFeature(
+            H3_ATTENTION_WINDOW_FEATURE
+          ),
+          capabilities.architectureId !== "minimax" ? "hidden" : getVideoStagesHostBridge().hasBackendFeature(
+            H3_TEXT_ENCODER_FEATURE
+          ) ? "ready" : "install",
+          capabilities.audioSourceKinds.includes("Native")
+        )
+      ],
+      { kind: "prompt-major", clipIdx }
+    );
+    if (clipIdx > 0)
+      prompt.actions = [
+        {
+          key: "toggle-clip",
+          label: clip.skipped ? "Include clip" : "Skip clip",
+          run: () => context.toggleClipSkip(clipIdx)
+        }
+      ];
+    const stages = repeated(
+      "stages",
+      "Stages",
+      clip.stages,
+      (ctx, entry, index) => buildStageParamsColumn(
+        ctx,
+        clip,
+        clipIdx,
+        index,
+        entry,
+        snapshot.defaults
+      ),
+      (index) => ({ kind: "clip", clipIdx, stageIdx: index }),
+      () => context.addStage(clipIdx),
+      (index) => context.deleteStage(clipIdx, index)
+    );
+    for (const [index, item] of stages[0].items.entries()) {
+      if (index > 0)
+        item.toggle = {
+          key: "toggle-stage",
+          label: `Enable stage S${index}`,
+          checked: !clip.stages[index].skipped,
+          run: () => context.toggleStageSkip(clipIdx, index)
+        };
+    }
+    const sections = [
+      prompt,
+      ...stages,
+      ...repeated(
+        "loras",
+        "LoRAs",
+        clip.loras.map((entry, index) => ({
+          ...entry,
+          id: `lora-${index}`
+        })),
+        (ctx, _entry, index) => {
+          const controls = buildClipLoraControls(
+            ctx,
+            clip,
+            clipIdx,
+            index,
+            snapshot.defaults
+          );
+          const fields = element("div", "vst-detail-fields");
+          fields.append(
+            buildField("Model", controls.model),
+            buildField("Weight", controls.weight)
+          );
+          return fields;
+        },
+        () => ({ kind: "clip", clipIdx, stageIdx: 0 }),
+        () => structural((target) => {
+          const name = snapshot.defaults.loraValues.find(
+            (value) => !target.loras.some((lora) => lora.name === value)
+          );
+          if (name)
+            appendLoraToClip(
+              target,
+              name,
+              defaultLoraWeight(snapshot.defaults, name)
+            );
+        }),
+        (index) => structural((target) => {
+          removeLoraAt(target, index);
+        }),
+        true,
+        "rows"
+      ),
+      ...repeated(
+        "keyframes",
+        "Keyframes",
+        clip.frameRefs,
+        (ctx, entry, index) => buildKeyframeFields(
+          ctx,
+          clip,
+          clipIdx,
+          entry,
+          index,
+          state.fps
+        ),
+        (index) => ({ kind: "ref", clipIdx, refIdx: index }),
+        () => context.addRefEntry(clipIdx),
+        (index) => context.deleteRefEntry(clipIdx, index),
+        capabilities.decision("frameReferences").supported || clip.frameRefs.length > 0,
+        "rows"
+      ),
+      ...repeated(
+        "references",
+        "References",
+        clip.references,
+        (ctx, _entry, index) => buildClipReferenceFields(
+          ctx,
+          clipIdx,
+          index,
+          state.clips,
+          state.fps
+        ),
+        (index) => ({ kind: "clip-ref", clipIdx, referenceIdx: index }),
+        () => context.addClipReference(clipIdx),
+        (index) => context.deleteClipReference(clipIdx, index),
+        clipReferenceAuthoring(capabilities).decision.supported || clip.references.length > 0,
+        "rows"
+      ),
+      ...repeated(
+        "ic-loras",
+        "IC-LoRAs",
+        clip.icLoras,
+        (ctx, _entry, index) => buildArchitectureIcLoraFields(
+          ctx,
+          clip,
+          clipIdx,
+          snapshot.defaults,
+          index
+        ),
+        (index) => ({ kind: "ic-lora", clipIdx, entryIdx: index }),
+        () => structural((target) => {
+          appendDefaultIcLora(target, snapshot.defaults);
+        }),
+        (index) => structural((target) => {
+          removeIcLoraEntryAt(target, index);
+        }),
+        capabilities.decision("icLora").supported || clip.icLoras.length > 0,
+        "rows"
+      ),
+      ...repeated(
+        "relay-prompts",
+        "Relay prompts",
+        clip.promptWindows,
+        (ctx, _entry, index) => buildRelayPromptFields(ctx, clip, clipIdx, index),
+        (index) => ({ kind: "prompt-minor", clipIdx, windowIdx: index }),
+        () => context.addPromptWindow(clipIdx),
+        (index) => context.deleteWindowEntry(clipIdx, index)
+      ),
+      singleton(
+        "source-video",
+        "Source video",
+        (ctx) => buildInitVideoFields(
+          ctx,
+          clip,
+          clipIdx,
+          clipIdx === 0 && clip.audioOnly === true || clipIdx === 1 && state.clips[0]?.audioOnly === true
+        ),
+        { kind: "clip", clipIdx, stageIdx: 0 }
+      ),
+      ...capabilities.clipAudio.supported || clip.uploadedAudio || clip.audioSource !== defaultAuthoringAudioSource(capabilities.audioSourceKinds) || clip.reuseAudio || clip.clipLengthFromAudio || clip.clipLengthFromControlNet || clip.saveAudioTrack ? [
+        singleton(
+          "audio",
+          "Audio",
+          (ctx) => buildBaseAudioFields(ctx, clipIdx, state),
+          { kind: "audio", clipIdx }
+        )
+      ] : [],
+      ...capabilities.decision("retake").supported || clip.retake ? [
+        singleton(
+          "retake",
+          "Retake",
+          (ctx) => buildRetakeFields(ctx, clip, clipIdx),
+          { kind: "retake", clipIdx }
+        )
+      ] : []
+    ];
+    if (clipIdx > 0) {
+      const preceding = clipIdx - 1;
+      const relationship = clipRelationship(state.clips, preceding);
+      const leftClipIdx = relationship === SOURCE_AUDIO_RELATIONSHIP || relationship === SOURCE_VIDEO_RELATIONSHIP ? preceding : executableBoundaries(state.clips).find(
+        (boundary) => boundary.rightIdx === clipIdx
+      )?.leftIdx ?? preceding;
+      sections.push(
+        singleton(
+          "join",
+          "Join from previous clip",
+          (ctx) => buildBoundaryFields(
+            ctx,
+            { kind: "boundary", leftClipIdx },
+            state
+          ),
+          { kind: "boundary", leftClipIdx }
+        )
+      );
+    }
+    sections.push(
+      singleton(
+        "output",
+        "Output settings",
+        (ctx) => buildSettingsFields(ctx, state)
+      )
+    );
+    sections.push(
+      singleton("settings", "VideoStages settings", (ctx) => {
+        const fields = buildVideoStagesSettingsFields(() => {
+          window.dispatchEvent(
+            new Event(TIMELINE_AUTHORING_SETTINGS_CHANGED)
+          );
+          ctx.render();
         });
-        renderedSelection = selection;
+        fields.append(buildResetVideoStagesButton(ctx.render));
+        return fields;
+      })
+    );
+    const incoming = clipReferenceAuthoring(capabilities).mode === "all" ? incomingReferenceContinueForClip(
+      state.clips,
+      state.fps,
+      snapshot.capabilities,
+      clipIdx
+    ) : null;
+    const references = sections.find((entry) => entry.key === "references");
+    if (references) {
+      const preceding = incoming ? [
+        {
+          kind: "video",
+          includeSoundtrack: state.clips[incoming.leftIdx].boundaryOutReferenceIncludeSoundtrack
+        }
+      ] : [];
+      const tags = clipReferenceTags(clip.references, preceding);
+      for (const [index, item] of references.items.entries()) {
+        item.label = tags[index];
+        item.contextLabel = tags[index];
+      }
+      if (incoming)
+        references.items.unshift({
+          key: `${clip.id}/incoming-reference`,
+          label: `<Video 1> · From Clip ${incoming.leftIdx}`,
+          contextLabel: `<Video 1> · From Clip ${incoming.leftIdx}`,
+          selection: {
+            kind: "boundary-ref",
+            leftClipIdx: incoming.leftIdx
+          },
+          fields: () => buildIncomingReferenceFields(
+            scopeFields(context, `${clip.id}/incoming-reference`),
+            clipIdx,
+            state.clips,
+            state.fps
+          )
+        });
+    }
+    const retake = sections.find((entry) => entry.key === "retake");
+    if (retake && clip.retake)
+      retake.actions = [remove(() => context.removeRetake(clipIdx))];
+    const decisions = {
+      keyframes: capabilities.decision("frameReferences"),
+      references: clipReferenceAuthoring(capabilities).decision,
+      "ic-loras": capabilities.decision("icLora"),
+      retake: capabilities.decision("retake"),
+      "relay-prompts": capabilities.decision("promptRelay")
+    };
+    for (const section of sections) {
+      const decision = decisions[section.key];
+      if (decision && !decision.supported) {
+        for (const action of section.actions ?? []) {
+          if (action.kind === "add") {
+            action.disabled = true;
+            action.title = decision.reason;
+          }
+        }
+        for (const item of section.items) {
+          const build = item.fields;
+          item.fields = () => {
+            const fields = build();
+            for (const field of Array.isArray(fields) ? fields : [fields])
+              applyPersistedCapabilityRepair(field, decision);
+            return fields;
+          };
+        }
+      }
+    }
+    const relay = sections.findIndex((entry) => entry.key === "relay-prompts");
+    if (!decisions["relay-prompts"].supported && !clip.promptWindows.length && relay >= 0)
+      sections.splice(relay, 1);
+    const disableAdd = (key, reason) => {
+      const add = sections.find((entry) => entry.key === key)?.actions?.find((action) => action.kind === "add");
+      if (add) {
+        add.disabled = true;
+        add.title = reason;
+      }
+    };
+    if (clipIdx === 0 && clip.audioOnly) {
+      disableAdd(
+        "stages",
+        "Audio-only source clips do not use video stages."
+      );
+      disableAdd(
+        "keyframes",
+        "Audio-only source clips do not use keyframes."
+      );
+    }
+    if (!referenceEndpointPolicy(clip, snapshot.defaults.modelCatalog).available)
+      disableAdd(
+        "keyframes",
+        "The selected models do not publish a supported keyframe endpoint."
+      );
+    if (!snapshot.defaults.loraValues.some(
+      (name) => !clip.loras.some((lora) => lora.name === name)
+    ))
+      disableAdd("loras", "All available LoRAs are already on this clip.");
+    const clipId = clip.id;
+    if (context.addRefEntries && context.addClipReferences && clipId) {
+      const operations = {
+        addRefEntries: context.addRefEntries,
+        addClipReferences: context.addClipReferences
+      };
+      for (const [key, kind] of [
+        ["keyframes", "keyframe"],
+        ["references", "clip-reference"]
+      ]) {
+        const add = sections.find((entry) => entry.key === key)?.actions?.find((action) => action.kind === "add");
+        if (add)
+          add.configure = (button2) => bindReferenceDrop(button2, clipId, kind, operations);
+      }
+    }
+    return sections;
+  }
+
+  // frontend/clipEditor/tab.ts
+  var EDITOR_BODY_ID = "videostages-editor";
+  var EDITOR_TAB_ID = "VideoStages-Timeline-Tab";
+  var updateEditorTabIndicator = (enabled) => {
+    const link = findHostBottomTabLink(EDITOR_TAB_ID);
+    if (!link) return;
+    const mark = link.querySelector(".vst-tab-check");
+    if (enabled && !mark) {
+      const check = element("span", "vst-tab-check", "✓");
+      check.setAttribute("aria-hidden", "true");
+      link.append(check);
+    } else if (!enabled) mark?.remove();
+    link.title = enabled ? "Video Stages is enabled" : "";
+  };
+  var restorePreviewLink = () => {
+    const hash = window.location.hash;
+    if (!hash.split(",").includes("#VideoStages-Editor-Tab")) return;
+    window.history.replaceState(
+      null,
+      "",
+      hash.replace("VideoStages-Editor-Tab", EDITOR_TAB_ID)
+    );
+    const link = findHostBottomTabLink(EDITOR_TAB_ID);
+    if (link) {
+      link.click();
+      link.setAttribute("aria-selected", "true");
+      link.tabIndex = 0;
+    }
+  };
+  function mountClipEditor() {
+    const existing = document.getElementById(EDITOR_BODY_ID);
+    if (existing) return existing;
+    const host = getHostBottomTabMount();
+    if (!host) return null;
+    const item = element("li", "nav-item");
+    item.setAttribute("role", "presentation");
+    const link = element("a", "nav-link translate", "VideoStages");
+    link.href = `#${EDITOR_TAB_ID}`;
+    link.dataset.bsToggle = "tab";
+    link.dataset.testid = "clip-editor-tab";
+    link.setAttribute("role", "tab");
+    link.setAttribute("aria-selected", "false");
+    link.tabIndex = -1;
+    item.append(link);
+    host.nav.insertBefore(item, host.toolsTabItem);
+    const pane = element("div", "tab-pane genpage-bottom-tab");
+    pane.id = EDITOR_TAB_ID;
+    pane.setAttribute("role", "tabpanel");
+    const body = element("div", "vst-clip-editor");
+    body.id = EDITOR_BODY_ID;
+    body.dataset.testid = "clip-editor";
+    pane.append(body);
+    host.content.append(pane);
+    registerBottomTabWithHost(link);
+    window.removeEventListener("hashchange", restorePreviewLink);
+    window.addEventListener("hashchange", restorePreviewLink);
+    restorePreviewLink();
+    return body;
+  }
+
+  // frontend/clipEditor/view.ts
+  function renderEditor(root, state, selected, sections, navigation, collapsed) {
+    const strip = flowMap(state, selected, navigation, collapsed);
+    root.classList.toggle("vst-editor-map-collapsed", collapsed);
+    const workspace = element("div", "vst-editor-workspace");
+    const rail = element("nav", "vst-editor-navigation");
+    rail.setAttribute("aria-label", "Clip sections");
+    rail.dataset.testid = "section-navigation";
+    const pane = element("main", "vst-editor-scroll");
+    pane.dataset.testid = "clip-sections";
+    pane.setAttribute("aria-label", "Clip settings");
+    for (const section of sections) {
+      const link = actionButton({
+        key: `nav-${section.key}`,
+        label: section.label,
+        run: () => navigation.jump(section.key)
+      });
+      link.dataset.sectionLink = section.key;
+      if ([
+        "stages",
+        "keyframes",
+        "references",
+        "loras",
+        "ic-loras",
+        "relay-prompts"
+      ].includes(section.key))
+        link.append(element("span", "", String(section.items.length)));
+      rail.append(link);
+      pane.append(sectionPanel(section, state.clips[selected]?.id || ""));
+    }
+    if (!state.clips.length) {
+      const empty = element("div", "vst-editor-start");
+      empty.append(
+        element("p", "", "Add a clip to start your video."),
+        actionButton({
+          key: "add-first-clip",
+          label: "+ Add clip",
+          run: navigation.addClip
+        })
+      );
+      pane.append(empty);
+    }
+    workspace.append(rail, pane);
+    root.replaceChildren(strip, workspace);
+  }
+
+  // frontend/clipEditor/clipEditor.ts
+  function selectionSection(selection) {
+    switch (selection.kind) {
+      case "clip":
+        return "stages";
+      case "ref":
+        return "keyframes";
+      case "boundary-ref":
+      case "clip-ref":
+        return "references";
+      case "ic-lora":
+        return "ic-loras";
+      case "audio":
+        return "audio";
+      case "prompt-minor":
+        return "relay-prompts";
+      case "retake":
+        return "retake";
+      case "boundary":
+        return "join";
+      default:
+        return "prompt";
+    }
+  }
+  function createClipEditor() {
+    let session = null;
+    let unsubscribers = [];
+    let clipId = null;
+    let section = "prompt";
+    let rendering = false;
+    let selecting = false;
+    let adding = false;
+    let collapsed = false;
+    let layoutObserver = null;
+    let enabledToggle = null;
+    const root = () => document.getElementById(EDITOR_BODY_ID);
+    const pane = () => root()?.querySelector(".vst-editor-scroll");
+    const selectedIndex = () => Math.max(
+      0,
+      getState().clips.findIndex((clip) => clip.id === clipId)
+    );
+    const silentlySelect = (selection) => {
+      if ("clipIdx" in selection)
+        clipId = getState().clips[selection.clipIdx]?.id || null;
+      selecting = true;
+      try {
+        setSelection(selection);
       } finally {
-        rendering = false;
-        activeSnapshot = null;
+        selecting = false;
       }
     };
-    const onSelectionChanged = () => {
-      if (suppressSelectionRender || !renderEnabled) {
-        return;
-      }
-      focus.beginSelectionSession();
-      const active = document.activeElement;
-      revealSelectionOnNextRender = !(active instanceof HTMLElement && dockEl?.contains(active));
-      render();
+    const mark = () => {
+      const rail = root()?.querySelector(
+        ".vst-editor-navigation"
+      );
+      if (rail) markNavigation(rail, section);
     };
-    const dispose = () => {
-      draftQueue.dispose();
-      closeTimelineAuthoringSettingsModal();
-      closeTrimModal();
-      focus.reset();
-      document.removeEventListener(
-        "pointerdown",
-        focus.onDocumentPointerDown,
-        true
-      );
-      document.removeEventListener(
-        "pointerup",
-        focus.onDocumentPointerUp,
-        true
-      );
-      document.removeEventListener(
-        "pointercancel",
-        focus.onDocumentPointerUp,
-        true
-      );
-      unsubscribe?.();
-      unsubscribe = null;
-      if (boundBody) {
-        boundBody.removeEventListener(
-          "mousedown",
-          selectionOperations.onMouseDownCapture,
-          true
-        );
-        boundBody.removeEventListener(
-          "click",
-          selectionOperations.onClickCapture,
-          true
-        );
-        boundBody.removeEventListener(
-          "keydown",
-          selectionOperations.onKeyDownCapture,
-          true
-        );
-        boundBody = null;
-      }
-      if (dockEl) {
-        releaseSidebarMediaPreviews(dockEl);
-        dockEl.removeEventListener(
-          "keydown",
-          selectionOperations.onStripKeyDown
-        );
-        dockEl.removeEventListener("focusout", focus.onDockFocusOut);
-        dockEl.removeEventListener("focusin", focus.onDockFocusIn);
-        dockEl.removeEventListener("change", focus.onDockChange);
-        dockEl.removeEventListener("dragover", onDockDragOver);
-        dockEl.removeEventListener("dragleave", onDockDragLeave);
-        dockEl.removeEventListener("drop", onDockDrop);
-        dockEl.className = DETAIL_CLASS2;
-        dockEl.innerHTML = "";
-        dockEl = null;
-      }
-      setFileDropTarget(null);
-      renderedSelection = null;
-      renderEnabled = false;
-      resetRememberedAccordionSections();
+    const jump = (key) => {
+      session?.flush();
+      const scroll = pane();
+      if (!scroll) return;
+      jumpToSection(scroll, key);
+      section = key;
+      mark();
     };
-    const attach = (body, dock, renderImmediately = true) => {
-      renderEnabled = renderImmediately;
-      if (boundBody === body && dockEl === dock) {
-        return;
-      }
-      dispose();
-      boundBody = body;
-      dockEl = dock;
-      renderEnabled = renderImmediately;
-      body.addEventListener(
-        "mousedown",
-        selectionOperations.onMouseDownCapture,
-        true
-      );
-      body.addEventListener(
-        "click",
-        selectionOperations.onClickCapture,
-        true
-      );
-      body.addEventListener(
-        "keydown",
-        selectionOperations.onKeyDownCapture,
-        true
-      );
-      dock.addEventListener("keydown", selectionOperations.onStripKeyDown);
-      dock.addEventListener("focusout", focus.onDockFocusOut);
-      dock.addEventListener("focusin", focus.onDockFocusIn);
-      dock.addEventListener("change", focus.onDockChange);
-      dock.addEventListener("dragover", onDockDragOver);
-      dock.addEventListener("dragleave", onDockDragLeave);
-      dock.addEventListener("drop", onDockDrop);
-      document.addEventListener(
-        "pointerdown",
-        focus.onDocumentPointerDown,
-        true
-      );
-      document.addEventListener("pointerup", focus.onDocumentPointerUp, true);
-      document.addEventListener(
-        "pointercancel",
-        focus.onDocumentPointerUp,
-        true
-      );
-      unsubscribe = subscribeSelection(onSelectionChanged);
-      if (renderImmediately) {
+    const selectClip = (index, destination = section, focusPrompt = false) => {
+      session?.flush();
+      const clip = getState().clips[index];
+      if (!clip) return;
+      const changed = clip.id !== clipId;
+      clipId = clip.id || null;
+      section = destination;
+      silentlySelect({ kind: "clip", clipIdx: index, stageIdx: 0 });
+      if (changed) render(destination);
+      else jump(destination);
+      if (focusPrompt)
+        root()?.querySelector(
+          '[data-section="prompt"] textarea'
+        )?.focus({ preventScroll: true });
+    };
+    const navigation = {
+      selectClip,
+      moveClip: (from, to) => {
+        session?.flush();
+        const selected = reorderClip(from, to);
+        if (selected !== null) selectClip(selected);
+      },
+      deleteClip: (index) => {
+        session?.flush();
+        session?.context.deleteClip?.(index);
+      },
+      toggleMap: () => {
+        collapsed = !collapsed;
+        const body = root();
+        body?.classList.toggle("vst-editor-map-collapsed", collapsed);
+        const button2 = body?.querySelector(
+          '[data-testid="toggle-map"]'
+        );
+        if (button2) {
+          button2.textContent = collapsed ? "»" : "«";
+          button2.setAttribute("aria-expanded", String(!collapsed));
+          button2.setAttribute(
+            "aria-label",
+            collapsed ? "Expand clip map" : "Collapse clip map"
+          );
+        }
+        if (body) revealSelectedClip(body);
+      },
+      jump,
+      addClip: () => {
+        session?.flush();
+        adding = true;
+        addVideoStagesClip();
+      },
+      setEnabled: (value) => {
+        setVideoStagesEnabled(value);
         render();
       }
     };
+    const updateDiagnostics = () => {
+      const body = root();
+      if (body && session)
+        renderEditorDiagnostics(
+          body,
+          deriveAuthoringDiagnostics(
+            getState().clips,
+            session.context.authoring().capabilities
+          ),
+          selectClip
+        );
+    };
+    function render(destination) {
+      const body = root();
+      if (!body || !session || rendering) return;
+      updateEditorTabIndicator(isVideoStagesEnabled());
+      const catalog = getArchitectureCatalogSnapshot();
+      if (renderBlockingArchitectureCatalogStatus(
+        body,
+        catalog,
+        refreshAuthoritativeArchitectureCatalog
+      ))
+        return;
+      rendering = true;
+      try {
+        session.beforeRender();
+        layoutObserver?.disconnect();
+        const state = getState();
+        const index = Math.max(
+          0,
+          state.clips.findIndex((clip) => clip.id === clipId)
+        );
+        const scrollTop = pane()?.scrollTop || 0;
+        const mapTop = body.querySelector(".vst-editor-sequence")?.scrollTop || 0;
+        const navLeft = body.querySelector(".vst-editor-navigation")?.scrollLeft || 0;
+        clipId = state.clips[index]?.id || null;
+        releaseSidebarMediaPreviews(body);
+        const sections = state.clips[index] ? clipSections(state, index, session.context) : [];
+        renderEditor(body, state, index, sections, navigation, collapsed);
+        updateDiagnostics();
+        renderRetainedArchitectureCatalogStatus(
+          body,
+          catalog,
+          refreshAuthoritativeArchitectureCatalog
+        );
+        const scroll = pane();
+        if (scroll) {
+          scroll.scrollTop = scrollTop;
+          if (destination) jumpToSection(scroll, destination);
+          scroll.addEventListener(
+            "scroll",
+            () => {
+              section = sectionAtTop(scroll) || "prompt";
+              updateStickyItemLabels(scroll);
+              mark();
+            },
+            { passive: true }
+          );
+        }
+        const sequence = body.querySelector(
+          ".vst-editor-sequence"
+        );
+        if (sequence) sequence.scrollTop = mapTop;
+        const nav = body.querySelector(
+          ".vst-editor-navigation"
+        );
+        if (nav) nav.scrollLeft = navLeft;
+        if (destination) revealSelectedClip(body);
+        if (!sections.some((entry) => entry.key === section)) {
+          section = "prompt";
+          if (scroll) scroll.scrollTop = 0;
+        }
+        mark();
+        getVideoStagesHostBridge().enableSliders(body);
+        if (scroll) {
+          updateStickyItemLabels(scroll);
+          layoutObserver?.observe(scroll);
+          for (const item of scroll.querySelectorAll("[data-item-id]"))
+            layoutObserver?.observe(item);
+        }
+      } finally {
+        session.afterRender();
+        rendering = false;
+      }
+    }
+    const focusItem = (event) => {
+      const item = event.target.closest(
+        "[data-selection]"
+      );
+      if (item?.dataset.selection) {
+        silentlySelect(
+          JSON.parse(item.dataset.selection)
+        );
+        const target = event.target;
+        if (target.isConnected && document.activeElement !== target)
+          target.focus({ preventScroll: true });
+      }
+    };
+    const dispose = () => {
+      closeManagedModal();
+      layoutObserver?.disconnect();
+      layoutObserver = null;
+      session?.dispose();
+      session = null;
+      for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
+      enabledToggle?.removeEventListener("change", onEnabled);
+      enabledToggle = null;
+      const body = root();
+      body?.removeEventListener("focusin", focusItem);
+      if (body) releaseSidebarMediaPreviews(body);
+    };
+    const onEnabled = () => render();
+    const init = () => {
+      dispose();
+      const body = mountClipEditor();
+      if (!body) return;
+      if (typeof ResizeObserver !== "undefined")
+        layoutObserver = new ResizeObserver(() => {
+          const scroll = pane();
+          if (scroll) updateStickyItemLabels(scroll);
+        });
+      session = createAuthoringSession({
+        render,
+        isRendering: () => rendering,
+        getRoot: root,
+        setSelectionSilently: silentlySelect
+      });
+      body.addEventListener("focusin", focusItem);
+      enabledToggle = getGroupToggle();
+      enabledToggle?.addEventListener("change", onEnabled);
+      unsubscribers = [
+        getTimelineStore().subscribe((state, meta) => {
+          if (rendering) return;
+          const active = document.activeElement;
+          const editing = active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement && ["text", "number", "range"].includes(active.type);
+          if (meta.hint === "value-only" && editing && body.contains(active)) {
+            const strip = body.querySelector(".vst-editor-strip");
+            const top = strip?.querySelector(
+              ".vst-editor-sequence"
+            )?.scrollTop || 0;
+            strip?.replaceWith(
+              flowMap(state, selectedIndex(), navigation, collapsed)
+            );
+            const updated = body.querySelector(
+              ".vst-editor-sequence"
+            );
+            if (updated) updated.scrollTop = top;
+            updateDiagnostics();
+          } else render();
+        }),
+        subscribeSelection((selection2) => {
+          if (selecting || rendering || selection2.kind === "none" || selection2.kind === "audio-track")
+            return;
+          const index = selection2.kind === "boundary" || selection2.kind === "boundary-ref" ? executableBoundaryForLeftClip(
+            getState().clips,
+            selection2.leftClipIdx
+          )?.rightIdx : selection2.clipIdx;
+          if (index === void 0) return;
+          clipId = getState().clips[index]?.id || null;
+          section = adding ? "prompt" : selectionSection(selection2);
+          render(section);
+          const scroll = pane();
+          if (scroll) revealSelectedItem(scroll, selection2);
+          if (adding) {
+            adding = false;
+            const strip = body.querySelector(
+              ".vst-editor-sequence"
+            );
+            if (strip) revealSelectedClip(body);
+            body.querySelector(
+              '[data-section="prompt"] textarea'
+            )?.focus({ preventScroll: true });
+          }
+        }),
+        subscribeArchitectureCatalog(() => render())
+      ];
+      const selection = getSelection();
+      if (getArchitectureCatalogSnapshot().catalog && "clipIdx" in selection)
+        clipId = getState().clips[selection.clipIdx]?.id || null;
+      render();
+    };
     return {
-      attach,
-      render,
-      flushPending: () => draftQueue.flush(),
+      init,
+      refresh: () => render(),
+      flushPending: () => session?.flush(),
       dispose
     };
+  }
+
+  // frontend/refineVideoButton.ts
+  var REFINE_SOURCE_FILE_NAME = "refine-source";
+  var REFINE_STAGE_INDEX = 1;
+  var REFINE_OWNED_PARAMS = /* @__PURE__ */ new Set(["images", "videostages"]);
+  var COMFY_BUTTON_ID = "video_stages_refine_to_comfy_button";
+  var COMFY_ROW_ID = "video_stages_refine_to_comfy_row";
+  var COMFY_MARK_CLASS = "video-stages-refine-comfy-mark";
+  var DONE_TIMEOUT_MS = 2500;
+  var comfyButtonObserver = null;
+  var markTimer = null;
+  var resolvedPromptParameterOverrides = (originalPrompt, sourceParams) => {
+    const sourceKeys = new Map(
+      Object.keys(sourceParams).map((key) => [cleanParamName(key), key])
+    );
+    const overrides = {};
+    for (const match of originalPrompt.matchAll(/<param\[([^\]]+)\]\s*:/gi)) {
+      const authoredId = cleanParamName(match[1]) ?? "";
+      const resolvedId = window.parameter_remaps?.[authoredId] ?? authoredId;
+      if (REFINE_OWNED_PARAMS.has(resolvedId)) {
+        continue;
+      }
+      const sourceKey = sourceKeys.get(resolvedId);
+      if (!sourceKey) {
+        continue;
+      }
+      overrides[resolvedId] = structuredClone(sourceParams[sourceKey]);
+    }
+    return overrides;
+  };
+  var refineNeedsExtraStageMessage = () => `Refine Video needs another stage or clip in the current timeline. Add one after the source video's last completed stage, then click Refine Video again.`;
+  var refineSourceMismatchMessage = () => `Refine Video source metadata does not match the current timeline. Restore the timeline that generated this video, then click Refine Video again.`;
+  var entityId = (value) => typeof value === "string" && value.trim() ? value.trim() : null;
+  var lastCompletedSourceStage = (serialized) => {
+    let parsed = serialized;
+    if (typeof serialized === "string") {
+      try {
+        parsed = JSON.parse(serialized);
+      } catch {
+        return null;
+      }
+    }
+    if (!isRecord(parsed) || !Array.isArray(parsed.clips)) {
+      return null;
+    }
+    let completed = null;
+    for (let clipIndex = 0; clipIndex < parsed.clips.length; clipIndex++) {
+      const clip = parsed.clips[clipIndex];
+      if (!isRecord(clip)) {
+        return null;
+      }
+      if (clip.skipped === true) {
+        break;
+      }
+      if (!Array.isArray(clip.stages)) {
+        return null;
+      }
+      for (let stageIndex = 0; stageIndex < clip.stages.length; stageIndex++) {
+        const stage = clip.stages[stageIndex];
+        if (!isRecord(stage)) {
+          return null;
+        }
+        if (stage.skipped === true) {
+          break;
+        }
+        completed = {
+          clipIndex,
+          clipId: entityId(clip.id),
+          stageIndex,
+          stageId: entityId(stage.id)
+        };
+      }
+    }
+    return completed;
+  };
+  var currentCompletedStage = (state, source) => {
+    const clipIndex = source.clipId ? state.clips.findIndex((clip2) => clip2.id === source.clipId) : source.clipIndex;
+    const clip = state.clips[clipIndex];
+    if (!clip) {
+      return null;
+    }
+    const stageIndex = source.stageId ? clip.stages.findIndex((stage) => stage.id === source.stageId) : source.stageIndex;
+    return stageIndex >= 0 ? { clipIndex, stageIndex } : null;
+  };
+  var defaultRefinementTarget = (state) => {
+    const clip0 = state.clips[0];
+    if (!clip0 || clip0.skipped) {
+      return null;
+    }
+    if (!clip0.audioOnly && clip0.stages.length > REFINE_STAGE_INDEX) {
+      return {
+        clipIndex: 0,
+        stageIndex: REFINE_STAGE_INDEX
+      };
+    }
+    return state.clips.length > 1 ? {
+      clipIndex: 1,
+      stageIndex: 0
+    } : null;
+  };
+  var refinementTarget = (state, serializedSource) => {
+    const source = lastCompletedSourceStage(serializedSource);
+    if (!source) {
+      return defaultRefinementTarget(state);
+    }
+    const completed = currentCompletedStage(state, source);
+    if (!completed) {
+      throw new Error(refineSourceMismatchMessage());
+    }
+    const nextStageIndex = completed.stageIndex + 1;
+    const completedClip = state.clips[completed.clipIndex];
+    const laterStagesCanRefine = completed.clipIndex !== 0 || completedClip.audioOnly !== true;
+    if (laterStagesCanRefine && completedClip.stages.length > nextStageIndex) {
+      return {
+        clipIndex: completed.clipIndex,
+        stageIndex: nextStageIndex
+      };
+    }
+    const nextClipIndex = completed.clipIndex + 1;
+    return state.clips.length > nextClipIndex ? {
+      clipIndex: nextClipIndex,
+      stageIndex: 0
+    } : null;
+  };
+  var hasRefinementWorkToDo = (state, enabled, serializedSource) => {
+    return enabled && refinementTarget(state, serializedSource) !== null;
+  };
+  var installRefineSource = (clip, data, probe) => {
+    clip.audioOnly = false;
+    clip.initVideo = initVideoFromProbe(
+      probe,
+      data,
+      REFINE_SOURCE_FILE_NAME,
+      clip.duration
+    );
+    clip.duration = clip.initVideo.lengthSeconds;
+    clip.audioSource = MEDIA_SOURCE_UPLOAD;
+    clip.saveAudioTrack = false;
+    clip.clipLengthFromAudio = false;
+    clip.uploadedAudio = null;
+    clip.uploadedAudioDurationSeconds = 0;
+    clip.uploadedAudioStartSeconds = 0;
+    clip.uploadedAudioLengthSeconds = 0;
+  };
+  var applyRefineToClip = (clip, data, probe, targetStageIndex) => {
+    installRefineSource(clip, data, probe);
+    if (clip.stages.length > targetStageIndex) {
+      applySkipSuffix(clip.stages, targetStageIndex, false);
+    }
+    for (let index = 0; index < targetStageIndex; index++) {
+      clip.stages[index].control = 0;
+      clip.stages[index].upscale = 1;
+    }
+    if (targetStageIndex > 0) {
+      clip.retake = null;
+    }
+  };
+  var buildRefineVideoPayload = async (src) => {
+    const host = getVideoStagesHostBridge();
+    let parsedMetadata = null;
+    const currentMetadata = await host.getMediaMetadata(src);
+    if (currentMetadata) {
+      try {
+        const readable = host.interpretMediaMetadata(currentMetadata);
+        parsedMetadata = readable ? JSON.parse(readable) : null;
+      } catch (error) {
+        console.warn(
+          "VideoStages: failed to parse source video metadata",
+          error
+        );
+      }
+    }
+    const params = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_image_params") : null;
+    const sourceVideostages = isRecord(params) ? readProp(params, "videostages") : void 0;
+    const initialState = getState();
+    if (!hasRefinementWorkToDo(
+      initialState,
+      isVideoStagesEnabled(),
+      sourceVideostages
+    )) {
+      host.showError(refineNeedsExtraStageMessage());
+      return null;
+    }
+    const videoDataUrl = await host.toDataUrl(src);
+    const probe = await probeInitVideo(videoDataUrl);
+    const state = getState();
+    const target = refinementTarget(state, sourceVideostages);
+    if (!isVideoStagesEnabled() || !target) {
+      host.showError(refineNeedsExtraStageMessage());
+      return null;
+    }
+    const sourceClipIndex = target.stageIndex > 0 ? target.clipIndex : target.clipIndex - 1;
+    const sourceClip = state.clips[sourceClipIndex];
+    const bakesAceStepFunAudio = isAceStepFunAudioSource(
+      sourceClip.audioSource
+    );
+    const clips = structuredClone(state.clips.slice(target.clipIndex));
+    clips[0].skipped = false;
+    applyRefineToClip(clips[0], videoDataUrl, probe, target.stageIndex);
+    reconcileClipArchitectureIdentity(
+      clips[0],
+      captureAuthoringTransactionSnapshot().capabilities.catalog
+    );
+    const sourceDimensions = probe?.width && probe.height ? {
+      width: probe.width,
+      height: probe.height,
+      dimsExplicit: true
+    } : {};
+    const inputOverrides = {
+      videostages: serializeStateForStorage({
+        ...state,
+        ...sourceDimensions,
+        clips
+      }),
+      images: 1
+    };
+    const sourceExtraMetadata = isRecord(parsedMetadata) ? readProp(parsedMetadata, "sui_extra_data") : void 0;
+    const originalPrompt = isRecord(sourceExtraMetadata) ? readProp(sourceExtraMetadata, "original_prompt") : void 0;
+    if (isRecord(params) && typeof originalPrompt === "string") {
+      Object.assign(
+        inputOverrides,
+        resolvedPromptParameterOverrides(originalPrompt, params)
+      );
+    }
+    if (bakesAceStepFunAudio) {
+      const aceStepFunModelParam = cleanParamName("AceStepFun Model");
+      if (aceStepFunModelParam) {
+        inputOverrides[aceStepFunModelParam] = null;
+      }
+    }
+    const prompt = isRecord(params) ? readProp(params, "prompt") : void 0;
+    if (typeof prompt === "string") {
+      inputOverrides.prompt = prompt;
+    }
+    const negativePrompt = isRecord(params) ? readProp(params, "negativeprompt") : void 0;
+    if (typeof negativePrompt === "string") {
+      inputOverrides.negativeprompt = negativePrompt;
+    }
+    const seed = isRecord(params) ? readProp(params, "seed") : void 0;
+    if (typeof seed === "number") {
+      inputOverrides.seed = seed;
+    }
+    if (isRecord(sourceExtraMetadata)) {
+      inputOverrides.extra_metadata = structuredClone(sourceExtraMetadata);
+    }
+    return inputOverrides;
+  };
+  var dispatchRefineVideo = async (src, destination) => {
+    const host = getVideoStagesHostBridge();
+    try {
+      const payload = await buildRefineVideoPayload(src);
+      if (!payload) {
+        return false;
+      }
+      await destination(host, payload);
+      return true;
+    } catch (error) {
+      console.error("VideoStages: failed to prepare Refine Video", error);
+      host.showError(
+        error instanceof Error ? error.message : "Failed to prepare Refine Video."
+      );
+      return false;
+    }
+  };
+  var setComfyButtonMark = (mark, timeoutMs = 0) => {
+    const button2 = document.getElementById(COMFY_BUTTON_ID);
+    if (!button2) {
+      return;
+    }
+    if (markTimer !== null) {
+      clearTimeout(markTimer);
+      markTimer = null;
+    }
+    let marker = button2.querySelector(`.${COMFY_MARK_CLASS}`);
+    if (!mark) {
+      marker?.remove();
+      return;
+    }
+    if (!marker) {
+      marker = document.createElement("span");
+      marker.className = COMFY_MARK_CLASS;
+      marker.style.marginLeft = "0.3rem";
+      marker.style.fontWeight = "bold";
+      button2.appendChild(marker);
+    }
+    marker.textContent = mark;
+    if (timeoutMs > 0) {
+      const shown = marker;
+      markTimer = setTimeout(() => {
+        shown.remove();
+        markTimer = null;
+      }, timeoutMs);
+    }
+  };
+  var refineCurrentVideoToComfy = () => {
+    const host = getVideoStagesHostBridge();
+    const src = host.getCurrentVideoSource();
+    if (!src) {
+      host.showError("Select a video on the Generate tab first.");
+      return;
+    }
+    setComfyButtonMark("…");
+    void dispatchRefineVideo(
+      src,
+      (target, payload) => target.sendToComfyUiAndSave(payload)
+    ).then((success2) => {
+      setComfyButtonMark(success2 ? "✓" : "", success2 ? DONE_TIMEOUT_MS : 0);
+    });
+  };
+  var injectRefineVideoToComfyButton = (rootDoc) => {
+    if (rootDoc.getElementById(COMFY_BUTTON_ID)) {
+      return true;
+    }
+    const whatTheDuckButton = rootDoc.getElementById(
+      "wtd_comfy_save_workflow_button"
+    );
+    const whatTheDuckRow = whatTheDuckButton?.closest(".wtd-comfy-save-row") ?? whatTheDuckButton?.parentElement;
+    if (!whatTheDuckRow) {
+      return false;
+    }
+    const row = rootDoc.createElement("div");
+    row.id = COMFY_ROW_ID;
+    row.className = "comfy-second-button-row";
+    row.style.clear = "both";
+    row.style.overflow = "hidden";
+    const button2 = rootDoc.createElement("button");
+    button2.type = "button";
+    button2.id = COMFY_BUTTON_ID;
+    button2.className = "basic-button comfy-small-button comfy-left-button";
+    button2.title = "Use the selected Generate-tab video for the next VideoStages refinement, open the workflow in ComfyUI, and save the payload and workflow to the server.";
+    button2.textContent = "Refine Video to ComfyUI";
+    button2.addEventListener("click", refineCurrentVideoToComfy);
+    row.appendChild(button2);
+    whatTheDuckRow.insertAdjacentElement("afterend", row);
+    return true;
+  };
+  var initRefineVideoToComfyButton = () => {
+    if (injectRefineVideoToComfyButton(document) || comfyButtonObserver) {
+      return;
+    }
+    if (!document.body) {
+      document.addEventListener(
+        "DOMContentLoaded",
+        initRefineVideoToComfyButton,
+        {
+          once: true
+        }
+      );
+      return;
+    }
+    comfyButtonObserver = new MutationObserver(() => {
+      if (injectRefineVideoToComfyButton(document)) {
+        comfyButtonObserver?.disconnect();
+        comfyButtonObserver = null;
+      }
+    });
+    comfyButtonObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  };
+  var refineVideoButton = () => {
+    const host = getVideoStagesHostBridge();
+    const description = "Uses this video as the source for the next refinement stage or clip.";
+    host.registerRefineVideoButton(
+      (src) => void dispatchRefineVideo(
+        src,
+        (target, payload) => target.generate(payload)
+      ),
+      description
+    );
+    initRefineVideoToComfyButton();
   };
 
   // frontend/timelineHistory.ts
@@ -17993,1954 +16606,86 @@ ${slot}`;
     return { bind, dispose };
   };
 
-  // frontend/timelineReorder.ts
-  var computeDropIndex = (pointerX, regions) => {
-    for (let i = 0; i < regions.length; i++) {
-      const region = regions[i];
-      const midpoint = region.startPx + region.widthPx / 2;
-      if (pointerX < midpoint) {
-        return i;
-      }
-    }
-    return regions.length;
-  };
-  var finalIndexAfterMove = (from, to) => to > from ? to - 1 : to;
-  var moveItem = (array, from, to) => {
-    const result = array.slice();
-    if (!Number.isInteger(from) || from < 0 || from >= result.length) {
-      return result;
-    }
-    const [item] = result.splice(from, 1);
-    const insertAt = to > from ? to - 1 : to;
-    const clamped = Math.max(0, Math.min(insertAt, result.length));
-    result.splice(clamped, 0, item);
-    return result;
-  };
-  var isNoOpMove = (from, to) => to === from || to === from + 1;
-
-  // frontend/timelineSelectionView.ts
-  var SELECTED = "vst-selected";
-  var REGION_SELECTED = "vst-region-selected";
-  var applySelectionHighlight = (body) => {
-    const sel = getSelection();
-    for (const el of body.querySelectorAll(`.${SELECTED}`)) {
-      el.classList.remove(SELECTED);
-    }
-    for (const el of body.querySelectorAll(`.${REGION_SELECTED}`)) {
-      el.classList.remove(REGION_SELECTED);
-    }
-    if (sel.kind === "clip" || sel.kind === "ic-lora") {
-      body.querySelector(
-        `.vst-region[data-clip-idx="${sel.clipIdx}"]`
-      )?.classList.add(REGION_SELECTED);
-      return;
-    }
-    let selector = null;
-    switch (sel.kind) {
-      case "ref":
-        selector = `.vst-refs-mark[data-clip-idx="${sel.clipIdx}"][data-ref-idx="${sel.refIdx}"]`;
-        break;
-      case "audio":
-        selector = `.vst-audio-clip[data-clip-idx="${sel.clipIdx}"]`;
-        break;
-      case "audio-track":
-        selector = `.vst-audio-span[data-track-idx="${sel.trackIdx}"]`;
-        break;
-      case "prompt-major":
-        selector = `.vst-major-seg[data-clip-idx="${sel.clipIdx}"]`;
-        break;
-      case "prompt-minor":
-        selector = `.vst-minor-seg[data-clip-idx="${sel.clipIdx}"][data-window-idx="${sel.windowIdx}"]`;
-        break;
-      case "retake":
-        selector = `.vst-retake[data-clip-idx="${sel.clipIdx}"]`;
-        break;
-      case "boundary":
-      case "boundary-ref":
-        selector = `.vst-boundary-chip[data-left-clip-idx="${sel.leftClipIdx}"]`;
-        break;
-      default:
-        selector = null;
-    }
-    if (selector) {
-      body.querySelector(selector)?.classList.add(SELECTED);
-    }
-  };
-
-  // frontend/timelineLinking.ts
-  var REGION_SELECTOR = ".vst-region[data-clip-idx]";
-  var REGION_ACTION_SELECTOR = "[data-vst-region-action]";
-  var REGION_RESIZE_SELECTOR = ".vst-region-resize";
-  var CLIP_SHIFT_SELECTOR = ".vst-region[data-clip-idx], .vst-audio-clip[data-clip-idx]";
-  var DRAGGING_CLASS = "vst-dragging";
-  var RESIZING_CLASS = "vst-resizing";
-  var DROP_INDICATOR_CLASS = "vst-drop-indicator";
-  var DRAG_THRESHOLD_PX2 = 5;
-  var MIN_RESIZE_WIDTH_PX = 24;
-  var REGION_DRAGGING_CLASS = "vst-region-dragging";
-  var resolveSelectedIndex = (selectedIndex, clipCount) => {
-    if (selectedIndex === null || !Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= clipCount) {
-      return null;
-    }
-    return selectedIndex;
-  };
-  var shiftClipsAfter = (body, idx, deltaPx) => {
-    for (const el of body.querySelectorAll(CLIP_SHIFT_SELECTOR)) {
-      const elIdx = parseIntAttr(el, "data-clip-idx");
-      if (elIdx !== null && elIdx > idx) {
-        el.style.transform = deltaPx !== 0 ? `translateX(${deltaPx}px)` : "";
-      }
-    }
-  };
-  var clearClipShifts = (body) => {
-    for (const el of body.querySelectorAll(CLIP_SHIFT_SELECTOR)) {
-      el.style.transform = "";
-    }
-  };
-  var createTimelineLinking = () => {
-    let attachedBody = null;
-    const selectedClip = () => getSelectedClipIndex();
-    const stageForClip = (clipIdx) => {
-      const sel = getSelection();
-      return sel.kind === "clip" && sel.clipIdx === clipIdx ? sel.stageIdx : 0;
-    };
-    const selectClip = (clipIdx, stageIdx) => {
-      setSelection({ kind: "clip", clipIdx, stageIdx });
-    };
-    let dropIndicator = null;
-    const findRegion = (body, idx) => body.querySelector(`.vst-region[data-clip-idx="${idx}"]`);
-    const onRegionClick = (body, event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
-        return;
-      }
-      const actionButton = target.closest(REGION_ACTION_SELECTOR);
-      if (actionButton) {
-        event.stopPropagation();
-        const actionRegion = actionButton.closest(REGION_SELECTOR);
-        const actionIdx = parseIntAttr(actionRegion, "data-clip-idx");
-        if (actionIdx === null) {
-          return;
-        }
-        const action = actionButton.getAttribute("data-vst-region-action");
-        if (action === "skip") {
-          applySkip(actionIdx);
-        }
-        return;
-      }
-      const region = target.closest(REGION_SELECTOR);
-      const idx = parseIntAttr(region, "data-clip-idx");
-      if (idx === null) {
-        return;
-      }
-      if (event.shiftKey) {
-        applyDelete(idx);
-        return;
-      }
-      selectClip(idx, 0);
-      applySelectionHighlight(body);
-    };
-    const readRegions = (body) => {
-      const els = Array.from(
-        body.querySelectorAll(REGION_SELECTOR)
-      );
-      const rects = els.map((el) => {
-        const r = el.getBoundingClientRect();
-        return { startPx: r.left, widthPx: r.width };
-      });
-      return { els, rects };
-    };
-    const removeDropIndicator = () => {
-      dropIndicator?.remove();
-      dropIndicator = null;
-    };
-    const showDropIndicator = (els, gap) => {
-      if (els.length === 0) {
-        return;
-      }
-      const track = els[0].parentElement;
-      if (!track) {
-        return;
-      }
-      if (!dropIndicator) {
-        dropIndicator = document.createElement("div");
-        dropIndicator.className = DROP_INDICATOR_CLASS;
-      }
-      if (dropIndicator.parentElement !== track) {
-        track.appendChild(dropIndicator);
-      }
-      const left = gap < els.length ? els[gap].offsetLeft : els[els.length - 1].offsetLeft + els[els.length - 1].offsetWidth;
-      dropIndicator.style.left = `${left}px`;
-    };
-    const applySkip = (idx) => {
-      const snapshot = getTimelineStore().getSnapshot();
-      const clip = snapshot.state.clips[idx];
-      if (!clip?.id || idx === 0 && clip.skipped !== true) {
-        return;
-      }
-      dispatchDocumentCommand(
-        { type: "clip.toggle-skip", clipId: clip.id },
-        {
-          origin: "linking",
-          expectedRevision: snapshot.revision
-        }
-      );
-    };
-    const applyDelete = (idx) => {
-      const clips = getClips();
-      if (idx <= 0 || idx >= clips.length) {
-        return;
-      }
-      clips.splice(idx, 1);
-      reconcileArchitectureIncomingIcLoraDrives(
-        clips,
-        getRootGeneratedEntryMode(),
-        getRootDefaults().modelCatalog
-      );
-      saveClips(clips, { origin: "linking" });
-    };
-    const resizeSession = (body, state) => {
-      const restore = () => {
-        state.el.style.width = `${state.originalWidthPx}px`;
-        clearClipShifts(body);
-        body.classList.remove(RESIZING_CLASS);
-      };
-      return {
-        threshold: DRAG_THRESHOLD_PX2,
-        suppressEscapeClick: true,
-        onMove: (ctx) => {
-          const width = Math.max(
-            MIN_RESIZE_WIDTH_PX,
-            ctx.event.clientX - state.startLeftPx
-          );
-          body.classList.add(RESIZING_CLASS);
-          state.el.style.width = `${width}px`;
-          shiftClipsAfter(body, state.idx, width - state.originalWidthPx);
-        },
-        onCommit: (ctx) => {
-          const width = ctx.event.clientX - state.startLeftPx;
-          const committed = commitClipMutation(
-            state.sourceRevision,
-            "linking",
-            (clips) => {
-              const clip = clips[state.idx];
-              if (state.idx < 0 || state.idx >= clips.length || clip.clipLengthFromAudio || clip.clipLengthFromControlNet) {
-                return null;
-              }
-              const fps = documentFps(getState());
-              const pxPerSecond = livePxPerSecond(body);
-              const joinTrimSeconds = Math.max(
-                0,
-                Number(state.el.dataset.vstJoinTrimSeconds ?? 0) || 0
-              );
-              const newDuration = pxToDuration(
-                width + joinTrimSeconds * pxPerSecond,
-                pxPerSecond,
-                fps
-              );
-              const source = clip.initVideo;
-              if (source) {
-                const trimmed = setOutPoint(
-                  source,
-                  source.startSeconds + newDuration,
-                  {
-                    limitSeconds: sourceLimitSeconds(source),
-                    minLengthSeconds: CLIP_DURATION_MIN,
-                    fps
-                  }
-                );
-                if (trimmed.startSeconds === source.startSeconds && trimmed.lengthSeconds === source.lengthSeconds) {
-                  return null;
-                }
-                source.startSeconds = trimmed.startSeconds;
-                source.lengthSeconds = trimmed.lengthSeconds;
-                applyClipDurationResize(
-                  clip,
-                  trimmed.lengthSeconds,
-                  getRootDefaults(),
-                  fps
-                );
-                selectClip(state.idx, stageForClip(state.idx));
-                return clips;
-              }
-              if (!applyClipDurationResize(
-                clip,
-                newDuration,
-                getRootDefaults(),
-                fps
-              )) {
-                return null;
-              }
-              selectClip(state.idx, stageForClip(state.idx));
-              return clips;
-            }
-          );
-          if (committed) {
-            body.classList.remove(RESIZING_CLASS);
-          } else {
-            restore();
-          }
-        },
-        onTap: restore,
-        onCancel: restore
-      };
-    };
-    const dragSession = (body, state) => {
-      const cleanup = () => {
-        findRegion(body, state.sourceIdx)?.classList.remove(
-          REGION_DRAGGING_CLASS
-        );
-        removeDropIndicator();
-        body.classList.remove(DRAGGING_CLASS);
-      };
-      return {
-        threshold: DRAG_THRESHOLD_PX2,
-        axis: "xy",
-        suppressEscapeClick: true,
-        onMove: (ctx) => {
-          body.classList.add(DRAGGING_CLASS);
-          findRegion(body, state.sourceIdx)?.classList.add(
-            REGION_DRAGGING_CLASS
-          );
-          const { els, rects } = readRegions(body);
-          showDropIndicator(
-            els,
-            computeDropIndex(ctx.event.clientX, rects)
-          );
-        },
-        onCommit: (ctx) => {
-          cleanup();
-          const { rects } = readRegions(body);
-          const gap = computeDropIndex(ctx.event.clientX, rects);
-          const from = state.sourceIdx;
-          if (isNoOpMove(from, gap)) {
-            selectClip(from, stageForClip(from));
-            applySelectionHighlight(body);
-            return;
-          }
-          const stageIdx = stageForClip(from);
-          const moved = commitClipMutation(
-            state.sourceRevision,
-            "linking",
-            (clips) => {
-              if (from < 0 || from >= clips.length) {
-                return null;
-              }
-              const reordered = moveItem(clips, from, gap);
-              reconcileArchitectureIncomingIcLoraDrives(
-                reordered,
-                getRootGeneratedEntryMode(),
-                getRootDefaults().modelCatalog
-              );
-              return reordered;
-            }
-          );
-          if (moved) {
-            selectClip(finalIndexAfterMove(from, gap), stageIdx);
-          }
-        },
-        onCancel: cleanup
-      };
-    };
-    const onPress = (me, body) => {
-      if (!(me.target instanceof Element)) {
-        return null;
-      }
-      if (me.target.closest(REGION_ACTION_SELECTOR)) {
-        return null;
-      }
-      if (me.shiftKey) {
-        me.preventDefault();
-        return null;
-      }
-      const resizeGrip = me.target.closest(REGION_RESIZE_SELECTOR);
-      if (resizeGrip) {
-        const region = resizeGrip.closest(REGION_SELECTOR);
-        const idx2 = parseIntAttr(region, "data-clip-idx");
-        if (idx2 === null || !(region instanceof HTMLElement)) {
-          return null;
-        }
-        const rect = region.getBoundingClientRect();
-        me.preventDefault();
-        return resizeSession(body, {
-          idx: idx2,
-          el: region,
-          startLeftPx: rect.left,
-          originalWidthPx: rect.width,
-          sourceRevision: currentRevision()
-        });
-      }
-      const target = me.target.closest(REGION_SELECTOR);
-      const idx = parseIntAttr(target, "data-clip-idx");
-      if (idx === null) {
-        return null;
-      }
-      return dragSession(body, {
-        sourceIdx: idx,
-        sourceRevision: currentRevision()
-      });
-    };
-    let bodyClickHandler = null;
-    let unregister = null;
-    const attach = (body, router) => {
-      if (attachedBody === body) {
-        return;
-      }
-      if (attachedBody) {
-        dispose();
-      }
-      bodyClickHandler = (e) => onRegionClick(body, e);
-      body.addEventListener("click", bodyClickHandler);
-      unregister = router.register({
-        id: "linking",
-        priority: 10,
-        onPress
-      });
-      attachedBody = body;
-    };
-    const reapplySelection = (body, clipCount) => {
-      const idx = selectedClip();
-      if (idx !== null && resolveSelectedIndex(idx, clipCount) === null) {
-        setSelection({ kind: "none" });
-      }
-      applySelectionHighlight(body);
-    };
-    const dispose = () => {
-      if (attachedBody) {
-        if (bodyClickHandler) {
-          attachedBody.removeEventListener("click", bodyClickHandler);
-        }
-      }
-      removeDropIndicator();
-      unregister?.();
-      unregister = null;
-      bodyClickHandler = null;
-      attachedBody = null;
-    };
-    const getSelectedIndex = () => selectedClip();
-    return { attach, reapplySelection, getSelectedIndex, dispose };
-  };
-
-  // frontend/timelinePromptTrack.ts
-  var MAJOR_SELECTOR = ".vst-major-seg[data-clip-idx]";
-  var wallsFor = (clip, windowIdx, press) => {
-    const clipDur = clipDurationOf(clip);
-    return freeIntervalAt(
-      otherSpans(clip.promptWindows ?? [], windowIdx, clipDur),
-      clipDur,
-      press.start
-    );
-  };
-  var createTimelinePromptTrack = (getCapabilities) => createWindowTrack({
-    routeId: "prompt-track",
-    priority: 20,
-    scope: clipWindowTrackScope("prompt-track"),
-    spanSelector: ".vst-minor-seg[data-clip-idx]",
-    itemIdxAttr: "data-window-idx",
-    edgeSelector: "[data-vst-minor-edge]",
-    edgeAttr: "data-vst-minor-edge",
-    laneSelector: ".vst-minor-lane[data-clip-idx]",
-    draggingClass: "vst-prompt-dragging",
-    ghostClass: "vst-minor-ghost",
-    unit: "px",
-    keyboardSelect: false,
-    isolateClicks: false,
-    readSpan: ({ owner }, windowIdx) => {
-      const window2 = owner.promptWindows?.[windowIdx];
-      return window2 ? { start: window2.start, length: window2.duration, trim: 0 } : null;
-    },
-    canEdit: ({ owner }) => getCapabilities?.().forClip(owner).decision("promptRelay").supported ?? true,
-    canCreate: ({ owner }) => owner !== null && (getCapabilities?.().forClip(owner).decision("promptRelay").supported ?? true),
-    moveTargetStart: ({ owner: clip }, windowIdx, press, desiredStart) => {
-      const clipDur = clipDurationOf(clip);
-      const [lo, hi] = wallsFor(clip, windowIdx, press);
-      const dur = Math.min(press.length, clipDur);
-      return clamp(desiredStart, lo, Math.max(lo, hi - dur));
-    },
-    writeMove: ({ owner: clip }, windowIdx, press, start) => {
-      const window2 = clip.promptWindows?.[windowIdx];
-      if (!window2) {
-        return;
-      }
-      const clipDur = clipDurationOf(clip);
-      const [, hi] = wallsFor(clip, windowIdx, press);
-      const dur = Math.min(press.length, clipDur);
-      window2.start = roundToTenth(start);
-      window2.duration = roundToTenth(
-        Math.max(
-          PROMPT_WINDOW_MIN_DURATION,
-          Math.min(dur, hi - window2.start)
-        )
-      );
-    },
-    resizeTarget: ({ owner: clip }, windowIdx, edge, press, deltaSec) => {
-      const clipDur = clipDurationOf(clip);
-      const spans = otherSpans(
-        clip.promptWindows ?? [],
-        windowIdx,
-        clipDur
-      );
-      const [, hi] = freeIntervalAt(spans, clipDur, press.start);
-      const end = press.start + press.length;
-      const [lo] = freeIntervalAt(
-        spans,
-        clipDur,
-        Math.max(0, end - 1e-3)
-      );
-      return resizeSpanEdge(
-        edge,
-        press,
-        deltaSec,
-        PROMPT_WINDOW_MIN_DURATION,
-        lo,
-        hi
-      );
-    },
-    writeResize: ({ owner: clip }, windowIdx, _edge, _press, geom) => {
-      const window2 = clip.promptWindows?.[windowIdx];
-      if (!window2) {
-        return;
-      }
-      window2.start = roundToTenth(geom.start);
-      window2.duration = roundToTenth(geom.length);
-    },
-    createSpan: ({ owner: clip, ownerIdx: clipIdx }, startSec, endSec) => {
-      const clipDur = clipDurationOf(clip);
-      const spans = otherSpans(clip.promptWindows ?? [], -1, clipDur);
-      const [lo, hi] = freeIntervalAt(spans, clipDur, startSec);
-      const geom = createDefaultOrDraggedSpan(
-        startSec,
-        endSec,
-        lo,
-        hi,
-        PROMPT_WINDOW_MIN_DURATION,
-        PROMPT_WINDOW_DEFAULT_DURATION
-      );
-      if (!geom) {
-        return null;
-      }
-      const window2 = {
-        prompt: "",
-        start: roundToTenth(geom.start),
-        duration: roundToTenth(geom.length)
-      };
-      clip.promptWindows.push(window2);
-      clip.promptWindows.sort((x, y) => x.start - y.start);
-      const newIdx = clip.promptWindows.indexOf(window2);
-      return newIdx >= 0 ? { kind: "prompt-minor", clipIdx, windowIdx: newIdx } : null;
-    },
-    deleteItem: ({ owner: clip, ownerIdx: clipIdx }, windowIdx) => {
-      if (!clip.promptWindows?.[windowIdx]) {
-        return null;
-      }
-      clip.promptWindows.splice(windowIdx, 1);
-      return selectionAfterRemoval(
-        windowIdx,
-        clip.promptWindows.length,
-        (index) => ({
-          kind: "prompt-minor",
-          clipIdx,
-          windowIdx: index
-        }),
-        { kind: "prompt-major", clipIdx }
-      );
-    },
-    selectionFor: (clipIdx, windowIdx) => ({
-      kind: "prompt-minor",
-      clipIdx,
-      windowIdx
-    }),
-    // Clicks that land on the MAJOR (whole-clip prompt) row select it.
-    onClickFallthrough: (_event, target) => {
-      const major = target.closest(MAJOR_SELECTOR);
-      if (!(major instanceof HTMLElement)) {
-        return;
-      }
-      const clipIdx = parseIntAttr(major, "data-clip-idx");
-      if (clipIdx === null || !getClips()[clipIdx]) {
-        return;
-      }
-      setSelection({ kind: "prompt-major", clipIdx });
-    }
-  });
-
-  // frontend/timelineReferencesTrack.ts
-  var THUMB_SELECTOR = '.vst-refs-mark[data-vst-ref="thumb"]';
-  var LANE_SELECTOR = ".vst-refs-lane[data-vst-ref-add]";
-  var DRAGGING_CLASS2 = "vst-refs-dragging";
-  var DRAG_THRESHOLD_PX3 = 5;
-  var createTimelineReferencesTrack = (getAuthoring) => {
-    let boundBody = null;
-    let unregister = null;
-    const canEditReferences = (clip, authoring = getAuthoring()) => authoring.capabilities.forClip(clip).decision("frameReferences").supported;
-    const referenceEndpoints = (clip, authoring = getAuthoring()) => referenceEndpointPolicy(clip, authoring.defaults.modelCatalog);
-    const resolveDragPolicy = (clip, fps, authoring) => ({
-      supported: canEditReferences(clip, authoring),
-      endpoints: referenceEndpoints(clip, authoring),
-      frameGrid: resolvedClipFrameGrid(clip, authoring.defaults.modelCatalog),
-      frameMax: getReferenceFrameMax(authoring.defaults, clip, fps)
-    });
-    const sameDragPolicy = (left, right) => left.supported === right.supported && left.frameGrid.frameGrid === right.frameGrid.frameGrid && left.frameGrid.frameGridOrigin === right.frameGrid.frameGridOrigin && left.frameMax === right.frameMax && left.endpoints.positions.length === right.endpoints.positions.length && left.endpoints.positions.every(
-      (position, index) => position === right.endpoints.positions[index]
-    );
-    const findArrow = (clipIdx, refIdx) => boundBody?.querySelector(
-      `.vst-region[data-clip-idx="${clipIdx}"] .vst-key[data-ref-idx="${refIdx}"]`
-    ) ?? null;
-    const positionRefMarker = (mark, arrow, frame, fromEnd, durationSeconds, fps) => {
-      const time = keyframeTimeSeconds(frame, fromEnd, durationSeconds, fps);
-      const leftPct = `${keyframeLeftPercent(time, durationSeconds)}%`;
-      mark.style.left = leftPct;
-      if (arrow) {
-        arrow.style.left = leftPct;
-      }
-      const ph = mark.querySelector(".vst-refs-ph");
-      if (ph) {
-        ph.textContent = `K ${fromEnd ? "-" : ""}${frame}`;
-      }
-    };
-    const addRefAtFrame = (clipIdx, frame, sourceRevision, authoring = getAuthoring()) => {
-      const fps = documentFps(getState());
-      let newRefIdx = -1;
-      const saved = commitClipMutation(
-        sourceRevision,
-        "references-track",
-        (clips) => {
-          const clip = clips[clipIdx];
-          if (!clip || !canEditReferences(clip, authoring)) {
-            return null;
-          }
-          const frameMax = getReferenceFrameMax(
-            authoring.defaults,
-            clip,
-            fps
-          );
-          const endpoints = referenceEndpoints(clip, authoring);
-          if (!endpoints.available) {
-            return null;
-          }
-          const ref = buildDefaultRef();
-          if (!endpoints.bounded) {
-            ref.frame = clamp(
-              Math.round(frame),
-              REF_FRAME_MIN,
-              frameMax
-            );
-          } else {
-            const position = nextAllowedReferencePosition(
-              clip.frameRefs,
-              frameMax,
-              endpoints.positions
-            );
-            if (!position) {
-              return null;
-            }
-            ref.frame = position.frame;
-            ref.fromEnd = position.fromEnd;
-          }
-          appendRefToClip(clip, ref);
-          newRefIdx = clip.frameRefs.length - 1;
-          return clips;
-        }
-      );
-      if (saved) {
-        setSelection({ kind: "ref", clipIdx, refIdx: newRefIdx });
-      }
-    };
-    const deleteRef = (clipIdx, refIdx, sourceRevision) => {
-      commitClipMutation(sourceRevision, "references-track", (clips) => {
-        const clip = clips[clipIdx];
-        return clip && removeRefAt(clip, refIdx) ? clips : null;
-      });
-    };
-    const dragPositionAt = (state, clientX) => {
-      const { bounded, supportsFirst, supportsLast } = state.policy.endpoints;
-      if (bounded) {
-        const rect2 = state.lane.getBoundingClientRect();
-        const prefersLast = clientX - rect2.left >= rect2.width / 2;
-        return {
-          frame: REF_FRAME_MIN,
-          fromEnd: supportsLast && (!supportsFirst || prefersLast)
-        };
-      }
-      const rect = state.lane.getBoundingClientRect();
-      const frame = pxToFrame(
-        clientX - rect.left,
-        rect.width,
-        state.durationSeconds,
-        state.fps,
-        state.fromEnd,
-        state.policy.frameGrid
-      );
-      if (!getTimelineAuthoringSettings().snap || rect.width <= 0) {
-        return { frame, fromEnd: state.fromEnd };
-      }
-      const thresholdFrames = Math.max(
-        1,
-        SNAP_THRESHOLD_PX / rect.width * state.policy.frameMax
-      );
-      return {
-        frame: Math.round(
-          snapPoint(
-            frame,
-            [],
-            [REF_FRAME_MIN, state.policy.frameMax],
-            thresholdFrames
-          )
-        ),
-        fromEnd: state.fromEnd
-      };
-    };
-    const restoreDragPreview = (state) => {
-      state.mark.style.left = state.originalLeft;
-      if (state.arrow) {
-        state.arrow.style.left = state.arrowOriginalLeft;
-      }
-      const ph = state.mark.querySelector(".vst-refs-ph");
-      if (ph) {
-        ph.textContent = state.originalLabel;
-      }
-    };
-    const dragSession = (body, state) => ({
-      threshold: DRAG_THRESHOLD_PX3,
-      suppressEscapeClick: true,
-      onMove: (ctx) => {
-        body.classList.add(DRAGGING_CLASS2);
-        const position = dragPositionAt(state, ctx.event.clientX);
-        positionRefMarker(
-          state.mark,
-          state.arrow,
-          position.frame,
-          position.fromEnd,
-          state.generatedDurationSeconds,
-          state.fps
-        );
-      },
-      onCommit: (ctx) => {
-        body.classList.remove(DRAGGING_CLASS2);
-        if (!state.mark.isConnected || !state.lane.isConnected) {
-          restoreDragPreview(state);
-          return;
-        }
-        const position = dragPositionAt(state, ctx.event.clientX);
-        const saved = commitClipMutation(
-          state.sourceRevision,
-          "references-track",
-          (clips) => {
-            const clip = clips[state.clipIdx];
-            const ref = clip?.frameRefs?.[state.refIdx];
-            const livePolicy = clip ? resolveDragPolicy(clip, state.fps, getAuthoring()) : null;
-            if (!ref || !livePolicy) {
-              return null;
-            }
-            if (!livePolicy.supported || !sameDragPolicy(state.policy, livePolicy) || ref.frame === position.frame && ref.fromEnd === position.fromEnd) {
-              return null;
-            }
-            ref.frame = position.frame;
-            ref.fromEnd = position.fromEnd;
-            return clips;
-          }
-        );
-        if (!saved) {
-          restoreDragPreview(state);
-        }
-      },
-      onTap: () => restoreDragPreview(state),
-      onCancel: () => {
-        restoreDragPreview(state);
-        body.classList.remove(DRAGGING_CLASS2);
-      }
-    });
-    const onPress = (me, body) => {
-      if (!(me.target instanceof Element)) {
-        return null;
-      }
-      const mark = me.target.closest(THUMB_SELECTOR);
-      if (!(mark instanceof HTMLElement)) {
-        return null;
-      }
-      if (me.shiftKey) {
-        me.preventDefault();
-        return claimOnly();
-      }
-      const lane = mark.closest(LANE_SELECTOR);
-      const clipIdx = parseIntAttr(mark, "data-clip-idx");
-      const refIdx = parseIntAttr(mark, "data-ref-idx");
-      if (!(lane instanceof HTMLElement) || clipIdx === null || refIdx === null) {
-        return null;
-      }
-      const documentSnapshot = getTimelineStore().getSnapshot();
-      const clip = documentSnapshot.state.clips[clipIdx];
-      const ref = clip?.frameRefs?.[refIdx];
-      if (!clip || !ref) {
-        return null;
-      }
-      const fps = documentFps(documentSnapshot.state);
-      const policy = resolveDragPolicy(clip, fps, getAuthoring());
-      if (!policy.supported) {
-        me.preventDefault();
-        return claimOnly();
-      }
-      const arrow = findArrow(clipIdx, refIdx);
-      if (!policy.endpoints.available) {
-        me.preventDefault();
-        return claimOnly();
-      }
-      me.preventDefault();
-      return dragSession(body, {
-        clipIdx,
-        refIdx,
-        mark,
-        arrow,
-        lane,
-        originalLeft: mark.style.left,
-        arrowOriginalLeft: arrow?.style.left ?? "",
-        originalLabel: mark.querySelector(".vst-refs-ph")?.textContent ?? "",
-        durationSeconds: clip.duration,
-        generatedDurationSeconds: policy.frameMax / fps,
-        fps,
-        policy,
-        fromEnd: ref.fromEnd === true,
-        sourceRevision: documentSnapshot.revision
-      });
-    };
-    const selectRef = (clipIdx, refIdx) => {
-      activateSelection({ kind: "ref", clipIdx, refIdx });
-    };
-    const onBodyClick = (event) => {
-      if (!(event.target instanceof Element)) {
-        return;
-      }
-      const thumb = event.target.closest(THUMB_SELECTOR);
-      if (thumb instanceof HTMLElement) {
-        const clipIdx2 = parseIntAttr(thumb, "data-clip-idx");
-        const refIdx = parseIntAttr(thumb, "data-ref-idx");
-        if (clipIdx2 !== null && refIdx !== null) {
-          if (event.shiftKey) {
-            deleteRef(clipIdx2, refIdx, currentRevision());
-          } else {
-            selectRef(clipIdx2, refIdx);
-          }
-        }
-        return;
-      }
-      const lane = event.target.closest(LANE_SELECTOR);
-      if (!(lane instanceof HTMLElement)) {
-        return;
-      }
-      const clipIdx = parseIntAttr(lane, "data-clip-idx");
-      if (clipIdx === null) {
-        return;
-      }
-      const clip = getClips()[clipIdx];
-      if (!clip) {
-        return;
-      }
-      const authoring = getAuthoring();
-      if (!canEditReferences(clip, authoring)) {
-        return;
-      }
-      const rect = lane.getBoundingClientRect();
-      const frame = pxToFrame(
-        event.clientX - rect.left,
-        rect.width,
-        clip.duration,
-        documentFps(getState()),
-        false,
-        resolvedClipFrameGrid(clip, authoring.defaults.modelCatalog)
-      );
-      addRefAtFrame(clipIdx, frame, currentRevision(), authoring);
-    };
-    const onBodyKeyDown = (event) => {
-      const ke = event;
-      if (!isActivateKey(ke)) {
-        return;
-      }
-      if (!(ke.target instanceof Element)) {
-        return;
-      }
-      const thumb = ke.target.closest(THUMB_SELECTOR);
-      if (!(thumb instanceof HTMLElement)) {
-        return;
-      }
-      const clipIdx = parseIntAttr(thumb, "data-clip-idx");
-      const refIdx = parseIntAttr(thumb, "data-ref-idx");
-      if (clipIdx === null || refIdx === null) {
-        return;
-      }
-      ke.preventDefault();
-      selectRef(clipIdx, refIdx);
-    };
-    const attach = (body, router) => {
-      if (boundBody === body) {
-        return;
-      }
-      dispose();
-      boundBody = body;
-      body.addEventListener("click", onBodyClick);
-      body.addEventListener("keydown", onBodyKeyDown);
-      unregister = router.register({
-        id: "references",
-        priority: 30,
-        onPress: (me) => onPress(me, body)
-      });
-    };
-    const dispose = () => {
-      if (boundBody) {
-        boundBody.removeEventListener("click", onBodyClick);
-        boundBody.removeEventListener("keydown", onBodyKeyDown);
-        boundBody = null;
-      }
-      unregister?.();
-      unregister = null;
-    };
-    return { attach, dispose };
-  };
-
-  // frontend/timelineRetakeTrack.ts
-  var createTimelineRetakeTrack = (getCapabilities) => createWindowTrack({
-    routeId: "retake",
-    priority: 50,
-    scope: clipWindowTrackScope("retake-track"),
-    spanSelector: ".vst-retake[data-clip-idx]",
-    itemIdxAttr: null,
-    edgeSelector: "[data-vst-retake-edge]",
-    edgeAttr: "data-vst-retake-edge",
-    laneSelector: ".vst-retake-lane[data-vst-retake-add]",
-    draggingClass: "vst-retake-dragging",
-    ghostClass: "vst-retake-ghost",
-    unit: "pct",
-    keyboardSelect: true,
-    revealOnActivate: true,
-    // The retake sits inside the clip region; its clicks must not bubble
-    // into the region's clip-select handler.
-    isolateClicks: true,
-    readSpan: ({ owner }) => owner.retake ? {
-      start: owner.retake.startSeconds,
-      length: owner.retake.lengthSeconds,
-      trim: 0
-    } : null,
-    canEdit: ({ owner }) => getCapabilities?.().forClip(owner).decision("retake").supported ?? true,
-    canCreate: ({ owner }) => owner !== null && !owner.retake && (getCapabilities?.().forClip(owner).decision("retake").supported ?? true),
-    moveTargetStart: ({ duration }, _itemIdx, press, desiredStart) => {
-      const length = Math.min(press.length, duration);
-      return clamp(desiredStart, 0, Math.max(0, duration - length));
-    },
-    writeMove: ({ owner, duration }, _itemIdx, press, start) => {
-      if (!owner.retake) {
-        return;
-      }
-      const length = Math.min(press.length, duration);
-      owner.retake.startSeconds = roundToTenth(start);
-      owner.retake.lengthSeconds = roundToTenth(
-        Math.min(length, duration - owner.retake.startSeconds)
-      );
-    },
-    resizeTarget: ({ duration }, _itemIdx, edge, press, deltaSec) => resizeSpanEdge(
-      edge,
-      press,
-      deltaSec,
-      RETAKE_MIN_DURATION,
-      0,
-      duration
-    ),
-    writeResize: ({ owner }, _itemIdx, _edge, _press, geom) => {
-      if (!owner.retake) {
-        return;
-      }
-      owner.retake.startSeconds = roundToTenth(geom.start);
-      owner.retake.lengthSeconds = roundToTenth(geom.length);
-    },
-    // A plain tap places a default-length window at the pressed time; a
-    // drag sizes it.
-    createSpan: ({ owner, ownerIdx, duration }, startSec, endSec) => {
-      if (owner.retake) {
-        return null;
-      }
-      const geom = createDefaultOrDraggedSpan(
-        startSec,
-        endSec,
-        0,
-        duration,
-        RETAKE_MIN_DURATION,
-        RETAKE_DEFAULT_DURATION
-      );
-      if (!geom) {
-        return null;
-      }
-      owner.retake = {
-        startSeconds: roundToTenth(geom.start),
-        lengthSeconds: roundToTenth(geom.length),
-        strength: RETAKE_STRENGTH_DEFAULT
-      };
-      return { kind: "retake", clipIdx: ownerIdx };
-    },
-    // The clip owns at most one retake, so its removal always falls back
-    // to the clip itself.
-    deleteItem: ({ owner, ownerIdx }) => {
-      if (!owner.retake) {
-        return null;
-      }
-      owner.retake = null;
-      return { kind: "clip", clipIdx: ownerIdx, stageIdx: 0 };
-    },
-    selectionFor: (clipIdx) => ({ kind: "retake", clipIdx })
-  });
-
-  // frontend/timelineSelectionTracks.ts
-  var RULES = [
-    {
-      selector: '.vst-audio-clip[data-vst-audio="clip"]',
-      select: (element) => {
-        const clipIdx = parseIntAttr(element, "data-clip-idx");
-        return clipIdx === null ? null : { kind: "audio", clipIdx };
-      }
-    },
-    {
-      selector: "[data-vst-boundary-chip]",
-      select: (element) => {
-        const leftClipIdx = parseIntAttr(element, "data-left-clip-idx");
-        return leftClipIdx === null ? null : { kind: "boundary", leftClipIdx };
-      }
-    }
-  ];
-  var createTimelineSelectionTracks = () => {
-    let boundBody = null;
-    const selector = RULES.map((rule) => rule.selector).join(", ");
-    const activate = (target) => {
-      const element = target.closest(selector);
-      if (!(element instanceof HTMLElement)) {
-        return;
-      }
-      const selection = RULES.find(
-        (rule) => element.matches(rule.selector)
-      )?.select(element);
-      if (selection) {
-        setSelection(selection);
-      }
-    };
-    const onClick = (event) => {
-      if (event.target instanceof Element) {
-        activate(event.target);
-      }
-    };
-    const onKeyDown = (event) => {
-      if (!isActivateKey(event) || !(event.target instanceof Element) || !event.target.closest(selector)) {
-        return;
-      }
-      event.preventDefault();
-      activate(event.target);
-    };
-    const dispose = () => {
-      boundBody?.removeEventListener("click", onClick);
-      boundBody?.removeEventListener("keydown", onKeyDown);
-      boundBody = null;
-    };
-    const attach = (body) => {
-      if (boundBody === body) {
-        return;
-      }
-      dispose();
-      boundBody = body;
-      body.addEventListener("click", onClick);
-      body.addEventListener("keydown", onKeyDown);
-    };
-    return { attach, dispose };
-  };
-
-  // frontend/timelineView/toolbar.ts
-  var renderDiagnosticPanel = (diagnostics = []) => {
-    const content = diagnostics.map(
-      (item) => `<div class="vst-diagnostic vst-diagnostic-${item.severity}" data-vst-diagnostic="${escapeHtml(item.code)}">${item.clipIdx === void 0 ? "" : `<strong>Clip ${item.clipIdx}:</strong> `}${escapeHtml(item.message)}</div>`
-    ).join("");
-    return content ? `<div class="vst-diagnostics" role="status">${content}</div>` : "";
-  };
-  var renderTimelineHeader = (clipCount, totalSeconds, fps, unit, pxPerSecond, options, timing) => {
-    const toggleLabel = unit === "frames" ? "Show seconds" : "Show frames";
-    const clipWord = `clip${clipCount === 1 ? "" : "s"}`;
-    const totalLabel = unit === "frames" ? `${timing?.outputFrames ?? Math.round(totalSeconds * fps)}f` : formatSecondsTenth(totalSeconds);
-    const zoomPct = Math.round(pxPerSecond / DEFAULT_PX_PER_SECOND * 100);
-    const rawSelected = options?.selectedIndex;
-    const selectedIndex = typeof rawSelected === "number" && Number.isInteger(rawSelected) && rawSelected >= 0 && rawSelected < clipCount ? rawSelected : null;
-    const selectedHidden = selectedIndex === null ? " hidden" : "";
-    const joinFrames = timing?.joinFrames ?? 0;
-    const joinSeconds = timing?.joinSeconds ?? 0;
-    const handleSeconds = timing?.boundaries.reduce(
-      (sum, boundary) => sum + boundary.handleSeconds,
-      0
-    ) ?? 0;
-    const joinFrameLabel = `${joinFrames > 0 ? "−" : ""}${joinFrames}f`;
-    const joinSecondsLabel = `${joinSeconds > 0 ? "−" : ""}${formatSecondsTenth(joinSeconds)}`;
-    const authoredLabel = formatSecondsTenth(
-      timing?.authoredSeconds ?? totalSeconds
-    );
-    const secondary = unit === "frames" ? `${timing?.generatedFrames ?? 0}f generated · ${joinFrameLabel} shared` : handleSeconds > 0 ? `${authoredLabel} authored · +${formatSecondsTenth(handleSeconds)} handle · ${joinSecondsLabel} shared` : `${authoredLabel} authored · ${joinSecondsLabel} joins`;
-    const readout = `<span class="vst-readout" data-vst-readout><span class="vst-readout-output" title="Published sequence length">${escapeHtml(totalLabel)} output</span><span class="vst-readout-detail" title="Authored length and resolved shared joins">${escapeHtml(secondary)}</span><span class="vst-dot" data-vst-readout-sel-dot${selectedHidden}>·</span><span class="vst-readout-sel" data-vst-readout-sel title="Selected clip"${selectedHidden}>${selectedIndex !== null ? `clip ${selectedIndex}` : ""}</span></span>`;
-    const width = Math.max(0, Math.round(options?.width ?? 0));
-    const height = Math.max(0, Math.round(options?.height ?? 0));
-    const dimsExplicit = options?.dimsExplicit === true;
-    const ratioId = dimsExplicit && width > 0 && height > 0 ? matchAspectRatio(width, height) : null;
-    const dimsSource = dimsExplicit ? ratioId ? `${ratioId} aspect ratio` : "custom" : "inherited from image resolution";
-    const fpsSource = "synced with Video FPS";
-    const settingsTip = `Resolution: ${dimsSource}; FPS: ${fpsSource}. Click to edit.`;
-    const settingsChip = `<button type="button" class="basic-button small-button vst-settings-chip" data-vst-settings title="${escapeHtml(settingsTip)}" aria-label="${escapeHtml(settingsTip)}"><span class="vst-settings-dims">${width}×${height}</span><span class="vst-settings-chip-sep" aria-hidden="true">·</span><span class="vst-settings-fps">${fps} fps</span></button>`;
-    const enabled = options?.enabled !== false;
-    const enableToggle = `<label class="vst-enable" title="Enable VideoStages. While off, none of this timeline is sent to the backend — a normal image/video generates as usual."><span class="toggle-switch"><input type="checkbox" class="auto-slider-toggle vst-enable-input" role="switch" data-vst-enable${enabled ? " checked" : ""}><div class="auto-slider-toggle-content"></div></span><span class="vst-enable-label">Enable</span></label>`;
-    return `<div class="vst-topbar${enabled ? "" : " vst-topbar-disabled"}"><div class="vst-topbar-main"><span class="vst-title">Timeline</span>` + enableToggle + `<span class="vst-sub"><span class="vst-stat-num">${clipCount}</span> ${clipWord}</span>` + settingsChip + `</div><div class="vst-topbar-tools"><button type="button" class="basic-button small-button btn-primary vst-add-clip" data-vst-add-clip title="Add a new clip to the end of the sequence">+ Clip</button><span class="vst-tool-sep" aria-hidden="true"></span><div class="vst-zoom" role="group" aria-label="Timeline zoom (Ctrl+wheel over the track)"><button type="button" class="basic-button small-button" data-vst-zoom-out title="Zoom out (show more time)" aria-label="Zoom out">−</button><span class="vst-zoom-pct" data-vst-zoom-pct title="Zoom level (100% = default)">${zoomPct}%</span><input type="range" class="vst-zoom-slider" data-vst-zoom-slider min="${MIN_PX_PER_SECOND}" max="${MAX_PX_PER_SECOND}" step="1" value="${Math.round(pxPerSecond)}" aria-label="Zoom (pixels per second)" title="Zoom (applies on release)"><button type="button" class="basic-button small-button" data-vst-zoom-in title="Zoom in (show less time, more detail)" aria-label="Zoom in">+</button><button type="button" class="basic-button small-button" data-vst-zoom-fit title="Fit the whole sequence to the view" aria-label="Zoom to fit">Fit</button></div><span class="vst-tool-sep" aria-hidden="true"></span><button type="button" class="basic-button small-button vst-toggle-unit" data-vst-unit-toggle title="Toggle ruler units between seconds and frames (in-memory only)">${toggleLabel}</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-undo title="Undo (Ctrl+Z)" aria-label="Undo">↶</button><button type="button" class="basic-button small-button vst-hist-btn" data-vst-redo title="Redo (Ctrl+Shift+Z or Ctrl+Y)" aria-label="Redo">↷</button></div>` + readout + `</div>`;
-  };
-  var wireTimelineToolbar = (body, options) => {
-    const wire = (selector, handler) => {
-      if (!handler) {
-        return;
-      }
-      body.querySelector(selector)?.addEventListener(
-        "click",
-        () => handler()
-      );
-    };
-    const enableInput = body.querySelector("[data-vst-enable]");
-    if (enableInput && options?.onToggleEnabled) {
-      enableInput.addEventListener("change", () => {
-        options.onToggleEnabled?.(enableInput.checked);
-      });
-    }
-    const settingsButton = body.querySelector(
-      "[data-vst-settings]"
-    );
-    if (settingsButton && options?.onOpenSettings) {
-      settingsButton.addEventListener("click", () => {
-        options.onOpenSettings?.(settingsButton);
-      });
-    }
-    wire("[data-vst-unit-toggle]", options?.onToggleUnit);
-    wire("[data-vst-zoom-in]", options?.onZoomIn);
-    wire("[data-vst-zoom-out]", options?.onZoomOut);
-    wire("[data-vst-zoom-fit]", options?.onZoomFit);
-    wire("[data-vst-undo]", options?.onUndo);
-    wire("[data-vst-redo]", options?.onRedo);
-    const slider = body.querySelector(
-      "[data-vst-zoom-slider]"
-    );
-    if (slider) {
-      slider.addEventListener("input", () => {
-        const percent = body.querySelector(
-          "[data-vst-zoom-pct]"
-        );
-        if (percent) {
-          const value = Number.parseFloat(slider.value);
-          percent.textContent = `${Math.round(value / DEFAULT_PX_PER_SECOND * 100)}%`;
-        }
-      });
-      if (options?.onZoomSlider) {
-        slider.addEventListener("change", () => {
-          options.onZoomSlider?.(Number.parseFloat(slider.value));
-        });
-      }
-    }
-    if (options?.onAddClip) {
-      for (const button2 of body.querySelectorAll("[data-vst-add-clip]")) {
-        button2.addEventListener("click", () => options.onAddClip?.());
-      }
-    }
-  };
-  var wireTimelineZoomWheel = (body, options) => {
-    const onZoomWheel = options?.onZoomWheel;
-    if (!onZoomWheel) {
-      return;
-    }
-    body.querySelector(".vst-scroll")?.addEventListener(
-      "wheel",
-      (event) => {
-        if (!event.ctrlKey && !event.metaKey) {
-          return;
-        }
-        event.preventDefault();
-        const factor = event.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
-        onZoomWheel(factor, event.clientX);
-      },
-      { passive: false }
-    );
-  };
-
-  // frontend/timelineView/trackRows.ts
-  var promptWindowGeom = (layout, window2, pxPerSecond) => {
-    const geometry = spanGeometry(
-      window2.start,
-      window2.duration,
-      layout.durationSeconds,
-      { unit: "px", pxPerSecond, minWidth: 2 }
-    );
-    return {
-      startSec: geometry.startSeconds,
-      endSec: geometry.endSeconds,
-      leftPx: geometry.left,
-      widthPx: geometry.width,
-      active: `${window2.prompt ?? ""}`.trim() !== ""
-    };
-  };
-  var PROMPT_PLACEHOLDER = "(no prompt)";
-  var hasRelayWindows = (clip) => (clip.promptWindows?.length ?? 0) > 0;
-  var renderPromptTrackRow = (clips, layouts, pxPerSecond, globalPrompt, capabilities) => {
-    const globalTrimmed = `${globalPrompt ?? ""}`.trim();
-    const relayLane = (clip) => laneVisible(clip, "promptRelay", hasRelayWindows(clip), capabilities);
-    const relayTrack = clips.some(relayLane);
-    const parts = [];
-    for (let i = 0; i < layouts.length; i++) {
-      const layout = layouts[i];
-      const clip = clips[i];
-      if (!clip) {
-        continue;
-      }
-      const width = clipInnerWidth(layout.widthPx);
-      const windows = clip.promptWindows ?? [];
-      const clipCapabilities = capabilities?.forClip(clip);
-      const relaySupported = clipCapabilities?.decision("promptRelay").supported ?? true;
-      const ownPrompt = `${clip.prompt ?? ""}`.trim();
-      const inherited = ownPrompt === "";
-      const major = inherited ? globalTrimmed : ownPrompt;
-      const overlays = windows.map((window2) => promptWindowGeom(layout, window2, pxPerSecond)).filter(
-        (geometry) => geometry.active && geometry.endSec > geometry.startSec
-      ).map(
-        (geometry) => `<div class="vst-major-off" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" aria-hidden="true"></div>`
-      ).join("");
-      const majorText = major === "" ? PROMPT_PLACEHOLDER : truncate(major, 120);
-      const majorClass = (major === "" ? " vst-major-empty" : "") + (inherited && major !== "" ? " vst-major-inherited" : "");
-      const majorTitle = (major === "" ? PROMPT_PLACEHOLDER : major) + (inherited && major !== "" ? " — inherited from the global prompt; click to set a clip prompt" : " — click to edit");
-      parts.push(
-        `<div class="vst-major-seg${majorClass}" data-vst-prompt="major" data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(majorTitle)}">` + overlays + `<span class="vst-major-text">${escapeHtml(majorText)}</span></div>`
-      );
-      const minorSegments = windows.map((window2, windowIdx) => {
-        const geometry = promptWindowGeom(layout, window2, pxPerSecond);
-        const text2 = `${window2.prompt ?? ""}`.trim();
-        const label = text2 === "" ? "(empty)" : truncate(text2, 60);
-        const title = relaySupported ? `${text2 || "(empty minor prompt)"} · Shift+click to delete` : "Persisted relay prompt is unsupported by this architecture; click to inspect or Shift+click to delete";
-        return `<div class="vst-minor-seg" data-vst-prompt="minor" data-clip-idx="${i}" data-window-idx="${windowIdx}" style="left:${geometry.leftPx}px;width:${geometry.widthPx}px" title="${escapeHtml(title)}"><span class="vst-minor-resize vst-minor-resize-l" data-vst-minor-edge="left" aria-hidden="true"></span><span class="vst-minor-text">${escapeHtml(label)}</span><span class="vst-minor-resize vst-minor-resize-r" data-vst-minor-edge="right" aria-hidden="true"></span></div>`;
-      }).join("");
-      if (relayLane(clip)) {
-        parts.push(
-          `<div class="vst-minor-lane${relaySupported ? "" : " vst-capability-disabled"}"${relaySupported ? " data-vst-prompt-add" : ""} data-clip-idx="${i}" style="left:${layout.startPx}px;width:${width}px" title="${relaySupported ? "Click empty space to add a minor prompt" : "Relay prompts are unsupported; existing windows can be inspected or removed"}">${minorSegments}</div>`
-        );
-      }
-    }
-    return `<div class="vst-track-row vst-track-prompt${relayTrack ? "" : " vst-no-relay"}">` + renderTrackHead(
-      "vst-track-icon-prompt",
-      "✎",
-      "Prompt",
-      headTag("major", "Major", { active: true }) + (relayTrack ? headTag("relay", "Relay", {
-        active: clips.some(hasRelayWindows)
-      }) : "")
-    ) + `<div class="vst-track-cell vst-prompt-cell">${parts.join("")}</div></div>`;
-  };
-  var audioFlagChips = (clip) => {
-    const chips = [];
-    if (clip.reuseAudio === true) {
-      chips.push(
-        `<span class="vst-audio-flag" title="Capture audio after the second active stage and reuse it from the third active stage onward">↻</span>`
-      );
-    }
-    if (clip.clipLengthFromAudio === true) {
-      chips.push(
-        `<span class="vst-audio-flag" title="Clip length follows the audio length">⇥</span>`
-      );
-    }
-    if (clip.saveAudioTrack === true) {
-      chips.push(
-        `<span class="vst-audio-flag" title="Save a standalone MP3 for this clip's audio">MP3</span>`
-      );
-    }
-    return chips.length === 0 ? "" : `<span class="vst-audio-flags" aria-hidden="true">${chips.join("")}</span>`;
-  };
-  var persistedClipAudio = (clip) => audioSourceKind(clip.audioSource) !== AUDIO_SOURCE_NATIVE || clip.uploadedAudio !== null || clip.reuseAudio === true || clip.clipLengthFromAudio === true || clip.saveAudioTrack === true;
-  var clipAudioLaneVisible = (clip, capabilities) => {
-    const view = capabilities?.forClip(clip);
-    return view === void 0 || view.clipAudio.supported || persistedClipAudio(clip);
-  };
-  var audioTrackTag = (trackIdx) => `A${trackIdx + 1}`;
-  var audioTrackName = (track, trackIdx) => track.source.reference || track.source.uploadedAudio?.fileName || `Audio track ${audioTrackTag(trackIdx)}`;
-  var renderTimelineAudioSpanBlock = (track, trackIdx, totalSeconds) => {
-    const span = track.spans[0];
-    if (!span || span.timelineStartSeconds === null || span.timelineLengthSeconds === null) {
-      return "";
-    }
-    const { startSeconds: start, endSeconds: end } = spanGeometry(
-      span.timelineStartSeconds,
-      span.timelineLengthSeconds,
-      totalSeconds
-    );
-    const labelText = audioTrackName(track, trackIdx);
-    const rangeLabel = `${roundToTenth(start)}–${roundToTenth(end)} s`;
-    const waveform = audioSpanWaveBarHeights(trackIdx, 40).map((height) => `<span style="height:${height}%"></span>`).join("");
-    return renderWindowSpan({
-      className: "vst-audio-span",
-      extraClassName: `vst-audio-span-tone-${trackIdx % 5}`,
-      dataAttrs: `data-vst-audio-span data-track-idx="${trackIdx}"`,
-      edgeAttr: "data-vst-audio-span-edge",
-      labelClass: "vst-audio-label",
-      label: labelText,
-      title: `${labelText} · ${rangeLabel} · drag to move/resize · Shift+click to delete`,
-      ariaLabel: `Edit audio track ${audioTrackTag(trackIdx)}`,
-      startSeconds: start,
-      lengthSeconds: end - start,
-      durationSeconds: totalSeconds,
-      decoration: `<span class="vst-audio-span-wave" aria-hidden="true">${waveform}</span>`
-    });
-  };
-  var renderTimelineAudioSpanLanes = (tracks, totalSeconds, totalWidthPx) => {
-    const place = (laneIdx) => `left:0;width:${totalWidthPx}px;--vst-audio-lane-idx:${laneIdx}`;
-    const lanes = tracks.map(
-      (track, trackIdx) => `<div class="vst-audio-track-lane" data-track-idx="${trackIdx}" style="${place(trackIdx)}">` + renderTimelineAudioSpanBlock(track, trackIdx, totalSeconds) + `</div>`
-    );
-    lanes.push(
-      `<div class="vst-audio-track-lane vst-audio-track-lane-blank" data-vst-audio-track-add style="${place(tracks.length)}" title="Click or drag to add an audio track spanning the timeline"></div>`
-    );
-    return lanes.join("");
-  };
-  var renderAudioTrackRow = (clips, layouts, capabilities, audioTracks = [], pxPerSecond = 1, timelineTotalSeconds) => {
-    const clipLane = (clip) => clipAudioLaneVisible(clip, capabilities);
-    const clipRow = clips.some(clipLane);
-    const clipBlocks = layouts.map((layout) => {
-      const clip = clips[layout.index];
-      if (!clip || !clipLane(clip)) {
-        return "";
-      }
-      const badge = audioSourceBadge(clip.audioSource);
-      const clipCapabilities = capabilities?.forClip(clip);
-      const clipAudioSupported = clipCapabilities?.clipAudio.supported ?? true;
-      const persistedAudio = persistedClipAudio(clip);
-      const audioOperable = clipAudioSupported || persistedAudio;
-      const kind = audioSourceKind(clip.audioSource);
-      const native = kind === AUDIO_SOURCE_NATIVE;
-      const width = clipInnerWidth(layout.widthPx);
-      const kindClass = native ? " vst-audio-native vst-audio-kind-native" : kind === AUDIO_SOURCE_ACE_STEP_FUN ? " vst-audio-kind-ace" : " vst-audio-kind-upload";
-      const upload = kind === AUDIO_SOURCE_UPLOAD ? clip.uploadedAudio?.fileName : null;
-      const labelText = upload ? `${badge.label} · ${upload}` : badge.label;
-      const title = native ? "Audio: Native — click to choose an audio source" : `${badge.title} — click to edit`;
-      const barCount = Math.min(
-        400,
-        Math.max(8, Math.floor(width / 5.5))
-      );
-      const bars = waveBarHeights(layout.index, barCount).map((height) => `<span style="height:${height}%"></span>`).join("");
-      const hint = native ? `<span class="vst-audio-hint" aria-hidden="true">click to add audio</span>` : "";
-      const body = `<div class="vst-audio-wave" aria-hidden="true">${bars}</div>${hint}`;
-      const renderedTitle = clipAudioSupported ? title : persistedAudio ? "Clip audio is unsupported; click persisted audio to inspect or remove it" : "Clip audio is unsupported by this architecture";
-      const ariaLabel = clipAudioSupported ? `Edit audio for clip ${layout.index}` : persistedAudio ? `Inspect unsupported persisted audio for clip ${layout.index}` : `Audio unavailable for clip ${layout.index}`;
-      return `<div class="vst-audio-clip${kindClass}${clipAudioSupported ? "" : " vst-capability-disabled"}"${audioOperable ? ' data-vst-audio="clip" role="button" tabindex="0"' : ' aria-disabled="true"'} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${escapeHtml(renderedTitle)}" aria-label="${ariaLabel}"><span class="vst-audio-label">${escapeHtml(labelText)}</span>` + audioFlagChips(clip) + body + `</div>`;
-    }).join("");
-    const totalSeconds = timelineTotalSeconds ?? layouts.reduce(
-      (max, layout) => Math.max(
-        max,
-        layout.startSeconds + layout.timelineDurationSeconds
-      ),
-      0
-    );
-    const totalWidthPx = totalSeconds * pxPerSecond;
-    const overlayLanes = renderTimelineAudioSpanLanes(
-      audioTracks,
-      totalSeconds,
-      totalWidthPx
-    );
-    const laneCount = Math.max(1, audioTracks.length + 1);
-    const laneTags = clipRow ? [headTag("src", "A0", { active: true })] : [];
-    for (let i = 0; i < laneCount; i++) {
-      const blank = i === laneCount - 1;
-      laneTags.push(
-        headTag("track", blank ? "+ Audio" : audioTrackTag(i), {
-          active: !blank,
-          muted: blank,
-          style: `--vst-audio-lane-idx:${i}`,
-          action: blank ? `data-vst-audio-track-add title="Add an audio track spanning the timeline" aria-label="Add an audio track"` : void 0
-        })
-      );
-    }
-    const soloLane = !clipRow && audioTracks.length === 0;
-    return `<div class="vst-track-row vst-track-audio${clipRow ? "" : " vst-no-clip-audio"}${soloLane ? " vst-audio-solo-lane" : ""}" style="--vst-audio-lane-count:${laneCount}">` + renderTrackHead(
-      "vst-track-icon-audio",
-      "♪",
-      "Audio",
-      laneTags.join("")
-    ) + `<div class="vst-track-cell vst-audio-cell">${clipBlocks}${overlayLanes}</div></div>`;
-  };
-  var REF_EDGE_ALIGN_FRAMES = 3;
-  var renderReferencesTrackRow = (clips, layouts, fps, unit, capabilities) => {
-    const lanes = layouts.map((layout) => {
-      const clip = clips[layout.index];
-      if (!clip) {
-        return "";
-      }
-      const width = clipInnerWidth(layout.widthPx);
-      const refsSupported = capabilities?.forClip(clip).decision("frameReferences").supported ?? true;
-      const marks = (clip.frameRefs ?? []).map((ref, refIdx) => {
-        const isEnd = ref.fromEnd === true;
-        const frame = Math.max(0, ref.frame ?? 0);
-        const isPrimary = frame === 1 && !isEnd;
-        const time = keyframeTimeSeconds(
-          ref.frame,
-          isEnd,
-          layout.frameCount > 0 ? layout.frameCount / fps : layout.durationSeconds,
-          fps
-        );
-        const left = keyframeLeftPercent(
-          time,
-          layout.frameCount > 0 ? layout.frameCount / fps : layout.durationSeconds
-        );
-        const source = refSourceLabel(ref.source ?? "");
-        const image = ref.uploadedImage?.data;
-        const thumbnailData = image ? backgroundImageDataAttr(mediaPreviewSrc(image)) : "";
-        const frameLabel = `K ${isEnd ? "-" : ""}${frame}`;
-        const thumbnailClass = `vst-refs-thumb${image ? " vst-refs-has-image" : ""}`;
-        const alignClass = frame > REF_EDGE_ALIGN_FRAMES ? "" : isEnd ? " vst-refs-align-end" : " vst-refs-align-start";
-        const kindClass = (isPrimary ? " vst-refs-primary" : "") + (isEnd ? " vst-refs-fromend" : "") + alignClass;
-        const title = refsSupported ? `${source}${isPrimary ? " · cover frame" : ""}${isEnd ? " · from end" : ""} · frame ${frame} · ${formatTimeLabel(time, unit, fps)} · click to edit, drag to move · Shift+click to delete` : `Persisted keyframe ${refIdx} is unsupported by this architecture · click to inspect or Shift+click to delete`;
-        const label = refsSupported ? `Edit keyframe ${refIdx} (${source}${isEnd ? ", from end" : ""})` : `Inspect unsupported persisted keyframe ${refIdx} for removal`;
-        return `<div class="vst-refs-mark${kindClass}" data-vst-ref="thumb" data-clip-idx="${layout.index}" data-ref-idx="${refIdx}" style="left:${left}%" role="button" tabindex="0" title="${escapeHtml(title)}" aria-label="${escapeHtml(label)}"><span class="${thumbnailClass}"${thumbnailData}><span class="vst-refs-ph">${escapeHtml(frameLabel)}</span></span></div>`;
-      }).join("");
-      return `<div class="vst-refs-lane${refsSupported ? "" : " vst-capability-disabled"}"${refsSupported ? " data-vst-ref-add" : clip.frameRefs.length === 0 ? ' aria-disabled="true"' : ""} data-clip-idx="${layout.index}" style="left:${layout.startPx}px;width:${width}px" title="${refsSupported ? "Click to add a keyframe here" : "Keyframes are unsupported; existing keyframes can be inspected or removed"}">${marks}</div>`;
-    }).join("");
-    return `<div class="vst-track-row vst-track-refs">` + renderTrackHead("vst-track-icon-refs", "⧉", "Keyframes", "") + `<div class="vst-track-cell">${lanes}</div></div>`;
-  };
-
-  // frontend/timelineView.ts
-  var renderRulerTicks = (layouts, totalSeconds, endPx, pxPerSecond, fps, unit, timing) => {
-    const endLabel = formatRulerLabel(totalSeconds, unit, fps);
-    const gridTicks = computeRulerTicks(totalSeconds, pxPerSecond).filter(
-      (tick) => Math.abs(tick.seconds - totalSeconds) > 1e-6 && !(formatRulerLabel(tick.seconds, unit, fps) === endLabel && Math.abs(tick.x - endPx) < 40)
-    ).map(
-      (tick) => `<span class="vst-tick vst-tick-grid" style="left:${tick.x}px"><span class="vst-tick-label">${escapeHtml(formatRulerLabel(tick.seconds, unit, fps))}</span></span>`
-    );
-    const minorStep = chooseRulerStepSeconds(pxPerSecond) / 5;
-    const minorTicks = [];
-    const maxMinorTicks = 5e3;
-    for (let i = 1; i <= maxMinorTicks; i++) {
-      const seconds2 = i * minorStep;
-      if (seconds2 > totalSeconds + 1e-6) {
-        break;
-      }
-      if (i % 5 === 0) {
-        continue;
-      }
-      minorTicks.push(
-        `<span class="vst-tick vst-tick-minor" style="left:${seconds2 * pxPerSecond}px" aria-hidden="true"></span>`
-      );
-    }
-    const seamTicks = timing.boundaries.map((boundary) => {
-      const editPoint = layouts[boundary.rightIdx]?.startPx ?? 0;
-      return `<span class="vst-tick vst-tick-seam" style="left:${editPoint}px" aria-hidden="true"></span>`;
-    });
-    const endTick = `<span class="vst-tick vst-tick-end" style="left:${endPx}px"><span class="vst-tick-label">${escapeHtml(endLabel)}</span></span>`;
-    const outputTick = timing.outputSeconds < totalSeconds - 1e-6 ? `<span class="vst-tick vst-tick-output" style="left:${timing.outputSeconds * pxPerSecond}px"><span class="vst-tick-label">${escapeHtml(formatRulerLabel(timing.outputSeconds, unit, fps))} output</span></span>` : "";
-    return [
-      ...minorTicks,
-      ...gridTicks,
-      ...seamTicks,
-      outputTick,
-      endTick
-    ].join("");
-  };
-  var renderTimeline = (body, clips, options) => {
-    const fps = safeFps(options?.fps);
-    const unit = options?.unit === "frames" ? "frames" : "seconds";
-    const pxPerSecond = clampPxPerSecond(
-      options?.pxPerSecond ?? DEFAULT_PX_PER_SECOND
-    );
-    body.dataset.vstPps = String(pxPerSecond);
-    body.dataset.vstFps = String(fps);
-    const timing = resolveTimelineTiming(clips, fps, options?.capabilities);
-    const layouts = computeRegionLayout(clips, { pxPerSecond, timing });
-    const totalSeconds = timelineDisplaySeconds(clips, timing);
-    const totalPx = layouts.reduce(
-      (max, layout) => Math.max(max, layout.startPx + layout.widthPx),
-      0
-    );
-    const header = renderTimelineHeader(
-      clips.length,
-      timing.outputSeconds,
-      fps,
-      unit,
-      pxPerSecond,
-      options,
-      timing
-    );
-    const diagnostics = renderDiagnosticPanel(options?.diagnostics);
-    if (clips.length === 0) {
-      body.innerHTML = `${header}${diagnostics}<div class="vst-empty"><div class="vst-empty-icon" aria-hidden="true">🎬</div><div class="vst-empty-title">No clips yet.</div><div class="vst-empty-hint">Use the button below to start building your sequence.</div><button type="button" class="basic-button btn-primary vst-add-clip vst-empty-add" data-vst-add-clip>+ Add a clip</button></div>`;
-      wireTimelineToolbar(body, options);
-      return;
-    }
-    const promptRow = renderPromptTrackRow(
-      clips,
-      layouts,
-      pxPerSecond,
-      `${options?.globalPrompt ?? ""}`,
-      options?.capabilities
-    );
-    const videoRow = renderVideoTrackRow(
-      clips,
-      layouts,
-      fps,
-      unit,
-      options?.capabilities,
-      timing,
-      pxPerSecond
-    );
-    const referencesRow = renderReferencesTrackRow(
-      clips,
-      layouts,
-      fps,
-      unit,
-      options?.capabilities
-    );
-    const renderedAudioRow = renderAudioTrackRow(
-      clips,
-      layouts,
-      options?.capabilities,
-      options?.audioTracks,
-      pxPerSecond,
-      timing.outputSeconds
-    );
-    const planeWidth = TRACK_HEADER_W_PX + Math.max(totalPx + 160, 320);
-    body.innerHTML = `${header}${diagnostics}<div class="vst-scroll"><div class="vst-plane" style="width:${planeWidth}px"><div class="vst-ruler-row"><div class="vst-corner">Timeline</div><div class="vst-ruler">${renderRulerTicks(layouts, totalSeconds, totalSeconds * pxPerSecond, pxPerSecond, fps, unit, timing)}</div></div>` + promptRow + videoRow + referencesRow + renderedAudioRow + `</div></div>`;
-    applyBackgroundImages(body);
-    wireTimelineToolbar(body, options);
-    wireTimelineZoomWheel(body, options);
-  };
-
-  // frontend/timelineViewState.ts
-  var VIEW_STATE_KEY = "videostages.timeline.viewState";
-  var loadViewState = () => {
-    try {
-      const raw = localStorage.getItem(VIEW_STATE_KEY);
-      if (!raw) {
-        return null;
-      }
-      const parsed = JSON.parse(raw);
-      const state = {};
-      if (typeof parsed.pxPerSecond === "number") {
-        state.pxPerSecond = parsed.pxPerSecond;
-      }
-      if (parsed.unit === "frames" || parsed.unit === "seconds") {
-        state.unit = parsed.unit;
-      }
-      return state;
-    } catch {
-      return null;
-    }
-  };
-  var saveViewState = (state) => {
-    try {
-      localStorage.setItem(VIEW_STATE_KEY, JSON.stringify(state));
-    } catch {
-    }
-  };
-
-  // frontend/timelineViewport.ts
-  var createTimelineViewport = (options) => {
-    let currentUnit = "seconds";
-    let currentPxPerSecond = DEFAULT_PX_PER_SECOND;
-    let lastRenderedPxPerSecond = 0;
-    const save = () => {
-      saveViewState({
-        pxPerSecond: currentPxPerSecond,
-        unit: currentUnit
-      });
-    };
-    const load = () => {
-      const stored = loadViewState();
-      if (!stored) return;
-      if (stored.pxPerSecond !== void 0) {
-        currentPxPerSecond = clampPxPerSecond(stored.pxPerSecond);
-      }
-      if (stored.unit) currentUnit = stored.unit;
-    };
-    const setZoom = (value) => {
-      currentPxPerSecond = clampPxPerSecond(value);
-      save();
-      options.refresh();
-    };
-    const zoomWheel = (factor, clientX) => {
-      const scroll = options.scrollElement();
-      if (!scroll || currentPxPerSecond <= 0) {
-        setZoom(currentPxPerSecond * factor);
-        return;
-      }
-      const offsetX = clientX - scroll.getBoundingClientRect().left;
-      const timeAtPointer = zoomAnchorTime(
-        offsetX,
-        scroll.scrollLeft,
-        currentPxPerSecond
-      );
-      setZoom(currentPxPerSecond * factor);
-      const fresh = options.scrollElement();
-      if (fresh) {
-        fresh.scrollLeft = zoomAnchorScrollLeft(
-          timeAtPointer,
-          currentPxPerSecond,
-          offsetX
-        );
-      }
-    };
-    const restoreScroll = (previous) => {
-      const fresh = options.scrollElement();
-      if (fresh && previous.left > 0) {
-        const target = lastRenderedPxPerSecond > 0 && lastRenderedPxPerSecond !== currentPxPerSecond ? zoomAnchorScrollLeft(
-          zoomAnchorTime(
-            TRACK_HEADER_W_PX,
-            previous.left,
-            lastRenderedPxPerSecond
-          ),
-          currentPxPerSecond,
-          TRACK_HEADER_W_PX
-        ) : previous.left;
-        fresh.scrollLeft = target;
-      }
-      if (fresh && previous.top > 0) {
-        fresh.scrollTop = previous.top;
-      }
-      lastRenderedPxPerSecond = currentPxPerSecond;
-    };
-    return {
-      load,
-      unit: () => currentUnit,
-      pxPerSecond: () => currentPxPerSecond,
-      toggleUnit: () => {
-        currentUnit = currentUnit === "seconds" ? "frames" : "seconds";
-        save();
-        options.refresh();
-      },
-      zoomIn: () => setZoom(currentPxPerSecond * ZOOM_FACTOR),
-      zoomOut: () => setZoom(currentPxPerSecond / ZOOM_FACTOR),
-      zoomFit: () => {
-        const width = options.scrollElement()?.clientWidth ?? options.timelineBody()?.clientWidth ?? 0;
-        setZoom(
-          computeFitPxPerSecond(
-            options.totalSeconds(),
-            width,
-            TRACK_HEADER_W_PX + 24
-          )
-        );
-      },
-      setZoom,
-      zoomWheel,
-      restoreScroll
-    };
-  };
-
-  // frontend/videoStagesTimeline.ts
-  var videoStagesTimeline = () => {
-    let storeUnsub = null;
-    let selectionUnsub = null;
-    let catalogUnsub = null;
-    const timelineBody = () => document.getElementById(TIMELINE_BODY_ID);
-    const scrollEl = () => timelineBody()?.querySelector(".vst-scroll") ?? null;
-    const capabilities = () => captureAuthoringTransactionSnapshot().capabilities;
-    const viewport = createTimelineViewport({
-      refresh: () => refresh(),
-      totalSeconds: () => {
-        const state = getState();
-        const timing = resolveTimelineTiming(
-          state.clips,
-          safeFps(state.fps),
-          capabilities()
-        );
-        return timelineDisplaySeconds(state.clips, timing);
-      },
-      timelineBody,
-      scrollElement: scrollEl
-    });
-    const detailStrip = createTimelineDetailStrip();
-    const linking = createTimelineLinking();
-    const gestures = createGestureRouter();
-    const retakeTrack = createTimelineRetakeTrack(capabilities);
-    const promptTrack = createTimelinePromptTrack(capabilities);
-    const audioSpanTrack = createTimelineAudioSpanTrack(capabilities);
-    const selectionTracks = createTimelineSelectionTracks();
-    const referencesTrack = createTimelineReferencesTrack(
-      captureAuthoringTransactionSnapshot
-    );
-    let addClipInFlight = false;
+  // frontend/videoStagesApplication.ts
+  function createVideoStagesApplication(editor) {
+    let unsubscribeStore = null;
+    let unsubscribeCatalog = null;
     let historyNeedsRebase = true;
-    const hasAuthoritativeCatalog = () => getArchitectureCatalogSnapshot().catalog !== null;
-    const openSettings = () => {
-      setSelection({ kind: "none" });
-      detailStrip.render();
-    };
+    const ready = () => getArchitectureCatalogSnapshot().catalog !== null;
     const history = createTimelineHistory({
-      // The canonical model contains everything VideoStages authors across
-      // Data, clip-prompt, and UI-state carriers, including hue and
-      // prompt-window IDs.
       read: () => JSON.stringify(getState()),
       write: (value) => {
-        const state = JSON.parse(value);
-        const expectedRevision = getTimelineStore().revision();
-        saveState(state, {
-          expectedRevision,
+        saveState(JSON.parse(value), {
+          expectedRevision: getTimelineStore().revision(),
           notifyDomChange: isVideoStagesEnabled(),
           origin: "history"
         });
       }
     });
-    const rebaseHistoryIfReady = () => {
-      if (!hasAuthoritativeCatalog()) {
-        historyNeedsRebase = true;
-        return;
-      }
-      if (historyNeedsRebase) {
+    const rebaseHistory = () => {
+      if (ready() && historyNeedsRebase) {
         history.rebase();
         historyNeedsRebase = false;
       }
     };
-    const hostLifecycle = createTimelineHostLifecycle({
-      refresh: () => refresh(),
-      refreshCatalog: () => {
-        requestArchitectureCatalog(true);
-      },
+    const host = createTimelineHostLifecycle({
+      refresh: editor.refresh,
+      refreshCatalog: refreshAuthoritativeArchitectureCatalog,
       syncFromCarrier: () => {
-        if (!hasAuthoritativeCatalog()) {
-          return;
-        }
-        rebaseHistoryIfReady();
+        if (!ready()) return;
+        rebaseHistory();
         getTimelineStore().syncFromCarrier();
       },
       flushPending: () => {
-        if (hasAuthoritativeCatalog()) {
-          detailStrip.flushPending();
-        }
+        if (ready()) editor.flushPending();
       },
-      undo: () => hasAuthoritativeCatalog() && history.undo(),
-      redo: () => hasAuthoritativeCatalog() && history.redo()
+      undo: () => ready() && history.undo(),
+      redo: () => ready() && history.redo()
     });
-    const ensureDock = (body) => {
-      const shell = body.parentElement;
-      if (!shell) {
-        throw new Error("timeline body has no shell parent");
-      }
-      let dock = shell.querySelector(":scope > .vst-detail");
-      if (!dock) {
-        dock = document.createElement("div");
-        dock.className = "vst-detail";
-        shell.insertBefore(dock, body);
-      }
-      return dock;
-    };
-    const onBodyClickSyncReadout = () => {
-      void Promise.resolve().then(() => {
-        const body = timelineBody();
-        if (!body) {
-          return;
-        }
-        const sel = linking.getSelectedIndex();
-        const selEl = body.querySelector(
-          "[data-vst-readout-sel]"
-        );
-        const dotEl = body.querySelector(
-          "[data-vst-readout-sel-dot]"
-        );
-        if (!selEl || !dotEl) {
-          return;
-        }
-        selEl.hidden = sel === null;
-        dotEl.hidden = sel === null;
-        selEl.textContent = sel === null ? "" : `clip ${sel}`;
-      });
-    };
-    const addClipAfterCatalog = async () => {
-      try {
-        await loadAuthoritativeArchitectureCatalog();
-        const { defaults } = captureAuthoringTransactionSnapshot();
-        const defaultModel = getDefaultStageModel(defaults);
-        if (!defaultModel || architectureForModel(defaults.modelCatalog, defaultModel) === null) {
-          getVideoStagesHostBridge().showError(
-            "VideoStages cannot add a clip because no supported video model is available."
-          );
-          return;
-        }
-        const clips = getClips();
-        const prev = clips[clips.length - 1] ?? null;
-        if (prev && clips.length >= 2) {
-          const prevJoin = clips[clips.length - 2];
-          prev.boundaryOut = prevJoin.boundaryOut;
-          prev.boundaryOutCarryAudio = prevJoin.boundaryOutCarryAudio;
-          prev.boundaryOutReferenceScale = prevJoin.boundaryOutReferenceScale;
-          prev.boundaryOutReferenceIncludeSoundtrack = prevJoin.boundaryOutReferenceIncludeSoundtrack;
-          prev.boundaryOutOverlap = prevJoin.boundaryOutOverlap;
-        }
-        clips.push(buildDefaultClip(defaults, defaultModel, false, prev));
-        saveClips(clips, { origin: "timeline" });
-        setSelection({
-          kind: "clip",
-          clipIdx: clips.length - 1,
-          stageIdx: 0
-        });
-      } catch (error) {
-        console.warn("VideoStages: failed to add clip", error);
-        getVideoStagesHostBridge().showError(
-          "VideoStages could not add the clip. See the browser console for details."
-        );
-      } finally {
-        addClipInFlight = false;
-      }
-    };
-    const addClip = () => {
-      if (addClipInFlight) {
-        return;
-      }
-      addClipInFlight = true;
-      void addClipAfterCatalog();
-    };
-    const renderAll = (meta) => {
-      const enabled = isVideoStagesEnabled();
-      updateTimelineTabIndicator(enabled);
-      const body = document.getElementById(TIMELINE_BODY_ID);
-      if (!body) {
-        return;
-      }
-      const transaction = captureAuthoringTransactionSnapshot();
-      const catalogSnapshot = transaction.catalogStatus;
-      if (renderBlockingArchitectureCatalogStatus(
-        body,
-        catalogSnapshot,
-        () => requestArchitectureCatalog(true)
-      )) {
-        return;
-      }
-      const previousScrollElement = scrollEl();
-      const previousScroll = meta?.origin === "external" ? { left: 0, top: 0 } : {
-        left: previousScrollElement?.scrollLeft ?? 0,
-        top: previousScrollElement?.scrollTop ?? 0
-      };
-      try {
-        const state = getState();
-        const clips = state.clips;
-        const globalPrompt = readGlobalPrompt();
-        renderTimeline(body, clips, {
-          fps: safeFps(state.fps),
-          width: state.width,
-          height: state.height,
-          dimsExplicit: state.dimsExplicit,
-          unit: viewport.unit(),
-          pxPerSecond: viewport.pxPerSecond(),
-          selectedIndex: linking.getSelectedIndex(),
-          enabled,
-          onToggleEnabled: setVideoStagesEnabled,
-          onOpenSettings: () => openSettings(),
-          onToggleUnit: viewport.toggleUnit,
-          onAddClip: addClip,
-          onZoomIn: viewport.zoomIn,
-          onZoomOut: viewport.zoomOut,
-          onZoomFit: viewport.zoomFit,
-          onZoomSlider: viewport.setZoom,
-          onZoomWheel: viewport.zoomWheel,
-          onUndo: () => history.undo(),
-          onRedo: () => history.redo(),
-          globalPrompt,
-          audioTracks: state.audioTracks,
-          diagnostics: deriveAuthoringDiagnostics(
-            clips,
-            transaction.capabilities
-          ),
-          capabilities: transaction.capabilities
-        });
-        renderRetainedArchitectureCatalogStatus(
-          body,
-          catalogSnapshot,
-          () => requestArchitectureCatalog(true)
-        );
-        viewport.restoreScroll(previousScroll);
-        linking.reapplySelection(body, clips.length);
-        detailStrip.render(meta, transaction);
-        applySelectionHighlight(body);
-      } catch (error) {
-        console.warn("VideoStages: timeline render failed", error);
-      }
-    };
-    const refresh = () => renderAll();
-    const requestArchitectureCatalog = (forceRefresh = false) => {
-      const currentCatalog = getArchitectureCatalogSnapshot();
-      if (!forceRefresh && currentCatalog.catalog && currentCatalog.status !== "refreshing") {
-        renderAll();
-        return;
-      }
-      if (forceRefresh) {
-        refreshAuthoritativeArchitectureCatalog();
-      } else {
-        loadAuthoritativeArchitectureCatalog();
-      }
-    };
     const init = () => {
-      historyNeedsRebase = true;
-      viewport.load();
-      injectTimelineTab();
-      const body = document.getElementById(TIMELINE_BODY_ID);
-      if (body) {
-        retakeTrack.attach(body, gestures);
-        audioSpanTrack.attach(body, gestures);
-        linking.attach(body, gestures);
-        promptTrack.attach(body, gestures);
-        selectionTracks.attach(body);
-        referencesTrack.attach(body, gestures);
-        detailStrip.attach(body, ensureDock(body), false);
-        gestures.attach(body);
-        body.removeEventListener("click", onBodyClickSyncReadout);
-        body.addEventListener("click", onBodyClickSyncReadout);
-      }
-      selectionUnsub?.();
-      selectionUnsub = subscribeSelection(() => {
-        const el = document.getElementById(TIMELINE_BODY_ID);
-        if (el) {
-          applySelectionHighlight(el);
-        }
-      });
       const store2 = getTimelineStore();
       store2.invalidate();
-      storeUnsub?.();
-      storeUnsub = store2.subscribe((_state, meta) => {
-        history.capture();
-        renderAll(meta);
+      historyNeedsRebase = true;
+      unsubscribeStore?.();
+      unsubscribeStore = store2.subscribe(() => history.capture());
+      unsubscribeCatalog?.();
+      unsubscribeCatalog = subscribeArchitectureCatalog((snapshot) => {
+        if (snapshot.status === "ready" && snapshot.catalog) {
+          store2.invalidate();
+          historyNeedsRebase = true;
+          rebaseHistory();
+        }
       });
-      rebaseHistoryIfReady();
-      hostLifecycle.bind();
+      rebaseHistory();
+      editor.init();
+      host.bind();
       window.removeEventListener(
         TIMELINE_AUTHORING_SETTINGS_CHANGED,
-        refresh
+        editor.refresh
       );
-      window.addEventListener(TIMELINE_AUTHORING_SETTINGS_CHANGED, refresh);
-      catalogUnsub?.();
-      catalogUnsub = subscribeArchitectureCatalog((snapshot) => {
-        if (snapshot.status === "ready" && snapshot.catalog) {
-          getTimelineStore().invalidate();
-          historyNeedsRebase = true;
-          rebaseHistoryIfReady();
-        }
-        renderAll();
-      });
-      requestArchitectureCatalog();
+      window.addEventListener(
+        TIMELINE_AUTHORING_SETTINGS_CHANGED,
+        editor.refresh
+      );
+      loadAuthoritativeArchitectureCatalog();
     };
     const dispose = () => {
-      catalogUnsub?.();
-      catalogUnsub = null;
-      hostLifecycle.dispose();
+      host.dispose();
       window.removeEventListener(
         TIMELINE_AUTHORING_SETTINGS_CHANGED,
-        refresh
+        editor.refresh
       );
-      retakeTrack.dispose();
-      audioSpanTrack.dispose();
-      linking.dispose();
-      promptTrack.dispose();
-      gestures.dispose();
-      selectionTracks.dispose();
-      referencesTrack.dispose();
-      detailStrip.dispose();
-      selectionUnsub?.();
-      selectionUnsub = null;
-      storeUnsub?.();
-      storeUnsub = null;
-      const body = document.getElementById(TIMELINE_BODY_ID);
-      body?.removeEventListener("click", onBodyClickSyncReadout);
+      unsubscribeStore?.();
+      unsubscribeStore = null;
+      unsubscribeCatalog?.();
+      unsubscribeCatalog = null;
+      editor.dispose();
     };
-    return { init, refresh, dispose };
-  };
+    return { init, dispose };
+  }
 
   // frontend/main.ts
-  var timeline = videoStagesTimeline();
+  var application = createVideoStagesApplication(createClipEditor());
   var dataInputWatchdog = null;
   var warnIfDataInputNeverAppears = () => {
     if (dataInputWatchdog) {
@@ -19957,38 +16702,38 @@ ${slot}`;
   var registerVideoStagesPromptPrefix = () => {
     getVideoStagesHostBridge().registerPromptPrefix(
       "videoclip",
-      "Per-clip prompt sections and prompt windows for the VideoStages timeline.",
+      "Per-clip prompt sections and prompt windows for VideoStages.",
       () => [
         "\n<videoclip[0]>the first clip's prompt text — everything until the next <videoclip...> tag.",
         "\n<videoclip[0]:1.5-4>a prompt window on the first clip from 1.5s to 4s.",
-        "\nThe timeline owns these; structured config (stages, references, keyframes, audio) rides in the hidden Data param."
+        "\nVideoStages owns these; structured config (stages, references, keyframes, audio) rides in the hidden Data param."
       ],
       true
     );
   };
   var DATA_INPUT_RETRY_MS = 250;
   var dataInputRetryTimer = null;
-  var initTimeline = () => {
+  var initVideoStages = () => {
     if (!getVideoStagesHostBridge().hasElement(DATA_INPUT_ID)) {
       warnIfDataInputNeverAppears();
       if (!dataInputRetryTimer) {
         dataInputRetryTimer = setTimeout(() => {
           dataInputRetryTimer = null;
-          initTimeline();
+          initVideoStages();
         }, DATA_INPUT_RETRY_MS);
       }
       return;
     }
     try {
-      timeline.init();
+      application.init();
       installHostGenerationInputProjector(materializeGenerationMedia);
     } catch (error) {
-      console.warn("VideoStages: failed to init timeline", error);
+      console.warn("VideoStages: failed to initialize editor", error);
     }
   };
-  getVideoStagesHostBridge().addPostParamBuildStep(initTimeline);
+  getVideoStagesHostBridge().addPostParamBuildStep(initVideoStages);
   registerVideoStagesPromptPrefix();
   refineVideoButton();
-  injectTimelineTab();
+  mountClipEditor();
 })();
 //# sourceMappingURL=video-stages.js.map

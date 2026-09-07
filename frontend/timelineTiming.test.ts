@@ -4,7 +4,7 @@ import { testArchitectureCatalog } from "./__test_helpers__/architectureFixtures
 import { minimalClip, minimalStage } from "./__test_helpers__/clipFixtures";
 import { createCapabilityViewResolver } from "./architectures/policy";
 import { activeStageCount, executableClipIndexes } from "./clipSemantics";
-import { timelineClipEdges } from "./timelineSnap";
+import { MEDIA_SOURCE_PREVIOUS_CLIP } from "./generatedMediaSource";
 import { resolveTimelineTiming } from "./timelineTiming";
 
 const capabilities = () =>
@@ -37,12 +37,6 @@ describe("resolveTimelineTiming", () => {
             handleFrames: 24,
             timelineReductionFrames: 1,
         });
-        const edges = timelineClipEdges(clips, timing);
-        expect(edges).toHaveLength(4);
-        expect(edges[0]).toBeCloseTo(0);
-        expect(edges[1]).toBeCloseTo(47 / 24);
-        expect(edges[2]).toBeCloseTo(3);
-        expect(edges[3]).toBeCloseTo(145 / 24);
     });
 
     it("uses the selected 24-frame Crossfade without a continuity extra", () => {
@@ -120,5 +114,51 @@ describe("resolveTimelineTiming", () => {
 
         expect(activeStageCount(clip)).toBe(1);
         expect(executableClipIndexes([clip])).toEqual([0]);
+    });
+
+    it("counts a leading audio-only clip as generation work, not output time", () => {
+        const timing = resolveTimelineTiming(
+            [
+                minimalClip({ duration: 20, audioOnly: true }),
+                minimalClip({
+                    duration: 20,
+                    audioSource: MEDIA_SOURCE_PREVIOUS_CLIP,
+                }),
+            ],
+            24,
+            capabilities(),
+        );
+
+        expect(timing.executableClipIndexes).toEqual([0, 1]);
+        expect(timing.outputClipIndexes).toEqual([1]);
+        expect(timing.consumedClipIndexes).toEqual([0]);
+        expect(timing.generatedFrames).toBe(962);
+        expect(timing.outputFrames).toBe(481);
+        expect(timing.outputSeconds).toBeCloseTo(481 / 24);
+    });
+
+    it("publishes only the last clip in a previous-video refinement chain", () => {
+        const previousVideo = {
+            source: MEDIA_SOURCE_PREVIOUS_CLIP,
+            data: "",
+            fileName: null,
+            fps: 24,
+            durationSeconds: 2,
+            startSeconds: 0,
+            lengthSeconds: 2,
+        };
+        const timing = resolveTimelineTiming(
+            [
+                minimalClip(),
+                minimalClip({ initVideo: previousVideo }),
+                minimalClip({ initVideo: previousVideo }),
+            ],
+            24,
+            capabilities(),
+        );
+
+        expect(timing.outputClipIndexes).toEqual([2]);
+        expect(timing.consumedClipIndexes).toEqual([0, 1]);
+        expect(timing.outputFrames).toBe(49);
     });
 });

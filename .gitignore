@@ -26,8 +26,12 @@ Directory.Build.rsp
 node_modules/
 *.js.map
 coverage/
+.playwright-cli/
+playwright-report/
+test-results/
 
 __pycache__/
+scripts/python-tests/.venv/
 
 # Syncthing scratch files. Never ours; a `git add -A` has committed these before.
 .syncthing.*

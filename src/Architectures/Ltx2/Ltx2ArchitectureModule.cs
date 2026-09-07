@@ -51,6 +51,7 @@ internal sealed class Ltx2ArchitectureModule : IVideoArchitectureModule
             AudioSourceKind.Upload,
             AudioSourceKind.ControlNet,
             AudioSourceKind.AceStepFun,
+            AudioSourceKind.PreviousClip,
         ],
         [
             ArchitectureEntryMode.TextToVideo,

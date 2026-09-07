@@ -1015,16 +1015,16 @@ describe("reduceDocumentCommand", () => {
             boundaryOut: "continue",
             duration: 7,
             prompt: "preserve me",
-            frameRefs: targetClip.frameRefs,
-            promptWindows: targetClip.promptWindows,
-            retake: targetClip.retake,
+            frameRefs: [],
+            promptWindows: [],
+            retake: null,
             initVideo: targetClip.initVideo,
-            icLoras: targetClip.icLoras,
-            audioSource: "Upload",
-            uploadedAudio: targetClip.uploadedAudio,
-            saveAudioTrack: true,
-            clipLengthFromAudio: true,
-            reuseAudio: true,
+            icLoras: [],
+            audioSource: "Native",
+            uploadedAudio: null,
+            saveAudioTrack: false,
+            clipLengthFromAudio: false,
+            reuseAudio: false,
         });
         expect(result.document.clips[0].boundaryOut).toBe("cut");
         expect(
@@ -1042,7 +1042,7 @@ describe("reduceDocumentCommand", () => {
                 skipped: false,
                 model: "test-video.safetensors",
                 modelProfileId: "test-profile",
-                frameRefStrengths: [0.8],
+                frameRefStrengths: [],
                 upscale: 2,
             },
             {
@@ -1712,7 +1712,7 @@ describe("reduceDocumentCommand", () => {
         );
     });
 
-    it("preserves unsupported LoRA and upscale settings as dormant data", () => {
+    it("keeps LoRAs and discards only unsupported upscale modes", () => {
         const source = document();
         const fake = fakeArchitectureCatalog();
         source.clips[1].loras = [{ name: "detail", weight: 1 }];
@@ -1746,7 +1746,7 @@ describe("reduceDocumentCommand", () => {
         expect(result.applied).toBe(true);
         expect(
             result.document.clips[1].stages.map((entry) => entry.upscale),
-        ).toEqual([2, 2]);
+        ).toEqual([1, 2]);
         expect(result.document.clips[1].loras).toEqual([
             { name: "detail", weight: 1 },
         ]);

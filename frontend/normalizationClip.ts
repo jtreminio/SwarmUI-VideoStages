@@ -11,7 +11,11 @@ import {
 import { architectureDescriptor } from "./architectures/catalogQueries";
 import { normalizeClipArchitecture } from "./architectures/identity";
 import { NONE_ARCHITECTURE_ID } from "./architectures/none/identity";
-import { AUDIO_SOURCE_NATIVE, canonicalAudioSource } from "./audioSource";
+import {
+    AUDIO_SOURCE_NATIVE,
+    AUDIO_SOURCE_PREVIOUS_CLIP,
+    canonicalAudioSource,
+} from "./audioSource";
 import { normalizeStoredHue, UNASSIGNED_HUE } from "./clipColor";
 import { normalizeClipReferenceScale } from "./clipReferenceAuthoring";
 import { sealSkipSuffix } from "./clipSemantics";
@@ -141,10 +145,14 @@ export const buildDefaultClip = (
                   defaults.fps,
               ),
         useSeedVr: false,
+        audioOnly: false,
         refFraming: "crop",
         h3AttentionWindowSeconds: 0,
         h3TextEncoder: previousClip?.h3TextEncoder ?? "default",
-        audioSource: AUDIO_SOURCE_NATIVE,
+        audioSource:
+            previousClip?.audioOnly === true
+                ? AUDIO_SOURCE_PREVIOUS_CLIP
+                : AUDIO_SOURCE_NATIVE,
         loras,
         icLoras: [],
         saveAudioTrack: false,
@@ -163,6 +171,12 @@ export const buildDefaultClip = (
         frameRefs,
         stages: [firstStage],
     };
+};
+
+export const applyAudioOnlyLeadBase = (clips: Clip[]): void => {
+    if (clips[0]?.audioOnly === true && clips[1]) {
+        clips[1].audioSource = AUDIO_SOURCE_PREVIOUS_CLIP;
+    }
 };
 
 export const normalizeClip = (
@@ -350,6 +364,7 @@ export const normalizeClip = (
         ),
         duration,
         useSeedVr: !!rawClip.useSeedVr,
+        audioOnly: !!rawClip.audioOnly,
         refFraming: normalizeReferenceFraming(rawClip.refFraming),
         h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
             rawClip.h3AttentionWindowSeconds,

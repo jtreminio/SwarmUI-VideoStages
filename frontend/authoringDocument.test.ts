@@ -13,7 +13,6 @@ import {
 } from "./__test_helpers__/dom";
 import { loadAuthoritativeArchitectureCatalog } from "./architectures/catalog";
 import { defaultIcLora } from "./architectures/ltx2/icLoraNormalization";
-import { isBrowserMediaHandle, resolveBrowserMedia } from "./browserMediaStore";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
 import {
@@ -441,15 +440,10 @@ describe("versioned authoring document identity", () => {
             "stage-b",
             "stage-a",
         ]);
-        expect(
-            reloaded.audioTracks?.map((track) => [track.id, track.spans[0].id]),
-        ).toEqual([
-            ["track-b", "span-b"],
-            ["track-a", "span-a"],
-        ]);
+        expect(reloaded.audioTracks).toEqual([]);
     });
 
-    it("round-trips a one-clip relative root audio span", () => {
+    it("discards a one-clip root audio span at the browser carrier", () => {
         const state = baseState([minimalClip({ id: "clip-one" })], {
             audioTracks: [
                 {
@@ -479,23 +473,10 @@ describe("versioned authoring document identity", () => {
         mountVideoStagesData(serialized);
         __resetPersistenceForTests();
         const reloaded = getState().audioTracks?.[0];
-        const data = reloaded?.source.uploadedAudio?.data ?? "";
-
-        expect(reloaded).toEqual({
-            ...state.audioTracks?.[0],
-            source: {
-                ...state.audioTracks?.[0]?.source,
-                uploadedAudio: {
-                    data: expect.stringMatching(/^vst-browser-media:/),
-                    fileName: "voice.wav",
-                },
-            },
-        });
-        expect(isBrowserMediaHandle(data)).toBe(true);
-        expect(resolveBrowserMedia(data)).toBe("data:audio/wav;base64,AAAA");
+        expect(reloaded).toBeUndefined();
     });
 
-    it("round-trips a multi-clip root audio span with an optional timeline window", () => {
+    it("discards a multi-clip root audio span at the browser carrier", () => {
         const state = baseState(
             [
                 minimalClip({ id: "clip-first" }),
@@ -505,6 +486,7 @@ describe("versioned authoring document identity", () => {
                 audioTracks: [
                     {
                         id: "track-score",
+                        disabled: true,
                         source: {
                             kind: "AceStepFun",
                             reference: "audio1",
@@ -527,10 +509,6 @@ describe("versioned authoring document identity", () => {
         saveState(state, { notifyDomChange: false });
         __resetPersistenceForTests();
         const reloaded = getState();
-        expect(reloaded.audioTracks).toEqual(state.audioTracks);
-        expect(reloaded.audioTracks?.[0].spans[0]).toMatchObject({
-            timelineStartSeconds: 0.5,
-            timelineLengthSeconds: 3,
-        });
+        expect(reloaded.audioTracks).toEqual([]);
     });
 });

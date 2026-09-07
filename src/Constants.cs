@@ -24,6 +24,7 @@ public static class Constants
     public const int SectionID_VideoClip = 58823;
     public const int SectionID_VideoClipUnmatched = 68823;
     public const int StagedNodeIdReservationFloor = 1_000_000;
+    public const int AudioOnlyDimension = 32;
 
     public const string SweptHostRootNodesKey = "videostages.host-root.swept";
     public const double DefaultStageRefStrength = 0.8;

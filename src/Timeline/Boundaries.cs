@@ -110,18 +110,31 @@ internal sealed class Boundaries
                 $"timeline merge expected {_plan.Clips.Count} clip outputs "
                 + $"but received {clipOutputs.Count}.");
         }
-        List<DecodedClipArtifact> publishedOutputs = [clipOutputs[0]];
+        List<DecodedClipArtifact> publishedOutputs = [];
         List<BoundaryPlan> publishedBoundaries = [];
-        for (int clipIndex = 1; clipIndex < clipOutputs.Count; clipIndex++)
+        for (int clipIndex = 0; clipIndex < clipOutputs.Count; clipIndex++)
         {
+            if (clipOutputs[clipIndex].Video is null)
+            {
+                continue;
+            }
             ClipPlan clip = _plan.Clips[clipIndex];
-            if (StringUtils.Equals(clip.InitVideo?.Source, MediaSource.PreviousClip))
+            if (publishedOutputs.Count > 0
+                && StringUtils.Equals(clip.InitVideo?.Source, MediaSource.PreviousClip))
             {
                 publishedOutputs[^1] = clipOutputs[clipIndex];
                 continue;
             }
+            if (publishedOutputs.Count > 0)
+            {
+                publishedBoundaries.Add(_effectiveBoundaries[clipIndex - 1]);
+            }
             publishedOutputs.Add(clipOutputs[clipIndex]);
-            publishedBoundaries.Add(_effectiveBoundaries[clipIndex - 1]);
+        }
+        if (publishedOutputs.Count == 0)
+        {
+            using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
+            return RuntimeArtifact.FromDecoded(_generator, bridge, clipOutputs[^1]);
         }
         if (publishedOutputs.Count == 1)
         {

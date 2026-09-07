@@ -3,28 +3,11 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-python_bin="${VIDEOSTAGES_PYTHON:-}"
-
-if [ -z "$python_bin" ]; then
-    for candidate in \
-        "$ROOT/../../../dlbackend/venv/bin/python" \
-        "$ROOT/../../../dlbackend/.venv/bin/python" \
-        "$ROOT/../../../dlbackend/ComfyUI/venv/bin/python" \
-        "$ROOT/../../../dlbackend/ComfyUI/.venv/bin/python" \
-        "$ROOT/../../../dlbackend/venv/Scripts/python.exe" \
-        "$ROOT/../../../dlbackend/python_embeded/python.exe"
-    do
-        if "$candidate" -c 'import pytest, torch' >/dev/null 2>&1; then
-            python_bin="$candidate"
-            break
-        fi
-    done
-fi
-
-if [ -z "$python_bin" ]; then
-    echo "PYTHON NODE TESTS FAILED: set VIDEOSTAGES_PYTHON to a Python with pytest and torch." >&2
-    exit 1
+python_args=()
+if [ -n "${VIDEOSTAGES_PYTHON:-}" ]; then
+    python_args=(--python "$VIDEOSTAGES_PYTHON")
 fi
 
 PYTHONPATH="$ROOT/comfy_node${PYTHONPATH:+:$PYTHONPATH}" \
-    "$python_bin" -m pytest -q "$ROOT/comfy_node/SwarmVideoStagesNodes/tests"
+    uv run --project "$ROOT/scripts/python-tests" --locked "${python_args[@]}" \
+    python -m pytest -q "$ROOT/comfy_node/SwarmVideoStagesNodes/tests" "$@"

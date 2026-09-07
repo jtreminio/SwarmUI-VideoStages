@@ -15,6 +15,7 @@ internal enum AudioSourceKind
     Upload,
     ControlNet,
     AceStepFun,
+    PreviousClip,
 }
 
 internal sealed record AudioSource(
@@ -37,6 +38,10 @@ internal sealed record AudioSource(
         {
             return new(AudioSourceKind.ControlNet, trimmed, null);
         }
+        if (StringUtils.Equals(trimmed, MediaSource.PreviousClip))
+        {
+            return new(AudioSourceKind.PreviousClip, trimmed, null);
+        }
         return MediaSource.TryParseAceStepFunIndex(trimmed, out int track)
             ? new(AudioSourceKind.AceStepFun, trimmed, track)
             : new(AudioSourceKind.Unknown, trimmed, null);
@@ -51,6 +56,7 @@ internal static class AudioSourceKindPolicy
     internal static bool CanDriveClipDuration(AudioSourceKind kind) =>
         kind is AudioSourceKind.Upload
             or AudioSourceKind.ControlNet
+            or AudioSourceKind.PreviousClip
             or AudioSourceKind.AceStepFun;
 
     /// <summary>

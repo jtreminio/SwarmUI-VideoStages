@@ -15,6 +15,8 @@ import {
 import { mountPromptBox, mountVideoStagesData } from "../__test_helpers__/dom";
 import { stubAceStepFunRegistry } from "../__test_helpers__/registries";
 import type { ArchitectureModelCatalog } from "../architectures/types";
+import { sectionPanel } from "../clipEditor/components";
+import { clipSections } from "../clipEditor/sections";
 import { resetRememberedAccordionSections } from "../detailWidgets";
 import { setVideoStagesHostBridgeForTests } from "../host";
 import {
@@ -23,9 +25,7 @@ import {
     getState,
 } from "../persistence/repository";
 import type { Clip, ClipReference } from "../types";
-import { buildClipReferenceSection } from "./clipReferencePanel";
 import type { DetailStripContext } from "./context";
-import { clampDetailSelection, detailBreadcrumb } from "./panelRouter";
 import { closeTrimModal } from "./trimModal";
 
 const catalogSupportingClipReferences = (): ArchitectureModelCatalog => {
@@ -39,9 +39,23 @@ const catalogSupportingClipReferences = (): ArchitectureModelCatalog => {
     return catalog;
 };
 
+const renderReferenceSection = (
+    context: DetailStripContext,
+    clipIdx: number,
+    clips: Clip[],
+    fps: number,
+): HTMLElement => {
+    const section = clipSections(
+        { ...getState(), clips, fps },
+        clipIdx,
+        context,
+    ).find((entry) => entry.key === "references");
+    if (!section) throw new Error("Missing references section");
+    return sectionPanel(section, clips[clipIdx].id || "clip");
+};
+
 const buildBody = (
     references: Partial<ClipReference>[],
-    selectedIdx: number,
     catalog = catalogSupportingClipReferences(),
     context: Partial<DetailStripContext> = {},
 ): HTMLElement => {
@@ -54,29 +68,26 @@ const buildBody = (
             },
         ],
     });
-    return buildClipReferenceSection(
+    return renderReferenceSection(
         {
             authoring: () => testAuthoringTransactionSnapshot(catalog),
             ...context,
         } as unknown as DetailStripContext,
         0,
-        selectedIdx,
         getClips(),
         getState().fps,
     );
 };
 
-/** `buildCheckbox` names its input after the label it renders beside. */
 const checkbox = (body: HTMLElement, label: string): HTMLInputElement | null =>
     body.querySelector<HTMLInputElement>(`input[data-name^="${label}"]`);
 
-/** The repeater wraps each tab label in its own disclosure and delete glyphs. */
-const tabLabels = (body: HTMLElement): string[] =>
-    Array.from(body.querySelectorAll(".vst-clip-ref-tab")).map(
-        (tab) => tab.textContent?.replace(/^[⮟⮞]|×$/g, "") ?? "",
-    );
+const itemLabels = (body: HTMLElement): string[] =>
+    Array.from(
+        body.querySelectorAll<HTMLElement>("[data-testid=editor-item]"),
+    ).map((item) => item.dataset.itemLabel || "");
 
-describe("buildClipReferenceSection", () => {
+describe("production reference section", () => {
     beforeEach(() => {
         localStorage.clear();
         __resetPersistenceForTests();
@@ -93,17 +104,14 @@ describe("buildClipReferenceSection", () => {
     });
 
     it("labels each reference with the prompt tag the model presents it under", () => {
-        const body = buildBody(
-            [
-                { kind: "image" },
-                { kind: "video" },
-                { kind: "image" },
-                { kind: "audio" },
-            ],
-            0,
-        );
+        const body = buildBody([
+            { kind: "image" },
+            { kind: "video" },
+            { kind: "image" },
+            { kind: "audio" },
+        ]);
 
-        expect(tabLabels(body)).toEqual([
+        expect(itemLabels(body)).toEqual([
             "<Picture 1>",
             "<Video 1>",
             "<Picture 2>",
@@ -144,60 +152,22 @@ describe("buildClipReferenceSection", () => {
             render,
         } as unknown as DetailStripContext;
         const build = () =>
-            buildClipReferenceSection(
-                context,
-                1,
-                null,
-                clips,
-                getState().fps,
-                true,
-                true,
-            );
+            renderReferenceSection(context, 1, clips, getState().fps);
         const body = build();
 
-        expect(tabLabels(body)).toEqual([
-            "<Video 1> (from Join with Clip 0)",
+        expect(itemLabels(body)).toEqual([
+            "<Video 1> · From Clip 0",
             "<Video 2>",
             "<Audio 2>",
         ]);
-        const capabilities =
-            testAuthoringTransactionSnapshot(catalog).capabilities;
-        expect(
-            detailBreadcrumb(
-                { kind: "clip-ref", clipIdx: 1, referenceIdx: 0 },
-                clips,
-                getState().fps,
-                capabilities,
-            ),
-        ).toBe("<Video 2> · Clip 1");
-        expect(
-            detailBreadcrumb(
-                { kind: "clip-ref", clipIdx: 1, referenceIdx: 1 },
-                clips,
-                getState().fps,
-                capabilities,
-            ),
-        ).toBe("<Audio 2> · Clip 1");
-        const join = body.querySelector<HTMLElement>(".vst-clip-ref-join-tab");
-        expect(join?.hasAttribute("aria-disabled")).toBe(false);
-        expect(join?.tabIndex).toBe(0);
-        const group = body
-            .querySelector(".vst-clip-ref-join-tab")
-            ?.closest(".vst-detail-repeating-group");
-        expect(
-            group?.querySelector<HTMLElement>(
-                ".vst-detail-repeating-group-content",
-            )?.hidden,
-        ).toBe(false);
+        const group = body.querySelector<HTMLElement>(
+            "[data-testid=editor-item]",
+        );
         expect(
             Array.from(
                 group?.querySelectorAll(".vst-detail-field-label") ?? [],
             ).map((label) => label.textContent),
         ).toEqual(["Reference scale", "Include soundtrack"]);
-        expect(
-            group?.querySelector(".vst-detail-repeating-group-delete"),
-        ).toBeNull();
-
         const scale = group?.querySelector<HTMLSelectElement>("select");
         if (!scale) {
             throw new Error("automatic reference scale missing");
@@ -215,37 +185,11 @@ describe("buildClipReferenceSection", () => {
         expect(clips[0].boundaryOutReferenceScale).toBe(0.5);
         expect(clips[0].boundaryOutReferenceIncludeSoundtrack).toBe(false);
         expect(render).toHaveBeenCalledTimes(1);
-        expect(
-            detailBreadcrumb(
-                { kind: "clip-ref", clipIdx: 1, referenceIdx: 1 },
-                clips,
-                getState().fps,
-                capabilities,
-            ),
-        ).toBe("<Audio 1> · Clip 1");
-        const boundarySelection = {
-            kind: "boundary-ref" as const,
-            leftClipIdx: 0,
-        };
-        expect(
-            clampDetailSelection(
-                boundarySelection,
-                clips,
-                [],
-                getState().fps,
-                capabilities,
-            ),
-        ).toEqual(boundarySelection);
-        clips[0].boundaryOut = "cut";
-        expect(
-            clampDetailSelection(
-                boundarySelection,
-                clips,
-                [],
-                getState().fps,
-                capabilities,
-            ),
-        ).toEqual({ kind: "none" });
+        expect(itemLabels(build())).toEqual([
+            "<Video 1> · From Clip 0",
+            "<Video 2>",
+            "<Audio 1>",
+        ]);
     });
 
     it("omits the join reference when the target has no generating stage", () => {
@@ -282,19 +226,16 @@ describe("buildClipReferenceSection", () => {
             ],
         });
         const clips = getClips();
-        const body = buildClipReferenceSection(
+        const body = renderReferenceSection(
             {
                 authoring: () => testAuthoringTransactionSnapshot(catalog),
             } as unknown as DetailStripContext,
             1,
-            0,
             clips,
             getState().fps,
-            true,
         );
 
-        expect(tabLabels(body)).toEqual(["<Video 1>"]);
-        expect(body.querySelector(".vst-clip-ref-join-tab")).toBeNull();
+        expect(itemLabels(body)).toEqual(["<Video 1>"]);
     });
 
     it("offers a Source field with the sources supported by each reference kind", () => {
@@ -312,7 +253,7 @@ describe("buildClipReferenceSection", () => {
             ).map((option) => option.value);
         };
 
-        expect(sourceValues(buildBody([{ kind: "image" }], 0))).toEqual([
+        expect(sourceValues(buildBody([{ kind: "image" }]))).toEqual([
             "Base",
             "Refiner",
             "Upload",
@@ -320,13 +261,13 @@ describe("buildClipReferenceSection", () => {
             "ControlNet 2",
             "ControlNet 3",
         ]);
-        expect(sourceValues(buildBody([{ kind: "video" }], 0))).toEqual([
+        expect(sourceValues(buildBody([{ kind: "video" }]))).toEqual([
             "Upload",
             "ControlNet 1",
             "ControlNet 2",
             "ControlNet 3",
         ]);
-        expect(sourceValues(buildBody([{ kind: "audio" }], 0))).toEqual([
+        expect(sourceValues(buildBody([{ kind: "audio" }]))).toEqual([
             "Upload",
             "ControlNet 1",
             "ControlNet 2",
@@ -346,7 +287,7 @@ describe("buildClipReferenceSection", () => {
             ],
         });
         const clips = getClips();
-        const secondClipVideo = buildClipReferenceSection(
+        const secondClipVideo = renderReferenceSection(
             {
                 authoring: () =>
                     testAuthoringTransactionSnapshot(
@@ -354,7 +295,6 @@ describe("buildClipReferenceSection", () => {
                     ),
             } as unknown as DetailStripContext,
             1,
-            0,
             clips,
             getState().fps,
         );
@@ -374,8 +314,8 @@ describe("buildClipReferenceSection", () => {
                 el.textContent?.includes("Include soundtrack"),
             );
 
-        expect(hasToggle(buildBody([{ kind: "video" }], 0))).toBe(true);
-        expect(hasToggle(buildBody([{ kind: "image" }], 0))).toBe(false);
+        expect(hasToggle(buildBody([{ kind: "video" }]))).toBe(true);
+        expect(hasToggle(buildBody([{ kind: "image" }]))).toBe(false);
     });
 
     describe("trim", () => {
@@ -435,7 +375,7 @@ describe("buildClipReferenceSection", () => {
         };
 
         it("offers the modal editor on a video reference with a probed length", () => {
-            const body = buildBody([videoReference()], 0);
+            const body = buildBody([videoReference()]);
 
             expect(body.querySelector("[data-vst-open-trim]")).not.toBeNull();
             expect(body.querySelector(".vst-trim")).toBeNull();
@@ -445,7 +385,6 @@ describe("buildClipReferenceSection", () => {
             let saved: Clip[] = [];
             const body = buildBody(
                 [videoReference({ startSeconds: 2, lengthSeconds: 4 })],
-                0,
                 catalogSupportingClipReferences(),
                 {
                     commit: (mutate) => {
@@ -478,10 +417,9 @@ describe("buildClipReferenceSection", () => {
         });
 
         it("disables the sidebar fields while the video owns clip length", () => {
-            const body = buildBody(
-                [videoReference({ drivesClipLength: true })],
-                0,
-            );
+            const body = buildBody([
+                videoReference({ drivesClipLength: true }),
+            ]);
 
             const inInput = sidebarField(body, "In (s)");
             const outInput = sidebarField(body, "Out (s)");
@@ -496,7 +434,7 @@ describe("buildClipReferenceSection", () => {
         });
 
         it("shows the selected reference video in the sidebar", () => {
-            const body = buildBody([videoReference()], 0);
+            const body = buildBody([videoReference()]);
 
             const preview = body.querySelector<HTMLVideoElement>(
                 ".vst-sidebar-video-preview",
@@ -505,33 +443,26 @@ describe("buildClipReferenceSection", () => {
             expect(preview?.src).toContain("data:video/mp4");
         });
 
-        /**
-         * Without a probed length the bar has no truthful scale, and the
-         * backend keeps the whole file regardless.
-         */
+        // An unprobed file has no meaningful full-source ruler.
         it("omits the editor when the reference length is unknown", () => {
             expect(
-                buildBody(
-                    [videoReference({ mediaDurationSeconds: 0 })],
-                    0,
-                ).querySelector("[data-vst-open-trim]"),
+                buildBody([
+                    videoReference({ mediaDurationSeconds: 0 }),
+                ]).querySelector("[data-vst-open-trim]"),
             ).toBeNull();
         });
 
         it("offers audio references the shared trim modal", () => {
-            const body = buildBody(
-                [
-                    {
-                        kind: "audio",
-                        mediaDurationSeconds: 8,
-                        uploadedMedia: {
-                            data: "data:audio/wav;base64,AAAA",
-                            fileName: "reference.wav",
-                        },
+            const body = buildBody([
+                {
+                    kind: "audio",
+                    mediaDurationSeconds: 8,
+                    uploadedMedia: {
+                        data: "data:audio/wav;base64,AAAA",
+                        fileName: "reference.wav",
                     },
-                ],
-                0,
-            );
+                },
+            ]);
 
             expect(
                 body.querySelector(".vst-sidebar-audio-preview")?.tagName,
@@ -545,24 +476,20 @@ describe("buildClipReferenceSection", () => {
 
         it("offers no trim on images", () => {
             expect(
-                buildBody(
-                    [{ kind: "image", mediaDurationSeconds: 8 }],
-                    0,
-                ).querySelector("[data-vst-open-trim]"),
+                buildBody([
+                    { kind: "image", mediaDurationSeconds: 8 },
+                ]).querySelector("[data-vst-open-trim]"),
             ).toBeNull();
         });
 
-        /** An untrimmed reference stores 0/0, so the editor has to widen it. */
+        // Stored 0/0 means the whole source file.
         it("shows an untrimmed reference as the whole file", () => {
-            const body = buildBody(
-                [
-                    videoReference({
-                        startSeconds: 0,
-                        lengthSeconds: 0,
-                    }),
-                ],
-                0,
-            );
+            const body = buildBody([
+                videoReference({
+                    startSeconds: 0,
+                    lengthSeconds: 0,
+                }),
+            ]);
             openTrim(body);
 
             const window_ = modalWindow();
@@ -571,15 +498,12 @@ describe("buildClipReferenceSection", () => {
         });
 
         it("draws a stored trim over the part of the file it uses", () => {
-            const body = buildBody(
-                [
-                    videoReference({
-                        startSeconds: 2,
-                        lengthSeconds: 4,
-                    }),
-                ],
-                0,
-            );
+            const body = buildBody([
+                videoReference({
+                    startSeconds: 2,
+                    lengthSeconds: 4,
+                }),
+            ]);
             openTrim(body);
 
             const window_ = modalWindow();
@@ -588,15 +512,12 @@ describe("buildClipReferenceSection", () => {
         });
 
         it("reports how much of the reference is used", () => {
-            const body = buildBody(
-                [
-                    videoReference({
-                        startSeconds: 2,
-                        lengthSeconds: 4,
-                    }),
-                ],
-                0,
-            );
+            const body = buildBody([
+                videoReference({
+                    startSeconds: 2,
+                    lengthSeconds: 4,
+                }),
+            ]);
 
             expect(body.textContent).toContain("References 4.0 s of 8.0 s");
         });
@@ -611,7 +532,6 @@ describe("buildClipReferenceSection", () => {
                         lengthSeconds: 4,
                     }),
                 ],
-                0,
                 catalogSupportingClipReferences(),
                 {
                     commit: (mutate) => {
@@ -651,7 +571,6 @@ describe("buildClipReferenceSection", () => {
                         drivesClipLength: true,
                     }),
                 ],
-                0,
                 catalogSupportingClipReferences(),
                 {
                     commit: (mutate) => {
@@ -682,15 +601,16 @@ describe("buildClipReferenceSection", () => {
         });
     });
 
-    it("disables Add for an architecture that does not support clip references", () => {
+    it("keeps unsupported persisted references repairable with Add disabled", () => {
         const catalog = testArchitectureCatalog();
         catalog.architectures[0].capabilities.features =
             catalog.architectures[0].capabilities.features.filter(
                 (feature) => feature !== "characterRefineIdentityReferences",
             );
-        const add = buildBody([], 0, catalog).querySelector<HTMLButtonElement>(
-            ".vst-detail-add-clip-ref",
-        );
+        const add = buildBody(
+            [{ kind: "image" }],
+            catalog,
+        ).querySelector<HTMLButtonElement>("[data-testid=add-references]");
 
         expect(add?.disabled).toBe(true);
     });
@@ -698,11 +618,11 @@ describe("buildClipReferenceSection", () => {
     it("allows image identity references without claiming general clip references", () => {
         const catalog = testArchitectureCatalog();
         const addClipReference = jest.fn();
-        const body = buildBody([], 0, catalog, {
+        const body = buildBody([], catalog, {
             addClipReference,
         } as unknown as Partial<DetailStripContext>);
         const add = body.querySelector<HTMLButtonElement>(
-            ".vst-detail-add-clip-ref",
+            "[data-testid=add-references]",
         );
 
         expect(add?.disabled).toBe(false);
@@ -713,23 +633,23 @@ describe("buildClipReferenceSection", () => {
     it("offers the length toggle only on timed media", () => {
         expect(
             checkbox(
-                buildBody([{ kind: "video", mediaDurationSeconds: 4.5 }], 0),
+                buildBody([{ kind: "video", mediaDurationSeconds: 4.5 }]),
                 "Clip Length from Video",
             ),
         ).not.toBeNull();
         expect(
             checkbox(
-                buildBody([{ kind: "audio", mediaDurationSeconds: 2 }], 0),
+                buildBody([{ kind: "audio", mediaDurationSeconds: 2 }]),
                 "Clip Length from Audio",
             ),
         ).not.toBeNull();
         expect(
-            checkbox(buildBody([{ kind: "image" }], 0), "Clip Length from"),
+            checkbox(buildBody([{ kind: "image" }]), "Clip Length from"),
         ).toBeNull();
     });
 
     it("disables the toggle until the media reports a length", () => {
-        const body = buildBody([{ kind: "video", mediaDurationSeconds: 0 }], 0);
+        const body = buildBody([{ kind: "video", mediaDurationSeconds: 0 }]);
 
         expect(checkbox(body, "Clip Length from Video")?.disabled).toBe(true);
         expect(body.textContent).toContain("Detected: unknown length");
@@ -744,16 +664,15 @@ describe("buildClipReferenceSection", () => {
             );
 
         const video = scaleField(
-            buildBody([{ kind: "video", mediaScale: 0.25 }], 0),
+            buildBody([{ kind: "video", mediaScale: 0.25 }]),
         );
         expect(video?.querySelector("select")?.value).toBe("0.25");
-        expect(scaleField(buildBody([{ kind: "audio" }], 0))).toBeUndefined();
-        expect(scaleField(buildBody([{ kind: "image" }], 0))).toBeUndefined();
+        expect(scaleField(buildBody([{ kind: "audio" }]))).toBeUndefined();
+        expect(scaleField(buildBody([{ kind: "image" }]))).toBeUndefined();
     });
 
     it("moves clip length ownership to the checked reference alone", () => {
-        // One captured array, so the commit's mutation is what the assertions
-        // read back — the repository hands out a fresh copy per call.
+        // Repository reads return copies; capture the array that commit mutates.
         let clips: Clip[] = [];
         const commit = jest.fn((mutate: (target: Clip[]) => void) => {
             mutate(clips);
@@ -767,7 +686,6 @@ describe("buildClipReferenceSection", () => {
                 },
                 { kind: "audio", mediaDurationSeconds: 4.5 },
             ],
-            1,
             catalogSupportingClipReferences(),
             {
                 commit,
@@ -795,10 +713,10 @@ describe("buildClipReferenceSection", () => {
     it("adds through the domain operation rather than mutating in place", () => {
         const addClipReference = jest.fn();
 
-        buildBody([], 0, catalogSupportingClipReferences(), {
+        buildBody([], catalogSupportingClipReferences(), {
             addClipReference,
         } as unknown as Partial<DetailStripContext>)
-            .querySelector<HTMLButtonElement>(".vst-detail-add-clip-ref")
+            .querySelector<HTMLButtonElement>("[data-testid=add-references]")
             ?.click();
 
         expect(addClipReference).toHaveBeenCalledWith(0);

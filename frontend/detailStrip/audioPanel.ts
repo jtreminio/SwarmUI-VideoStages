@@ -1,6 +1,7 @@
 import { hasArchitectureSlotSourcedIcLora } from "../architectures/behaviorRegistry";
 import {
     AUDIO_SOURCE_CONTROLNET,
+    AUDIO_SOURCE_PREVIOUS_CLIP,
     AUDIO_SOURCE_UPLOAD,
     buildAudioSourceOptions,
     canUseClipLengthFromAudio,
@@ -11,21 +12,15 @@ import {
 import { runClipMediaProbe } from "../clipMediaProbeGuard";
 import { AUDIO_SPAN_MIN_LENGTH } from "../constants";
 import {
-    buildAccordionSection,
     buildCheckbox,
     buildField,
     buildMediaPickRow,
     buildOptionSelect,
 } from "../detailWidgets";
-import {
-    audioTrackIndicesForClipWindow,
-    clipTimelineWindow,
-} from "../documentQueries";
 import { probeMediaDurationSeconds } from "../mediaProbe";
 import { toInOut } from "../trimGeometry";
-import type { AuthoringDocument, Clip, TimelineSelection } from "../types";
+import type { AuthoringDocument, Clip } from "../types";
 import { roundToTenth } from "../utils";
-import { buildAudioTracksPanel } from "./audioTracksPanel";
 import {
     applyPersistedCapabilityRepair,
     buildCapabilityNotice,
@@ -33,23 +28,20 @@ import {
     CAPABILITY_REPAIR_SELECTORS,
 } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
-import { buildSidebarMediaPreview } from "./sidebarMediaPreview";
 import { buildTrimLauncher, openTrimModal } from "./trimModal";
 
-export const buildAudioBody = (
+export const buildBaseAudioFields = (
     ctx: DetailStripContext,
-    sel: Extract<TimelineSelection, { kind: "audio" }>,
+    clipIdx: number,
     state: AuthoringDocument,
 ): HTMLElement => {
     const clips = state.clips;
-    const { clipIdx } = sel;
     const clip = clips[clipIdx];
     const capabilityView = ctx.authoring().capabilities.forClip(clip);
     const audioCapabilityDecision = capabilityView.clipAudio;
     const reuseDecision = capabilityView.decision("audioReuse");
     const durationDecision = capabilityView.decision("audioDerivedDuration");
-    // The control signal is IC-LoRA media, so its duration rides on that feature; the reason
-    // still names the control the user is looking at.
+    // Control-signal duration requires IC-LoRA support.
     const icLoraDecision = capabilityView.decision("icLora");
     const controlDurationDecision = icLoraDecision.supported
         ? icLoraDecision
@@ -71,16 +63,21 @@ export const buildAudioBody = (
                     reason: "No IC-LoRA supplies a ControlNet 1-3 drive source for clip duration.",
                 }
               : null;
-    const options = buildAudioSourceOptions(clip.audioSource ?? "", {
-        controlNetEnabled: capabilityView.audioSourceKinds.includes(
-            AUDIO_SOURCE_CONTROLNET,
-        ),
-        allowedKinds: capabilityView.audioSourceKinds,
-    });
-    const source =
-        options.find((option) => option.value === clip.audioSource)?.value ??
-        clip.audioSource ??
-        "";
+    const usesAudioOnlyLead = clipIdx === 1 && clips[0]?.audioOnly === true;
+    const options = usesAudioOnlyLead
+        ? [{ value: AUDIO_SOURCE_PREVIOUS_CLIP, label: "Clip 0 audio" }]
+        : buildAudioSourceOptions(clip.audioSource ?? "", {
+              controlNetEnabled: capabilityView.audioSourceKinds.includes(
+                  AUDIO_SOURCE_CONTROLNET,
+              ),
+              previousClipEnabled: clipIdx > 0,
+              allowedKinds: capabilityView.audioSourceKinds,
+          });
+    const source = usesAudioOnlyLead
+        ? AUDIO_SOURCE_PREVIOUS_CLIP
+        : (options.find((option) => option.value === clip.audioSource)?.value ??
+          clip.audioSource ??
+          "");
     const selectedAudioSourceAllowed = isAllowedAudioSource(
         capabilityView.audioSourceKinds,
         source,
@@ -139,10 +136,8 @@ export const buildAudioBody = (
         });
     };
 
-    const body = document.createElement("div");
-    body.className = "vst-detail-body vst-detail-audio-body";
     const base = document.createElement("div");
-    base.className = "vst-detail-col vst-detail-audio";
+    base.className = "vst-detail-fields vst-detail-col vst-detail-audio";
 
     const select = buildOptionSelect(
         options.map((o) => ({ value: o.value, label: o.label })),
@@ -154,15 +149,18 @@ export const buildAudioBody = (
             ctx.render();
         },
     );
-    base.appendChild(
-        buildField(
-            "Audio Source",
-            select,
-            undefined,
-            "Where this clip's audio comes from: generated from the prompt, " +
-                "an uploaded file, or a connected generated-audio source.",
-        ),
+    select.disabled = usesAudioOnlyLead;
+    const sourceField = buildField(
+        "Audio Source",
+        select,
+        undefined,
+        usesAudioOnlyLead
+            ? "Clip 0 is audio-only, so its output is always Clip 1's base audio."
+            : "Where this clip's audio comes from: generated from the prompt, " +
+                  "an uploaded file, or a connected generated-audio source.",
     );
+    sourceField.classList.toggle("vst-field-disabled", usesAudioOnlyLead);
+    base.appendChild(sourceField);
 
     const reuseRow = buildCheckbox(
         "Reuse Captured Stage Audio",
@@ -238,6 +236,22 @@ export const buildAudioBody = (
             }),
         );
     }
+    const saveRow = buildCheckbox(
+        "Save audio separately",
+        clip.saveAudioTrack === true && isAce,
+        (value) => {
+            commitAudio((c) => {
+                c.saveAudioTrack = value;
+            });
+        },
+        {
+            disabled: !isAce,
+            help:
+                "Export the generated audio as its own output alongside the " +
+                "video. Only available for generated (AceStep) audio.",
+        },
+    );
+    base.appendChild(saveRow);
     if (clip.clipLengthFromControlNet) {
         const controlLengthStatus = document.createElement("div");
         controlLengthStatus.className =
@@ -270,26 +284,15 @@ export const buildAudioBody = (
         base.appendChild(controlLengthStatus);
     }
 
-    // "Audio track" is the timeline's own entity, edited in its own panel. This is a per-clip
-    // output flag, so it borrows the wording its diagnostic already uses instead.
-    const saveRow = buildCheckbox(
-        "Save audio separately",
-        clip.saveAudioTrack === true && isAce,
-        (value) => {
-            commitAudio((c) => {
-                c.saveAudioTrack = value;
-            });
-        },
-        {
-            disabled: !isAce,
-            help:
-                "Export the generated audio as its own output alongside the " +
-                "video. Only available for generated (AceStep) audio.",
-        },
-    );
-    base.appendChild(saveRow);
-
     if (source === AUDIO_SOURCE_UPLOAD) {
+        const limitSeconds = clip.uploadedAudioDurationSeconds;
+        const shown =
+            clip.uploadedAudioLengthSeconds > 0
+                ? {
+                      startSeconds: clip.uploadedAudioStartSeconds,
+                      lengthSeconds: clip.uploadedAudioLengthSeconds,
+                  }
+                : { startSeconds: 0, lengthSeconds: limitSeconds };
         base.appendChild(
             buildMediaPickRow(
                 "Audio Upload",
@@ -329,24 +332,11 @@ export const buildAudioBody = (
                     });
                     ctx.render();
                 },
+                clip.uploadedAudio?.data,
+                { kind: "audio", range: shown },
             ),
         );
         if (clip.uploadedAudio) {
-            const limitSeconds = clip.uploadedAudioDurationSeconds;
-            const shown =
-                clip.uploadedAudioLengthSeconds > 0
-                    ? {
-                          startSeconds: clip.uploadedAudioStartSeconds,
-                          lengthSeconds: clip.uploadedAudioLengthSeconds,
-                      }
-                    : { startSeconds: 0, lengthSeconds: limitSeconds };
-            base.appendChild(
-                buildSidebarMediaPreview(
-                    "audio",
-                    clip.uploadedAudio.data,
-                    shown,
-                ),
-            );
             if (limitSeconds > 0) {
                 const range = toInOut(shown);
                 base.appendChild(
@@ -416,28 +406,5 @@ export const buildAudioBody = (
             },
         });
     }
-    body.appendChild(
-        buildAccordionSection({
-            key: "base-audio",
-            label: "Base Audio",
-            content: base,
-            open: true,
-            flattenContent: true,
-        }).section,
-    );
-
-    body.appendChild(
-        buildAudioTracksPanel(
-            ctx,
-            state,
-            { kind: "none" },
-            {
-                trackIndices: audioTrackIndicesForClipWindow(state, clipIdx),
-                clipWindow:
-                    clipTimelineWindow(state.clips, clipIdx) ?? undefined,
-            },
-        ),
-    );
-
-    return body;
+    return base;
 };

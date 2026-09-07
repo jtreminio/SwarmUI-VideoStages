@@ -1,20 +1,18 @@
 import { describe, expect, it, jest } from "@jest/globals";
+import { lastSavedClips } from "../__test_helpers__/dom";
 import {
     committedClips,
-    crumbText,
-    detail,
-    detailBody,
-    detailStripHarness,
+    editorHarness,
     RETAKE_SOURCE,
-    retakeFieldByLabel,
-    sliderNumberByLabel,
-} from "../__test_helpers__/detailStrip";
-import { lastSavedClips } from "../__test_helpers__/dom";
+} from "../__test_helpers__/editor";
 import { getSelection, setSelection } from "../selection";
 import type { Clip } from "../types";
 
-describe("detail strip retake panel", () => {
-    const h = detailStripHarness();
+describe("production editor retake panel", () => {
+    const h = editorHarness();
+    const detail = (): HTMLElement => h.section("retake");
+    const sliderNumberByLabel = (label: string): HTMLInputElement =>
+        h.field("retake", label, "input.auto-slider-number");
 
     it("shows a + Retake button on a clip without a retake and creates+selects one", () => {
         h.setup([{ duration: 4, stages: [{}], initVideo: RETAKE_SOURCE }]);
@@ -29,11 +27,11 @@ describe("detail strip retake panel", () => {
         const retake = committedClips()[0].retake;
         expect(retake).not.toBeNull();
         expect(retake?.startSeconds).toBe(0);
-        expect(retake?.lengthSeconds).toBe(3); // min(default 3, clip 4)
+        expect(retake?.lengthSeconds).toBe(3);
         expect(retake?.strength).toBe(1);
     });
 
-    it("shows no second Retake add action once a retake exists", () => {
+    it("keeps an existing retake editable", () => {
         h.setup([
             {
                 duration: 10,
@@ -42,13 +40,14 @@ describe("detail strip retake panel", () => {
                 initVideo: RETAKE_SOURCE,
             },
         ]);
-        setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+        expect(h.field("retake", "Start (s)").value).toBe("2");
         expect(
-            document.querySelector<HTMLButtonElement>(".vst-detail-add-retake"),
-        ).toBeNull();
+            h.section("retake").querySelector("[data-testid=remove-item]")
+                ?.textContent,
+        ).toBe("Delete");
     });
 
-    it("renders the retake editor with the breadcrumb, fields, note and remove", () => {
+    it("renders the retake section with its fields, note and delete action", () => {
         h.setup([
             {
                 duration: 10,
@@ -58,26 +57,20 @@ describe("detail strip retake panel", () => {
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
-        expect(crumbText()).toBe("Retake · Clip 0 · 2–5 s");
-        expect(
-            retakeFieldByLabel("Start (s)").querySelector<HTMLInputElement>(
-                "input",
-            )?.value,
-        ).toBe("2");
-        expect(
-            retakeFieldByLabel("Length (s)").querySelector<HTMLInputElement>(
-                "input",
-            )?.value,
-        ).toBe("3");
+        expect(h.section("retake").querySelector("h3")?.textContent).toBe(
+            "Retake",
+        );
+        expect(h.field("retake", "Start (s)")?.value).toBe("2");
+        expect(h.field("retake", "Length (s)")?.value).toBe("3");
         expect(sliderNumberByLabel("Strength").value).toBe("0.6");
         expect(
             detail()?.querySelector(".vst-detail-retake-col .vst-detail-note")
                 ?.textContent,
         ).toContain("Applies when refining a base video");
         expect(
-            detailBody()?.querySelector(".vst-detail-delete-retake")
+            h.section("retake").querySelector("[data-testid=remove-item]")
                 ?.textContent,
-        ).toBe("×");
+        ).toBe("Delete");
     });
 
     it("live-applies a retake Start edit through the debounce", () => {
@@ -91,10 +84,7 @@ describe("detail strip retake panel", () => {
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
         jest.useFakeTimers();
-        const start =
-            retakeFieldByLabel("Start (s)").querySelector<HTMLInputElement>(
-                "input",
-            );
+        const start = h.field("retake", "Start (s)");
         if (!start) {
             throw new Error("start input missing");
         }
@@ -106,7 +96,7 @@ describe("detail strip retake panel", () => {
         );
     });
 
-    it("a retake selection opens the CLIP panel with its Retake section", () => {
+    it("navigates to editable retake fields from a retake selection", () => {
         h.setup([
             {
                 duration: 10,
@@ -116,32 +106,15 @@ describe("detail strip retake panel", () => {
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
-        // The clip panel (bare fields + Stages group) is what renders…
-        expect(detailBody()?.querySelector(".vst-detail-clip")).not.toBeNull();
         expect(
-            detail()?.querySelector('[data-vst-repeater-key="stages"]'),
-        ).not.toBeNull();
-        // …and its Retake section carries the editable fields.
-        expect(
-            detail()?.querySelector('[data-vst-accordion-key="retake"]'),
-        ).not.toBeNull();
-        expect(
-            detail()?.querySelector('[data-vst-repeater-key="retakes"]'),
-        ).toBeNull();
-        expect(
-            detail()
-                ?.querySelector(".vst-detail-retake-section")
-                ?.querySelector(".vst-detail-repeating-group"),
-        ).toBeNull();
-        expect(
-            detailBody()?.querySelector(
-                'input[data-vst-focus-key="retake-start"]',
-            ),
-        ).not.toBeNull();
-        expect(crumbText()).toBe("Retake · Clip 0 · 2–5 s");
+            h.root
+                .querySelector('[data-testid="nav-retake"]')
+                ?.getAttribute("aria-current"),
+        ).toBe("location");
+        expect(h.field("retake", "Start (s)").value).toBe("2");
     });
 
-    it("removes the retake without leaving or collapsing its section", () => {
+    it("removes a retake and offers creating another", () => {
         h.setup([
             {
                 duration: 10,
@@ -151,36 +124,29 @@ describe("detail strip retake panel", () => {
             },
         ]);
         setSelection({ kind: "retake", clipIdx: 0 });
-        const beforeDelete = detailBody();
-        if (!beforeDelete) {
-            throw new Error("dock body missing");
-        }
-        beforeDelete.scrollTop = 140;
-        beforeDelete
-            ?.querySelector<HTMLElement>(".vst-detail-delete-retake")
-            ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        h.section("retake")
+            .querySelector<HTMLButtonElement>("[data-testid=remove-item]")
+            ?.click();
         expect(committedClips()[0].retake).toBeNull();
-        expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
-        expect(
-            detail()
-                ?.querySelector('[data-vst-accordion-key="retake"]')
-                ?.classList.contains("input-group-open"),
-        ).toBe(true);
-        expect(
-            detail()?.querySelector(".vst-detail-add-retake"),
-        ).not.toBeNull();
-        expect(detailBody()?.scrollTop).toBe(140);
+        const add = h
+            .section("retake")
+            .querySelector<HTMLButtonElement>(".vst-detail-add-retake");
+        expect(add?.disabled).toBe(false);
+        add?.click();
+        expect(committedClips()[0].retake?.startSeconds).toBe(0);
     });
 
-    it("keeps the empty single-instance Retake section selectable", () => {
+    it("keeps the empty Retake section selectable", () => {
         h.setup([{ duration: 4, stages: [{}], initVideo: RETAKE_SOURCE }]);
         setSelection({ kind: "retake", clipIdx: 0 });
-        expect(crumbText()).toBe("Retake · Clip 0");
-        expect(getSelection()).toEqual({ kind: "retake", clipIdx: 0 });
         expect(
-            detail()
-                ?.querySelector('[data-vst-accordion-key="retake"]')
-                ?.classList.contains("input-group-open"),
-        ).toBe(true);
+            h.root
+                .querySelector('[data-testid="nav-retake"]')
+                ?.getAttribute("aria-current"),
+        ).toBe("location");
+        expect(
+            h.section("retake").querySelector(".vst-detail-add-retake")
+                ?.textContent,
+        ).toBe("+ Add Retake");
     });
 });

@@ -92,6 +92,13 @@ internal static class RequestReader
             clips.Add(clip);
         }
 
+        IReadOnlyList<TimelineAudioSpanSpec> audioSpans =
+            clips.Count == 1 && clips[0].AudioOnly
+                ? []
+                : AuthoringTimeline.ReadAudioSpans(
+                    document.AudioTracks,
+                    document.Clips,
+                    warn);
         return new TimelineSpec(
             width,
             height,
@@ -99,10 +106,7 @@ internal static class RequestReader
             isTextToVideo,
             clips,
             hasConfiguredResolution,
-            AuthoringTimeline.ReadAudioSpans(
-                document.AudioTracks,
-                document.Clips,
-                warn))
+            audioSpans)
         {
             LegacyVideoSwap = legacyVideoSwap,
         };
@@ -249,6 +253,10 @@ internal static class RequestReader
             UseSeedVr = DocumentJson.GetOptionalBool(
                 clipObject,
                 "useSeedVr",
+                false),
+            AudioOnly = DocumentJson.GetOptionalBool(
+                clipObject,
+                "audioOnly",
                 false),
         };
     }

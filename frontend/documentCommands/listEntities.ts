@@ -122,6 +122,7 @@ const CLIP_ENTITY = defineList<CanonicalAuthoringDocument, CanonicalClip>()({
         "boundaryOutOverlap",
         "duration",
         "useSeedVr",
+        "audioOnly",
         "refFraming",
         "h3AttentionWindowSeconds",
         "h3TextEncoder",
@@ -241,7 +242,7 @@ const AUDIO_TRACK_ENTITY = defineList<
     entityField: "track",
     idField: "trackId",
     beforeIdField: "beforeTrackId",
-    patchKeys: ["source", "volume"],
+    patchKeys: ["source", "volume", "disabled"],
     reservedKeys: ["id", "spans"],
     collection: (document) => document.audioTracks,
 });

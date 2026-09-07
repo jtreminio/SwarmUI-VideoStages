@@ -1,17 +1,16 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
+import { resetArchitectureCatalogForTests } from "../__test_helpers__/architectureCatalog";
 import {
     testArchitectureCatalog,
-    testAuthoringTransactionSnapshot,
+    testArchitectureCatalogDto,
 } from "../__test_helpers__/architectureFixtures";
-import { minimalClip } from "../__test_helpers__/clipFixtures";
+import { committedClips, editorHarness } from "../__test_helpers__/editor";
+import { loadAuthoritativeArchitectureCatalog } from "../architectures/catalog";
 import type { ArchitectureModelCatalog } from "../architectures/types";
 import { H3_TEXT_ENCODER_FEATURE } from "../generatedMiniMaxTextEncoder";
 import { H3_ATTENTION_WINDOW_FEATURE } from "../h3AttentionWindow";
 import { setVideoStagesHostBridgeForTests } from "../host";
-import { __resetPersistenceForTests } from "../persistence/repository";
-import type { AuthoringDocument, Clip } from "../types";
-import { buildClipBody } from "./clipPanel";
-import type { DetailStripContext } from "./context";
+import { createDefaultVideoStagesHostBridge } from "../host/defaultVideoStagesHostBridge";
 
 const minimaxCatalog = (): ArchitectureModelCatalog => {
     const catalog = testArchitectureCatalog();
@@ -25,144 +24,108 @@ const minimaxCatalog = (): ArchitectureModelCatalog => {
     return catalog;
 };
 
-const context = (
+const backend = globalThis as typeof globalThis & {
+    currentBackendFeatureSet?: string[];
+};
+
+const loadCatalog = async (
     catalog: ArchitectureModelCatalog,
-    clips: Clip[],
-): DetailStripContext =>
-    ({
-        commit: (mutate: (clips: Clip[]) => void) => mutate(clips),
-        commitState: jest.fn(),
-        debouncedCommit: (_key: string, mutate: (clips: Clip[]) => void) =>
-            mutate(clips),
-        debouncedCommitState: jest.fn(),
-        buildClampedNumber: () => document.createElement("input"),
-        structuralCommit: jest.fn(),
-        render: jest.fn(),
-        addRefEntry: jest.fn(),
-        deleteRefEntry: jest.fn(),
-        addClipReference: jest.fn(),
-        deleteClipReference: jest.fn(),
-        addPromptWindow: jest.fn(),
-        deleteWindowEntry: jest.fn(),
-        createRetake: jest.fn(),
-        removeRetake: jest.fn(),
-        addStage: jest.fn(),
-        deleteStage: jest.fn(),
-        selectStage: jest.fn(),
-        toggleClipSkip: jest.fn(),
-        toggleStageSkip: jest.fn(),
-        getBoundBody: () => null,
-        getSettingsMode: () => null,
-        setSettingsMode: jest.fn(),
-        authoring: () => testAuthoringTransactionSnapshot(catalog),
-    }) as DetailStripContext;
+): Promise<void> => {
+    resetArchitectureCatalogForTests();
+    setVideoStagesHostBridgeForTests({
+        ...createDefaultVideoStagesHostBridge(),
+        requestJson: async () => testArchitectureCatalogDto(catalog),
+    });
+    await loadAuthoritativeArchitectureCatalog();
+};
 
-const documentFor = (clips: Clip[]): AuthoringDocument => ({
-    width: 512,
-    height: 512,
-    fps: 24,
-    dimsExplicit: false,
-    clips,
-    audioTracks: [],
-});
+describe("MiniMax H3 clip controls", () => {
+    const h = editorHarness();
 
-afterEach(() => {
-    delete (globalThis as { currentBackendFeatureSet?: string[] })
-        .currentBackendFeatureSet;
-    setVideoStagesHostBridgeForTests(null);
-    Reflect.deleteProperty(globalThis, "installFeatureById");
-    __resetPersistenceForTests();
-    document.body.innerHTML = "";
-});
+    afterEach(() => {
+        delete backend.currentBackendFeatureSet;
+        Reflect.deleteProperty(globalThis, "installFeatureById");
+    });
 
-describe("MiniMax H3 attention window", () => {
-    it("renders below clip basics and commits seconds when JuanAttn is installed", () => {
-        (
-            globalThis as { currentBackendFeatureSet?: string[] }
-        ).currentBackendFeatureSet = [H3_ATTENTION_WINDOW_FEATURE];
-        const clip = minimalClip();
-        const clips: Clip[] = [clip];
-
-        const body = buildClipBody(
-            context(minimaxCatalog(), clips),
-            { kind: "clip", clipIdx: 0, stageIdx: 0 },
-            documentFor(clips),
-        );
-
+    it("renders attention below clip basics and commits seconds when JuanAttn is installed", async () => {
+        backend.currentBackendFeatureSet = [H3_ATTENTION_WINDOW_FEATURE];
+        await loadCatalog(minimaxCatalog());
+        h.setup([{ duration: 4, stages: [{}] }]);
+        const body = h.section("prompt");
         const labels = Array.from(
             body.querySelectorAll<HTMLElement>(".auto-input-name"),
         ).map((label) => label.textContent);
         expect(labels.indexOf("Attention window (s)")).toBeGreaterThan(
             labels.indexOf("Reference resize"),
         );
-        const number = body.querySelector<HTMLInputElement>(
-            "[data-vst-h3-attention-window] input.auto-slider-number",
+        const number = h.field<HTMLInputElement>(
+            "prompt",
+            "Attention window (s)",
+            "input.auto-slider-number",
         );
-        expect(number?.value).toBe("0");
-        if (!number) throw new Error("attention window slider missing");
+        expect(number.value).toBe("0");
         number.value = "2.5";
         number.dispatchEvent(new Event("input", { bubbles: true }));
-
-        expect(clip.h3AttentionWindowSeconds).toBe(2.5);
+        h.editor.flushPending();
+        expect(committedClips()[0].h3AttentionWindowSeconds).toBe(2.5);
     });
 
-    it("stays hidden unless JuanAttn is installed and the clip uses MiniMax H3", () => {
-        const clip = minimalClip();
-        const clips = [clip];
-        const withoutJuanAttn = buildClipBody(
-            context(minimaxCatalog(), clips),
-            { kind: "clip", clipIdx: 0, stageIdx: 0 },
-            documentFor(clips),
-        );
+    it("gates attention by architecture and enables it after the backend gains JuanAttn", async () => {
+        await loadCatalog(minimaxCatalog());
+        h.setup([{ duration: 4, stages: [{}] }]);
         expect(
-            withoutJuanAttn.querySelector("[data-vst-h3-attention-window]"),
-        ).toBeNull();
-
-        (
-            globalThis as { currentBackendFeatureSet?: string[] }
-        ).currentBackendFeatureSet = [H3_ATTENTION_WINDOW_FEATURE];
-        const wrongArchitecture = buildClipBody(
-            context(testArchitectureCatalog(), clips),
-            { kind: "clip", clipIdx: 0, stageIdx: 0 },
-            documentFor(clips),
-        );
+            h.field("prompt", "Duration (s)", "input.auto-slider-number").value,
+        ).toBe("4");
         expect(
-            wrongArchitecture.querySelector("[data-vst-h3-attention-window]"),
+            h.section("prompt").querySelector("[data-vst-h3-attention-window]"),
         ).toBeNull();
+        backend.currentBackendFeatureSet = [H3_ATTENTION_WINDOW_FEATURE];
+        await loadCatalog(testArchitectureCatalog());
+        h.editor.refresh();
+        expect(
+            h.field<HTMLSelectElement>("prompt", "Reference resize", "select")
+                .value,
+        ).toBe("crop");
+        expect(
+            h.section("prompt").querySelector("[data-vst-h3-attention-window]"),
+        ).toBeNull();
+        await loadCatalog(minimaxCatalog());
+        h.editor.refresh();
+        const number = h.field<HTMLInputElement>(
+            "prompt",
+            "Attention window (s)",
+            "input.auto-slider-number",
+        );
+        number.value = "3";
+        number.dispatchEvent(new Event("input", { bubbles: true }));
+        h.editor.flushPending();
+        expect(committedClips()[0].h3AttentionWindowSeconds).toBe(3);
     });
-});
 
-describe("MiniMax H3 text encoder", () => {
-    it("renders below attention window and commits the selected encoder", () => {
-        (
-            globalThis as { currentBackendFeatureSet?: string[] }
-        ).currentBackendFeatureSet = [
+    it("renders the text encoder below attention with help and commits the selection", async () => {
+        backend.currentBackendFeatureSet = [
             H3_ATTENTION_WINDOW_FEATURE,
             H3_TEXT_ENCODER_FEATURE,
         ];
-        const clip = minimalClip();
-        const clips = [clip];
-
-        const body = buildClipBody(
-            context(minimaxCatalog(), clips),
-            { kind: "clip", clipIdx: 0, stageIdx: 0 },
-            documentFor(clips),
-        );
-
+        await loadCatalog(minimaxCatalog());
+        h.setup([{ duration: 4, stages: [{}] }]);
+        const body = h.section("prompt");
         const labels = Array.from(
             body.querySelectorAll<HTMLElement>(".auto-input-name"),
         ).map((label) => label.textContent);
         expect(labels.indexOf("Text Encoder")).toBeGreaterThan(
             labels.indexOf("Attention window (s)"),
         );
-        const select = body.querySelector<HTMLSelectElement>(
-            "select[data-vst-h3-text-encoder]",
+        const select = h.field<HTMLSelectElement>(
+            "prompt",
+            "Text Encoder",
+            "select",
         );
         expect(
-            Array.from(select?.options ?? []).map((option) => option.value),
+            Array.from(select.options).map((option) => option.value),
         ).toEqual(["default", "8b", "4b"]);
         const help = select
-            ?.closest(".vst-detail-field")
+            .closest(".vst-detail-field")
             ?.querySelector<HTMLElement>(".sui-info-popover");
         expect(help?.textContent).toContain(
             "download the matching projection automatically",
@@ -172,53 +135,52 @@ describe("MiniMax H3 text encoder", () => {
             "https://github.com/nicolab28/ComfyUI-ClipProj",
         );
         expect(repo?.target).toBe("_blank");
-        if (!select) throw new Error("text encoder select missing");
         select.value = "8b";
         select.dispatchEvent(new Event("change", { bubbles: true }));
-
-        expect(clip.h3TextEncoder).toBe("8b");
+        expect(committedClips()[0].h3TextEncoder).toBe("8b");
     });
 
-    it("offers ClipProj installation in place of the dropdown", () => {
-        const clip = minimalClip();
-        const clips = [clip];
+    it("offers ClipProj installation and exposes encoders after backend installation", async () => {
+        await loadCatalog(minimaxCatalog());
         const installFeatureById = jest.fn();
-        (
-            globalThis as typeof globalThis & {
-                installFeatureById?: typeof installFeatureById;
-            }
-        ).installFeatureById = installFeatureById;
-        const withoutClipProj = buildClipBody(
-            context(minimaxCatalog(), clips),
-            { kind: "clip", clipIdx: 0, stageIdx: 0 },
-            documentFor(clips),
-        );
-        const install = withoutClipProj.querySelector<HTMLButtonElement>(
-            "[data-vst-install-clipproj]",
-        );
+        Object.assign(globalThis, { installFeatureById });
+        h.setup([{ duration: 4, stages: [{}] }]);
+        const install = h
+            .section("prompt")
+            .querySelector<HTMLButtonElement>("[data-vst-install-clipproj]");
         expect(install?.textContent).toBe("Install ComfyUI-ClipProj");
         expect(
-            withoutClipProj.querySelector("select[data-vst-h3-text-encoder]"),
+            h
+                .section("prompt")
+                .querySelector("select[data-vst-h3-text-encoder]"),
         ).toBeNull();
         install?.click();
         expect(installFeatureById).toHaveBeenCalledWith(
             H3_TEXT_ENCODER_FEATURE,
             expect.any(String),
         );
-
-        (
-            globalThis as { currentBackendFeatureSet?: string[] }
-        ).currentBackendFeatureSet = [H3_TEXT_ENCODER_FEATURE];
-        const wrongArchitecture = buildClipBody(
-            context(testArchitectureCatalog(), clips),
-            { kind: "clip", clipIdx: 0, stageIdx: 0 },
-            documentFor(clips),
+        backend.currentBackendFeatureSet = [H3_TEXT_ENCODER_FEATURE];
+        h.editor.refresh();
+        const select = h.field<HTMLSelectElement>(
+            "prompt",
+            "Text Encoder",
+            "select",
         );
+        expect(select.value).toBe("default");
+        select.value = "4b";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        expect(committedClips()[0].h3TextEncoder).toBe("4b");
+        await loadCatalog(testArchitectureCatalog());
+        h.editor.refresh();
         expect(
-            wrongArchitecture.querySelector("[data-vst-h3-text-encoder]"),
+            h.field<HTMLSelectElement>("prompt", "Reference resize", "select")
+                .value,
+        ).toBe("crop");
+        expect(
+            h.section("prompt").querySelector("[data-vst-h3-text-encoder]"),
         ).toBeNull();
         expect(
-            wrongArchitecture.querySelector("[data-vst-install-clipproj]"),
+            h.section("prompt").querySelector("[data-vst-install-clipproj]"),
         ).toBeNull();
     });
 });

@@ -105,6 +105,16 @@ internal class StageRunner
         StagePlan stage = stageContext.Stage;
         ClipContext clipContext = stageContext.ClipContext;
         Ltx2StagePayload payload = stage.RequireLtx2Payload();
+        if (clipContext.PlannedClip.AudioOnly)
+        {
+            _stageExecutor.RunStage(
+                stageContext,
+                guideMedia: null,
+                resolveFallbackGuide: null,
+                frameRefs: [],
+                guideMergeStrength: 1);
+            return;
+        }
         if (payload.CharacterRefine is not null)
         {
             _stageExecutor.RunStage(

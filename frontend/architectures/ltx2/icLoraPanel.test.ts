@@ -1,20 +1,89 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import { initVideoFixture } from "../../__test_helpers__/clipFixtures";
+import { lastSavedClips } from "../../__test_helpers__/dom";
 import {
     committedClips,
-    detail,
-    detailStripHarness,
-    fieldByLabel,
+    editorFieldContainer,
+    editorHarness,
     modelGlobals,
     swarmGlobals,
-} from "../../__test_helpers__/detailStrip";
-import { lastSavedClips } from "../../__test_helpers__/dom";
+} from "../../__test_helpers__/editor";
+import { storeBrowserMedia } from "../../browserMediaStore";
 import { setSelection } from "../../selection";
 import type { Clip } from "../../types";
 import { IC_LORA_AUTO } from "./icLoraPresets";
 
-describe("detail strip IC-LoRA panel", () => {
-    const h = detailStripHarness();
+describe("production editor IC-LoRA panel", () => {
+    const h = editorHarness();
+    const fieldByLabel = (label: string): HTMLElement =>
+        editorFieldContainer("ic-loras", label);
+    const detail = (): HTMLElement => h.section("ic-loras");
+
+    it("restores uploaded drive previews without recommitting media on load", () => {
+        const data = "data:image/png;base64,AAAA";
+        const renderPreview = jest.fn(
+            (input: HTMLInputElement, src: string) => {
+                input.dataset.filedata = src;
+                const image = document.createElement("img");
+                image.src = src;
+                input
+                    .closest(".auto-input")
+                    ?.querySelector(".auto-input-preview")
+                    ?.append(image);
+            },
+        );
+        const previous = {
+            setMediaFileDirect: globalThis.setMediaFileDirect,
+            getMediaType: globalThis.getMediaType,
+        };
+        Object.assign(globalThis, {
+            setMediaFileDirect: renderPreview,
+            getMediaType: () => "image",
+        });
+        try {
+            h.setup([
+                {
+                    duration: 4,
+                    stages: [{}],
+                    icLoras: [
+                        {
+                            preset: "union",
+                            lora: "control.safetensors",
+                            driveData: "visual",
+                            driveSource: "Upload",
+                            driveMedia: {
+                                data: storeBrowserMedia(data),
+                                fileName: "example.png",
+                            },
+                        },
+                    ],
+                },
+            ]);
+            setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
+            const row = fieldByLabel("Drive Media");
+            expect(
+                row
+                    .querySelector(".auto-input-preview img")
+                    ?.getAttribute("src"),
+            ).toBe(data);
+            const calls = renderPreview.mock.calls.length;
+            const input =
+                row.querySelector<HTMLInputElement>('input[type="file"]');
+            if (!input) throw new Error("Drive upload input missing");
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(renderPreview).toHaveBeenCalledTimes(calls);
+            row.querySelector<HTMLButtonElement>(
+                ".vst-audio-upload-clear",
+            )?.click();
+            expect(
+                fieldByLabel("Drive Media").querySelector(
+                    ".auto-input-preview img",
+                ),
+            ).toBeNull();
+        } finally {
+            Object.assign(globalThis, previous);
+        }
+    });
 
     const icLoraSelect = (label: string): HTMLSelectElement => {
         const select =
@@ -34,14 +103,19 @@ describe("detail strip IC-LoRA panel", () => {
     const controlNetLabels = (): (string | null)[] =>
         Array.from(
             document.querySelectorAll<HTMLElement>(
-                ".vst-detail .auto-input-name",
+                ".vst-clip-editor .auto-input-name",
             ),
         ).map((el) => el.textContent);
 
-    it("hides IC-LoRA strengths when the clip has no IC-LoRAs", () => {
+    it("offers IC-LoRA authoring when the clip has no guides", () => {
         h.setup([{ duration: 4, stages: [{}], controlNetLora: "" }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(document.querySelector(".vst-stage-iclora-strength")).toBeNull();
+        expect(
+            h
+                .section("ic-loras")
+                .querySelector<HTMLButtonElement>("[data-testid=add-ic-loras]")
+                ?.disabled,
+        ).toBe(false);
     });
 
     it("shows a zero-based strength for each IC-LoRA in the stage", () => {
@@ -140,10 +214,10 @@ describe("detail strip IC-LoRA panel", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         jest.useFakeTimers();
-        const second =
-            fieldByLabel("second.safetensors").querySelector<HTMLInputElement>(
-                "input",
-            );
+        const second = editorFieldContainer(
+            "stages",
+            "second.safetensors",
+        ).querySelector<HTMLInputElement>("input");
         if (!second) throw new Error("IC-LoRA strength input missing");
         second.value = "0.3";
         second.dispatchEvent(new Event("input", { bubbles: true }));
@@ -157,7 +231,7 @@ describe("detail strip IC-LoRA panel", () => {
         h.setup([{ duration: 4, stages: [{}] }]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const addBtn = document.querySelector<HTMLButtonElement>(
-            ".vst-detail-add-iclora",
+            "[data-testid='add-ic-loras']",
         );
         if (!addBtn) {
             throw new Error("add IC-LoRA button missing");
@@ -190,7 +264,7 @@ describe("detail strip IC-LoRA panel", () => {
         );
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const addBtn = document.querySelector<HTMLButtonElement>(
-            ".vst-detail-add-iclora",
+            "[data-testid='add-ic-loras']",
         );
         if (!addBtn) {
             throw new Error("add IC-LoRA button missing");
@@ -201,7 +275,6 @@ describe("detail strip IC-LoRA panel", () => {
         expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
         expect(clips[0].icLoras[0].preset).toBe("union-control");
         expect(controlNetLabels()).not.toContain("LoRA");
-        // The row survives the rebuild (the original bug: it vanished).
         expect(document.querySelectorAll(".vst-detail-iclora")).toHaveLength(1);
     });
 
@@ -456,7 +529,6 @@ describe("detail strip IC-LoRA panel", () => {
             ["0", "Stage 0"],
             ["1", "Stage 1"],
         ]);
-        // The whole field set a Custom entry renders, in order.
         expect(
             Array.from(
                 document.querySelectorAll(
@@ -619,9 +691,7 @@ describe("detail strip IC-LoRA panel", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 1 });
         document
-            .querySelector<HTMLButtonElement>(
-                '.vst-stage-tab[aria-pressed="true"] .vst-detail-skip-stage',
-            )
+            .querySelector<HTMLInputElement>("[data-testid=toggle-stage]")
             ?.click();
 
         expect(committedClips()[0].icLoras[0].driveSource).toBe("Upload");
@@ -651,7 +721,7 @@ describe("detail strip IC-LoRA panel", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 1, stageIdx: 0 });
         document
-            .querySelector<HTMLButtonElement>(".vst-detail-skip-clip")
+            .querySelector<HTMLButtonElement>("[data-testid='toggle-clip']")
             ?.click();
 
         expect(committedClips()[2].icLoras[0].driveSource).toBe("Upload");
@@ -789,7 +859,6 @@ describe("detail strip IC-LoRA panel", () => {
             expect.any(Function),
         );
 
-        // Completion refreshes the host's model lists and settles the hint.
         const onData = swarmGlobals.makeWSRequest.mock.calls[0][2] as (
             data: Record<string, unknown>,
         ) => void;
@@ -848,7 +917,7 @@ describe("detail strip IC-LoRA panel", () => {
         ).toContain(`Download failed: ${message}`);
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
 
-        h.strip.render();
+        h.editor.refresh();
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
 
         changeIcLoraSelect("Preset", "custom");
@@ -903,7 +972,7 @@ describe("detail strip IC-LoRA panel", () => {
         h.setup([{ duration: 4, stages: [{}] }], []);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const addBtn = document.querySelector<HTMLButtonElement>(
-            ".vst-detail-add-iclora",
+            "[data-testid='add-ic-loras']",
         );
         if (!addBtn) {
             throw new Error("add IC-LoRA button missing");
@@ -914,7 +983,7 @@ describe("detail strip IC-LoRA panel", () => {
         expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
     });
 
-    it("removes an IC-LoRA entry via the rail Delete button", () => {
+    it("removes an IC-LoRA entry via its row Delete button", () => {
         h.setup([
             {
                 duration: 4,
@@ -924,7 +993,7 @@ describe("detail strip IC-LoRA panel", () => {
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         const removeBtn = document.querySelector<HTMLButtonElement>(
-            ".vst-detail-delete-iclora",
+            "[data-testid='section-ic-loras'] [data-testid='remove-item']",
         );
         if (!removeBtn) {
             throw new Error("remove IC-LoRA button missing");

@@ -3,7 +3,9 @@ import {
     buildField,
     buildOptionSelect,
     type OptionSpec,
+    setFieldDisabled,
 } from "../../detailWidgets";
+import { updateCharacterRefineAvailability } from "./characterRefineSection";
 import type { StagePanelBindings } from "./types";
 
 const UPSCALE_EPSILON = 1e-6;
@@ -68,18 +70,19 @@ export const appendStageUpscaleSection = (
     );
     methodField.classList.add("vst-detail-span-2");
     const syncMethod = (upscale: number): void => {
-        fields
-            .querySelector<HTMLElement>(".vst-character-refine-section")
-            ?.toggleAttribute("hidden", upscale !== 1);
+        const bonita = fields.querySelector<HTMLElement>(
+            ".vst-character-refine-section",
+        );
+        if (bonita) updateCharacterRefineAvailability(bonita, upscale);
         const disabled =
             bonitaEnabled || Math.abs(upscale - 1) < UPSCALE_EPSILON;
-        methodSelect.disabled = disabled;
-        methodField.classList.toggle("vst-field-disabled", disabled);
-        methodField.title = bonitaEnabled
-            ? "Upscale is unavailable while Make Them Bonita is on"
-            : disabled
-              ? "Set Upscale above 1× to choose a method"
-              : "";
+        setFieldDisabled(
+            methodField,
+            disabled,
+            bonitaEnabled
+                ? "Upscale is unavailable while Make Them Bonita is on"
+                : "Set Upscale above 1× to choose a method",
+        );
     };
     const upscaleSlider = slider(
         "Upscale",
@@ -99,16 +102,11 @@ export const appendStageUpscaleSection = (
                 "above 1× enlarges using the Upscale Method.",
         },
     );
-    if (bonitaEnabled) {
-        upscaleSlider
-            .querySelectorAll<HTMLInputElement>("input")
-            .forEach((input) => {
-                input.disabled = true;
-            });
-        upscaleSlider.classList.add("vst-field-disabled");
-        upscaleSlider.title =
-            "Upscale is unavailable while Make Them Bonita is on";
-    }
+    setFieldDisabled(
+        upscaleSlider,
+        bonitaEnabled,
+        "Upscale is unavailable while Make Them Bonita is on",
+    );
     fields.append(upscaleSlider, methodField);
     syncMethod(stage.upscale);
 };

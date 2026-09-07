@@ -6,6 +6,7 @@ import { appendStageModelSection } from "./stagePanel/modelSection";
 import { appendStageReferenceGuideSection } from "./stagePanel/referenceGuideSection";
 import {
     appendStageDenoisingSection,
+    appendStageRefinementControls,
     appendStageSamplerSchedulerSection,
 } from "./stagePanel/samplingSection";
 import type { StagePanelBindings } from "./stagePanel/types";
@@ -94,11 +95,21 @@ export const buildStageParamsColumn = (
         slider,
     };
     appendStageModelSection(bindings);
-    appendStageDenoisingSection(bindings, isRefine);
-    appendStageUpscaleSection(bindings, isRefine);
+    appendStageDenoisingSection(bindings);
     appendStageSamplerSchedulerSection(bindings);
-    appendCharacterRefineSection(bindings);
+    if (isRefine) {
+        const heading = document.createElement("div");
+        heading.className =
+            "vst-detail-sec vst-detail-span-full vst-detail-crumb vst-detail-subsection-crumb";
+        heading.setAttribute("role", "heading");
+        heading.setAttribute("aria-level", "4");
+        heading.textContent = "Refinement";
+        fields.append(heading);
+        appendStageRefinementControls(bindings);
+        appendStageUpscaleSection(bindings, isRefine);
+    }
     appendStageReferenceGuideSection(bindings);
+    appendCharacterRefineSection(bindings);
 
     if (initVideoStage0) {
         const note = document.createElement("p");

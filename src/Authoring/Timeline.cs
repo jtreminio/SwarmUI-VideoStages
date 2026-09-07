@@ -155,6 +155,10 @@ internal static class AuthoringTimeline
         for (int trackIndex = 0; trackIndex < tracks.Count; trackIndex++)
         {
             JObject track = tracks[trackIndex];
+            if (DocumentJson.GetOptionalBool(track, "disabled", false))
+            {
+                continue;
+            }
             JObject sourceObject = DocumentJson.GetObject(
                 track,
                 UploadContainers.AudioTrackSource);

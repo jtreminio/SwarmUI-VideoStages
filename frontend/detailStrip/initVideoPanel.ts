@@ -4,13 +4,12 @@ import {
     INIT_VIDEO_PROBE_SLOT,
     runClipMediaProbe,
 } from "../clipMediaProbeGuard";
+import { setPreviousClipVideoSource } from "../clipRelationships";
 import { CLIP_DURATION_MIN } from "../constants";
 import {
-    appendHelp,
     buildField,
     buildMediaPickRow,
     buildOptionSelect,
-    buildStackSection,
 } from "../detailWidgets";
 import {
     MEDIA_SOURCE_PREVIOUS_CLIP,
@@ -29,7 +28,6 @@ import {
 } from "../trimGeometry";
 import type { Clip } from "../types";
 import type { DetailStripContext } from "./context";
-import { buildSidebarMediaPreview } from "./sidebarMediaPreview";
 import { buildTrimLauncher, openTrimModal } from "./trimModal";
 
 const DURATION_STEP = 0.1;
@@ -64,32 +62,15 @@ const applyPickedInitVideo = (
         onApplied: () => context.render(),
     });
 
-export const buildInitVideoSection = (
+export const buildInitVideoFields = (
     context: DetailStripContext,
     clip: Clip,
     clipIdx: number,
-    open = false,
+    disabled = false,
 ): HTMLElement => {
-    const { wrap, col } = buildStackSection(
-        "init-video",
-        "Source Video",
-        "vst-detail-source-col",
-        open,
-    );
-    const sectionLabel = wrap.querySelector<HTMLElement>(
-        ":scope > .input-group-header .header-label",
-    );
-    if (sectionLabel) {
-        appendHelp(
-            sectionLabel,
-            wrap,
-            "Source Video",
-            "Start this clip from an existing video instead of generating it. " +
-                "Stages then refine/upscale the footage and a retake can " +
-                "regenerate part of it.",
-        );
-    }
     const source = clip.initVideo;
+    const col = document.createElement("div");
+    col.className = "vst-detail-fields vst-detail-col vst-detail-source-col";
     const removeSource = (): void => {
         context.structuralCommit((clips) => {
             const target = clips[clipIdx];
@@ -126,42 +107,14 @@ export const buildInitVideoSection = (
             sourceKind,
             (value) => {
                 context.structuralCommit((clips) => {
-                    const target = clips[clipIdx];
-                    const previous = clips[clipIdx - 1];
-                    if (!target || !previous) {
-                        return null;
-                    }
-                    if (value === MEDIA_SOURCE_PREVIOUS_CLIP) {
-                        const duration = previous.duration;
-                        target.initVideo = {
-                            source: MEDIA_SOURCE_PREVIOUS_CLIP,
-                            data: "",
-                            fileName: null,
-                            fps: getTimelineStore().getState().fps,
-                            durationSeconds: duration,
-                            startSeconds: 0,
-                            lengthSeconds: duration,
-                        };
-                        applyClipDurationResize(
-                            target,
-                            duration,
-                            context.authoring().defaults,
-                        );
-                    } else if (
-                        target.initVideo?.source === MEDIA_SOURCE_PREVIOUS_CLIP
-                    ) {
-                        target.initVideo = null;
-                    }
-                    reconcileClipArchitectureIdentity(
-                        target,
-                        context.authoring().capabilities.catalog,
-                    );
-                    reconcileArchitectureIncomingIcLoraDrives(
+                    const changed = setPreviousClipVideoSource(
                         clips,
-                        context.authoring().generatedEntryMode,
-                        context.authoring().capabilities.catalog,
+                        clipIdx,
+                        value === MEDIA_SOURCE_PREVIOUS_CLIP,
+                        context.authoring(),
+                        getTimelineStore().getState().fps,
                     );
-                    return "render";
+                    return changed ? "render" : null;
                 });
             },
         );
@@ -169,8 +122,12 @@ export const buildInitVideoSection = (
         col.appendChild(buildField("Video source", sourceSelect));
     }
 
+    const shown: SourceRange = {
+        startSeconds: source?.startSeconds ?? 0,
+        lengthSeconds: source?.lengthSeconds ?? 0,
+    };
     const hint = document.createElement("small");
-    hint.className = "vst-detail-field-hint";
+    hint.className = "vst-detail-field-hint vst-detail-span-full";
     const sourceIsPrevious = sourceKind === MEDIA_SOURCE_PREVIOUS_CLIP;
     hint.textContent = sourceIsPrevious
         ? "Uses the previous clip's decoded output as this clip's starting footage."
@@ -189,19 +146,29 @@ export const buildInitVideoSection = (
                     }
                 },
                 removeSource,
+                source?.data,
+                {
+                    kind: "video",
+                    range: shown,
+                },
             ),
         );
     }
-    if (!source) {
-        return wrap;
-    }
-
-    const shown: SourceRange = {
-        startSeconds: source.startSeconds,
-        lengthSeconds: source.lengthSeconds,
+    const disableSection = (): void => {
+        if (!disabled) {
+            return;
+        }
+        col.classList.add("vst-field-disabled");
+        col.setAttribute("aria-disabled", "true");
+        col.querySelectorAll<
+            HTMLInputElement | HTMLButtonElement | HTMLSelectElement
+        >("input, button, select").forEach((control) => {
+            control.disabled = true;
+        });
     };
-    if (!sourceIsPrevious) {
-        col.appendChild(buildSidebarMediaPreview("video", source.data, shown));
+    if (!source) {
+        disableSection();
+        return col;
     }
 
     const info = document.createElement("small");
@@ -327,5 +294,6 @@ export const buildInitVideoSection = (
         "later stages refine or upscale it, and a retake regenerates part of it.";
     col.appendChild(note);
 
-    return wrap;
+    disableSection();
+    return col;
 };

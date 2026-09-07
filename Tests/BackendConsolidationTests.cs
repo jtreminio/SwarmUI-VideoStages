@@ -178,6 +178,7 @@ public class BackendConsolidationTests
     [InlineData(null, (int)AudioSourceKind.Native)]
     [InlineData("Upload", (int)AudioSourceKind.Upload)]
     [InlineData("ControlNet", (int)AudioSourceKind.ControlNet)]
+    [InlineData("Previous Clip", (int)AudioSourceKind.PreviousClip)]
     [InlineData("nonsense", (int)AudioSourceKind.Unknown)]
     public void One_parser_owns_the_audio_source_vocabulary(string raw, int expected)
     {

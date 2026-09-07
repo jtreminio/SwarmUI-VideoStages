@@ -54,12 +54,15 @@ internal sealed record DecodedClipArtifact(
 {
     internal void ValidateDecoded()
     {
-        if (Video?.Kind != DecodedMediaKind.Video
-            || (Audio is not null && Audio.Kind != DecodedMediaKind.Audio)
-            || Width <= 0
-            || Height <= 0
-            || FramesPerSecond <= 0
-            || Frames <= 0)
+        bool validVideo = Video?.Kind == DecodedMediaKind.Video
+            && Width > 0
+            && Height > 0
+            && FramesPerSecond > 0
+            && Frames > 0;
+        bool validAudioOnly = Video is null
+            && Audio?.Kind == DecodedMediaKind.Audio;
+        if ((!validVideo && !validAudioOnly)
+            || (Audio is not null && Audio.Kind != DecodedMediaKind.Audio))
         {
             throw Invariant.Failure(
                 $"Clip {ClipId} returned an invalid decoded media artifact.");
@@ -68,6 +71,15 @@ internal sealed record DecodedClipArtifact(
 
     internal WGNodeData ToHostMedia(WorkflowGenerator g)
     {
+        return Video is null ? ToAudioHostMedia(g) : ToVideoHostMedia(g);
+    }
+
+    internal WGNodeData ToVideoHostMedia(WorkflowGenerator g)
+    {
+        if (Video is null)
+        {
+            return null;
+        }
         WGNodeData media = new(Video.ToPath(), g, WGNodeData.DT_VIDEO, null)
         {
             Width = Width,
@@ -82,6 +94,16 @@ internal sealed record DecodedClipArtifact(
         return media;
     }
 
+    internal WGNodeData ToAudioHostMedia(WorkflowGenerator g)
+    {
+        DecodedOutputHandle audio = Audio;
+        if (audio is null)
+        {
+            return null;
+        }
+        return new(audio.ToPath(), g, WGNodeData.DT_AUDIO, null);
+    }
+
     internal static DecodedClipArtifact FromRuntime(RuntimeArtifact artifact, ClipPlan clip)
     {
         ArgumentNullException.ThrowIfNull(artifact);
@@ -90,6 +112,19 @@ internal sealed record DecodedClipArtifact(
         {
             throw Invariant.Failure(
                 $"clip {clip.ClipId} did not produce decoded video media.");
+        }
+        if (artifact.Media.DataType == WGNodeData.DT_AUDIO)
+        {
+            return new(
+                null,
+                DecodedOutputHandle.From(artifact.Media.Output, DecodedMediaKind.Audio),
+                0,
+                0,
+                0,
+                0,
+                clip.Architecture?.Id ?? throw Invariant.Failure(
+                    $"Clip {clip.ClipId} has no resolved architecture identity."),
+                clip.ClipId);
         }
         if (artifact.Media.DataType != WGNodeData.DT_VIDEO)
         {

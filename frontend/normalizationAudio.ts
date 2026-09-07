@@ -109,6 +109,7 @@ export const normalizeAudioTracks = (value: unknown): AudioTrack[] => {
                               (span): span is AudioTrackSpan => span !== null,
                           )
                     : [],
+                ...(rawTrack.disabled === true ? { disabled: true } : {}),
                 ...(volume === undefined ? {} : { volume }),
             }),
         );

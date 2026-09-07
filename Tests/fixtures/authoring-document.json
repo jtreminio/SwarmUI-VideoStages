@@ -15,6 +15,7 @@
             "boundaryOutOverlap": 8,
             "duration": 3,
             "useSeedVr": true,
+            "audioOnly": true,
             "refFraming": "fit-green",
             "h3AttentionWindowSeconds": 2.5,
             "h3TextEncoder": "8b",
@@ -185,10 +186,11 @@
             "boundaryOutOverlap": 1,
             "duration": 2,
             "useSeedVr": false,
+            "audioOnly": false,
             "refFraming": "crop",
             "h3AttentionWindowSeconds": 0,
             "h3TextEncoder": "default",
-            "audioSource": "Native",
+            "audioSource": "Previous Clip",
             "loras": [],
             "icLoras": [],
             "saveAudioTrack": false,
@@ -226,6 +228,7 @@
     "audioTracks": [
         {
             "id": "track-0",
+            "disabled": false,
             "volume": 0.75,
             "source": {
                 "kind": "Upload",
