@@ -14,32 +14,7 @@ using VideoStages.Architectures.Ltx2.Runtime;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// How a VideoStages timeline takes over the host's video root on LTX-2: what survives of core's
-/// own graph, where the root resolution / length / fps come from, how stage guides are framed, and
-/// how a ControlNet configured on the request is shared between core and the timeline — all
-/// generated through the real Comfy API POST path.
-/// <para>
-/// The POST shape decides the topology. Image-to-video keeps core's base pass (sampler seed
-/// <c>Seed</c>) and a decoded base image the timeline guides from, while the extension's own
-/// <see cref="Architectures.TimelineRunner.DropCoreOutput"/> step (<c>11.05</c>)
-/// prunes core's LTX video root
-/// so the stage sampler is the only video sampler left. Text-to-video has no base image at all, and
-/// the extension's displaced-root cleanup sweeps anything core built that the timeline does not
-/// consume — including core's whole ControlNet apply chain.
-/// </para>
-/// <para>
-/// Every test closes with <see cref="TypedWorkflowAssertions.AssertShippable"/>, the ControlNet
-/// ones included. That is only safe here because of the shapes chosen: core's
-/// <c>AutoCleanupNodeTypes</c> does not cover <c>ControlNetLoader</c>,
-/// <c>ControlNetApplyAdvanced</c>, <c>ModelPatchLoader</c>, <c>QwenImageDiffsynthControlnet</c>,
-/// <c>SwarmLoadVideoB64</c> or <c>GetVideoComponents</c>, and under
-/// image-to-video <c>IgnoresHostRootOutput</c> is false, so nothing sweeps a dead host root. Every
-/// image-to-video ControlNet clip here guides stage 0 from core's decoded base image, which keeps
-/// the base pass — and its apply chain — live. A ControlNet test whose timeline never consumes the
-/// base image would need targeted <c>AssertLive</c> calls instead.
-/// </para>
-/// </summary>
+// Image-to-video keeps the base pass live through stage 0’s guide. Text-to-video prunes the replaced host root, including ControlNet nodes outside core’s cleanup list.
 [Collection("VideoStagesTests")]
 public class Ltx2CoreVideoContractTests
 {
@@ -973,12 +948,7 @@ public class Ltx2CoreVideoContractTests
 
     // ---- ControlNet ---------------------------------------------------------------------
 
-    /// <summary>
-    /// A clip driving its IC-LoRA guide off ControlNet 1 reuses core's preprocessor output rather
-    /// than preprocessing the source video a second time. Text-to-video, where core's own apply
-    /// chain has nothing left to condition and the extension's displaced-root cleanup sweeps it —
-    /// leaving the preprocessor alive purely because the timeline reads it.
-    /// </summary>
+    // Text-to-video prunes core’s apply chain; the captured preprocessor output survives through the timeline guide.
     [Fact]
     public async Task Text_to_video_stage_guide_reuses_cores_controlnet_preprocessor()
     {
@@ -1167,17 +1137,7 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// <c>clipLengthFromControlNet</c> with no ControlNet configured on the request has nothing to
-    /// capture a length from. The clip falls back to its authored length and says so: no wired
-    /// length anywhere, and the entry that named the missing source is dropped.
-    /// <para>
-    /// The clip runs 2.0s deliberately. At the fixture's 1.0s the snapped length, the request's
-    /// <c>text2videoframes</c> and LTX's own grid all read 25, so "kept the authored length" would
-    /// be indistinguishable from "fell back to the request's". 2.0s at 24 fps is 48, snapped up to
-    /// 49 on the 8k+1 grid, and only the authored path produces that.
-    /// </para>
-    /// </summary>
+    // Two seconds distinguish authored length (49 aligned frames) from the request default (25).
     [Fact]
     public async Task Clip_length_from_an_uncaptured_controlnet_warns_and_keeps_the_authored_length()
     {
@@ -1277,15 +1237,7 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// The IC-LoRA guide nodes ship with ComfyUI-LTXVideo, so a backend without them must refuse
-    /// the request outright rather than emit a graph Comfy cannot execute.
-    /// <para>
-    /// The feature has to be cleared off the generator, not left out of the harness call: the
-    /// harness unions its caller's extra features with the defaults, and <c>ltxvideo</c> is one of
-    /// the defaults.
-    /// </para>
-    /// </summary>
+    // Clear ltxvideo on the generator: the harness adds it to its default feature set.
     [Fact]
     public async Task An_ic_lora_controlnet_guide_refuses_without_the_ltxvideo_nodes()
     {
@@ -1306,12 +1258,7 @@ public class Ltx2CoreVideoContractTests
         Assert.Contains("IC-LoRAs require the ComfyUI-LTXVideo custom nodes", refusal.Message);
     }
 
-    /// <summary>
-    /// A clip whose audio source is ControlNet 1 plays the source video's own soundtrack: the
-    /// capture is the <c>GetVideoComponents</c> audio slot, and the graph has to carry that slot all
-    /// the way to the save's audio. Image-to-video, because clip 0 of a text-to-video request hits
-    /// the P1 audio defect.
-    /// </summary>
+    // The captured source’s audio slot must reach the published soundtrack.
     [Fact]
     public async Task A_controlnet_audio_source_publishes_the_captured_source_audio()
     {
@@ -1544,9 +1491,7 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A clip LoRA is threaded through every stage's IC-LoRA chain at one shared weight.
-    /// </summary>
+    /// Identical stage LoRAs share their loader with both IC-LoRA chains.
     [Fact]
     public async Task Clip_lora_loads_for_every_stage_alongside_the_ic_lora()
     {
@@ -1556,11 +1501,14 @@ public class Ltx2CoreVideoContractTests
         JObject first = fixture.Stage(control: 0.5);
         JObject second = fixture.Stage("PreviousStage", control: 0.5);
         JObject clip = IcLoraClip(first, second);
-        clip["loras"] = new JArray(new JObject
+        foreach (JObject authoredStage in clip["stages"])
         {
-            ["name"] = "UnitTest_ScopedStageLora",
-            ["weight"] = 0.6,
-        });
+            authoredStage["loras"] = new JArray(new JObject
+            {
+                ["name"] = "UnitTest_ScopedStageLora",
+                ["weight"] = 0.6,
+            });
+        }
 
         JObject workflow = await fixture.GenerateImageToVideoAsync(
             MakeDocument(clip), RequestControlNet);

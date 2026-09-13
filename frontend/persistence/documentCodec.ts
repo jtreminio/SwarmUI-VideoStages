@@ -98,10 +98,6 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
             h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
             h3TextEncoder: clip.h3TextEncoder,
             audioSource: clip.audioSource,
-            loras: clip.loras.map((entry) => ({
-                name: entry.name,
-                weight: entry.weight,
-            })),
             icLoras: clip.icLoras.map((entry) => ({
                 id: entry.id,
                 lora: entry.lora,
@@ -163,6 +159,10 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 fromEnd: ref.fromEnd,
             })),
             stages: clip.stages.map((stage) => ({
+                loras: stage.loras.map((entry) => ({
+                    name: entry.name,
+                    weight: entry.weight,
+                })),
                 id: stage.id,
                 skipped: stage.skipped,
                 control: stage.control,
@@ -380,7 +380,13 @@ const hasValidStoredCollections = (
         }
         for (const stage of stages) {
             if (
-                Object.hasOwn(stage, "loras") ||
+                (Object.hasOwn(stage, "loras") &&
+                    (!hasArrayOfRecords(stage, "loras") ||
+                        !(stage.loras as Record<string, unknown>[]).every(
+                            (lora) =>
+                                typeof lora.weight === "number" &&
+                                Number.isFinite(lora.weight),
+                        ))) ||
                 Object.hasOwn(stage, "loraWeights") ||
                 (Object.hasOwn(stage, "icLoraStrengths") &&
                     (!Array.isArray(stage.icLoraStrengths) ||
@@ -518,6 +524,7 @@ const noticeDivergentProjection = (serialized: string): void => {
 
 const FRAME_REFS_SCHEMA_VERSION = 7;
 const STAGE_LORA_SCHEMA_VERSION = 8;
+const CLIP_LORA_SCHEMA_VERSION = 9;
 
 const renameKey = (
     target: Record<string, unknown>,
@@ -618,7 +625,7 @@ const migrateStageLorasToClip = (
         }
         rawClip.loras = clipLoras;
     }
-    document.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    document.schemaVersion = CLIP_LORA_SCHEMA_VERSION;
     return document;
 };
 
@@ -630,7 +637,8 @@ const migrateStoredDocument = (
     }
     if (
         parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION &&
-        parsed.schemaVersion !== STAGE_LORA_SCHEMA_VERSION
+        parsed.schemaVersion !== STAGE_LORA_SCHEMA_VERSION &&
+        parsed.schemaVersion !== CLIP_LORA_SCHEMA_VERSION
     ) {
         return null;
     }
@@ -659,7 +667,20 @@ const migrateStoredDocument = (
         }
         migrated.schemaVersion = STAGE_LORA_SCHEMA_VERSION;
     }
-    return migrateStageLorasToClip(migrated);
+    if (
+        migrated.schemaVersion === STAGE_LORA_SCHEMA_VERSION &&
+        !migrateStageLorasToClip(migrated)
+    )
+        return null;
+    if (!hasValidStoredCollections(migrated)) return null;
+    for (const clip of migrated.clips) {
+        for (const stage of Array.isArray(clip.stages) ? clip.stages : []) {
+            stage.loras = structuredClone(clip.loras ?? []);
+        }
+        delete clip.loras;
+    }
+    migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    return migrated;
 };
 
 export const decodeStoredDocument = (

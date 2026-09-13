@@ -97,6 +97,40 @@ describe("persistence", () => {
                 getDefaultStageModel(getRootDefaults()),
             );
 
+        it("migrates clip LoRAs into independent stage lists and preserves later empty lists", () => {
+            const decoded = decode({
+                schemaVersion: 9,
+                clips: [
+                    {
+                        loras: [{ name: "style.safetensors", weight: -0.4 }],
+                        stages: [
+                            { model: "ltx-2.3.safetensors" },
+                            { model: "ltx-2.3.safetensors", skipped: true },
+                        ],
+                    },
+                ],
+            });
+            expect(
+                decoded?.clips[0].stages.map((stage) => stage.loras),
+            ).toEqual([
+                [{ name: "style.safetensors", weight: -0.4 }],
+                [{ name: "style.safetensors", weight: -0.4 }],
+            ]);
+            if (!decoded) throw new Error("Expected migrated document");
+            const clips = decoded.clips;
+            clips[0].stages[0].loras[0].weight = 0.75;
+            expect(clips[0].stages[1].loras[0].weight).toBe(-0.4);
+            clips[0].stages[1].loras = [];
+            const stored = serializeClipsForStorage(clips);
+            const restored = decode({
+                schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
+                clips: stored,
+            });
+            expect(
+                restored?.clips[0].stages.map((stage) => stage.loras),
+            ).toEqual([[{ name: "style.safetensors", weight: 0.75 }], []]);
+        });
+
         it.each([
             ["missing clips", { schemaVersion: 8 }],
             ["non-array clips", { schemaVersion: 8, clips: {} }],
@@ -240,7 +274,7 @@ describe("persistence", () => {
                     }>;
                 }>;
             };
-            expect(reencoded.schemaVersion).toBe(9);
+            expect(reencoded.schemaVersion).toBe(10);
             expect(reencoded.clips[0].keyframes).toHaveLength(1);
             expect(reencoded.clips[0].frameRefs).toBeUndefined();
             expect(reencoded.clips[0].stages[0].keyframeStrengths).toEqual([
@@ -287,7 +321,7 @@ describe("persistence", () => {
                 ],
             });
 
-            expect(decoded?.clips[0].loras).toEqual([
+            expect(decoded?.clips[0].stages[0].loras).toEqual([
                 { name: "style.safetensors", weight: 0.5 },
                 { name: "detail.safetensors", weight: -0.25 },
             ]);
@@ -297,7 +331,7 @@ describe("persistence", () => {
             expect(decoded?.clips[0].stages[1]).not.toHaveProperty(
                 "loraWeights",
             );
-            expect(CURRENT_AUTHORING_SCHEMA_VERSION).toBe(9);
+            expect(CURRENT_AUTHORING_SCHEMA_VERSION).toBe(10);
         });
 
         it("accepts omitted optional collections without inventing stored items", () => {
@@ -386,7 +420,6 @@ describe("persistence", () => {
                     duration: 3,
                     h3AttentionWindowSeconds: 2.5,
                     h3TextEncoder: "8b",
-                    loras: [{ name: "detail.safetensors", weight: 0.6 }],
                     icLoras: [
                         {
                             id: "ic-guide",
@@ -422,6 +455,9 @@ describe("persistence", () => {
                     frameRefs: [minimalRef({ frame: 2, fromEnd: true })],
                     stages: [
                         minimalStage({
+                            loras: [
+                                { name: "detail.safetensors", weight: 0.6 },
+                            ],
                             controlNetStrength: 0.7,
                             frameRefStrengths: [0.8],
                         }),
@@ -447,7 +483,6 @@ describe("persistence", () => {
                     h3AttentionWindowSeconds: 2.5,
                     h3TextEncoder: "8b",
                     audioSource: "Native",
-                    loras: [{ name: "detail.safetensors", weight: 0.6 }],
                     icLoras: [
                         {
                             id: "ic-guide",
@@ -503,6 +538,9 @@ describe("persistence", () => {
                     stages: [
                         {
                             id: clips[0].stages[0].id as string,
+                            loras: [
+                                { name: "detail.safetensors", weight: 0.6 },
+                            ],
                             skipped: false,
                             control: 1,
                             controlNetStrength: 0.7,

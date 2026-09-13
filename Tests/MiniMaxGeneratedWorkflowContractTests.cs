@@ -389,8 +389,11 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live, publishedVideoSaves: 3);
     }
 
-    [Fact]
-    public async Task Persisted_clip_LoRA_reaches_every_stage_and_prompt_LoRA_stays_scoped()
+    [Theory]
+    [InlineData(0.6)]
+    [InlineData(-0.3)]
+    [InlineData(0)]
+    public async Task Persisted_stage_LoRA_strengths_and_prompt_LoRAs_stay_scoped(double secondStrength)
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         fixture.InstallModel("LoRA", "UnitTest_MiniMax_Prompt.safetensors")
@@ -398,12 +401,16 @@ public class MiniMaxGeneratedWorkflowContractTests
 
         JObject first = fixture.Stage();
         JObject clip = MakeClip(first, fixture.Stage("PreviousStage", control: 0.5, steps: 9));
-        clip["loras"] = new JArray(new JObject
+        foreach (JObject authoredStage in clip["stages"])
         {
-            ["name"] = "UnitTest_MiniMax_Persisted",
-            ["weight"] = 0.6,
-            ["textEncoderWeight"] = 0.7,
-        });
+            authoredStage["loras"] = new JArray(new JObject
+            {
+                ["name"] = "UnitTest_MiniMax_Persisted",
+                ["weight"] = 0.6,
+                ["textEncoderWeight"] = 0.7,
+            });
+        }
+        clip["stages"][1]["loras"][0]["weight"] = secondStrength;
         clip["duration"] = 1.0;
 
         (JObject workflow, WorkflowGenerator generator) =
@@ -433,16 +440,22 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.NotEmpty(persisted);
         Assert.True(ReachesUpstream(bridge, firstSampler.Model.Connection?.Node, prompt.Id));
         Assert.False(ReachesUpstream(bridge, secondSampler.Model.Connection?.Node, prompt.Id));
-        Assert.All(
-            [firstSampler, secondSampler],
-            sampler => Assert.Contains(
-                persisted,
-                lora => ReachesUpstream(bridge, sampler.Model.Connection?.Node, lora.Id)));
-        Assert.All(
-            persisted,
-            lora => Assert.Equal(0.6, lora.FindInput("strength_model").LiteralAsDouble()));
+        ComfyNode firstLora = Assert.Single(persisted,
+            lora => ReachesUpstream(bridge, firstSampler.Model.Connection?.Node, lora.Id));
+        Assert.Equal(0.6, firstLora.FindInput("strength_model").LiteralAsDouble());
+        ComfyNode[] secondLoras = [.. persisted.Where(
+            lora => ReachesUpstream(bridge, secondSampler.Model.Connection?.Node, lora.Id))];
+        if (secondStrength == 0)
+        {
+            Assert.Empty(secondLoras);
+        }
+        else
+        {
+            Assert.Equal(secondStrength,
+                Assert.Single(secondLoras).FindInput("strength_model").LiteralAsDouble());
+        }
 
-        Assert.DoesNotContain(
+        if (secondStrength != 0) Assert.DoesNotContain(
             $"modelloader_{fixture.Model.Name}_image2video",
             generator.NodeHelpers.Keys);
 

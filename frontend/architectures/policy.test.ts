@@ -293,8 +293,12 @@ describe("catalog-backed authoring policy", () => {
     it("keeps sampler and scheduler authoring enabled on a samplerless stage", () => {
         const models = testCombinedCatalog();
         const clip = minimalClip({
-            loras: [{ name: "persisted.safetensors", weight: 1 }],
-            stages: [minimalStage({ control: 0 })],
+            stages: [
+                minimalStage({
+                    loras: [{ name: "persisted.safetensors", weight: 1 }],
+                    control: 0,
+                }),
+            ],
         });
         const resolver = createCapabilityViewResolver(models);
 

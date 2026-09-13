@@ -322,12 +322,15 @@ public class WanRuntimeFlowTests
         JObject stage = (JObject)((JArray)clip["stages"])[0];
         clip["modelProfileId"] = "forged-non-5b-profile";
         stage["modelProfileId"] = "forged-non-5b-profile";
-        clip["loras"] = new JArray(new JObject
+        foreach (JObject authoredStage in clip["stages"])
         {
-            ["name"] = "UnitTest_Wan5b_Failure_Persisted",
-            ["weight"] = 0.6,
-            ["textEncoderWeight"] = 0.8,
-        });
+            authoredStage["loras"] = new JArray(new JObject
+            {
+                ["name"] = "UnitTest_Wan5b_Failure_Persisted",
+                ["weight"] = 0.6,
+                ["textEncoderWeight"] = 0.8,
+            });
+        }
         T2IParamInput input = BuildNativeInput(
             models.BaseModel,
             models.VideoModel,
@@ -590,7 +593,7 @@ public class WanRuntimeFlowTests
         JObject document = JObject.Parse(JsonSingleClipStages(
             MakeStage(high.Name, "Generated", control: 1, steps: 8),
             lowStage));
-        ((JObject)((JArray)document["clips"])[0])["loras"] = new JArray(new JObject
+        document["clips"][0]["stages"][1]["loras"] = new JArray(new JObject
         {
             ["name"] = "UnitTest_Wan_Low_Failure_Persisted",
             ["weight"] = 0.7,

@@ -369,7 +369,7 @@ describe("normalization", () => {
         prev.stages[0].steps = 20;
         prev.stages[0].cfgScale = 4;
         prev.h3TextEncoder = "4b";
-        prev.loras = [{ name: "look", weight: 0.6 }];
+        prev.stages[0].loras = [{ name: "look", weight: 0.6 }];
 
         const clip = buildDefaultClip(
             moduleRootDefaults(),
@@ -386,8 +386,8 @@ describe("normalization", () => {
         expect(stage.steps).toBe(20);
         expect(stage.cfgScale).toBe(4);
         expect(clip.h3TextEncoder).toBe("4b");
-        expect(clip.loras).toEqual([{ name: "look", weight: 0.6 }]);
-        expect(clip.loras).not.toBe(prev.loras);
+        expect(clip.stages[0].loras).toEqual([{ name: "look", weight: 0.6 }]);
+        expect(clip.stages[0].loras).not.toBe(prev.stages[0].loras);
         expect(clip.boundaryOut).toBe("cut");
         expect(clip.prompt).toBe("");
         expect(clip.frameRefs).toEqual([]);
@@ -915,8 +915,7 @@ describe("normalization", () => {
             24,
         );
 
-        // The inert flag no longer suppresses grid snapping, so references clamp to the
-        // clip's grid-snapped frame count exactly as they would without the flag.
+        // Dormant flags must not change frame-grid limits.
         expect(clip.frameRefs[0].frame).toBe(
             framesForClip(clip.duration, 24, {
                 frameGrid: 8,
@@ -1261,8 +1260,10 @@ describe("clip LoRAs with per-stage weights", () => {
             moduleRootDefaults(),
             testStageModel,
         );
-        expect(clip.loras).toEqual([
+        expect(clip.stages[0].loras).toEqual([
             { name: "base.safetensors", weight: 1 },
+        ]);
+        expect(clip.stages[1].loras).toEqual([
             { name: "refine.safetensors", weight: 0.4 },
         ]);
         expect(clip.stages[0]).not.toHaveProperty("loraWeights");
@@ -1724,9 +1725,7 @@ describe("clip length from a reference", () => {
     });
 
     /**
-     * The whole point of trimming a driving reference is to use part of it. If
-     * the clip still took the file's full length, a 3 s trim of a 30 s motion
-     * reference would leave a 30 s clip conditioned on 3 s of footage.
+     * A driving reference uses its trimmed length for the clip duration.
      */
     it("takes the trimmed length, not the file's, from a driving reference", () => {
         expect(

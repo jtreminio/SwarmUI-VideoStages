@@ -240,7 +240,6 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
 
             StockHostVideoStagePayload host = StockHostVideoStagePayload.Compile(
                     ArchitectureId,
-                    clip,
                     stage,
                     resolved,
                     resolved.LoraTarget)

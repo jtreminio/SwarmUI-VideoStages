@@ -125,18 +125,11 @@ export const readRawStageString = (
     return trimmedText(value) || undefined;
 };
 
-export interface NormalizedLegacyStageLora {
-    name: string;
-    weight: number;
-}
-
-export const normalizeStageLoras = (
-    raw: unknown,
-): NormalizedLegacyStageLora[] => {
+export const normalizeStageLoras = (raw: unknown): Stage["loras"] => {
     if (!Array.isArray(raw)) {
         return [];
     }
-    const out: NormalizedLegacyStageLora[] = [];
+    const out: Stage["loras"] = [];
     for (const entry of raw) {
         if (!isRecord(entry)) {
             continue;
@@ -162,6 +155,7 @@ export const buildDefaultStage = (
 ): Stage => {
     const model = previousStage ? previousStage.model : defaultStageModel;
     return {
+        loras: [],
         skipped: false,
         control: previousStage ? previousStage.control : defaults.control,
         controlNetStrength: previousStage
@@ -442,6 +436,7 @@ export const normalizeStage = (
         );
     }
     const stage: Stage = {
+        loras: normalizeStageLoras(rawStage.loras),
         id: normalizeOptionalEntityId(rawStage.id),
         skipped: !!rawStage.skipped,
         control,

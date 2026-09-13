@@ -251,8 +251,7 @@ public class VideoExecutionPlanCompilerTests
             false, true, false, true,
             new UploadedMediaSpec("data:audio/wav;base64,AA==", "track.wav"),
             [new FrameRefSpec("Upload", 1, false, "ref.png")],
-            [Stage(10), Stage(11)],
-            Loras: [new LoraRef("clip"), new LoraRef("stage")],
+            [Stage(10) with { Loras = [new LoraRef("clip"), new LoraRef("stage")] }, Stage(11)],
             PromptWindows: [new PromptWindowSpec("first", 0, 1)],
             ReferenceFraming: ReferenceFramingMode.FitGreen);
 
@@ -286,11 +285,13 @@ public class VideoExecutionPlanCompilerTests
         StageSpec stage = Stage(10);
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            Loras =
-            [
+            Stages = [stage with
+            {
+                Loras = [
                 new("clip-no-op", 0, 0),
-                new("clip-text-only", 0, 0.8),
-            ],
+                    new("clip-text-only", 0, 0.8),
+                ]
+            }],
         };
 
         Ltx2StagePayload payload = Assert.Single(
@@ -393,8 +394,7 @@ public class VideoExecutionPlanCompilerTests
             ReuseAudio: true,
             UploadedAudio: null,
             FrameRefs: references,
-            Stages: [first, target, last],
-            Loras: [.. clipLoras, .. stageLoras],
+            Stages: [first, target with { Loras = [.. clipLoras, .. stageLoras] }, last],
             PromptWindows:
             [
                 new("opening prompt", 0, 1),

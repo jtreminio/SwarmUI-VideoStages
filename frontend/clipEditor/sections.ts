@@ -20,7 +20,6 @@ import { buildBaseAudioFields } from "../detailStrip/audioPanel";
 import { buildBoundaryFields } from "../detailStrip/boundaryPanel";
 import { applyPersistedCapabilityRepair } from "../detailStrip/capabilityUi";
 import { buildClipColumn } from "../detailStrip/clipBasics";
-import { buildClipLoraControls } from "../detailStrip/clipLorasPanel";
 import {
     buildClipReferenceFields,
     buildIncomingReferenceFields,
@@ -39,15 +38,9 @@ import {
     buildResetVideoStagesButton,
     buildVideoStagesSettingsFields,
 } from "../detailStrip/videoStagesSettings";
-import { buildField } from "../detailWidgets";
 import { H3_TEXT_ENCODER_FEATURE } from "../generatedMiniMaxTextEncoder";
 import { H3_ATTENTION_WINDOW_FEATURE } from "../h3AttentionWindow";
 import { getVideoStagesHostBridge } from "../host";
-import {
-    appendLoraToClip,
-    defaultLoraWeight,
-    removeLoraAt,
-} from "../loraAuthoring";
 import { TIMELINE_AUTHORING_SETTINGS_CHANGED } from "../timelineAuthoringSettings";
 import { incomingReferenceContinueForClip } from "../timelineTiming";
 import type { AuthoringDocument, Clip, TimelineSelection } from "../types";
@@ -55,7 +48,6 @@ import {
     type EditorAction,
     type EditorItem,
     type EditorSection,
-    element,
     scopeFields,
 } from "./components";
 import { bindReferenceDrop } from "./referenceDrops";
@@ -115,7 +107,7 @@ export function clipSections(
                       actions: [
                           {
                               key: `add-${key}`,
-                              label: `+ Add ${label === "Stages" ? "stage" : label === "Keyframes" ? "keyframe" : label === "References" ? "reference" : label === "Relay prompts" ? "relay prompt" : label === "LoRAs" ? "LoRA" : "IC-LoRA"}`,
+                              label: `+ Add ${label === "Stages" ? "stage" : label === "Keyframes" ? "keyframe" : label === "References" ? "reference" : label === "Relay prompts" ? "relay prompt" : "IC-LoRA"}`,
                               kind: "add",
                               run: add,
                           },
@@ -220,49 +212,6 @@ export function clipSections(
     const sections = [
         prompt,
         ...stages,
-        ...repeated(
-            "loras",
-            "LoRAs",
-            clip.loras.map((entry, index) => ({
-                ...entry,
-                id: `lora-${index}`,
-            })),
-            (ctx, _entry, index) => {
-                const controls = buildClipLoraControls(
-                    ctx,
-                    clip,
-                    clipIdx,
-                    index,
-                    snapshot.defaults,
-                );
-                const fields = element("div", "vst-detail-fields");
-                fields.append(
-                    buildField("Model", controls.model),
-                    buildField("Weight", controls.weight),
-                );
-                return fields;
-            },
-            () => ({ kind: "clip", clipIdx, stageIdx: 0 }),
-            () =>
-                structural((target) => {
-                    const name = snapshot.defaults.loraValues.find(
-                        (value) =>
-                            !target.loras.some((lora) => lora.name === value),
-                    );
-                    if (name)
-                        appendLoraToClip(
-                            target,
-                            name,
-                            defaultLoraWeight(snapshot.defaults, name),
-                        );
-                }),
-            (index) =>
-                structural((target) => {
-                    removeLoraAt(target, index);
-                }),
-            true,
-            "rows",
-        ),
         ...repeated(
             "keyframes",
             "Keyframes",
@@ -528,12 +477,6 @@ export function clipSections(
             "keyframes",
             "The selected models do not publish a supported keyframe endpoint.",
         );
-    if (
-        !snapshot.defaults.loraValues.some(
-            (name) => !clip.loras.some((lora) => lora.name === name),
-        )
-    )
-        disableAdd("loras", "All available LoRAs are already on this clip.");
     const clipId = clip.id;
     if (context.addRefEntries && context.addClipReferences && clipId) {
         const operations = {

@@ -27,7 +27,6 @@ const fixturePath = path.resolve(
 const fixture = (): Record<string, unknown> =>
     JSON.parse(fs.readFileSync(fixturePath, "utf8"));
 
-/** Fully populated document for the shared contract fixture. */
 const contractState = (): AuthoringDocument => ({
     schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
     width: 768,
@@ -53,7 +52,6 @@ const contractState = (): AuthoringDocument => ({
             h3AttentionWindowSeconds: 2.5,
             h3TextEncoder: "8b",
             audioSource: "Native",
-            loras: [{ name: "style.safetensors", weight: 0.5 }],
             icLoras: [
                 {
                     id: "ic-lora-0",
@@ -148,6 +146,7 @@ const contractState = (): AuthoringDocument => ({
             stages: [
                 {
                     id: "stage-0",
+                    loras: [{ name: "style.safetensors", weight: 0.5 }],
                     skipped: false,
                     control: 1,
                     controlNetStrength: 0.8,
@@ -178,6 +177,7 @@ const contractState = (): AuthoringDocument => ({
                 },
                 {
                     id: "stage-1",
+                    loras: [{ name: "style.safetensors", weight: 0.5 }],
                     skipped: true,
                     control: 0.5,
                     controlNetStrength: 0.8,
@@ -213,7 +213,6 @@ const contractState = (): AuthoringDocument => ({
             h3AttentionWindowSeconds: 0,
             h3TextEncoder: "default",
             audioSource: "Previous Clip",
-            loras: [],
             icLoras: [],
             saveAudioTrack: false,
             clipLengthFromAudio: false,
@@ -232,6 +231,7 @@ const contractState = (): AuthoringDocument => ({
             stages: [
                 {
                     id: "stage-2",
+                    loras: [],
                     skipped: false,
                     control: 0.5,
                     controlNetStrength: 0.8,

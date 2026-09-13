@@ -842,7 +842,7 @@ audio.vst-trim-modal-player {
 .vst-editor-row > .vst-editor-item-heading { margin: 0; }
 .vst-editor-row > .vst-editor-item-heading h4 { font-size: 13px; font-weight: 500; color: var(--text-soft); line-height: 28px; }
 .vst-editor-row > .vst-editor-actions { margin: 0; }
-#videostages-editor .vst-editor-actions .basic-button {
+#videostages-editor :is(.vst-editor-actions, .vst-stage-lora-row) .basic-button {
     --button-text: var(--text);
     padding: 5px 10px;
     min-height: 32px;
@@ -852,7 +852,7 @@ audio.vst-trim-modal-player {
     box-shadow: none;
     font-size: 13px;
 }
-#videostages-editor .vst-editor-actions .basic-button:hover {
+#videostages-editor :is(.vst-editor-actions, .vst-stage-lora-row) .basic-button:hover {
     border-color: var(--emphasis);
     background: var(--background-soft);
 }
@@ -866,9 +866,9 @@ audio.vst-trim-modal-player {
     color: var(--emphasis);
     background: color-mix(in srgb, var(--emphasis) 24%, transparent);
 }
-#videostages-editor .vst-editor-actions [data-action="delete"] { display: inline-flex; align-items: center; gap: 5px; }
-.vst-editor-actions [data-action="delete"] svg { width: 14px; height: 14px; }
-#videostages-editor .vst-editor-actions [data-action="delete"]:is(:hover, :focus-visible) {
+#videostages-editor :is(.vst-editor-actions, .vst-stage-lora-row) [data-action="delete"] { display: inline-flex; align-items: center; justify-content: center; gap: 5px; line-height: 1; }
+:is(.vst-editor-actions, .vst-stage-lora-row) [data-action="delete"] svg { width: 14px; height: 14px; }
+#videostages-editor :is(.vst-editor-actions, .vst-stage-lora-row) [data-action="delete"]:is(:hover, :focus-visible) {
     color: var(--bs-danger);
     border-color: var(--bs-danger);
     background: color-mix(in srgb, var(--bs-danger) 10%, transparent);
@@ -969,6 +969,9 @@ audio.vst-trim-modal-player {
     margin: 6px 0 0;
     padding: 12px 0 0;
     border-top: 1px solid var(--border-color);
+}
+#videostages-editor .vst-detail-subsection-crumb,
+.vst-stage-loras-header h5 {
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -990,3 +993,29 @@ audio.vst-trim-modal-player {
 .vst-clip-editor .vst-form-field :is(input, select, textarea):focus { outline: none; }
 
 .vst-editor-current-item { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8em; font-weight: 500; color: var(--emphasis); }
+
+.vst-stage-loras { border-top: 1px solid var(--border-color); padding-top: 12px; }
+.vst-stage-loras-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.vst-stage-loras-header h5 { margin: 0; }
+#videostages-editor input:is([type="number"], [type="text"], [type="url"], [type="search"]),
+#videostages-editor textarea {
+    background-color: var(--background);
+    border-radius: 5px;
+}
+.vst-stage-lora-table { width: 100%; max-width: 760px; table-layout: fixed; border-collapse: separate; border-spacing: 0 8px; margin: 0; }
+.vst-stage-lora-table :is(th, td) { padding: 0 10px 0 0; vertical-align: middle; }
+.vst-stage-lora-table th { font-weight: 400; color: var(--text-soft); text-align: left; }
+.vst-stage-lora-table :is(th, td):nth-child(2) { width: 100px; }
+.vst-stage-lora-table :is(th, td):last-child { width: 34px; padding: 0; }
+#videostages-editor .vst-stage-lora-row :is(select, input) { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 32px; margin: 0; }
+#videostages-editor .vst-stage-lora-row .vst-stage-lora-strength { padding: 4px 8px; }
+#videostages-editor .vst-stage-lora-row .vst-stage-lora-remove { width: 34px; height: 32px; padding: 0; margin: 0; }
+#videostages-editor .vst-stage-loras-actions { justify-content: flex-start; flex-wrap: wrap; margin: 4px 0 0; gap: 8px; }
+@media (max-width: 600px) {
+    .vst-stage-lora-table :is(th, td):nth-child(2) { width: 80px; }
+}
+@media (pointer: coarse) {
+    .vst-stage-lora-table :is(th, td):last-child { width: 44px; }
+    #videostages-editor .vst-stage-lora-row :is(button, input, select) { min-height: 44px; }
+    #videostages-editor .vst-stage-lora-row .vst-stage-lora-remove { width: 44px; height: 44px; }
+}

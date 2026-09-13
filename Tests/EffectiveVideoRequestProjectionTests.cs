@@ -628,7 +628,7 @@ public sealed class EffectiveVideoRequestProjectionTests
                 "data:video/mp4;base64,QUJD",
                 "source.mp4",
                 0),
-            Loras = [new("clip-lora.safetensors", 0.5)],
+            Stages = [first with { Loras = [new("clip-lora.safetensors", 0.5)] }, second with { Loras = [new("clip-lora.safetensors", 0.5)] }],
             IcLoras =
             [
                 new(
@@ -681,7 +681,7 @@ public sealed class EffectiveVideoRequestProjectionTests
                     StringComparison.Ordinal));
         Assert.Equal(2, effective.Stages.Count);
         Assert.Equal(clip.InitVideo, effective.InitVideo);
-        Assert.Equal(clip.Loras, effective.Loras);
+        Assert.Equal(clip.Stages[0].Loras, effective.Stages[0].Loras);
     }
 
     [Fact]

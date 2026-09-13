@@ -3821,25 +3821,6 @@
     const value = index >= 0 ? defaults.loraDefaultWeights[index] : null;
     return typeof value === "number" && Number.isFinite(value) ? value : LORA_WEIGHT_DEFAULT;
   };
-  var appendLoraToClip = (clip, name, initialWeight) => {
-    clip.loras.push({ name, weight: initialWeight });
-  };
-  var replaceLoraModelAt = (clip, index, name, initialWeight) => {
-    const entry = clip.loras[index];
-    if (!entry) {
-      return false;
-    }
-    entry.name = name;
-    entry.weight = initialWeight;
-    return true;
-  };
-  var removeLoraAt = (clip, index) => {
-    if (index < 0 || index >= clip.loras.length) {
-      return false;
-    }
-    clip.loras.splice(index, 1);
-    return true;
-  };
 
   // frontend/generatedCharacterRefine.ts
   var CHARACTER_REFINE_INSTALL_FEATURE = "bonita";
@@ -3929,6 +3910,7 @@
   var buildDefaultStage = (defaults, defaultStageModel, previousStage, refCount, initialIcLoraStrengths = []) => {
     const model = previousStage ? previousStage.model : defaultStageModel;
     return {
+      loras: [],
       skipped: false,
       control: previousStage ? previousStage.control : defaults.control,
       controlNetStrength: previousStage ? previousStage.controlNetStrength : STAGE_CONTROLNET_STRENGTH_DEFAULT,
@@ -4090,6 +4072,7 @@
       );
     }
     const stage = {
+      loras: normalizeStageLoras(rawStage.loras),
       id: normalizeOptionalEntityId(rawStage.id),
       skipped: !!rawStage.skipped,
       control,
@@ -4166,7 +4149,6 @@
   var normalizeReferenceFraming = (value) => value === "stretch" || value === "fit" || value === "fit-green" ? value : "crop";
   var buildDefaultClip = (defaults, defaultStageModel, includeDefaultRef = false, previousClip = null) => {
     const frameRefs = includeDefaultRef ? [buildDefaultRef()] : [];
-    const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
     const firstStage = {
       ...buildDefaultStage(
         defaults,
@@ -4174,6 +4156,7 @@
         previousClip?.stages[0] ?? null,
         frameRefs.length
       ),
+      loras: previousClip?.stages[0]?.loras.map((entry) => ({ ...entry })) ?? [],
       frameRefStrengths: buildDefaultStageRefStrengths(
         frameRefs.length,
         includeDefaultRef ? IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH : STAGE_REF_STRENGTH_DEFAULT
@@ -4204,7 +4187,6 @@
       h3AttentionWindowSeconds: 0,
       h3TextEncoder: previousClip?.h3TextEncoder ?? "default",
       audioSource: previousClip?.audioOnly === true ? AUDIO_SOURCE_PREVIOUS_CLIP : AUDIO_SOURCE_NATIVE,
-      loras,
       icLoras: [],
       saveAudioTrack: false,
       clipLengthFromAudio: false,
@@ -4248,27 +4230,6 @@
       fps
     );
     const refsRaw = Array.isArray(rawClip.keyframes) ? rawClip.keyframes : [];
-    const clipScopedLoras = normalizeStageLoras(rawClip.loras);
-    const loras = [];
-    const loraNames = /* @__PURE__ */ new Set();
-    const appendLora = (name, weight) => {
-      if (loraNames.has(name)) {
-        return;
-      }
-      loraNames.add(name);
-      loras.push({ name, weight });
-    };
-    for (const entry of clipScopedLoras) {
-      appendLora(entry.name, entry.weight);
-    }
-    for (const rawStage of stagesRaw) {
-      if (!isRecord(rawStage)) {
-        continue;
-      }
-      for (const entry of normalizeStageLoras(rawStage.loras)) {
-        appendLora(entry.name, entry.weight);
-      }
-    }
     const stages = [];
     for (let i = 0; i < stagesRaw.length; i++) {
       const previousStage = i > 0 ? stages[i - 1] : null;
@@ -4276,7 +4237,10 @@
         normalizeStage(
           defaults,
           defaultStageModel,
-          isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
+          {
+            ...isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
+            loras: isRecord(stagesRaw[i]) && Array.isArray(stagesRaw[i].loras) ? stagesRaw[i].loras : rawClip.loras
+          },
           previousStage,
           refsRaw.length,
           i,
@@ -4379,7 +4343,6 @@
       ),
       h3TextEncoder: normalizeH3TextEncoder(rawClip.h3TextEncoder),
       audioSource,
-      loras,
       icLoras,
       saveAudioTrack: !!rawClip.saveAudioTrack,
       clipLengthFromAudio,
@@ -4551,7 +4514,6 @@
       "h3AttentionWindowSeconds",
       "h3TextEncoder",
       "audioSource",
-      "loras",
       "icLoras",
       "saveAudioTrack",
       "clipLengthFromAudio",
@@ -4583,6 +4545,7 @@
     idField: "stageId",
     beforeIdField: "beforeStageId",
     patchKeys: [
+      "loras",
       "skipped",
       "control",
       "controlNetStrength",
@@ -4684,7 +4647,7 @@
   };
 
   // frontend/types.ts
-  var CURRENT_AUTHORING_SCHEMA_VERSION = 9;
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 10;
 
   // frontend/identity.ts
   var fallbackSequence = 0;
@@ -6171,10 +6134,6 @@
         h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
         h3TextEncoder: clip.h3TextEncoder,
         audioSource: clip.audioSource,
-        loras: clip.loras.map((entry) => ({
-          name: entry.name,
-          weight: entry.weight
-        })),
         icLoras: clip.icLoras.map((entry) => ({
           id: entry.id,
           lora: entry.lora,
@@ -6232,6 +6191,10 @@
           fromEnd: ref.fromEnd
         })),
         stages: clip.stages.map((stage) => ({
+          loras: stage.loras.map((entry) => ({
+            name: entry.name,
+            weight: entry.weight
+          })),
           id: stage.id,
           skipped: stage.skipped,
           control: stage.control,
@@ -6374,7 +6337,9 @@
         return false;
       }
       for (const stage of stages) {
-        if (Object.hasOwn(stage, "loras") || Object.hasOwn(stage, "loraWeights") || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
+        if (Object.hasOwn(stage, "loras") && (!hasArrayOfRecords(stage, "loras") || !stage.loras.every(
+          (lora) => typeof lora.weight === "number" && Number.isFinite(lora.weight)
+        )) || Object.hasOwn(stage, "loraWeights") || Object.hasOwn(stage, "icLoraStrengths") && (!Array.isArray(stage.icLoraStrengths) || !stage.icLoraStrengths.every(
           (strength) => typeof strength === "number" && Number.isFinite(strength)
         )) || Object.hasOwn(stage, "keyframeStrengths") && (!Array.isArray(stage.keyframeStrengths) || !stage.keyframeStrengths.every(
           (strength) => typeof strength === "number" && Number.isFinite(strength)
@@ -6457,6 +6422,7 @@
   };
   var FRAME_REFS_SCHEMA_VERSION = 7;
   var STAGE_LORA_SCHEMA_VERSION = 8;
+  var CLIP_LORA_SCHEMA_VERSION = 9;
   var renameKey = (target, oldKey, newKey) => {
     if (!(oldKey in target)) {
       return;
@@ -6525,14 +6491,14 @@
       }
       rawClip.loras = clipLoras;
     }
-    document2.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    document2.schemaVersion = CLIP_LORA_SCHEMA_VERSION;
     return document2;
   };
   var migrateStoredDocument = (parsed) => {
     if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
       return parsed;
     }
-    if (parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION && parsed.schemaVersion !== STAGE_LORA_SCHEMA_VERSION) {
+    if (parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION && parsed.schemaVersion !== STAGE_LORA_SCHEMA_VERSION && parsed.schemaVersion !== CLIP_LORA_SCHEMA_VERSION) {
       return null;
     }
     const migrated = structuredClone(parsed);
@@ -6560,7 +6526,17 @@
       }
       migrated.schemaVersion = STAGE_LORA_SCHEMA_VERSION;
     }
-    return migrateStageLorasToClip(migrated);
+    if (migrated.schemaVersion === STAGE_LORA_SCHEMA_VERSION && !migrateStageLorasToClip(migrated))
+      return null;
+    if (!hasValidStoredCollections(migrated)) return null;
+    for (const clip of migrated.clips) {
+      for (const stage of Array.isArray(clip.stages) ? clip.stages : []) {
+        stage.loras = structuredClone(clip.loras ?? []);
+      }
+      delete clip.loras;
+    }
+    migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
+    return migrated;
   };
   var decodeStoredDocument = (serialized, inherited, defaults, defaultStageModel) => {
     try {
@@ -9350,6 +9326,7 @@
             )
           );
           stage.skipped = last?.skipped === true;
+          stage.loras = last?.loras.map((entry) => ({ ...entry })) ?? [];
           if (clipArchitectureId === NONE_ARCHITECTURE_ID && clip.stages.length === 0) {
             const target = buildArchitectureRetargetPlan(
               defaults.modelCatalog,
@@ -12667,54 +12644,6 @@ ${slot}`;
     return column;
   };
 
-  // frontend/detailStrip/clipLorasPanel.ts
-  var buildClipLoraControls = (context, clip, clipIdx, loraIdx, defaults) => {
-    const lora = clip.loras[loraIdx];
-    const options = defaults.loraValues.flatMap(
-      (value, optionIdx) => value === lora.name || !clip.loras.some(
-        (entry, index) => index !== loraIdx && entry.name === value
-      ) ? [
-        {
-          value,
-          label: defaults.loraLabels[optionIdx] ?? value
-        }
-      ] : []
-    );
-    preserveSelectedOption(options, lora.name, "start", (value) => ({
-      value,
-      label: `${value} (unsupported persisted value)`,
-      disabled: true
-    }));
-    const model = buildOptionSelect(options, lora.name, (value) => {
-      context.commit((clips) => {
-        const target = clips[clipIdx];
-        if (target) {
-          const initialWeight = defaultLoraWeight(defaults, value);
-          replaceLoraModelAt(target, loraIdx, value, initialWeight);
-        }
-      });
-      context.render();
-    });
-    model.setAttribute(
-      "data-vst-focus-key",
-      `clip-${clipIdx}-lora-${loraIdx}-model`
-    );
-    const weight = tagFocus(
-      buildUnboundedNumber(lora.weight, LORA_WEIGHT_STEP, (value) => {
-        context.debouncedCommit(
-          `clip-${clipIdx}-lora-${loraIdx}-weight`,
-          (clips) => {
-            const target = clips[clipIdx]?.loras[loraIdx];
-            if (target) target.weight = value;
-          }
-        );
-      }),
-      `clip-${clipIdx}-lora-${loraIdx}-weight`
-    );
-    weight.classList.add("lora-weight-input", "vst-clip-lora-weight");
-    return { model, weight };
-  };
-
   // frontend/detailStrip/clipReferencePanel.ts
   var REFERENCE_TRIM_MIN = 0.1;
   var appendReferenceTrim = (ctx, fields, reference, shown, commitReference) => {
@@ -14244,6 +14173,159 @@ ${slot}`;
     appendGroup();
   };
 
+  // frontend/detailStrip/stagePanel/lorasSection.ts
+  var appendStageLorasSection = ({
+    context,
+    clip,
+    clipIdx,
+    stage,
+    stageIdx,
+    defaults,
+    fields,
+    commit,
+    debouncedCommit
+  }) => {
+    const section = document.createElement("section");
+    section.className = "vst-stage-loras vst-detail-span-full";
+    section.setAttribute("aria-label", `LoRAs for stage S${stageIdx}`);
+    const header = document.createElement("div");
+    header.className = "vst-stage-loras-header";
+    const heading = document.createElement("h5");
+    heading.className = "vst-detail-crumb";
+    heading.textContent = `LoRAs · ${stage.loras.length}`;
+    header.append(heading);
+    const structural = (edit) => context.structuralCommit((clips) => {
+      const target = clips[clipIdx];
+      if (!target?.stages[stageIdx]) return null;
+      edit(target);
+      return "render";
+    });
+    section.append(header);
+    if (stage.loras.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "vst-detail-note";
+      empty.textContent = "No LoRAs on this stage.";
+      section.append(empty);
+    }
+    const table = document.createElement("table");
+    table.className = "vst-stage-lora-table";
+    table.setAttribute("aria-label", `LoRAs for stage S${stageIdx}`);
+    const columns = table.createTHead().insertRow();
+    for (const label of ["LoRA model", "Strength", ""]) {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.textContent = label;
+      if (!label) cell.setAttribute("aria-label", "Remove LoRA");
+      columns.append(cell);
+    }
+    const rows = table.createTBody();
+    stage.loras.forEach((lora, loraIdx) => {
+      const row = rows.insertRow();
+      row.className = "vst-stage-lora-row";
+      const options = defaults.loraValues.flatMap(
+        (value, index) => value === lora.name || !stage.loras.some((entry) => entry.name === value) ? [{ value, label: defaults.loraLabels[index] ?? value }] : []
+      );
+      preserveSelectedOption(options, lora.name, "start", (value) => ({
+        value,
+        label: `${value} (unsupported persisted value)`,
+        disabled: true
+      }));
+      const model = tagFocus(
+        buildOptionSelect(options, lora.name, (name) => {
+          commit((target) => {
+            if (target.loras[loraIdx])
+              target.loras[loraIdx] = {
+                name,
+                weight: defaultLoraWeight(defaults, name)
+              };
+          });
+          context.render();
+        }),
+        `lora-${loraIdx}-model`
+      );
+      const strength = tagFocus(
+        buildUnboundedNumber(lora.weight, LORA_WEIGHT_STEP, (value) => {
+          debouncedCommit(`lora-${loraIdx}-strength`, (target) => {
+            if (target.loras[loraIdx])
+              target.loras[loraIdx].weight = value;
+          });
+        }),
+        `lora-${loraIdx}-strength`
+      );
+      strength.classList.add("lora-weight-input", "vst-stage-lora-strength");
+      model.setAttribute(
+        "aria-label",
+        `LoRA model ${loraIdx + 1} for stage S${stageIdx}`
+      );
+      strength.setAttribute(
+        "aria-label",
+        `Strength ${loraIdx + 1} for stage S${stageIdx}`
+      );
+      row.insertCell().append(model);
+      row.insertCell().append(strength);
+      row.insertCell().append(
+        actionButton({
+          key: `remove-lora-${loraIdx}`,
+          label: "",
+          kind: "delete",
+          title: `Remove LoRA ${loraIdx + 1} from stage S${stageIdx}`,
+          configure: (button2) => {
+            button2.classList.add("vst-stage-lora-remove");
+            button2.setAttribute("aria-label", button2.title);
+          },
+          run: () => structural((target) => {
+            target.stages[stageIdx].loras.splice(loraIdx, 1);
+          })
+        })
+      );
+    });
+    if (stage.loras.length > 0) section.append(table);
+    const actions = document.createElement("div");
+    actions.className = "vst-editor-actions vst-stage-loras-actions";
+    const available = defaults.loraValues.some(
+      (name) => !stage.loras.some((entry) => entry.name === name)
+    );
+    const add = buildDetailActionButton({
+      label: "+ Add LoRA",
+      title: available ? "Add a LoRA to this stage" : "All available LoRAs are already on this stage.",
+      className: "small-button vst-stage-lora-add",
+      disabled: !available,
+      onClick: () => structural((target) => {
+        const loras = target.stages[stageIdx].loras;
+        const name = defaults.loraValues.find(
+          (name2) => !loras.some((entry) => entry.name === name2)
+        );
+        if (name)
+          loras.push({
+            name,
+            weight: defaultLoraWeight(defaults, name)
+          });
+      })
+    });
+    add.dataset.action = "add";
+    actions.append(add);
+    if (stage.loras.length > 0 && clip.stages.length > 1) {
+      actions.append(
+        buildDetailActionButton({
+          label: "Copy to other stages",
+          title: `Replace LoRAs and strengths in every other stage of Clip ${clipIdx}. Later edits stay independent.`,
+          className: "small-button vst-stage-loras-copy",
+          onClick: () => structural((target) => {
+            const source = target.stages[stageIdx].loras;
+            target.stages.forEach((other, index) => {
+              if (index !== stageIdx)
+                other.loras = source.map((entry) => ({
+                  ...entry
+                }));
+            });
+          })
+        })
+      );
+    }
+    section.append(actions);
+    fields.append(section);
+  };
+
   // frontend/detailStrip/stagePanel/modelSection.ts
   var appendStageModelSection = ({
     context,
@@ -14729,6 +14811,7 @@ ${slot}`;
       appendStageUpscaleSection(bindings, isRefine);
     }
     appendStageReferenceGuideSection(bindings);
+    appendStageLorasSection(bindings);
     appendCharacterRefineSection(bindings);
     if (initVideoStage0) {
       const note = document.createElement("p");
@@ -15294,7 +15377,7 @@ ${slot}`;
         actions: [
           {
             key: `add-${key}`,
-            label: `+ Add ${label === "Stages" ? "stage" : label === "Keyframes" ? "keyframe" : label === "References" ? "reference" : label === "Relay prompts" ? "relay prompt" : label === "LoRAs" ? "LoRA" : "IC-LoRA"}`,
+            label: `+ Add ${label === "Stages" ? "stage" : label === "Keyframes" ? "keyframe" : label === "References" ? "reference" : label === "Relay prompts" ? "relay prompt" : "IC-LoRA"}`,
             kind: "add",
             run: add
           }
@@ -15383,46 +15466,6 @@ ${slot}`;
     const sections = [
       prompt,
       ...stages,
-      ...repeated(
-        "loras",
-        "LoRAs",
-        clip.loras.map((entry, index) => ({
-          ...entry,
-          id: `lora-${index}`
-        })),
-        (ctx, _entry, index) => {
-          const controls = buildClipLoraControls(
-            ctx,
-            clip,
-            clipIdx,
-            index,
-            snapshot.defaults
-          );
-          const fields = element("div", "vst-detail-fields");
-          fields.append(
-            buildField("Model", controls.model),
-            buildField("Weight", controls.weight)
-          );
-          return fields;
-        },
-        () => ({ kind: "clip", clipIdx, stageIdx: 0 }),
-        () => structural((target) => {
-          const name = snapshot.defaults.loraValues.find(
-            (value) => !target.loras.some((lora) => lora.name === value)
-          );
-          if (name)
-            appendLoraToClip(
-              target,
-              name,
-              defaultLoraWeight(snapshot.defaults, name)
-            );
-        }),
-        (index) => structural((target) => {
-          removeLoraAt(target, index);
-        }),
-        true,
-        "rows"
-      ),
       ...repeated(
         "keyframes",
         "Keyframes",
@@ -15645,10 +15688,6 @@ ${slot}`;
         "keyframes",
         "The selected models do not publish a supported keyframe endpoint."
       );
-    if (!snapshot.defaults.loraValues.some(
-      (name) => !clip.loras.some((lora) => lora.name === name)
-    ))
-      disableAdd("loras", "All available LoRAs are already on this clip.");
     const clipId = clip.id;
     if (context.addRefEntries && context.addClipReferences && clipId) {
       const operations = {
@@ -15749,7 +15788,6 @@ ${slot}`;
         "stages",
         "keyframes",
         "references",
-        "loras",
         "ic-loras",
         "relay-prompts"
       ].includes(section.key))

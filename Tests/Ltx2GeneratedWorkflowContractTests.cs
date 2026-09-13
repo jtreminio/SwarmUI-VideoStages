@@ -13,11 +13,7 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class Ltx2GeneratedWorkflowContractTests
 {
-    /// <summary>
-    /// The smoke test the LTX-2 conversion chunks rest on: an LTX-2.3 request survives the whole
-    /// production step list, resolves all four support-model stubs without reaching for a
-    /// download, and hands the timeline's sampler a joint audio/video latent.
-    /// </summary>
+    // Support models are installed stubs; this path must not download them.
     [Fact]
     public async Task Basic_text_to_video_can_be_generated_from_the_Comfy_API_POST_body()
     {
@@ -128,12 +124,7 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
     }
 
-    /// <summary>
-    /// The text-to-video shape is what makes this observable: core's own encoders are in
-    /// <c>AutoCleanupNodeTypes</c> and get pruned, so the encoder feeding the stage sampler is the
-    /// only one carrying a prompt. Under image-to-video the base model would encode the global
-    /// prompt into an encoder of its own and "the global text is absent" could not be asserted.
-    /// </summary>
+    // Text-to-video prunes core’s prompt encoders. Image-to-video also encodes global text for the base pass.
     [Theory]
     // No section matches the stage, so the un-sectioned global text carries it.
     [InlineData("global-only words", "global-only words")]
@@ -176,12 +167,7 @@ public class Ltx2GeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Confinement is core's own model-gen step, so only the production step list scopes a LoRA to
-    /// the clip that authored it. LTX-2 leaves <c>LorasTargetTextEnc</c> at its <c>true</c> default
-    /// — unlike MiniMax, which opts out — which is why this is a <c>LoraLoader</c> carrying a
-    /// strength_clip rather than a <c>LoraLoaderModelOnly</c>.
-    /// </summary>
+    // LTX targets both model and CLIP. Confinement runs in core’s model-generation step.
     [Fact]
     public async Task A_clip_scoped_lora_patches_only_its_own_clip()
     {
@@ -190,11 +176,14 @@ public class Ltx2GeneratedWorkflowContractTests
 
         JObject plain = MakeClip(1.0, fixture.Stage());
         JObject loraClip = MakeClip(1.0, fixture.Stage());
-        loraClip["loras"] = new JArray(new JObject
+        foreach (JObject authoredStage in loraClip["stages"])
         {
-            ["name"] = "UnitTest_VideoClipLora",
-            ["weight"] = 0.5,
-        });
+            authoredStage["loras"] = new JArray(new JObject
+            {
+                ["name"] = "UnitTest_VideoClipLora",
+                ["weight"] = 0.5,
+            });
+        }
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(plain, loraClip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
@@ -223,11 +212,14 @@ public class Ltx2GeneratedWorkflowContractTests
 
         JObject stage = fixture.Stage();
         JObject clip = MakeClip(1.0, stage);
-        clip["loras"] = new JArray(new JObject
+        foreach (JObject authoredStage in clip["stages"])
         {
-            ["name"] = "UnitTest_VideoClipStageLora",
-            ["weight"] = 0.5,
-        });
+            authoredStage["loras"] = new JArray(new JObject
+            {
+                ["name"] = "UnitTest_VideoClipStageLora",
+                ["weight"] = 0.5,
+            });
+        }
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);

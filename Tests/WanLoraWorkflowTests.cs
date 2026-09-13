@@ -15,14 +15,17 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class WanLoraWorkflowTests
 {
-    /// <summary>A clip-level LoRA reaches the stage generated off that clip's source.</summary>
+    /// <summary>A stage LoRA reaches the stage generated off that clip's source.</summary>
     [Fact]
     public async Task A_source_clip_lora_applies_to_its_generating_stage()
     {
         using WanWorkflowFixture fixture = WanWorkflowFixture.CreateWithBaseModel();
         fixture.InstallModel("LoRA", "UnitTest_Wan_Source_Lora.safetensors");
         JObject clip = WanWorkflowFixture.SourceClip(fixture.Stage(control: 0.5, steps: 10));
-        clip["loras"] = new JArray(WanWorkflowFixture.Lora("UnitTest_Wan_Source_Lora", 0.6));
+        foreach (JObject authoredStage in clip["stages"])
+        {
+            authoredStage["loras"] = new JArray(WanWorkflowFixture.Lora("UnitTest_Wan_Source_Lora", 0.6));
+        }
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
@@ -78,9 +81,12 @@ public class WanLoraWorkflowTests
         }
         JObject stage = fixture.Stage(steps: 10);
         JObject clip = MakeClip(stage);
-        clip["loras"] = new JArray(
-            WanWorkflowFixture.Lora("UnitTest_Wan_Persisted", 0.6, textEncoderWeight: 0.7),
-            WanWorkflowFixture.Lora("UnitTest_Wan_PersistedZero", 0, textEncoderWeight: 0.9));
+        foreach (JObject authoredStage in clip["stages"])
+        {
+            authoredStage["loras"] = new JArray(
+                WanWorkflowFixture.Lora("UnitTest_Wan_Persisted", 0.6, textEncoderWeight: 0.7),
+                WanWorkflowFixture.Lora("UnitTest_Wan_PersistedZero", 0, textEncoderWeight: 0.9));
+        }
         void Customize(JObject post)
         {
             post["prompt"] =
@@ -132,7 +138,7 @@ public class WanLoraWorkflowTests
 
         // The request's own LoRA list is exactly what it was before the stages ran: the two the
         // prompt parser put there (a zero weight still counts) plus whatever the POST set. The
-        // clip's LoRAs are borrowed and handed back, so they must not appear.
+        // stage's LoRAs are borrowed and handed back, so they must not appear.
         Assert.Equal(
             textEntryWithConfinedHostLora
                 ? ["UnitTest_Wan_Base_Confined", "UnitTest_Wan_Prompt", "UnitTest_Wan_PromptZero"]
@@ -161,7 +167,7 @@ public class WanLoraWorkflowTests
     }
 
     /// <summary>
-    /// A clip LoRA reaches every stage while the underlying model loader remains shared.
+    /// A stage LoRA reaches every stage while the underlying model loader remains shared.
     /// </summary>
     [Fact]
     public async Task Clip_lora_reaches_every_stage_and_shares_one_cached_model_loader()
@@ -172,8 +178,11 @@ public class WanLoraWorkflowTests
             fixture.Stage(control: 1, steps: 10),
             fixture.Stage("PreviousStage", control: 0.5, steps: 11),
             fixture.Stage("PreviousStage", control: 0.5, steps: 12));
-        clip["loras"] = new JArray(
-            WanWorkflowFixture.Lora("UnitTest_Wan_Scoped_Lora", 0.25));
+        foreach (JObject authoredStage in clip["stages"])
+        {
+            authoredStage["loras"] = new JArray(
+                WanWorkflowFixture.Lora("UnitTest_Wan_Scoped_Lora", 0.25));
+        }
         JObject document = MakeDocument(clip);
 
         (JObject workflow, WorkflowGenerator generator) =
@@ -286,11 +295,7 @@ public class WanLoraWorkflowTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A clip naming a LoRA that does not exist refuses the whole request, and everything borrowed
-    /// from the host is handed back on the way out. The prompt-LoRA arm makes the
-    /// rollback nested — one scope already applied when the next one throws.
-    /// </summary>
+    // A prompt LoRA nests the failing stage scope inside an already-applied scope.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -301,8 +306,11 @@ public class WanLoraWorkflowTests
         fixture.InstallModel("LoRA", "UnitTest_Wan_Present.safetensors");
         JObject stage = fixture.Stage(steps: 10);
         JObject clip = MakeClip(stage);
-        clip["loras"] = new JArray(
-            WanWorkflowFixture.Lora("UnitTest_Wan_Missing", 0.45));
+        foreach (JObject authoredStage in clip["stages"])
+        {
+            authoredStage["loras"] = new JArray(
+                WanWorkflowFixture.Lora("UnitTest_Wan_Missing", 0.45));
+        }
         WorkflowGenerator captured = null;
         List<string> lorasBeforeStages = null;
 

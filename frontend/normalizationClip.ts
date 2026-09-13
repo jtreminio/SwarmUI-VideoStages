@@ -53,7 +53,6 @@ import {
     normalizeRef,
     normalizeStage,
     normalizeStageIcLoraStrengths,
-    normalizeStageLoras,
 } from "./normalizationStage";
 import { snapDurationToFps } from "./renderUtils";
 import type {
@@ -71,9 +70,7 @@ export const normalizeBoundaryOut = (value: unknown): BoundaryOut => {
 };
 
 /**
- * Preserves positive authored values exactly so a catalog update cannot
- * silently rewrite an overlap before the user repairs it. New UI selections
- * are normalized against the active boundary rule.
+ * Catalog updates must preserve authored overlaps for repair. New selections use the active boundary rule.
  */
 export const normalizeContinueOverlap = (
     value: unknown,
@@ -97,7 +94,6 @@ export const buildDefaultClip = (
     previousClip: Clip | null = null,
 ): Clip => {
     const frameRefs = includeDefaultRef ? [buildDefaultRef()] : [];
-    const loras = previousClip?.loras.map((entry) => ({ ...entry })) ?? [];
     const firstStage = {
         ...buildDefaultStage(
             defaults,
@@ -105,6 +101,8 @@ export const buildDefaultClip = (
             previousClip?.stages[0] ?? null,
             frameRefs.length,
         ),
+        loras:
+            previousClip?.stages[0]?.loras.map((entry) => ({ ...entry })) ?? [],
         frameRefStrengths: buildDefaultStageRefStrengths(
             frameRefs.length,
             includeDefaultRef
@@ -153,7 +151,6 @@ export const buildDefaultClip = (
             previousClip?.audioOnly === true
                 ? AUDIO_SOURCE_PREVIOUS_CLIP
                 : AUDIO_SOURCE_NATIVE,
-        loras,
         icLoras: [],
         saveAudioTrack: false,
         clipLengthFromAudio: false,
@@ -196,10 +193,7 @@ export const normalizeClip = (
             ? effectiveFps
             : defaults.fps,
     );
-    // Preserved exactly as authored: a source that cannot supply a length is
-    // reported by architecture diagnostics, never silently erased here. Only
-    // the mutual exclusion between the two flags is enforced, with ControlNet
-    // precedence matching RequestReader and AudioPlanCompiler.
+    // Keep unsupported length sources for repair. ControlNet takes precedence over audio, as in the backend.
     const clipLengthFromControlNet = !!rawClip.clipLengthFromControlNet;
     const clipLengthFromAudio =
         !clipLengthFromControlNet && !!rawClip.clipLengthFromAudio;
@@ -216,28 +210,6 @@ export const normalizeClip = (
         fps,
     );
     const refsRaw = Array.isArray(rawClip.keyframes) ? rawClip.keyframes : [];
-    const clipScopedLoras = normalizeStageLoras(rawClip.loras);
-    const loras: { name: string; weight: number }[] = [];
-    const loraNames = new Set<string>();
-    const appendLora = (name: string, weight: number): void => {
-        if (loraNames.has(name)) {
-            return;
-        }
-        loraNames.add(name);
-        loras.push({ name, weight });
-    };
-    for (const entry of clipScopedLoras) {
-        appendLora(entry.name, entry.weight);
-    }
-    for (const rawStage of stagesRaw) {
-        if (!isRecord(rawStage)) {
-            continue;
-        }
-        for (const entry of normalizeStageLoras(rawStage.loras)) {
-            appendLora(entry.name, entry.weight);
-        }
-    }
-
     const stages: Stage[] = [];
     for (let i = 0; i < stagesRaw.length; i++) {
         const previousStage = i > 0 ? stages[i - 1] : null;
@@ -245,7 +217,14 @@ export const normalizeClip = (
             normalizeStage(
                 defaults,
                 defaultStageModel,
-                isRecord(stagesRaw[i]) ? stagesRaw[i] : {},
+                {
+                    ...(isRecord(stagesRaw[i]) ? stagesRaw[i] : {}),
+                    loras:
+                        isRecord(stagesRaw[i]) &&
+                        Array.isArray(stagesRaw[i].loras)
+                            ? stagesRaw[i].loras
+                            : rawClip.loras,
+                },
                 previousStage,
                 refsRaw.length,
                 i,
@@ -371,7 +350,6 @@ export const normalizeClip = (
         ),
         h3TextEncoder: normalizeH3TextEncoder(rawClip.h3TextEncoder),
         audioSource,
-        loras,
         icLoras,
         saveAudioTrack: !!rawClip.saveAudioTrack,
         clipLengthFromAudio,

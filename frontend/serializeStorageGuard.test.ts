@@ -74,9 +74,7 @@ const normalize = (raw: unknown): Clip => {
 const store = (clip: Clip): StoredClip => serializeClipsForStorage([clip])[0];
 
 /**
- * A clip with EVERY persisted field set to a meaningful, round-trip-stable
- * value, so the guard exercises the whole serializer projection — a new stored
- * field that the fixture leaves at its default would slip the population check.
+ * Use non-default values so omitted fields fail the round trip.
  */
 const maximalClip = (): Clip =>
     minimalClip({
@@ -87,7 +85,6 @@ const maximalClip = (): Clip =>
         duration: 4,
         useSeedVr: true,
         audioSource: "Native",
-        loras: [{ name: "detail.safetensors", weight: 0.6 }],
         icLoras: [
             {
                 lora: "detail.safetensors",
@@ -157,6 +154,7 @@ const maximalClip = (): Clip =>
         ],
         stages: [
             {
+                loras: [{ name: "detail.safetensors", weight: 0.6 }],
                 skipped: false,
                 control: 0.5,
                 controlNetStrength: 0.7,
@@ -206,14 +204,12 @@ describe("serialize storage completeness guard", () => {
                 ),
             ).toBe(true);
         }
-        // Every optional container is present, so the nested projections above
-        // are genuinely exercised.
         expect(stored.icLoras.length).toBeGreaterThan(0);
         expect(stored.references.length).toBeGreaterThan(0);
         expect(stored.keyframes.length).toBeGreaterThan(0);
         expect(stored.stages.length).toBeGreaterThan(0);
-        expect(stored.loras.length).toBeGreaterThan(0);
-        expect(stored.loras[0].weight).toBe(0.6);
+        expect(stored.stages[0].loras.length).toBeGreaterThan(0);
+        expect(stored.stages[0].loras[0].weight).toBe(0.6);
         expect(stored.stages[0].keyframeStrengths.length).toBeGreaterThan(0);
         expect(stored.retake).not.toBeNull();
         expect(stored.uploadedAudio).not.toBeNull();

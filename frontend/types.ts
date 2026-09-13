@@ -49,7 +49,6 @@ export interface RootDefaults {
 }
 
 export interface AuthoringDocument {
-    /** Only the current schema is accepted. */
     schemaVersion?: number;
     width: number;
     height: number;
@@ -59,19 +58,20 @@ export interface AuthoringDocument {
     audioTracks?: AudioTrack[];
 }
 
-export const CURRENT_AUTHORING_SCHEMA_VERSION = 9;
+export const CURRENT_AUTHORING_SCHEMA_VERSION = 10;
 
 export interface UploadedMedia {
     data: string;
     fileName: string | null;
 }
 
-export interface ClipLora {
+export interface StageLora {
     name: string;
     weight: number;
 }
 
 export interface Stage {
+    loras: StageLora[];
     id?: string;
     skipped: boolean;
     control: number;
@@ -196,7 +196,6 @@ export interface Clip {
     h3AttentionWindowSeconds: number;
     h3TextEncoder: H3TextEncoder;
     audioSource: string;
-    loras: ClipLora[];
     icLoras: IcLora[];
     saveAudioTrack: boolean;
     clipLengthFromAudio: boolean;

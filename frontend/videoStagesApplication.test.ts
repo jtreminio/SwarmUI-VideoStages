@@ -391,9 +391,9 @@ describe("VideoStages application", () => {
         });
         expect(clips[2]).toMatchObject({
             duration: 3,
-            loras: [{ name: "look", weight: 0.6 }],
             stages: [
                 {
+                    loras: [{ name: "look", weight: 0.6 }],
                     model: "ltx-2.3.safetensors",
                     sampler: "res_multistep",
                     scheduler: "sgm_uniform",

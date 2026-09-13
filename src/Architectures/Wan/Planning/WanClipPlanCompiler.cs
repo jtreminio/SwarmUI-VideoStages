@@ -57,7 +57,6 @@ internal static class WanClipPlanCompiler
         for (int stageIndex = 0; stageIndex < activeStages.Count; stageIndex++)
         {
             StageSpec stage = activeStages[stageIndex];
-            // Planning requires a resolved model for every active stage.
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool firstStage = stageIndex == 0;
             bool decodedStageInput = initVideoEntry || !firstStage;
@@ -112,10 +111,9 @@ internal static class WanClipPlanCompiler
                         stage.Control),
                 "decoded-input partial control that quantizes to sampler start step 0",
                 stage.Id);
-            // Wan pins the model-only target for every compat class, not per resolved model.
+            // All Wan compatibility classes use model-only LoRAs.
             StockHostVideoStagePayload payload = StockHostVideoStagePayload.Compile(
                 WanArchitectureModule.ArchitectureId,
-                clip,
                 stage,
                 resolved,
                 LoraTarget.ModelOnly) with

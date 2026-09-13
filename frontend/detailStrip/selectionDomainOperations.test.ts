@@ -170,7 +170,6 @@ describe("detail structural stage operations", () => {
             minimalClip({
                 architectureHint: "ltx2",
                 modelProfileId: "stale-profile",
-                loras: [{ name: "detail.safetensors", weight: 1 }],
                 icLoras: [icLoraFixture()],
                 stages: [],
             }),

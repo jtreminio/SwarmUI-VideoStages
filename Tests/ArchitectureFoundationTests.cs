@@ -456,7 +456,7 @@ public class ArchitectureFoundationTests
         StageSpec stage = Stage(10, "fake-model");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            Loras = [new LoraRef("ltx-owned-option.safetensors")],
+            Stages = [stage with { Loras = [new LoraRef("ltx-owned-option.safetensors")] }],
             AuthoredStages = [new(0, "fake-model", "fake-profile", false)],
         };
         TimelineSpec spec = Spec(clip);
@@ -522,7 +522,6 @@ public class ArchitectureFoundationTests
         {
             PromptWindows = [new("dormant relay", 0, 1)],
             FrameRefs = [new("Upload", 1, false, "ref.png")],
-            Loras = [new("clip-lora.safetensors")],
             IcLoras =
             [
                 new(
@@ -767,19 +766,7 @@ public class ArchitectureFoundationTests
         Assert.Equal(1, registry.CompileCounts[new("fake")]);
     }
 
-    /// <summary>
-    /// Every mode the classifier can return for a real method survives the common projection with
-    /// nothing said about it, once the architecture declares it. The wire prefix is the mode's own
-    /// name, and the classifier is asked to confirm that rather than it being spelled out a second
-    /// time here — so a mode added with some other prefix arrives as a failure instead of silently
-    /// going untested.
-    /// <para>
-    /// <see cref="StageUpscaleMode.None"/> is what a factor of 1 produces rather than a method, and
-    /// <see cref="StageUpscaleMode.Unsupported"/> is the absence of a known mode; neither has a
-    /// method that names it. The stage's own upscale plan is not asserted because
-    /// <c>FakeModule</c> fabricates its stage core.
-    /// </para>
-    /// </summary>
+    // The classifier owns mode prefixes. None and Unsupported have no named method; FakeModule supplies the stage core.
     [Fact]
     public void Common_projection_keeps_every_known_upscale_mode()
     {
@@ -1646,7 +1633,7 @@ public class ArchitectureFoundationTests
                             TestPlanCompiler.DefaultStageCore with
                             {
                                 Loras = LoraPlanCompiler.Compile(
-                                    clip, LoraTarget.ModelAndTextEncoder),
+                                    stage, LoraTarget.ModelAndTextEncoder),
                             })),
                     []);
             }

@@ -15,7 +15,6 @@ describe("architecture conversion feature ownership", () => {
             promptWindows: [{ prompt: "later", start: 1, duration: 1 }],
             reuseAudio: true,
             clipLengthFromAudio: true,
-            loras: [{ name: "detail.safetensors", weight: 0.7 }],
             icLoras: [
                 {
                     lora: "guide.safetensors",
@@ -32,6 +31,7 @@ describe("architecture conversion feature ownership", () => {
             ],
             stages: [
                 minimalStage({
+                    loras: [{ name: "detail.safetensors", weight: 0.7 }],
                     icLoraStrengths: [0.4],
                     upscale: 2,
                 }),
@@ -54,7 +54,7 @@ describe("architecture conversion feature ownership", () => {
             promptWindows: [],
             reuseAudio: false,
             clipLengthFromAudio: false,
-            loras: before.loras,
+            stages: before.stages.map((stage) => ({ loras: stage.loras })),
             icLoras: [],
         });
         expect(conversion?.stages[0]).toMatchObject({

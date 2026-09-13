@@ -38,7 +38,9 @@ the following section reaches them; only Stages adds current-item context.
 Controls use SwarmUI's native field creators and theme. Shared sizing gives model
 selectors room for names while numbers and sliders remain compact. Fields wrap
 in document order; card padding and subsection separation remain consistent.
-Repeated LoRAs, keyframes, references, and IC-LoRAs share section containers.
+Normal LoRAs are repeatable rows inside each stage. Add below the list, remove beside
+the strength, or copy the list and strengths to every other stage of the current clip.
+Keyframes, references, and IC-LoRAs share section containers.
 Reference row labels retain their prompt tags.
 
 Media pickers show compact previews beside file controls. Opening a preview uses

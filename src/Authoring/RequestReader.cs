@@ -187,7 +187,6 @@ internal static class RequestReader
                 clipObject, UploadContainers.ClipAudio),
             FrameRefs: frameRefs,
             Stages: stages,
-            Loras: Loras.ReadNormal(clipObject, context.Warn),
             PromptWindows: SortWindows(context.Directives.ClipWindows.GetValueOrDefault(clipIndex)),
             BoundaryOut: NormalizeBoundaryOut(
                 DocumentJson.GetString(clipObject, "boundaryOut")),
@@ -363,7 +362,8 @@ internal static class RequestReader
             IcLoraStrengths: ReadIcLoraStrengths(stage),
             FrameRefStrengths: ReadRefStrengths(stage, frameRefCount),
             ImageRefWasExplicit: DocumentJson.HasProperty(stage, "imageReference"),
-            CharacterRefine: CharacterRefineSpec.Read(stage));
+            CharacterRefine: CharacterRefineSpec.Read(stage),
+            Loras: Loras.ReadNormal(stage, context.Warn));
     }
 
     private static ClipReadContext ReadContext(

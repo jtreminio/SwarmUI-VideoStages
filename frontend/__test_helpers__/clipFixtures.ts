@@ -45,6 +45,7 @@ export const icLoraFixture = (overrides: Partial<IcLora> = {}): IcLora => ({
 });
 
 export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
+    loras: [],
     skipped: false,
     control: 1,
     controlNetStrength: 0.8,
@@ -108,7 +109,6 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     h3AttentionWindowSeconds: 0,
     h3TextEncoder: "default",
     audioSource: "Native",
-    loras: [],
     icLoras: [],
     saveAudioTrack: false,
     clipLengthFromAudio: false,
@@ -129,8 +129,7 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
 });
 
 /**
- * ID-bearing fixtures for the document command/diff tests, which address every entity by a
- * stable ID.
+ * Document commands and diffs address entities by stable ID.
  */
 export const canonicalStage = (
     id: string,
@@ -230,8 +229,7 @@ export const canonicalDocument = (
 });
 
 /**
- * The persisted wire record for a clip — the shape `storageTypes.ts` owns, not a normalized
- * {@link Clip}. Track tests feed this to the renderer so normalization fills the rest.
+ * Track tests pass partial wire records through normalization.
  */
 export const storedClip = (
     overrides: Record<string, unknown> = {},

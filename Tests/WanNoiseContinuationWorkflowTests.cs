@@ -56,8 +56,11 @@ public class WanNoiseContinuationWorkflowTests
                 steps: 8,
                 cfgScale: 6.5,
                 sampler: "dpmpp_2m"));
-        clip["loras"] = new JArray(
-            WanWorkflowFixture.Lora("UnitTest_Wan_High_Persisted", 0.3));
+        foreach (JObject authoredStage in clip["stages"])
+        {
+            authoredStage["loras"] = new JArray(
+                WanWorkflowFixture.Lora("UnitTest_Wan_High_Persisted", 0.3));
+        }
         JObject document = MakeDocument(clip);
 
         (JObject workflow, WorkflowGenerator generator) =

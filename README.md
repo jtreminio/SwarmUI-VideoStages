@@ -54,7 +54,7 @@ The **Audio** section selects the clip's audio source, such as native model audi
 
 ## LoRAs and IC-LoRAs
 
-The **LoRAs** section lists the clip's models and weights. **IC-LoRAs** are the control-style adapters: pick one of the curated presets (union control, motion tracking, in/outpainting, lip sync, spatial upscalers, deblur, colorization, restyle, and more) or choose Custom and point it at your own weights, then choose what drives it — an upload you supply or media already entering a stage.
+Each stage has its own **LoRAs** list, with a model, strength, and remove button per row. Use **+ Add LoRA** below the list. **Copy to other stages** replaces the LoRAs and strengths on every other stage of the current clip; later edits stay independent. New stages copy the last stage’s LoRAs and strengths. Existing saved clip LoRAs migrate to every stage. **IC-LoRAs** are the control-style adapters: pick one of the curated presets (union control, motion tracking, in/outpainting, lip sync, spatial upscalers, deblur, colorization, restyle, and more) or choose Custom and point it at your own weights, then choose what drives it — an upload you supply or media already entering a stage.
 
 ## Upscaling
 

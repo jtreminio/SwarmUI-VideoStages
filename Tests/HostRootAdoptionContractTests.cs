@@ -10,7 +10,7 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-// Loader dedup runs after model patches; clearing modelloader_* per stage preserves clip LoRAs.
+// Loader dedup runs after model patches; clearing modelloader_* per stage preserves stage LoRAs.
 [Collection("VideoStagesTests")]
 public sealed class HostRootAdoptionContractTests
 {
@@ -82,11 +82,14 @@ public sealed class HostRootAdoptionContractTests
             1.0,
             loraStage,
             fixture.Stage(control: 0.5));
-        clip["loras"] = new JArray(new JObject
+        foreach (JObject authoredStage in clip["stages"])
         {
-            ["name"] = StageLoraName,
-            ["weight"] = 1.0,
-        });
+            authoredStage["loras"] = new JArray(new JObject
+            {
+                ["name"] = StageLoraName,
+                ["weight"] = 1.0,
+            });
+        }
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);

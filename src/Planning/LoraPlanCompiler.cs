@@ -6,12 +6,12 @@ namespace VideoStages.Planning;
 internal static class LoraPlanCompiler
 {
     internal static ImmutableArray<LoraPlan> Compile(
-        ClipSpec clip,
+        StageSpec stage,
         LoraTarget target)
     {
         ImmutableArray<LoraPlan>.Builder plans =
             ImmutableArray.CreateBuilder<LoraPlan>();
-        AppendWithOwnWeights(plans, clip.Loras, target);
+        AppendWithOwnWeights(plans, stage.Loras, target);
         return plans.ToImmutable();
     }
 

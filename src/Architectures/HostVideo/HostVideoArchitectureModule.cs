@@ -120,7 +120,6 @@ internal sealed class HostVideoArchitectureModule : IVideoArchitectureModule
 
             stages[stage.ClipStageRawIndex] = StockHostVideoStagePayload.Compile(
                 ArchitectureId,
-                clip,
                 stage,
                 resolved,
                 resolved.LoraTarget);

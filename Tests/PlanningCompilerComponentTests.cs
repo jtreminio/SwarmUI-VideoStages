@@ -211,7 +211,7 @@ public class PlanningCompilerComponentTests
         };
         ClipSpec clip = GeneratedClip(0, Stage(10), stage) with
         {
-            Loras = [new LoraRef("clip", 0.75), new LoraRef("stage", 0.5)],
+            Stages = [Stage(10), stage with { Loras = [new LoraRef("clip", 0.75), new LoraRef("stage", 0.5)] }],
             PromptWindows = [new PromptWindowSpec("prompt", 0, 1)],
             FrameRefs = [new FrameRefSpec("Upload", 1, false, "ref.png", "data:image/png;base64,QQ==")],
             IcLoras =
@@ -234,7 +234,7 @@ public class PlanningCompilerComponentTests
             new(640, 360, 24, ArchitectureEntryMode.ImageToVideo));
         GuideReferencePlan guide = Assert.IsType<Ltx2StagePayload>(
             compilation.StagePayloads[stage.ClipStageRawIndex]).Guide;
-        var loras = LoraPlanCompiler.Compile(clip, LoraTarget.ModelAndTextEncoder);
+        var loras = LoraPlanCompiler.Compile(clip.Stages[1], LoraTarget.ModelAndTextEncoder);
         var icLoras = IcLoraPlanCompiler
             .CompileClip(clip, new(640, 360, 24, ArchitectureEntryMode.ImageToVideo))
             .Stages[stage.ClipStageRawIndex];
@@ -254,19 +254,21 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
-    public void LoraPlanCompiler_UsesClipWeightsForEveryStage()
+    public void LoraPlanCompiler_UsesStageWeights()
     {
         StageSpec stage = Stage(10);
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            Loras =
-            [
+            Stages = [stage with
+            {
+                Loras = [
                 new LoraRef("cinematic", 1),
-                new LoraRef("detail", 0.8),
-            ],
+                    new LoraRef("detail", 0.8),
+                ]
+            }],
         };
 
-        var plans = LoraPlanCompiler.Compile(clip, LoraTarget.ModelAndTextEncoder);
+        var plans = LoraPlanCompiler.Compile(clip.Stages[0], LoraTarget.ModelAndTextEncoder);
 
         Assert.Collection(
             plans,
@@ -285,15 +287,15 @@ public class PlanningCompilerComponentTests
     }
 
     [Fact]
-    public void LoraPlanCompiler_SkipsZeroWeightClipDefinitions()
+    public void LoraPlanCompiler_SkipsZeroWeightStageDefinitions()
     {
         StageSpec stage = Stage(10);
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            Loras = [new LoraRef("disabled-for-this-clip", 0)],
+            Stages = [stage with { Loras = [new LoraRef("disabled-for-this-clip", 0)] }],
         };
 
-        Assert.Empty(LoraPlanCompiler.Compile(clip, LoraTarget.ModelAndTextEncoder));
+        Assert.Empty(LoraPlanCompiler.Compile(clip.Stages[0], LoraTarget.ModelAndTextEncoder));
     }
 
     [Fact]
@@ -302,15 +304,17 @@ public class PlanningCompilerComponentTests
         StageSpec stage = Stage(10);
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            Loras =
-            [
+            Stages = [stage with
+            {
+                Loras = [
                 new("clip-no-op", 0, 0),
-                new("clip-text-only", 0, 0.6),
-            ],
+                    new("clip-text-only", 0, 0.6),
+                ]
+            }],
         };
 
         Assert.Collection(
-            LoraPlanCompiler.Compile(clip, LoraTarget.ModelAndTextEncoder),
+            LoraPlanCompiler.Compile(clip.Stages[0], LoraTarget.ModelAndTextEncoder),
             plan =>
             {
                 Assert.Equal("clip-text-only", plan.Name);
@@ -325,16 +329,18 @@ public class PlanningCompilerComponentTests
         StageSpec stage = Stage(10);
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            Loras =
-            [
+            Stages = [stage with
+            {
+                Loras = [
                 new("clip-text-only", 0, 0.6),
-                new("clip-model", -0.3, 0.7),
-            ],
+                    new("clip-model", -0.3, 0.7),
+                ]
+            }],
         };
 
         Assert.Collection(
             LoraPlanCompiler.Compile(
-                clip,
+                clip.Stages[0],
                 LoraTarget.ModelOnly),
             plan =>
             {

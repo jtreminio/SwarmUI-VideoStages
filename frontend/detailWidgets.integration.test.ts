@@ -312,7 +312,7 @@ describe("native widgets in the production editor", () => {
             expect(actions?.style.getPropertyValue("flex-shrink")).toBe("0");
             expect(
                 editorRule(
-                    "#videostages-editor .vst-editor-actions .basic-button",
+                    "#videostages-editor :is(.vst-editor-actions, .vst-stage-lora-row) .basic-button",
                 )?.style.getPropertyValue("min-height"),
             ).toBe("32px");
         });

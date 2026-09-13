@@ -45,7 +45,6 @@ import {
     getTimelineStore,
 } from "../persistence/repository";
 import type { CharacterRefine, Clip } from "../types";
-import { buildClipLoraControls } from "./clipLorasPanel";
 import type { DetailStripContext } from "./context";
 import type { StructuralOutcome } from "./draftQueue";
 import { buildStageParamsColumn } from "./stagePanel";
@@ -512,12 +511,17 @@ describe("stage architecture model filtering", () => {
     it("keeps unsupported persisted sampling and normal-LoRA values visible for repair", () => {
         const models = catalog();
         const stage = minimalStage({
+            loras: [{ name: "removed-lora.safetensors", weight: 1 }],
             sampler: "removed-sampler",
             scheduler: "removed-scheduler",
         });
         const clip = minimalClip({
-            loras: [{ name: "removed-lora.safetensors", weight: 1 }],
-            stages: [stage],
+            stages: [
+                {
+                    ...stage,
+                    loras: [{ name: "removed-lora.safetensors", weight: 1 }],
+                },
+            ],
         });
         const column = buildStageParamsColumn(
             context(models),
@@ -526,15 +530,6 @@ describe("stage architecture model filtering", () => {
             0,
             stage,
             testRootDefaults(models),
-        );
-        column.appendChild(
-            buildClipLoraControls(
-                context(models),
-                clip,
-                0,
-                0,
-                testRootDefaults(models),
-            ).model,
         );
         const option = (value: string) =>
             Array.from(column.querySelectorAll("option")).find(

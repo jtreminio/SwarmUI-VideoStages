@@ -602,6 +602,7 @@ export const createDetailSelectionDomainOperations = (
                     ),
                 );
                 stage.skipped = last?.skipped === true;
+                stage.loras = last?.loras.map((entry) => ({ ...entry })) ?? [];
                 if (
                     clipArchitectureId === NONE_ARCHITECTURE_ID &&
                     clip.stages.length === 0

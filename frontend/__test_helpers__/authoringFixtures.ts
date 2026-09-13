@@ -64,16 +64,6 @@ export interface ClipFixture {
 }
 
 const clipRecord = (clip: ClipFixture): Record<string, unknown> => {
-    const loras: StageFixture["loras"] = [];
-    const names = new Set<string>();
-    for (const stage of clip.stages) {
-        for (const lora of stage.loras ?? []) {
-            if (!names.has(lora.name)) {
-                names.add(lora.name);
-                loras.push(lora);
-            }
-        }
-    }
     return {
         duration: clip.duration,
         skipped: clip.skipped ?? false,
@@ -97,8 +87,8 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => {
         ...(clip.icLoras ? { icLoras: clip.icLoras } : {}),
         reuseAudio: clip.reuseAudio ?? false,
         clipLengthFromAudio: clip.clipLengthFromAudio ?? false,
-        loras,
         stages: clip.stages.map((stage) => ({
+            loras: stage.loras ?? [],
             model: stage.model ?? "ltx-2.3.safetensors",
             skipped: stage.skipped ?? false,
             upscale: stage.upscale,
@@ -142,7 +132,7 @@ const mountRootDefaults = (loras: string[]): void => {
     });
 };
 
-/** SwarmUI's LoRA browser globals, which seed a newly added clip LoRA. */
+/** SwarmUI metadata and preferences seed new LoRA strengths. */
 export const modelGlobals = globalThis as unknown as {
     sdLoraBrowser?: {
         models: Record<
@@ -155,7 +145,7 @@ export const modelGlobals = globalThis as unknown as {
     };
 };
 
-/** The SwarmUI globals the IC-LoRA [AUTO] downloader reaches for. */
+/** Host globals used by the IC-LoRA downloader. */
 export const swarmGlobals = globalThis as unknown as {
     makeWSRequest?: jest.Mock;
     refreshParameterValues?: jest.Mock;
@@ -245,7 +235,7 @@ export const authoringFixtureHarness = (dispose?: () => void) => {
 
 export const committedClips = (): Clip[] => persistence.getClips();
 
-/** Retakes are only authorable on a initVideoClip clip (`retake-source-required`). */
+/** Retakes require source video. */
 export const RETAKE_SOURCE = initVideoFixture({
     durationSeconds: 10,
     lengthSeconds: 10,

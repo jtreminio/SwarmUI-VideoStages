@@ -14,19 +14,18 @@ internal sealed record AuthoringDocument(
     List<JObject> AudioTracks);
 
 /// <summary>
-/// Owns the Enabled/Data carrier, schema validation and migration, and typed JSON reads for the
-/// authored document. The shared contract fixture checks its keys against the frontend codec.
+/// The shared contract fixture checks document keys against the frontend codec.
 /// </summary>
 internal static class DocumentJson
 {
     /// <summary>Must match the frontend's <c>CURRENT_AUTHORING_SCHEMA_VERSION</c>.</summary>
-    public const int SupportedSchemaVersion = 9;
+    public const int SupportedSchemaVersion = 10;
 
     private const int FrameRefsSchemaVersion = 7;
     private const int StageLoraSchemaVersion = 8;
+    private const int ClipLoraSchemaVersion = 9;
 
-    /// <summary>Test-only observer of every document key lookup the request reader performs, used by the
-    /// contract fixture test to prove no reader names a key the frontend never emits.</summary>
+    // The contract test observes all key lookups through Read.
     internal static Action<JObject, string, bool> KeyProbe;
 
     public static bool IsActive(T2IParamInput input) =>
@@ -62,6 +61,18 @@ internal static class DocumentJson
                 foreach (JObject entry in entries)
                 {
                     MoveStageLorasToClip(entry);
+                }
+            }
+            if (schemaVersion <= ClipLoraSchemaVersion)
+            {
+                foreach (JObject entry in entries)
+                {
+                    JArray loras = entry["loras"] as JArray ?? [];
+                    foreach (JObject stage in GetObjectArray(entry, "stages"))
+                    {
+                        stage["loras"] = loras.DeepClone();
+                    }
+                    entry.Remove("loras");
                 }
             }
             return new AuthoringDocument(
@@ -151,6 +162,7 @@ internal static class DocumentJson
     {
         int? version = GetOptionalNullableInt(obj, "schemaVersion");
         if (version is not SupportedSchemaVersion
+            and not ClipLoraSchemaVersion
             and not StageLoraSchemaVersion
             and not FrameRefsSchemaVersion)
         {
@@ -162,12 +174,10 @@ internal static class DocumentJson
         return version.Value;
     }
 
-    /// <summary>The raw value of <paramref name="key"/>, for readers that must distinguish an
-    /// explicit null from a wrong-typed value.</summary>
+
     public static JToken GetToken(JObject obj, string key) => Read(obj, key);
 
-    /// <summary>The single point every document key lookup passes through, so the shared contract
-    /// fixture test can observe exactly which keys the backend reads.</summary>
+
     private static JToken Read(JObject obj, string key)
     {
         JToken token = obj?[key];

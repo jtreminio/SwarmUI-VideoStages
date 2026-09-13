@@ -288,9 +288,9 @@ public class HostVideoContractTests
     }
 
     /// <summary>
-    /// A clip LoRA on the generic runtime loads through core's own model-gen confinement step.
+    /// A stage LoRA on the generic runtime loads through core's own model-gen confinement step.
     /// Hunyuan 1.5's compat class does not target the text encoder, so the authored
-    /// <c>textEncoderWeight</c> is dropped and the loader is model-only. The clip's LoRAs are
+    /// <c>textEncoderWeight</c> is dropped and the loader is model-only. The stage's LoRAs are
     /// borrowed and handed back, so the request's LoRA list is untouched, and the borrowed host
     /// model-loader cache is dropped rather than handed on.
     /// </summary>
@@ -301,12 +301,15 @@ public class HostVideoContractTests
         fixture.InstallModel("LoRA", "UnitTest_HostVideo_Lora.safetensors");
         JObject stage = fixture.Stage(steps: 8);
         JObject clip = MakeClip(1.0, stage);
-        clip["loras"] = new JArray(new JObject
+        foreach (JObject authoredStage in clip["stages"])
         {
-            ["name"] = "UnitTest_HostVideo_Lora",
-            ["weight"] = 0.45,
-            ["textEncoderWeight"] = 0.2,
-        });
+            authoredStage["loras"] = new JArray(new JObject
+            {
+                ["name"] = "UnitTest_HostVideo_Lora",
+                ["weight"] = 0.45,
+                ["textEncoderWeight"] = 0.2,
+            });
+        }
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
@@ -337,20 +340,7 @@ public class HostVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Everything the generic runtime cannot honour is warned about and left out of the graph:
-    /// IC-LoRAs, a non-<c>Generated</c> stage reference, audio output/reuse/derived duration,
-    /// reference framing, request-global creativity, and prompt audio/video attachments. The
-    /// authored document keeps all of it. An upscale model is the exception — it is a stock ComfyUI
-    /// operation, so the generic runtime drives it and says nothing.
-    /// <para>
-    /// A ControlNet is configured on the request too, so the stage's authored
-    /// <c>controlNetStrength</c> has something it could have reached: core builds its own apply
-    /// chain for the base image pass, and the claim is that neither host stage conditions on it.
-    /// Nothing warns about the dropped stage strength — the generic descriptor has no ControlNet
-    /// feature for <c>ArchitectureCapabilityValidator</c> to report against.
-    /// </para>
-    /// </summary>
+    // Core’s ControlNet still conditions the base image. Check direct conditioning inputs: reachability also crosses the decoded base pass.
     [Fact]
     public async Task Unsupported_generic_extras_warn_and_do_not_reach_the_host_stage()
     {

@@ -551,12 +551,10 @@ describe("clip editor", () => {
     });
     it("adds and removes a clip LoRA", () => {
         setup();
-        click("add-loras");
-        expect(getState().clips[0].loras).toHaveLength(1);
-        query<HTMLButtonElement>(
-            '[data-section="loras"] [data-testid="remove-item"]',
-        ).click();
-        expect(getState().clips[0].loras).toHaveLength(0);
+        query<HTMLButtonElement>(".vst-stage-lora-add").click();
+        expect(getState().clips[0].stages[0].loras).toHaveLength(1);
+        query<HTMLButtonElement>(".vst-stage-lora-remove").click();
+        expect(getState().clips[0].stages[0].loras).toHaveLength(0);
     });
     it("adds and removes an IC-LoRA", () => {
         setup();
@@ -902,7 +900,7 @@ describe("clip editor", () => {
             "true",
         );
     });
-    it("keeps sidebar and form order aligned with LoRAs after stages and audio after source video", () => {
+    it("keeps sidebar and form order aligned with stage LoRAs and audio after source video", () => {
         setup();
         const sections = [
             ...query(
@@ -915,7 +913,11 @@ describe("clip editor", () => {
             ).querySelectorAll<HTMLElement>("[data-section-link]"),
         ].map((node) => node.dataset.sectionLink);
         expect(links).toEqual(sections);
-        expect(sections[sections.indexOf("stages") + 1]).toBe("loras");
+        expect(
+            query(".vst-stage-loras")
+                .closest("[data-section]")
+                ?.getAttribute("data-section"),
+        ).toBe("stages");
         expect(sections[sections.indexOf("source-video") + 1]).toBe("audio");
     });
     it("composes prompt and clip controls into the same field grid", () => {
@@ -943,7 +945,7 @@ describe("clip editor", () => {
         expect(document.activeElement).toBe(number);
         expect(select).toHaveBeenCalledTimes(1);
     });
-    it("places Make Them Bonita after stage reference strengths", () => {
+    it("places Make Them Bonita last, after LoRAs and stage reference strengths", () => {
         setup([
             {
                 duration: 4,
@@ -963,6 +965,9 @@ describe("clip editor", () => {
         expect(stages[1].lastElementChild?.classList).toContain(
             "vst-character-refine-section",
         );
+        expect(
+            stages[1].lastElementChild?.previousElementSibling?.classList,
+        ).toContain("vst-stage-loras");
         const toggle = () =>
             query<HTMLInputElement>(
                 '.vst-character-refine-section input[type="checkbox"]',
@@ -979,6 +984,9 @@ describe("clip editor", () => {
         expect(lastStage.lastElementChild?.classList).toContain(
             "vst-character-refine-section",
         );
+        expect(
+            lastStage.lastElementChild?.previousElementSibling?.classList,
+        ).toContain("vst-stage-loras");
         toggle().click();
         expect(strength().disabled).toBe(false);
         change(strength(), "0.6");

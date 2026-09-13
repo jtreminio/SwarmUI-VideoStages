@@ -2,6 +2,7 @@ import { buildSlider, tagFocus } from "../detailWidgets";
 import type { Clip, RootDefaults, Stage } from "../types";
 import type { DetailStripContext } from "./context";
 import { appendCharacterRefineSection } from "./stagePanel/characterRefineSection";
+import { appendStageLorasSection } from "./stagePanel/lorasSection";
 import { appendStageModelSection } from "./stagePanel/modelSection";
 import { appendStageReferenceGuideSection } from "./stagePanel/referenceGuideSection";
 import {
@@ -109,6 +110,7 @@ export const buildStageParamsColumn = (
         appendStageUpscaleSection(bindings, isRefine);
     }
     appendStageReferenceGuideSection(bindings);
+    appendStageLorasSection(bindings);
     appendCharacterRefineSection(bindings);
 
     if (initVideoStage0) {

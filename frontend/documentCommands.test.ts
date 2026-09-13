@@ -981,10 +981,10 @@ describe("reduceDocumentCommand", () => {
                 driveMedia: null,
             },
         ];
-        targetClip.loras = [{ name: "detail", weight: 1 }];
         targetClip.stages = [
             {
                 ...canonicalStage("stage-convert-a"),
+                loras: [{ name: "detail", weight: 1 }],
                 frameRefStrengths: [0.8],
                 upscale: 2,
             },
@@ -1715,10 +1715,10 @@ describe("reduceDocumentCommand", () => {
     it("keeps LoRAs and discards only unsupported upscale modes", () => {
         const source = document();
         const fake = fakeArchitectureCatalog();
-        source.clips[1].loras = [{ name: "detail", weight: 1 }];
         source.clips[1].stages = [
             {
                 ...canonicalStage("model-upscale"),
+                loras: [{ name: "detail", weight: 1 }],
                 upscale: 2,
                 upscaleMethod: "upscaler.safetensors",
             },
@@ -1747,7 +1747,7 @@ describe("reduceDocumentCommand", () => {
         expect(
             result.document.clips[1].stages.map((entry) => entry.upscale),
         ).toEqual([1, 2]);
-        expect(result.document.clips[1].loras).toEqual([
+        expect(result.document.clips[1].stages[0].loras).toEqual([
             { name: "detail", weight: 1 },
         ]);
     });

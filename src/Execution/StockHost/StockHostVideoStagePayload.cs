@@ -20,7 +20,6 @@ internal sealed record StockHostVideoStagePayload(
 
     internal static StockHostVideoStagePayload Compile(
         ArchitectureId architectureId,
-        ClipSpec clip,
         StageSpec stage,
         ResolvedVideoModel resolved,
         LoraTarget loraTarget) =>
@@ -36,7 +35,7 @@ internal sealed record StockHostVideoStagePayload(
                 stage.Sampler,
                 stage.Scheduler,
                 StageUpscalePlanCompiler.Compile(stage),
-                LoraPlanCompiler.Compile(clip, loraTarget)));
+                LoraPlanCompiler.Compile(stage, loraTarget)));
 }
 
 internal static class StockHostVideoStagePayloadExtensions

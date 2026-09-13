@@ -73,14 +73,14 @@ export const mountVideoStagesData = (state: unknown): HTMLTextAreaElement => {
         state !== null &&
         !Array.isArray(state) &&
         !Object.hasOwn(state, "schemaVersion")
-            ? { ...state, schemaVersion: 9 }
+            ? { ...state, schemaVersion: 10 }
             : structuredClone(state);
     if (
         typeof persisted === "object" &&
         persisted !== null &&
         !Array.isArray(persisted) &&
         "schemaVersion" in persisted &&
-        persisted.schemaVersion === 9 &&
+        persisted.schemaVersion === 10 &&
         "clips" in persisted &&
         Array.isArray(persisted.clips)
     ) {
@@ -108,7 +108,7 @@ export const mountVideoStagesData = (state: unknown): HTMLTextAreaElement => {
     return el;
 };
 
-/** Core Video FPS param input — the timeline fps always mirrors this. */
+/** The timeline follows core Video FPS. */
 export const mountVideoFps = (value: number): HTMLInputElement => {
     const existing = document.getElementById("input_videofps");
     if (existing instanceof HTMLInputElement) {
@@ -129,15 +129,12 @@ export const mountPromptBox = (value = ""): HTMLTextAreaElement => {
     return el;
 };
 
-/**
- * The clips passed to the FIRST `saveClips` call. Use when the test asserts that
- * exactly one save happened, or cares about the first of several.
- */
+/** Clips from the first save. */
 export const firstSavedClips = <T>(spy: {
     mock: { calls: [T, ...unknown[]][] };
 }): T => spy.mock.calls[0][0];
 
-/** The clips passed to the LAST `saveClips` call — the state the user ends on. */
+/** Clips from the last save. */
 export const lastSavedClips = <T>(spy: {
     mock: { calls: [T, ...unknown[]][] };
 }): T => spy.mock.calls[spy.mock.calls.length - 1][0];
@@ -155,10 +152,7 @@ export const mountTimelineBody = (pxPerSecond = TIMELINE_PPS): HTMLElement => {
 };
 
 /**
- * jsdom does no layout, so a track that measures a lane or region sees all zeros.
- * Track code reads only `left` and `width`, but pass the row's `top` where it is
- * not 0: a rect whose vertical fields are all zero lets a reader that grabs
- * `rect.top` instead of `rect.left` keep on measuring correctly.
+ * jsdom has no layout. Use distinct top and left values to expose axis mix-ups.
  */
 export const stubRect = (
     el: HTMLElement,
@@ -180,7 +174,6 @@ export const stubRect = (
         }) as DOMRect) as HTMLElement["getBoundingClientRect"];
 };
 
-/** The one element matching `selector`, or a throw naming what was missing. */
 export const requireEl = (root: ParentNode, selector: string): HTMLElement => {
     const found = root.querySelector<HTMLElement>(selector);
     if (!found) {

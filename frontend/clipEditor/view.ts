@@ -46,7 +46,6 @@ export function renderEditor(
                 "stages",
                 "keyframes",
                 "references",
-                "loras",
                 "ic-loras",
                 "relay-prompts",
             ].includes(section.key)

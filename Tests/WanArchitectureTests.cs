@@ -765,7 +765,7 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            Loras = [new("clip-text-only", 0, 0.8), new("clip-model", 0.5, 0.9)],
+            Stages = [stage with { Loras = [new("clip-text-only", 0, 0.8), new("clip-model", 0.5, 0.9)] }],
         };
         StockHostVideoStagePayload payload = Assert.Single(
             Assert.Single(Compile(clip).Clips).Stages)
@@ -781,13 +781,15 @@ public class WanArchitectureTests
         StageSpec stage = Stage(10, "wan-model");
         ClipSpec clip = GeneratedClip(0, stage) with
         {
-            Loras =
-            [
+            Stages = [stage with
+            {
+                Loras = [
                 new("clip-active", 0.35, 0.25),
-                new("clip-disabled", 0, 0.7),
-                new("clip-text-only", 0, 0.8),
-                new("clip-negative", -0.4, 0.9),
-            ],
+                    new("clip-disabled", 0, 0.7),
+                    new("clip-text-only", 0, 0.8),
+                    new("clip-negative", -0.4, 0.9),
+                ]
+            }],
         };
 
         StockHostVideoStagePayload payload = Assert.Single(
@@ -1236,7 +1238,7 @@ public class WanArchitectureTests
         VideoExecutionPlan active = Compile(
             InitVideoClip(0, passthrough) with
             {
-                Loras = [new("clip-active", 0.5)],
+                Stages = [passthrough with { Loras = [new("clip-active", 0.5)] }],
             });
         Assert.DoesNotContain(
             active.Diagnostics,
@@ -1246,14 +1248,14 @@ public class WanArchitectureTests
         VideoExecutionPlan textOnly = Compile(
             InitVideoClip(0, passthrough) with
             {
-                Loras = [new("clip-text-only", 0, 0.8)],
+                Stages = [passthrough with { Loras = [new("clip-text-only", 0, 0.8)] }],
             });
         Assert.Empty(
             Assert.Single(textOnly.Clips).Stages[0].Core.Loras);
 
         ClipSpec disabled = InitVideoClip(0, passthrough) with
         {
-            Loras = [new("clip-disabled", 0)],
+            Stages = [passthrough with { Loras = [new("clip-disabled", 0)] }],
         };
         ClipPlan compiled = Assert.Single(Compile(disabled).Clips);
         Assert.True(Assert.Single(compiled.Stages).IsPassthrough);
@@ -1262,7 +1264,7 @@ public class WanArchitectureTests
         VideoExecutionPlan stageNoOp = Compile(
             InitVideoClip(0, passthrough) with
             {
-                Loras = [new("clip-no-op", 0, 0)],
+                Stages = [passthrough with { Loras = [new("clip-no-op", 0, 0)] }],
             });
         Assert.Empty(
             Assert.Single(stageNoOp.Clips).Stages[0].Core.Loras);
@@ -1270,7 +1272,7 @@ public class WanArchitectureTests
         VideoExecutionPlan sampled = Compile(
             InitVideoClip(0, passthrough with { Control = 0.5 }) with
             {
-                Loras = [new("clip-active", 0.5)],
+                Stages = [passthrough with { Control = 0.5 } with { Loras = [new("clip-active", 0.5)] }],
             });
         Assert.Single(
             Assert.Single(sampled.Clips).Stages[0].Core.Loras);

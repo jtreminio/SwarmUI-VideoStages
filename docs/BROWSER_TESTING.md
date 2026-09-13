@@ -77,7 +77,12 @@ A reference-style Continue join adds its incoming video reference to the next
 clip's References section. Edit its scale and soundtrack there. This requires a
 backend model whose catalog supports reference-style Continue.
 
-LoRAs, IC-LoRAs, Keyframes and References share a card of repeatable rows. Each row keeps
+Normal LoRAs are rows inside each stage (`.vst-stage-loras`). Add with
+`.vst-stage-lora-add`, remove with `.vst-stage-lora-remove`, and edit the
+`.vst-stage-lora-strength` number. `.vst-stage-loras-copy` replaces the other
+stages’ lists and strengths on the current clip. Check copying before blurring a
+strength edit, independent edits afterward, and persistence after reload.
+IC-LoRAs, Keyframes and References share a card of repeatable rows. Each row keeps
 its own fields and delete action. Drop local files onto **+ Add keyframe** or
 **+ Add reference** to create populated rows. Source video enables the Retake
 section for models that support it; Start, Length and Strength edit its window.

@@ -10,7 +10,6 @@ import type {
     CanonicalStage,
 } from "../types";
 
-/** Which entity owns the collection a list command addresses. */
 export type ListOwnerKind = "document" | "clip" | "track";
 
 /** The command field naming the owner; document-owned lists have none. */
@@ -21,10 +20,8 @@ export const OWNER_ID_FIELD = {
 } as const satisfies Record<ListOwnerKind, string | null>;
 
 /**
- * Every key of an entity is either patchable or deliberately reserved for a
- * dedicated command (identity, architecture retargeting, child collections).
- * Leaving a key out of both is a compile error, so a new canonical field can
- * never be silently dropped by the diff.
+ * Every entity key must be patchable or reserved for a dedicated command.
+ * Missing classifications fail compilation.
  */
 type Coverage<
     TEntity,
@@ -57,9 +54,7 @@ export interface ListEntityDescriptor<
     readonly patchKeys: readonly TPatchKey[];
     /** Keys owned by a dedicated command instead of `.patch`. */
     readonly reservedKeys: readonly (keyof TEntity)[];
-    /** True when mutating the list can change the owning clip's identity. */
     readonly reconcilesClipIdentity?: boolean;
-    /** True when edits can invalidate Character Refine reference selections. */
     readonly reconcilesCharacterRefineReferences?: boolean;
     collection(owner: TOwner): TEntity[];
 }
@@ -127,7 +122,6 @@ const CLIP_ENTITY = defineList<CanonicalAuthoringDocument, CanonicalClip>()({
         "h3AttentionWindowSeconds",
         "h3TextEncoder",
         "audioSource",
-        "loras",
         "icLoras",
         "saveAudioTrack",
         "clipLengthFromAudio",
@@ -160,6 +154,7 @@ const STAGE_ENTITY = defineList<CanonicalClip, CanonicalStage>()({
     idField: "stageId",
     beforeIdField: "beforeStageId",
     patchKeys: [
+        "loras",
         "skipped",
         "control",
         "controlNetStrength",
@@ -265,7 +260,6 @@ const AUDIO_SPAN_ENTITY = defineList<
     collection: (track) => track.spans,
 });
 
-/** The one description of every ID-addressed list the commands can edit. */
 export const LIST_ENTITIES = {
     clip: CLIP_ENTITY,
     stage: STAGE_ENTITY,

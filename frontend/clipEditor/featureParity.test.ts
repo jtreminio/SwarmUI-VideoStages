@@ -331,8 +331,8 @@ describe("production editor feature parity", () => {
             ).title,
         ).toContain("keyframe endpoint");
         const lora = required<HTMLButtonElement>(
-            mount("loras"),
-            '[data-action="add"]',
+            mount("stages"),
+            ".vst-stage-lora-add",
         );
         expect(lora.title).toContain("All available LoRAs");
         expect(lora.disabled).toBe(true);
