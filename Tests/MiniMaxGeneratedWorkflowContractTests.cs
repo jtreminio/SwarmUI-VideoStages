@@ -12,10 +12,7 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// MiniMax H3 generated-graph contracts. Stages are identified by sampler seed because node order
-/// and upstream reachability do not identify a refining stage.
-/// </summary>
+// Identify stages by seed; refinement makes upstream reachability ambiguous.
 [Collection("VideoStagesTests")]
 public class MiniMaxGeneratedWorkflowContractTests
 {
@@ -302,11 +299,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
     }
 
-    /// <summary>
-    /// A refine stage re-encodes the decoded video, which collapses back onto the sampler's own
-    /// latent and leaves stage 0's decode unused for core's cleanup to prune — the audio half must
-    /// survive that.
-    /// </summary>
+    // Re-encoding collapses onto the sampler latent; audio must survive pruning the unused decode.
     [Fact]
     public async Task A_second_stage_refines_the_joint_latent_that_survives_core_cleanup()
     {
@@ -340,10 +333,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Three places emit a SwarmTrimFrames node: core's save step, core's image-to-video step,
-    /// and the extension's global trimmer. Only the production list runs all three.
-    /// </summary>
+    // Core's save, image-to-video step, and the extension can each emit a trim.
     [Fact]
     public async Task Three_stages_publish_intermediates_and_trim_only_the_final_output()
     {
@@ -399,9 +389,6 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live, publishedVideoSaves: 3);
     }
 
-    /// <summary>
-    /// Persisted clip LoRAs reach every stage while prompt confinement still selects one stage.
-    /// </summary>
     [Fact]
     public async Task Persisted_clip_LoRA_reaches_every_stage_and_prompt_LoRA_stays_scoped()
     {
@@ -463,10 +450,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Framing reuse is keyed on source plus size plus method, so a second stage resolution adds
-    /// a second SwarmFrameImage — and each must reach its own stage.
-    /// </summary>
+    // Framing reuse depends on source, size, and method.
     [Fact]
     public async Task A_final_frame_reference_is_reframed_for_each_stage_resolution()
     {
@@ -500,9 +484,7 @@ public class MiniMaxGeneratedWorkflowContractTests
                 Assert.Equal("fit-green", node.Method.LiteralAsString());
             });
 
-        // The authored reference is fromEnd, so each stage must consume its framing through the
-        // keyframe node's last_frame slot — reachability from the sampler alone would not say which
-        // slot, nor that first_frame stayed unwired.
+        // Reachability alone cannot distinguish the first-frame and last-frame slots.
         Assert.All(
             bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>(),
             keyframes => Assert.Null(keyframes.FirstFrame.Connection));
@@ -522,11 +504,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A refine stage re-encodes decoded frames that have already drifted from the authored opening
-    /// image, so dropping the first keyframe after stage 0 leaves nothing holding frame 0 — and an
-    /// upscaling stage samples at a resolution the stage-0 framing does not fit.
-    /// </summary>
+    // Refinement must keep the authored opening image at the new stage resolution.
     [Fact]
     public async Task An_opening_frame_reference_is_reframed_for_each_stage_resolution()
     {
@@ -647,8 +625,7 @@ public class MiniMaxGeneratedWorkflowContractTests
                 Assert.Equal(320, node.Height.LiteralAsInt());
             });
 
-        // Which upload lands in which slot: two framed images of identical size would otherwise be
-        // interchangeable.
+        // Equal dimensions cannot distinguish which upload reached each slot.
         Assert.Equal(
             "RklSU1Q=",
             Assert.IsType<SwarmLoadImageB64Node>(firstFrame.ImagesInput.Connection?.Node)
@@ -673,11 +650,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Nothing between the base capture (-4.2) and the refiner capture (5.89) touches CurrentMedia
-    /// unless core's refiner (-4) and decode (1) run, so only the production list can tell a
-    /// "Refiner" reference from a "Base" one.
-    /// </summary>
+    // Run core's refiner and decode to distinguish the Base and Refiner capture points.
     [Theory]
     [InlineData("Refiner")]
     [InlineData("Base")]
@@ -692,7 +665,7 @@ public class MiniMaxGeneratedWorkflowContractTests
             MakeDocument(clip),
             post =>
             {
-                // Core's refiner step is gated on BOTH of these being present.
+                // Core requires both refiner parameters.
                 post["refinermethod"] = "PostApply";
                 post["refinercontrolpercentage"] = 0.2;
             });
@@ -718,37 +691,36 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertAcyclic(bridge);
     }
 
-    /// <summary>
-    /// Text-to-video is the shape where the base capture is H3's own joint audio/video latent
-    /// rather than a decoded image, so it is the shape that proves the capture is decoded before
-    /// it reaches a keyframe input. Handed over raw, it fails the whole request on a LATENT wired
-    /// into an IMAGE — no video, and no warning saying why.
-    /// </summary>
-    [Fact]
-    public async Task A_text_to_video_base_frame_reference_is_decoded_before_it_is_keyframed()
+    [Theory]
+    [InlineData("Base", 0, false)]
+    [InlineData("Refiner", 0, false)]
+    [InlineData("Base", 0, true)]
+    [InlineData("Refiner", 0, true)]
+    [InlineData("Base", 9, false)]
+    [InlineData("Refiner", 9, false)]
+    public async Task A_text_to_video_keyframe_cannot_reference_the_replaced_host_root(
+        string source,
+        int frame,
+        bool fromEnd)
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
-        clip["keyframes"] = new JArray(MakeRef("Base"));
+        clip["keyframes"] = new JArray(MakeRef(source, frame: frame, fromEnd: fromEnd));
 
         JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
-        ComfyNode firstFrame = keyframes.FirstFrame.Connection?.Node;
-        Assert.NotNull(firstFrame);
-        AssertImageSource(firstFrame, "first_frame");
+        SwarmKSamplerNode sampler = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        Assert.Same(StageSampler(bridge, 0), sampler);
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
+        Assert.Empty(bridge.Graph.NodesOfType<MiniMaxH3AddGuideNode>());
 
-        live.AssertLive(keyframes);
+        live.AssertLive(sampler);
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// StartStep = <c>floor(steps * (1 - control))</c>.
-    /// </summary>
     [Theory]
     [InlineData(1.0, 0)]
     [InlineData(0.5, 4)]
@@ -773,10 +745,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// An Error severity must travel ThrowIfBlocking → SwarmUserErrorException → the API's error
-    /// response. Nothing else proves a blocking diagnostic stops the request.
-    /// </summary>
+    // Exercise the API conversion from a blocking diagnostic to a readable error.
     [Fact]
     public async Task A_blocking_diagnostic_rejects_the_request()
     {
@@ -802,10 +771,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.Contains("audio", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// Core's image-to-video step (11) builds its own MiniMax graph, which DropCoreOutput (11.05)
-    /// must remove before the extension builds the timeline.
-    /// </summary>
+    // DropCoreOutput must remove core's video graph before the timeline runs.
     [Fact]
     public async Task Image_to_video_drops_the_core_built_graph_and_keeps_one_timeline()
     {
@@ -854,10 +820,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// The base capture (-4.2) precedes core's decode (1), so it is a latent; it must reach the
-    /// keyframe chain through a VAE decode, not raw.
-    /// </summary>
+    // Base is captured before decode, so its reference needs a VAE conversion.
     [Fact]
     public async Task Base_frame_reference_never_feeds_a_latent_into_the_keyframe_chain()
     {
@@ -878,8 +841,6 @@ public class MiniMaxGeneratedWorkflowContractTests
             decode => ReachesUpstream(bridge, keyframes.FirstFrame.Connection.Node, decode.Id));
 
         AssertImageSource(keyframes.FirstFrame.Connection?.Node, "first_frame");
-        // Only a first-frame reference was authored, so last_frame must be genuinely unwired
-        // rather than silently skipped by the image-source check.
         Assert.Null(keyframes.LastFrame.Connection);
         foreach (SwarmFrameImageNode framed in bridge.Graph.NodesOfType<SwarmFrameImageNode>())
         {
@@ -889,12 +850,7 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// SwarmMiniMaxH3AddKeyframes unbinds its latent into H3's (video, audio) pair and reads
-    /// <c>shape[4]</c> for the canvas width. The video half alone unbinds to four dimensions, so a
-    /// stage handing over anything but the joint latent it actually samples dies mid-run on
-    /// "tuple index out of range" — the graph builds and ships clean either way.
-    /// </summary>
+    // The keyframe node requires the joint (video, audio) latent and reads video.shape[4].
     private static void AssertKeyframesReadTheSampledJointLatent(params SwarmKSamplerNode[] samplers) =>
         Assert.All(
             samplers,

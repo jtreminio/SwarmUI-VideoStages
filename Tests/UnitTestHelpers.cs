@@ -131,8 +131,7 @@ internal static class UnitTestStubs
     {
         EnsureComfySamplerSchedulerRegistered();
         EnsureComfyVideoParamsRegistered();
-        // Core dereferences ControlNetPreprocessorParams[i] unguarded once a ControlNet model is
-        // set, so these must exist for any POST that configures one.
+        // Core dereferences the preprocessor parameters when a ControlNet model is set.
         EnsureComfyControlNetParamsRegistered();
 
         // Names must match ComfyUIBackendExtension's production registrations exactly:
@@ -140,6 +139,7 @@ internal static class UnitTestStubs
         Ensure(ref ComfyUIBackendExtension.CustomWorkflowParam, "ComfyUI Custom Workflow", "");
         Ensure(ref ComfyUIBackendExtension.SetClipDevice, "Set CLIP Device", "cpu");
         Ensure(ref ComfyUIBackendExtension.ModelAttentionBackend, "Model Attention Backend", "pytorch attention");
+        Ensure(ref ComfyUIBackendExtension.UseSparseAttention, "Use Sparse Attention", "None");
         Ensure(ref ComfyUIBackendExtension.SelfAttentionGuidanceScale, "Self-Attention Guidance Scale", "0.5");
         Ensure(ref ComfyUIBackendExtension.SelfAttentionGuidanceSigmaBlur, "Self-Attention Guidance Sigma Blur", "2");
         Ensure(ref ComfyUIBackendExtension.PerturbedAttentionGuidanceScale, "Perturbed-Attention Guidance Scale", "3");
@@ -267,8 +267,7 @@ internal sealed class SwarmUiTestContext : IDisposable
         _priorIncludeHash = Program.ServerSettings.Metadata.ImageMetadataIncludeModelHash;
         _priorModelGenSteps = [.. WorkflowGenerator.ModelGenSteps];
         _priorExtraModelProviders = ModelsAPI.ExtraModelProviders;
-        // Never-cleared statics: once one test installs a support model, every later test passes
-        // without it, while the same test under --filter downloads. Green in suite, hangs alone.
+        // Isolate model caches so filtered tests resolve the same models as full-suite runs.
         _priorClipModelsValid = WorkflowGenerator.ClipModelsValid;
         _priorVisionModelsValid = WorkflowGenerator.VisionModelsValid;
         WorkflowGenerator.ClipModelsValid = new(_priorClipModelsValid);
@@ -362,9 +361,7 @@ internal static class TestModelFactory
     {
         EnsureModelSet("Stable-Diffusion");
         EnsureModelSet("Clip");
-        // EnsureModelSet, not a fresh handler: the per-architecture installers are chained by
-        // cross-family fixtures, and replacing the set would drop the previous one's VAE stubs —
-        // which does not fail, it falls through to a multi-gigabyte DownloadNow().Wait().
+        // Preserve other architectures' VAE stubs; missing models trigger downloads.
         EnsureModelSet("VAE");
         if (CommonModels.Known.IsEmpty)
         {
@@ -384,9 +381,7 @@ internal static class TestModelFactory
     {
         EnsureModelSet("Stable-Diffusion");
         EnsureModelSet("Clip");
-        // EnsureModelSet, not a fresh handler: the per-architecture installers are chained by
-        // cross-family fixtures, and replacing the set would drop the previous one's VAE stubs —
-        // which does not fail, it falls through to a multi-gigabyte DownloadNow().Wait().
+        // Preserve other architectures' VAE stubs; missing models trigger downloads.
         EnsureModelSet("VAE");
         if (CommonModels.Known.IsEmpty)
         {
@@ -410,9 +405,7 @@ internal static class TestModelFactory
         EnsureModelSet("Stable-Diffusion");
         EnsureModelSet("Clip");
         EnsureModelSet("ClipVision");
-        // EnsureModelSet, not a fresh handler: the per-architecture installers are chained by
-        // cross-family fixtures, and replacing the set would drop the previous one's VAE stubs —
-        // which does not fail, it falls through to a multi-gigabyte DownloadNow().Wait().
+        // Preserve other architectures' VAE stubs; missing models trigger downloads.
         EnsureModelSet("VAE");
         if (CommonModels.Known.IsEmpty)
         {
@@ -453,7 +446,6 @@ internal static class TestModelFactory
             T2IModelClassSorter.CompatWan21_14b,
             WanArchitectureModule.ImageToVideoModelClassId,
             "Wan 2.2 Image2Video 14B");
-        // WAN resolves its CLIP and VAE support models through the host registries.
         return models with { VisionModel = InstallWanSupportModels() };
     }
 
@@ -516,23 +508,14 @@ internal static class TestModelFactory
 
     public const string WanClipVisionFileName = "clip_vision_h.safetensors";
 
-    /// <summary>
-    /// Returns the CLIP-vision stub. Models whose compat class is <c>wan-21-14b</c> or
-    /// <c>wan-21-1_3b</c> — which includes Wan 2.2 I2V 14B, so the model class ID is not the
-    /// discriminator — route core into
-    /// <c>RequireVisionModel</c>, which — unlike <c>RequireClipModel</c> — has no "already
-    /// installed" fallback and downloads 1.2 GB unless the request names the model itself, so
-    /// callers reaching that branch must set <see cref="T2IParamTypes.ClipVisionModel"/>. Stubbing
-    /// it under core's own file name keeps the generated <c>CLIPVisionLoader</c> unchanged.
-    /// </summary>
+    // WAN 2.1 and WAN 2.2 I2V 14B call RequireVisionModel, which downloads unless the request
+    // names ClipVisionModel explicitly. Use core's filename to preserve the loader graph.
     public static T2IModel InstallWanSupportModels()
     {
         EnsureModelSet("Stable-Diffusion");
         EnsureModelSet("Clip");
         EnsureModelSet("ClipVision");
-        // EnsureModelSet, not a fresh handler: the per-architecture installers are chained by
-        // cross-family fixtures, and replacing the set would drop the previous one's VAE stubs —
-        // which does not fail, it falls through to a multi-gigabyte DownloadNow().Wait().
+        // Preserve other architectures' VAE stubs; missing models trigger downloads.
         EnsureModelSet("VAE");
         if (CommonModels.Known.IsEmpty)
         {

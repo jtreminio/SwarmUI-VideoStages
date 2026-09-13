@@ -10,18 +10,7 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// What a timeline stage adopts from SwarmUI's own root chain instead of rebuilding. Reuse is what
-/// keeps the root cleanup from having anything to delete: <c>RemoveOwnedNodesNotLive</c> is
-/// liveness-based, so any core node a stage consumes survives it.
-/// <para>
-/// The model loader is adopted at <c>WorkflowGenerator.CreateNode</c>'s dedup cache, not at
-/// <c>CreateModelLoader</c>'s <c>modelloader_*</c> cache — the extension clears that key per stage
-/// so clip LoRAs and model patches still apply. Because dedup happens after the model-gen
-/// steps run, the reused node is the tail they had nothing to add to, which is why adoption cannot
-/// silently drop a stage-scoped patch.
-/// </para>
-/// </summary>
+// Loader dedup runs after model patches; clearing modelloader_* per stage preserves clip LoRAs.
 [Collection("VideoStagesTests")]
 public sealed class HostRootAdoptionContractTests
 {
@@ -37,11 +26,7 @@ public sealed class HostRootAdoptionContractTests
             _ => throw new ArgumentOutOfRangeException(nameof(architecture)),
         };
 
-    /// <summary>
-    /// Core's reserved id for the base model loader, per <c>WorkflowGeneratorSteps</c>'s id table.
-    /// Asserting the id — not merely that one loader exists — is what distinguishes adoption from
-    /// the extension building its own loader and the cleanup deleting core's.
-    /// </summary>
+    // Core reserves this loader id in WorkflowGeneratorSteps; count alone cannot prove adoption.
     private const string CoreBaseLoaderId = "4";
 
     private const string CoreSamplerId = "10";
@@ -57,11 +42,6 @@ public sealed class HostRootAdoptionContractTests
         return loader;
     }
 
-    /// <summary>
-    /// Every architecture's text-to-video stage loads the request's model through core's own base
-    /// loader. A second loader would be a second copy of the same weights on the GPU, and would
-    /// leave core's node dead for the root cleanup to sweep.
-    /// </summary>
     [Theory]
     [InlineData("ltx2")]
     [InlineData("wan")]
@@ -91,11 +71,7 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// The case the <c>modelloader_*</c> cache alone would get wrong: a clip LoRA must still be
-    /// applied, and it is — as a loader chained onto core's node, not as a reload of the model.
-    /// The unmodified second stage keeps sampling straight off core's node.
-    /// </summary>
+    // Reusing modelloader_* would skip the stage's LoRA patch.
     [Fact]
     public async Task A_clip_lora_chains_onto_cores_base_loader_rather_than_reloading_the_model()
     {
@@ -130,12 +106,7 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A single-stage text-to-video timeline ships core's own graph shape with the stage's
-    /// settings in it: loader, empty latent and conditioning adopted by dedup, sampler and decode
-    /// claimed by id, core's save reading the claimed decode. The root cleanup has nothing left to
-    /// remove — every node core built is one the stage is using.
-    /// </summary>
+    // Dedup adopts loaders and conditioning; reserved ids let stages replace samplers and decodes.
     [Theory]
     [InlineData("wan")]
     [InlineData("host-video")]
@@ -158,8 +129,7 @@ public sealed class HostRootAdoptionContractTests
             ReachesUpstream(bridge, sampler, CoreLatentId),
             "The stage does not sample core's own empty latent.");
 
-        // By interface, not by node class: LTX-2 decodes tiled and H3 splits its joint latent
-        // first, so neither the class nor a direct connection to the sampler is common ground.
+        // LTX uses tiled decode; H3 inserts an A/V split before decode.
         ComfyNode decode = Assert.IsAssignableFrom<ComfyNode>(
             Assert.Single(bridge.Graph.Nodes.Values.OfType<IVaeDecode>()));
         Assert.Equal(CoreDecodeId, decode.Id);
@@ -170,11 +140,7 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// The conditioning pair, on core's terms: its id map reserves 6 for the positive prompt and 7
-    /// for the negative, and a stage that takes those ids has to honour that or the encoders swap
-    /// roles for anything downstream that reads them by id.
-    /// </summary>
+    // Core reserves 6 for positive conditioning and 7 for negative conditioning.
     [Fact]
     public async Task An_ltx_text_stage_claims_cores_conditioning_pair_in_cores_own_roles()
     {
@@ -204,12 +170,7 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// LTX-2 builds its latent through the typed bridge, which never consults the dedup cache the
-    /// other families' latents collapse through, so it takes core's id outright. What sits above it
-    /// then collapses unaided: with core's video and audio latents on both inputs, the stage's joint
-    /// latent is byte-identical to core's and dedups onto it.
-    /// </summary>
+    // Typed latent creation bypasses dedup, so LTX claims the id before the joint latent dedups.
     [Fact]
     public async Task An_ltx_text_stage_claims_cores_latent_and_its_joint_latent_follows()
     {
@@ -236,13 +197,7 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Claiming core's latent has to retire its dedup entry, or the next family's latent collapses
-    /// onto the claiming family's. The collision needs the request's own model to be the second
-    /// family's: core then builds that family's latent at the reserved id, and a clip of the same
-    /// length asks for a byte-identical one — the dedup key of the node LTX-2 has already taken
-    /// over.
-    /// </summary>
+    // A stale dedup entry would let the second family reuse the first family's claimed latent.
     [Fact]
     public async Task Claiming_cores_latent_retires_the_dedup_entry_another_family_would_hit()
     {
@@ -265,10 +220,7 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// There is one host root, so only one stage may take it. The second clip's first stage is a
-    /// text stage on the same terms as the first's, and builds its own sampler and decode.
-    /// </summary>
+    // Only one stage can claim the host root.
     [Fact]
     public async Task Only_the_first_generated_stage_claims_the_host_root()
     {
@@ -292,11 +244,7 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Image-to-video keeps core's sampler and decode for the base image the video drives from, so
-    /// the video stage must leave both alone. Claiming there would overwrite the image the stage
-    /// itself is about to consume.
-    /// </summary>
+    // The base image remains an input to image-to-video stages.
     [Fact]
     public async Task An_image_to_video_stage_leaves_cores_sampler_and_decode_alone()
     {
@@ -315,16 +263,11 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A keyframe reference sourced from the host's own pass is captured as a node id, not as a
-    /// graph edge, so nothing about the graph at claim time says the node is spoken for. Claiming
-    /// it anyway would hand the reference the claiming stage's output under the name of the host's,
-    /// silently — so a captured host reference refuses the claim outright.
-    /// </summary>
+    // A later clip must not pin the discarded host root or read another clip's claimed output.
     [Theory]
     [InlineData("Base")]
     [InlineData("Refiner")]
-    public async Task A_captured_host_reference_refuses_the_claim(string source)
+    public async Task A_later_MiniMax_host_reference_cannot_block_the_text_root_claim(string source)
     {
         using WanAndMiniMaxFixture fixture = new();
         JObject miniMaxClip = MakeClipWithRefs(
@@ -339,22 +282,15 @@ public sealed class HostRootAdoptionContractTests
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
         SwarmKSamplerNode wanStage = StageSampler(bridge, 0);
-        Assert.NotEqual(CoreSamplerId, wanStage.Id);
-        SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
-        Assert.False(
-            ReachesUpstream(bridge, keyframes.FirstFrame.Connection?.Node, wanStage.Id),
-            $"The '{source}' keyframe resolves to the WAN clip's own generation.");
+        Assert.Equal(CoreSamplerId, wanStage.Id);
+        Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count());
+        Assert.Empty(bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
 
+        live.AssertAllLive(wanStage, StageSampler(bridge, 1));
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// The claim belongs to the timeline rather than to an architecture: whichever clip generates
-    /// first takes it, and the other family's clip neither takes it nor blocks it. LTX-2 used to
-    /// capture the host root unconditionally, and since a capture refuses the claim, one LTX-2 clip
-    /// denied it to the whole timeline whichever end it sat at.
-    /// </summary>
+    // Root ownership belongs to the timeline, regardless of which architecture generates first.
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -383,13 +319,7 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// An authored reference to the host's base pass costs the timeline nothing on a text-to-video
-    /// request, because there is no host pass to reference: the spec parser rewrites every stage's
-    /// ImageReference to <c>Generated</c>, and <c>FrameRefResolver</c> drops every non-upload
-    /// frame ref. Refusing the claim for it would trade a whole extra root pass for a reference that
-    /// is discarded either way.
-    /// </summary>
+    // Text-to-video discards host references before generation, so they cannot prevent adoption.
     [Fact]
     public async Task An_ltx_base_frame_ref_costs_the_timeline_nothing_on_text_to_video()
     {
@@ -406,12 +336,7 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// The timeline replaces the host's text root, so there is deliberately no host generation for
-    /// a stage to reference — and every stage's ImageReference is rewritten to <c>Generated</c> on
-    /// such a request. Reporting that as a missing reference would put a warning on the browser for
-    /// every text-to-video run.
-    /// </summary>
+    // Text-to-video normalizes ImageReference to Generated; it should not warn about host captures.
     [Fact]
     public async Task A_discarded_text_root_is_not_reported_as_a_missing_generated_reference()
     {
@@ -428,11 +353,6 @@ public sealed class HostRootAdoptionContractTests
             warning => warning.Contains("Generated", StringComparison.Ordinal));
     }
 
-    /// <summary>
-    /// The capture that refuses the claim is only taken when a clip asked for it. Capturing
-    /// unconditionally would pin core's nodes for every H3 request and deny the claim outright —
-    /// the same timeline, minus the reference, claims normally.
-    /// </summary>
     [Fact]
     public async Task An_unreferenced_host_capture_is_not_taken_and_does_not_refuse_the_claim()
     {
@@ -452,10 +372,7 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Interpolation runs over the assembled timeline, so the first stage can claim the root while
-    /// one pre-interpolation intermediate and the final result are published.
-    /// </summary>
+    // Interpolation consumes the assembled timeline after the intermediate save.
     [Fact]
     public async Task Deferred_interpolation_keeps_the_root_claim_and_one_intermediate()
     {
@@ -480,20 +397,12 @@ public sealed class HostRootAdoptionContractTests
         AssertShippable(bridge, workflow, live, publishedVideoSaves: 2);
     }
 
-    /// <summary>
-    /// Every host-root node publishing the timeline had to delete, by id and by the class it held
-    /// when it died. Empty is the goal and the usual answer: every node core built is one a stage
-    /// took over.
-    /// </summary>
+    // Record removed ids and their original classes to distinguish adoption from replacement.
     private static IReadOnlyDictionary<string, string> SweptHostRootNodes(
         WorkflowGenerator generator) =>
         VideoGraphHelpers.ReadRemovalRecord(generator, Constants.SweptHostRootNodesKey);
 
-    /// <summary>
-    /// The cleanup is a safety net now, not a step. For a text-to-video timeline whose stage takes
-    /// core's chain over, it deletes nothing at all — the shipped graph is the same graph core
-    /// built, running the stage's settings.
-    /// </summary>
+    // A fully adopted root leaves nothing for extension cleanup to remove.
     [Theory]
     [InlineData("wan")]
     [InlineData("host-video")]
@@ -513,18 +422,8 @@ public sealed class HostRootAdoptionContractTests
         Assert.Empty(SweptHostRootNodes(generator));
     }
 
-    /// <summary>
-    /// A single-family LTX-2 text root leaves three nodes behind — its conditioning, its A/V split
-    /// and its audio decode — and core would have collected all three itself: it allocates them
-    /// dynamically, so there is no reserved id for a stage to take, and lists their classes in
-    /// <c>AutoCleanupNodeTypes</c>.
-    /// <para>
-    /// Only for this shape. A mixed timeline sweeps more and not all of it is core-collectable —
-    /// WAN beside MiniMax sweeps an <c>EmptyHunyuanLatentVideo</c>, and a MiniMax refine stage a
-    /// <c>VAEDecodeAudio</c>, neither of which core lists. The cleanup is a no-op where one family
-    /// owns the root and still does real work where two do not.
-    /// </para>
-    /// </summary>
+    // LTX's dynamically allocated conditioning, A/V split, and audio decode are core-collectable.
+    // Mixed families can leave nodes outside core's AutoCleanupNodeTypes.
     [Fact]
     public async Task An_ltx_text_roots_remaining_sweep_is_all_core_would_have_collected()
     {
@@ -543,12 +442,7 @@ public sealed class HostRootAdoptionContractTests
                 WorkflowGeneratorSteps.AutoCleanupNodeTypes));
     }
 
-    /// <summary>
-    /// Two clips carrying the same prompt encode it once. A text encode is the expensive part of a
-    /// stage — LTX-2 runs a 12B text model — so a timeline that repeats a prompt should not pay for
-    /// it twice, and a clip that repeats the previous clip's settings should not rebuild what it
-    /// already has.
-    /// </summary>
+    // Matching prompts share encoders; different seeds still require separate samplers.
     [Fact]
     public async Task Two_clips_with_the_same_prompt_encode_it_once()
     {

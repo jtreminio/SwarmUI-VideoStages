@@ -145,13 +145,9 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
         }
     }
 
-    /// <summary>
-    /// A capture pins the host node it names for the rest of the request, which is why an unwanted
-    /// one is not free: it denies that node to anything that would otherwise take it over. Only
-    /// capture a source a stage will use, whether as a keyframe or as a clip reference.
-    /// </summary>
+    // Captures pin host nodes, so a discarded text-to-video root must never be captured.
     private static bool AnyClipReferences(VideoExecutionPlan plan, string source) =>
-        plan.Clips
+        !plan.Root.IgnoresTextToVideoRoot && plan.Clips
             .Where(clip => clip.Architecture.Id == MiniMaxArchitectureModule.ArchitectureId)
             .SelectMany(clip =>
             {
