@@ -12441,7 +12441,7 @@ ${slot}`;
   };
 
   // frontend/detailStrip/clipBasics.ts
-  var DURATION_STEP = 0.1;
+  var DURATION_STEP = 0.5;
   var REFERENCE_LENGTH_HINT = "(derived from a reference's media length)";
   var CLIP_PROJ_REPO = "https://github.com/nicolab28/ComfyUI-ClipProj";
   var appendClipProjRepoLink = (field) => {

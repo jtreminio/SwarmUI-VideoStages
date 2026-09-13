@@ -326,8 +326,10 @@ describe("production authoring controls", () => {
         }
         expect(duration.min).toBe("1");
         expect(duration.max).toBe("9999");
+        expect(duration.step).toBe("0.5");
         expect(range.min).toBe("1");
         expect(range.max).toBe("20");
+        expect(range.step).toBe("0.5");
 
         duration.value = "50";
         duration.dispatchEvent(new Event("input", { bubbles: true }));

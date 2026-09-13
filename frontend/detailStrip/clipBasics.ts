@@ -20,7 +20,7 @@ import type { Clip, ReferenceFraming } from "../types";
 import { applyPersistedCapabilityRepair } from "./capabilityUi";
 import type { DetailStripContext } from "./context";
 
-const DURATION_STEP = 0.1;
+const DURATION_STEP = 0.5;
 const REFERENCE_LENGTH_HINT = "(derived from a reference's media length)";
 const CLIP_PROJ_REPO = "https://github.com/nicolab28/ComfyUI-ClipProj";
 
