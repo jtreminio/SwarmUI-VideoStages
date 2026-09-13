@@ -53,24 +53,10 @@ const clampSideLength = (value: number): number =>
         ROOT_DIMENSION_MAX,
     );
 
-const setSliderDisabled = (slider: HTMLElement, disabled: boolean): void => {
-    slider.querySelectorAll<HTMLInputElement>("input").forEach((input) => {
-        input.disabled = disabled;
-    });
-    const box = slider.querySelector<HTMLElement>(".auto-slider-box");
-    if (box) {
-        box.dataset.disabled = `${disabled}`;
-    }
-};
-
 const FPS_WRITE_DEBOUNCE_MS = 300;
 let fpsWriteTimer: ReturnType<typeof setTimeout> | null = null;
 
-/**
- * The panel's FPS field is a second view of the core Video FPS param: edits
- * here write through to the core input (debounced), and core edits flow back
- * via the carrier token's inherited-dims signature.
- */
+// Core FPS edits return through the carrier's inherited-dimensions signature.
 const scheduleCoreFpsWrite = (value: number): void => {
     if (fpsWriteTimer !== null) {
         clearTimeout(fpsWriteTimer);
@@ -256,8 +242,6 @@ export const buildSettingsFields = (
         );
         body.append(widthSlider, heightSlider);
     } else if (!isInherited) {
-        const ratioHasReference =
-            dimensionsFor(mode, selectedSideLength) !== null;
         let calculatedDimensions: HTMLSpanElement | null = null;
         const sideLengthSlider = tagFocus(
             buildSlider(
@@ -289,9 +273,6 @@ export const buildSettingsFields = (
                     });
                 },
                 {
-                    hint: !ratioHasReference
-                        ? "(the host has no 3:4 reference; current dimensions are retained)"
-                        : undefined,
                     sliderMin: ROOT_DIMENSION_SLIDER_MIN,
                     isPot: true,
                 },
@@ -304,7 +285,6 @@ export const buildSettingsFields = (
         sideLengthSlider
             .querySelector("label")
             ?.appendChild(calculatedDimensions);
-        setSliderDisabled(sideLengthSlider, !ratioHasReference);
         body.appendChild(sideLengthSlider);
     }
 

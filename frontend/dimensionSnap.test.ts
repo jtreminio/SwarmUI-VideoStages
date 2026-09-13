@@ -43,12 +43,15 @@ describe("dimension snapping", () => {
 });
 
 describe("SwarmUI aspect-ratio vocabulary", () => {
-    it("uses the host reference sheet and preserves its missing 3:4 fallback", () => {
+    it("uses the host reference dimensions for landscape and portrait presets", () => {
         expect(dimensionsFor("16:9", 1024)).toEqual({
             width: 1344,
             height: 768,
         });
-        expect(dimensionsFor("3:4", 1024)).toBeNull();
+        expect(dimensionsFor("3:4", 1024)).toEqual({
+            width: 896,
+            height: 1152,
+        });
     });
 
     it("recognizes exact and emitted effective dimensions", () => {

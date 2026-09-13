@@ -13,7 +13,7 @@ export interface WidthHeight {
 export interface AspectRatio {
     id: string;
     label: string;
-    reference: WidthHeight | null;
+    reference: WidthHeight;
 }
 
 export const ASPECT_RATIOS: readonly AspectRatio[] = [
@@ -47,7 +47,11 @@ export const ASPECT_RATIOS: readonly AspectRatio[] = [
         label: "21:9 (Ultra-Widescreen)",
         reference: { width: 768, height: 320 },
     },
-    { id: "3:4", label: "3:4", reference: null },
+    {
+        id: "3:4",
+        label: "3:4",
+        reference: { width: 448, height: 576 },
+    },
     {
         id: "2:3",
         label: "2:3 (Semi-tall)",
@@ -152,9 +156,6 @@ export const matchAspectRatio = (
         return exact.id;
     }
     for (const ratio of ASPECT_RATIOS) {
-        if (!ratio.reference) {
-            continue;
-        }
         const estimated = sideLengthForDimensions(
             ratio.id,
             roundedWidth,

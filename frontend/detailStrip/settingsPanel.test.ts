@@ -5,6 +5,7 @@ import {
 } from "../__test_helpers__/editor";
 import { dimensionsFor } from "../dimensionPresets";
 import { snapDimensions } from "../dimensionSnap";
+import { getState, saveState } from "../persistence/repository";
 import { setSelection } from "../selection";
 
 describe("production editor output settings panel", () => {
@@ -14,6 +15,50 @@ describe("production editor output settings panel", () => {
     const detail = (): HTMLElement => h.section("output");
     const sliderNumberByLabel = (label: string): HTMLInputElement =>
         h.field("output", label, "input.auto-slider-number");
+
+    it("replaces custom dimensions when selecting 3:4 and saves side-length edits", () => {
+        h.setup([{ duration: 4, stages: [{}] }]);
+        saveState({
+            ...getState(),
+            dimsExplicit: true,
+            width: 384,
+            height: 960,
+        });
+        const select = (label: string, value: string): void => {
+            const control = h.field<HTMLSelectElement>(
+                "output",
+                label,
+                "select",
+            );
+            control.value = value;
+            control.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+        const savedDimensions = (): unknown =>
+            JSON.parse(
+                document.querySelector<HTMLTextAreaElement>(
+                    "#input_videostages",
+                )?.value ?? "{}",
+            );
+        select("Dimension Snap", "64");
+        select("Aspect Ratio", "3:4");
+        expect(savedDimensions()).toMatchObject({ width: 896, height: 1152 });
+        expect(
+            h.root.querySelector('[data-testid="output-settings"]')
+                ?.textContent,
+        ).toContain("896×1152");
+
+        jest.useFakeTimers();
+        const sideLength = sliderNumberByLabel("Side Length");
+        expect(sideLength.disabled).toBe(false);
+        sideLength.value = "512";
+        sideLength.dispatchEvent(new Event("input", { bubbles: true }));
+        jest.advanceTimersByTime(200);
+        expect(savedDimensions()).toMatchObject({ width: 448, height: 576 });
+        expect(
+            detail().querySelector(".vst-settings-calculated-dims")
+                ?.textContent,
+        ).toBe("448 × 576");
+    });
 
     it("uses SwarmUI POT stops and updates side-length dimensions live", () => {
         h.setup([{ duration: 4, stages: [{}] }]);

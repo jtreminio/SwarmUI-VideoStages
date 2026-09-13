@@ -3102,7 +3102,11 @@
       label: "21:9 (Ultra-Widescreen)",
       reference: { width: 768, height: 320 }
     },
-    { id: "3:4", label: "3:4", reference: null },
+    {
+      id: "3:4",
+      label: "3:4",
+      reference: { width: 448, height: 576 }
+    },
     {
       id: "2:3",
       label: "2:3 (Semi-tall)",
@@ -3179,9 +3183,6 @@
       return exact.id;
     }
     for (const ratio of ASPECT_RATIOS) {
-      if (!ratio.reference) {
-        continue;
-      }
       const estimated = sideLengthForDimensions(
         ratio.id,
         roundedWidth,
@@ -13760,15 +13761,6 @@ ${slot}`;
     ROOT_DIMENSION_MIN,
     ROOT_DIMENSION_MAX
   );
-  var setSliderDisabled = (slider, disabled) => {
-    slider.querySelectorAll("input").forEach((input2) => {
-      input2.disabled = disabled;
-    });
-    const box = slider.querySelector(".auto-slider-box");
-    if (box) {
-      box.dataset.disabled = `${disabled}`;
-    }
-  };
   var FPS_WRITE_DEBOUNCE_MS = 300;
   var fpsWriteTimer = null;
   var scheduleCoreFpsWrite = (value) => {
@@ -13925,7 +13917,6 @@ ${slot}`;
       );
       body.append(widthSlider, heightSlider);
     } else if (!isInherited) {
-      const ratioHasReference = dimensionsFor(mode, selectedSideLength) !== null;
       let calculatedDimensions = null;
       const sideLengthSlider = tagFocus(
         buildSlider(
@@ -13957,7 +13948,6 @@ ${slot}`;
             });
           },
           {
-            hint: !ratioHasReference ? "(the host has no 3:4 reference; current dimensions are retained)" : void 0,
             sliderMin: ROOT_DIMENSION_SLIDER_MIN,
             isPot: true
           }
@@ -13968,7 +13958,6 @@ ${slot}`;
       calculatedDimensions.className = "vst-settings-calculated-dims";
       calculatedDimensions.textContent = `${effectiveDimensions.width} × ${effectiveDimensions.height}`;
       sideLengthSlider.querySelector("label")?.appendChild(calculatedDimensions);
-      setSliderDisabled(sideLengthSlider, !ratioHasReference);
       body.appendChild(sideLengthSlider);
     }
     const hasCoreFps = getVideoStagesHostBridge().getRootVideoFpsInput() !== null;
