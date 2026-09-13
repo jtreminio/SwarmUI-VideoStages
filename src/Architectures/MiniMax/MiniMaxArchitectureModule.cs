@@ -252,15 +252,16 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             MiniMaxCharacterRefinePlan characterRefinePlan = characterRefine
                 ? CompileCharacterRefine(clip, stage, diagnostics)
                 : null;
-            stages[stage.ClipStageRawIndex] = new MiniMaxStagePayload(host, characterRefinePlan);
+            stages[stage.ClipStageRawIndex] = new MiniMaxStagePayload(
+                host,
+                characterRefinePlan,
+                MiniMaxAttentionWindowGraph.NormalizeSeconds(stage.H3AttentionWindowSeconds));
         }
 
         return new(
             new MiniMaxClipPayload(
                 clip.ReferenceFraming,
                 clip.ReuseAudio && activeStages.Count >= 3,
-                MiniMaxAttentionWindowGraph.NormalizeSeconds(
-                    clip.H3AttentionWindowSeconds),
                 clip.H3TextEncoder,
                 first,
                 last,
@@ -339,7 +340,6 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
 internal sealed record MiniMaxClipPayload(
     ReferenceFramingMode ReferenceFraming,
     bool ReuseAudio,
-    double AttentionWindowSeconds,
     MiniMaxTextEncoder TextEncoder,
     NativeFrameReferencePlan FirstFrameReference,
     NativeFrameReferencePlan LastFrameReference,

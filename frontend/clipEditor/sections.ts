@@ -39,7 +39,6 @@ import {
     buildVideoStagesSettingsFields,
 } from "../detailStrip/videoStagesSettings";
 import { H3_TEXT_ENCODER_FEATURE } from "../generatedMiniMaxTextEncoder";
-import { H3_ATTENTION_WINDOW_FEATURE } from "../h3AttentionWindow";
 import { getVideoStagesHostBridge } from "../host";
 import { TIMELINE_AUTHORING_SETTINGS_CHANGED } from "../timelineAuthoringSettings";
 import { incomingReferenceContinueForClip } from "../timelineTiming";
@@ -159,10 +158,6 @@ export function clipSections(
                     "referenceFraming",
                     clip.refFraming !== "crop",
                 ),
-                capabilities.architectureId === "minimax" &&
-                    getVideoStagesHostBridge().hasBackendFeature(
-                        H3_ATTENTION_WINDOW_FEATURE,
-                    ),
                 capabilities.architectureId !== "minimax"
                     ? "hidden"
                     : getVideoStagesHostBridge().hasBackendFeature(

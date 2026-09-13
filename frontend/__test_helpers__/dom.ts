@@ -1,3 +1,5 @@
+import { CURRENT_AUTHORING_SCHEMA_VERSION } from "../types";
+
 interface MountSelectOptions {
     value?: string;
     options?: string[];
@@ -73,14 +75,14 @@ export const mountVideoStagesData = (state: unknown): HTMLTextAreaElement => {
         state !== null &&
         !Array.isArray(state) &&
         !Object.hasOwn(state, "schemaVersion")
-            ? { ...state, schemaVersion: 10 }
+            ? { ...state, schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION }
             : structuredClone(state);
     if (
         typeof persisted === "object" &&
         persisted !== null &&
         !Array.isArray(persisted) &&
         "schemaVersion" in persisted &&
-        persisted.schemaVersion === 10 &&
+        persisted.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION &&
         "clips" in persisted &&
         Array.isArray(persisted.clips)
     ) {

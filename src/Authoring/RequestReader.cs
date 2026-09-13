@@ -233,12 +233,6 @@ internal static class RequestReader
                     0,
                     location,
                     context.Warn)),
-            H3AttentionWindowSeconds: DocumentJson.GetOptionalDouble(
-                clipObject,
-                "h3AttentionWindowSeconds",
-                0,
-                location,
-                context.Warn),
             H3TextEncoder: MiniMaxTextEncoders.Parse(
                 DocumentJson.GetString(clipObject, "h3TextEncoder")))
         {
@@ -363,7 +357,9 @@ internal static class RequestReader
             FrameRefStrengths: ReadRefStrengths(stage, frameRefCount),
             ImageRefWasExplicit: DocumentJson.HasProperty(stage, "imageReference"),
             CharacterRefine: CharacterRefineSpec.Read(stage),
-            Loras: Loras.ReadNormal(stage, context.Warn));
+            Loras: Loras.ReadNormal(stage, context.Warn),
+            H3AttentionWindowSeconds: DocumentJson.GetOptionalDouble(
+                stage, "h3AttentionWindowSeconds", 0, location, context.Warn));
     }
 
     private static ClipReadContext ReadContext(

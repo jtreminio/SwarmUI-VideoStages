@@ -12,11 +12,6 @@ import {
     H3_TEXT_ENCODER_FEATURE,
     H3_TEXT_ENCODERS,
 } from "../generatedMiniMaxTextEncoder";
-import {
-    H3_ATTENTION_WINDOW_MAX_SECONDS,
-    H3_ATTENTION_WINDOW_MIN_SECONDS,
-    H3_ATTENTION_WINDOW_STEP_SECONDS,
-} from "../h3AttentionWindow";
 import { normalizeH3TextEncoder } from "../h3TextEncoder";
 import { getVideoStagesHostBridge } from "../host";
 import { installHostFeature } from "../host/swarmUiAdapters";
@@ -47,7 +42,6 @@ export const buildClipColumn = (
     clip: Clip,
     clipIdx: number,
     referenceFramingState?: AuthoringState,
-    showH3AttentionWindow = false,
     h3TextEncoderState: "hidden" | "install" | "ready" = "hidden",
     supportsAudioOnly = false,
 ): HTMLElement => {
@@ -188,29 +182,6 @@ export const buildClipColumn = (
                 { disabled: clip.initVideo !== null },
             ),
         );
-    }
-    if (showH3AttentionWindow) {
-        const attentionWindow = buildSlider(
-            "Attention window (s)",
-            clip.h3AttentionWindowSeconds,
-            H3_ATTENTION_WINDOW_MIN_SECONDS,
-            H3_ATTENTION_WINDOW_MAX_SECONDS,
-            H3_ATTENTION_WINDOW_STEP_SECONDS,
-            (value) => {
-                context.debouncedCommit("h3AttentionWindowSeconds", (clips) => {
-                    const target = clips[clipIdx];
-                    if (target) {
-                        target.h3AttentionWindowSeconds = value;
-                    }
-                });
-            },
-            {
-                hint: "0 disables JuanAttn for this clip.",
-                help: "Total centered temporal attention window. Dense transformer layers remain fixed at 0,9,19,29,39,49.",
-            },
-        );
-        attentionWindow.dataset.vstH3AttentionWindow = "true";
-        column.appendChild(attentionWindow);
     }
     if (h3TextEncoderState === "ready") {
         const textEncoder = buildOptionSelect(

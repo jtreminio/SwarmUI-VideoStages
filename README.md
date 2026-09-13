@@ -36,6 +36,8 @@ A clip can start from nothing (text to video), from an image, from an uploaded *
 
 There is also a global **Refine Video** action for taking one finished video back through the timeline.
 
+MiniMax H3 stages expose **Attention window (s)** when JuanAttn is installed. Each stage has its own value; 0 disables it. New stages inherit the last stage’s window, and saved clip-wide settings migrate to every stage.
+
 ## Prompts
 
 Each clip has a prompt in **Prompt & clip** and, where supported, **Relay prompts** with editable start and end times. These let the description change as the shot progresses. The `<videoclip>` prompt syntax documented below also works.

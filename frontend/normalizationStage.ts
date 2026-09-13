@@ -26,6 +26,7 @@ import {
     CHARACTER_REFINE_SUBJECT_DEFAULT,
 } from "./generatedCharacterRefine";
 import { MEDIA_SOURCE_REFINER } from "./generatedMediaSource";
+import { normalizeH3AttentionWindowSeconds } from "./h3AttentionWindow";
 import {
     STAGE_CONTROLNET_STRENGTH_DEFAULT,
     STAGE_CONTROLNET_STRENGTH_MAX,
@@ -155,6 +156,7 @@ export const buildDefaultStage = (
 ): Stage => {
     const model = previousStage ? previousStage.model : defaultStageModel;
     return {
+        h3AttentionWindowSeconds: previousStage?.h3AttentionWindowSeconds ?? 0,
         loras: [],
         skipped: false,
         control: previousStage ? previousStage.control : defaults.control,
@@ -436,6 +438,9 @@ export const normalizeStage = (
         );
     }
     const stage: Stage = {
+        h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
+            rawStage.h3AttentionWindowSeconds,
+        ),
         loras: normalizeStageLoras(rawStage.loras),
         id: normalizeOptionalEntityId(rawStage.id),
         skipped: !!rawStage.skipped,

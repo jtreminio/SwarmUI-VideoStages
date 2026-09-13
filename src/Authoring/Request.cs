@@ -41,7 +41,8 @@ public sealed record StageSpec(
     bool ImageRefWasExplicit = false,
     RetakeWindowSpec RetakeWindow = null,
     CharacterRefineSpec CharacterRefine = null,
-    IReadOnlyList<LoraRef> Loras = null
+    IReadOnlyList<LoraRef> Loras = null,
+    double H3AttentionWindowSeconds = 0
 );
 
 public sealed record FrameRefSpec(
@@ -166,7 +167,6 @@ public sealed record ClipSpec(
     IReadOnlyList<ClipReferenceSpec> References = null,
     double UploadedAudioStartSeconds = 0,
     double UploadedAudioLengthSeconds = 0,
-    double H3AttentionWindowSeconds = 0,
     MiniMaxTextEncoder H3TextEncoder = MiniMaxTextEncoder.Default
 )
 {

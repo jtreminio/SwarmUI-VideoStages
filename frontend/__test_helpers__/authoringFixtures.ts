@@ -20,6 +20,7 @@ import {
 } from "./dom";
 
 export interface StageFixture {
+    h3AttentionWindowSeconds?: number;
     model?: string;
     skipped?: boolean;
     loras?: { name: string; weight: number }[];
@@ -89,6 +90,7 @@ const clipRecord = (clip: ClipFixture): Record<string, unknown> => {
         clipLengthFromAudio: clip.clipLengthFromAudio ?? false,
         stages: clip.stages.map((stage) => ({
             loras: stage.loras ?? [],
+            h3AttentionWindowSeconds: stage.h3AttentionWindowSeconds ?? 0,
             model: stage.model ?? "ltx-2.3.safetensors",
             skipped: stage.skipped ?? false,
             upscale: stage.upscale,

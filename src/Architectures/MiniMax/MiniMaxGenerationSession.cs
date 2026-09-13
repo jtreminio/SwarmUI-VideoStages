@@ -136,7 +136,7 @@ internal sealed class MiniMaxGenerationSession(
         PrepModelAndPrompt(clip, genInfo, []);
         MiniMaxAttentionWindowGraph.Apply(
             g,
-            clip.RequireMiniMaxPayload().AttentionWindowSeconds,
+            stage.RequireMiniMaxStagePayload().AttentionWindowSeconds,
             genInfo);
         int frames = genInfo.Frames
             ?? throw Invariant.Failure(
@@ -384,7 +384,8 @@ internal sealed class MiniMaxGenerationSession(
             g.IsImageToVideo = true;
             MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
             PrepModelAndPrompt(clip, genInfo, payload.References);
-            MiniMaxAttentionWindowGraph.Apply(g, payload.AttentionWindowSeconds, genInfo);
+            MiniMaxAttentionWindowGraph.Apply(
+                g, stage.RequireMiniMaxStagePayload().AttentionWindowSeconds, genInfo);
             int frames = genInfo.Frames
                 ?? throw Invariant.Failure(
                     "A MiniMax H3 stage has no resolved frame count.");
@@ -490,7 +491,7 @@ internal sealed class MiniMaxGenerationSession(
                 firstReferenceImage: identityIsFirstPicture ? identityImage : null);
             MiniMaxAttentionWindowGraph.Apply(
                 g,
-                clip.RequireMiniMaxPayload().AttentionWindowSeconds,
+                stage.RequireMiniMaxStagePayload().AttentionWindowSeconds,
                 genInfo);
             JArray cropPath = cropMedia.Path;
             if (samplingFrames != incomingFrames)
@@ -927,10 +928,6 @@ internal sealed class MiniMaxGenerationSession(
         return decoded;
     }
 
-    /// <summary>
-    /// Builds the reference collection Swarm's advanced text encoder consumes, or null when the
-    /// clip authored no usable reference.
-    /// </summary>
     private JArray BuildReferenceCollection(
         int clipId,
         IReadOnlyList<MiniMaxReferencePlan> references,
@@ -1052,23 +1049,9 @@ internal sealed class MiniMaxGenerationSession(
         return WorkflowBridge.ToPath(encode.CONDITIONING);
     }
 
-    /// <summary>
-    /// Puts a reference video on the timebase and size H3 expects.
-    /// <para>
-    /// The node reads a reference as a plain frame batch at its own fixed 24 fps: it truncates to
-    /// the generated frame count, samples every twelfth frame for the text encoder, and stamps
-    /// those at half-second intervals. A 30 or 60 fps upload therefore arrives as sped-up motion
-    /// cut short of the seconds it was meant to cover, so it is resampled first. Scaling comes
-    /// after, on the frames that survived, and only buys back reference tokens — H3 fits every
-    /// reference onto its own 32-aligned canvas regardless.
-    /// </para>
-    /// <para>
-    /// An authored trim window lands between the two: the resample fixes the timebase, so the
-    /// authored seconds convert to frames at a rate this graph chose rather than one the file
-    /// happened to have. A reference whose rate is unknown cannot make that conversion and keeps
-    /// its whole length.
-    /// </para>
-    /// </summary>
+    // H3 reads reference batches at 24 fps and embeds every twelfth frame.
+    // Resample before trimming so authored seconds use that timebase, then scale
+    // to reduce reference tokens. Unknown-rate references keep their whole length.
     private JArray ConformReferenceVideo(
         WGNodeData video,
         MiniMaxReferencePlan reference,
@@ -1128,7 +1111,6 @@ internal sealed class MiniMaxGenerationSession(
         return WorkflowBridge.ToPath(scaled.IMAGE);
     }
 
-    /// <summary>Applies the authored range to video soundtracks and audio references.</summary>
     private JArray TrimReferenceAudio(JArray path, MiniMaxReferencePlan reference)
     {
         if (path is null || reference.LengthSeconds <= 0)

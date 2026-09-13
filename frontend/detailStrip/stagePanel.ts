@@ -6,6 +6,7 @@ import { appendStageLorasSection } from "./stagePanel/lorasSection";
 import { appendStageModelSection } from "./stagePanel/modelSection";
 import { appendStageReferenceGuideSection } from "./stagePanel/referenceGuideSection";
 import {
+    appendStageAttentionWindow,
     appendStageDenoisingSection,
     appendStageRefinementControls,
     appendStageSamplerSchedulerSection,
@@ -98,6 +99,7 @@ export const buildStageParamsColumn = (
     appendStageModelSection(bindings);
     appendStageDenoisingSection(bindings);
     appendStageSamplerSchedulerSection(bindings);
+    appendStageAttentionWindow(bindings);
     if (isRefine) {
         const heading = document.createElement("div");
         heading.className =

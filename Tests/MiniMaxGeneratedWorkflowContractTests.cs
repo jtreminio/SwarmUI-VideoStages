@@ -125,14 +125,16 @@ public class MiniMaxGeneratedWorkflowContractTests
     }
 
     [Fact]
-    public async Task Clip_attention_window_patches_the_model_used_by_every_H3_sampler()
+    public async Task Stage_attention_windows_patch_only_their_own_H3_samplers()
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         JObject clip = MakeClip(
-            fixture.Stage(),
-            fixture.Stage("PreviousStage", control: 0.5));
+            fixture.Stage(steps: 8),
+            fixture.Stage("PreviousStage", control: 0.5, steps: 10),
+            fixture.Stage("PreviousStage", control: 0.5, steps: 12));
         clip["duration"] = 1.0;
-        clip["h3AttentionWindowSeconds"] = 2.5;
+        clip["stages"][0]["h3AttentionWindowSeconds"] = 2.5;
+        clip["stages"][1]["h3AttentionWindowSeconds"] = 4;
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
             fixture.Post(MakeDocument(clip)),
@@ -143,33 +145,66 @@ public class MiniMaxGeneratedWorkflowContractTests
         JProperty[] samplers = [.. workflow.Properties().Where(property =>
             property.Value["class_type"]?.Value<string>() == SwarmKSamplerNode.ClassType)];
 
-        Assert.Single(windows);
-        Assert.Equal(2, samplers.Length);
+        Assert.Equal(2, windows.Length);
+        Assert.Equal(3, samplers.Length);
         Assert.All(windows, property =>
         {
             JObject inputs = (JObject)property.Value["inputs"];
-            Assert.Equal(2.5, inputs["window_seconds"]?.Value<double>());
+
             Assert.Equal("0,9,19,29,39,49", inputs["dense_layers"]?.Value<string>());
             Assert.True(inputs["verbose"]?.Value<bool>());
         });
-        HashSet<string> windowIds = [.. windows.Select(property => property.Name)];
-        Assert.All(samplers, property =>
+        Assert.All(samplers, sampler =>
         {
-            JArray model = (JArray)property.Value["inputs"]?["model"];
-            Assert.Contains(model?[0]?.Value<string>(), windowIds);
+            JObject inputs = (JObject)sampler.Value["inputs"];
+            string modelId = inputs["model"][0].Value<string>();
+            if (inputs["steps"].Value<int>() == 12)
+            {
+                Assert.DoesNotContain(windows, window => window.Name == modelId);
+            }
+            else
+            {
+                Assert.Contains(windows, window => window.Name == modelId);
+                Assert.Equal(inputs["steps"].Value<int>() == 8 ? 2.5 : 4,
+                    workflow[modelId]["inputs"]["window_seconds"].Value<double>());
+            }
         });
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Stage_attention_window_applies_to_audio_only_and_Bonita(bool audioOnly)
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        using IDisposable yolo = audioOnly ? null : BonitaTestModels.InstallYoloModels();
+        JObject stage = fixture.Stage(audioOnly ? null : "PreviousStage", control: 0.5);
+        stage["h3AttentionWindowSeconds"] = 3.5;
+        if (!audioOnly) stage["characterRefine"] = BonitaTestModels.CharacterRefineSettings();
+        JObject clip = audioOnly ? MakeClip(stage) : MakeClip(fixture.Stage(), stage);
+        clip["duration"] = 1.0;
+        clip["audioOnly"] = audioOnly;
+        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
+            fixture.Post(MakeDocument(clip)),
+            extraFeatures: [MiniMaxAttentionWindowGraph.FeatureFlag, .. BonitaTestModels.Features()]);
+        JProperty window = Assert.Single(workflow.Properties(), property =>
+            property.Value["class_type"]?.Value<string>() == H3WindowAttentionPatchNode.ClassType);
+        Assert.Equal(3.5, window.Value["inputs"]["window_seconds"].Value<double>());
+        Assert.Contains(workflow.Properties(), property =>
+            property.Value["class_type"]?.Value<string>() == SwarmKSamplerNode.ClassType
+            && property.Value["inputs"]?["model"]?[0]?.Value<string>() == window.Name);
+    }
+
     [Fact]
-    public async Task Clip_attention_window_stays_off_at_zero_or_without_JuanAttn()
+    public async Task Stage_attention_window_stays_off_at_zero_or_without_JuanAttn()
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         JObject clip = MakeClip(fixture.Stage());
         clip["duration"] = 1.0;
-        clip["h3AttentionWindowSeconds"] = 2.5;
+        clip["stages"][0]["h3AttentionWindowSeconds"] = 2.5;
 
         JObject withoutFeature = await fixture.GenerateAsync(MakeDocument(clip));
-        clip["h3AttentionWindowSeconds"] = 0;
+        clip["stages"][0]["h3AttentionWindowSeconds"] = 0;
         JObject atZero = await ComfyWorkflowApiTestHarness.GenerateAsync(
             fixture.Post(MakeDocument(clip)),
             extraFeatures: [MiniMaxAttentionWindowGraph.FeatureFlag]);

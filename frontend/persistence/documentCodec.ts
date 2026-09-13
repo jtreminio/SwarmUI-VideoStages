@@ -95,7 +95,6 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
             useSeedVr: clip.useSeedVr,
             audioOnly: clip.audioOnly,
             refFraming: clip.refFraming,
-            h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
             h3TextEncoder: clip.h3TextEncoder,
             audioSource: clip.audioSource,
             icLoras: clip.icLoras.map((entry) => ({
@@ -177,6 +176,7 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 cfgScale: stage.cfgScale,
                 sampler: stage.sampler,
                 scheduler: stage.scheduler,
+                h3AttentionWindowSeconds: stage.h3AttentionWindowSeconds,
                 ...(stage.characterRefine
                     ? { characterRefine: stage.characterRefine }
                     : {}),
@@ -525,6 +525,7 @@ const noticeDivergentProjection = (serialized: string): void => {
 const FRAME_REFS_SCHEMA_VERSION = 7;
 const STAGE_LORA_SCHEMA_VERSION = 8;
 const CLIP_LORA_SCHEMA_VERSION = 9;
+const CLIP_ATTENTION_WINDOW_SCHEMA_VERSION = 10;
 
 const renameKey = (
     target: Record<string, unknown>,
@@ -638,7 +639,8 @@ const migrateStoredDocument = (
     if (
         parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION &&
         parsed.schemaVersion !== STAGE_LORA_SCHEMA_VERSION &&
-        parsed.schemaVersion !== CLIP_LORA_SCHEMA_VERSION
+        parsed.schemaVersion !== CLIP_LORA_SCHEMA_VERSION &&
+        parsed.schemaVersion !== CLIP_ATTENTION_WINDOW_SCHEMA_VERSION
     ) {
         return null;
     }
@@ -675,9 +677,12 @@ const migrateStoredDocument = (
     if (!hasValidStoredCollections(migrated)) return null;
     for (const clip of migrated.clips) {
         for (const stage of Array.isArray(clip.stages) ? clip.stages : []) {
-            stage.loras = structuredClone(clip.loras ?? []);
+            if (migrated.schemaVersion === CLIP_LORA_SCHEMA_VERSION)
+                stage.loras = structuredClone(clip.loras ?? []);
+            stage.h3AttentionWindowSeconds = clip.h3AttentionWindowSeconds ?? 0;
         }
         delete clip.loras;
+        delete clip.h3AttentionWindowSeconds;
     }
     migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
     return migrated;

@@ -3,6 +3,13 @@ import {
     buildOptionSelect,
     type OptionSpec,
 } from "../../detailWidgets";
+import {
+    H3_ATTENTION_WINDOW_FEATURE,
+    H3_ATTENTION_WINDOW_MAX_SECONDS,
+    H3_ATTENTION_WINDOW_MIN_SECONDS,
+    H3_ATTENTION_WINDOW_STEP_SECONDS,
+} from "../../h3AttentionWindow";
+import { getVideoStagesHostBridge } from "../../host";
 import { preserveSelectedOption } from "../../selectOption";
 import { disableCapabilityControls } from "../capabilityUi";
 import type { StagePanelBindings } from "./types";
@@ -131,4 +138,37 @@ export const appendStageSamplerSchedulerSection = ({
         disableCapabilityControls(schedulerField, schedulerState);
     }
     fields.appendChild(schedulerField);
+};
+
+export const appendStageAttentionWindow = ({
+    context,
+    clip,
+    stage,
+    fields,
+    slider,
+}: StagePanelBindings): void => {
+    if (
+        context.authoring().capabilities.forClip(clip).architectureId !==
+            "minimax" ||
+        !getVideoStagesHostBridge().hasBackendFeature(
+            H3_ATTENTION_WINDOW_FEATURE,
+        )
+    )
+        return;
+    const attentionWindow = slider(
+        "Attention window (s)",
+        "h3AttentionWindowSeconds",
+        stage.h3AttentionWindowSeconds,
+        H3_ATTENTION_WINDOW_MIN_SECONDS,
+        H3_ATTENTION_WINDOW_MAX_SECONDS,
+        H3_ATTENTION_WINDOW_STEP_SECONDS,
+        (target, value) => {
+            target.h3AttentionWindowSeconds = value;
+        },
+        {
+            help: "Total centered temporal attention window for this stage. 0 disables JuanAttn. Dense transformer layers remain fixed at 0,9,19,29,39,49.",
+        },
+    );
+    attentionWindow.dataset.vstH3AttentionWindow = "true";
+    fields.append(attentionWindow);
 };

@@ -39,7 +39,7 @@ const loadCatalog = async (
     await loadAuthoritativeArchitectureCatalog();
 };
 
-describe("MiniMax H3 clip controls", () => {
+describe("MiniMax H3 controls", () => {
     const h = editorHarness();
 
     afterEach(() => {
@@ -47,19 +47,21 @@ describe("MiniMax H3 clip controls", () => {
         Reflect.deleteProperty(globalThis, "installFeatureById");
     });
 
-    it("renders attention below clip basics and commits seconds when JuanAttn is installed", async () => {
+    it("renders stage attention and commits seconds independently when JuanAttn is installed", async () => {
         backend.currentBackendFeatureSet = [H3_ATTENTION_WINDOW_FEATURE];
         await loadCatalog(minimaxCatalog());
-        h.setup([{ duration: 4, stages: [{}] }]);
-        const body = h.section("prompt");
+        h.setup([
+            { duration: 4, stages: [{}, { h3AttentionWindowSeconds: 4 }] },
+        ]);
+        const body = h.item("stages", 0);
         const labels = Array.from(
             body.querySelectorAll<HTMLElement>(".auto-input-name"),
         ).map((label) => label.textContent);
         expect(labels.indexOf("Attention window (s)")).toBeGreaterThan(
-            labels.indexOf("Reference resize"),
+            labels.indexOf("Steps"),
         );
         const number = h.field<HTMLInputElement>(
-            "prompt",
+            "stages",
             "Attention window (s)",
             "input.auto-slider-number",
         );
@@ -67,7 +69,27 @@ describe("MiniMax H3 clip controls", () => {
         number.value = "2.5";
         number.dispatchEvent(new Event("input", { bubbles: true }));
         h.editor.flushPending();
-        expect(committedClips()[0].h3AttentionWindowSeconds).toBe(2.5);
+        expect(
+            committedClips()[0].stages.map(
+                (stage) => stage.h3AttentionWindowSeconds,
+            ),
+        ).toEqual([2.5, 4]);
+        const last = h.field<HTMLInputElement>(
+            "stages",
+            "Attention window (s)",
+            "input.auto-slider-number",
+            1,
+        );
+        last.value = "3.5";
+        last.dispatchEvent(new Event("input", { bubbles: true }));
+        h.section("stages")
+            .querySelector<HTMLButtonElement>("[data-testid=add-stages]")
+            ?.click();
+        expect(
+            committedClips()[0].stages.map(
+                (stage) => stage.h3AttentionWindowSeconds,
+            ),
+        ).toEqual([2.5, 3.5, 3.5]);
     });
 
     it("gates attention by architecture and enables it after the backend gains JuanAttn", async () => {
@@ -77,7 +99,7 @@ describe("MiniMax H3 clip controls", () => {
             h.field("prompt", "Duration (s)", "input.auto-slider-number").value,
         ).toBe("4");
         expect(
-            h.section("prompt").querySelector("[data-vst-h3-attention-window]"),
+            h.section("stages").querySelector("[data-vst-h3-attention-window]"),
         ).toBeNull();
         backend.currentBackendFeatureSet = [H3_ATTENTION_WINDOW_FEATURE];
         await loadCatalog(testArchitectureCatalog());
@@ -87,22 +109,22 @@ describe("MiniMax H3 clip controls", () => {
                 .value,
         ).toBe("crop");
         expect(
-            h.section("prompt").querySelector("[data-vst-h3-attention-window]"),
+            h.section("stages").querySelector("[data-vst-h3-attention-window]"),
         ).toBeNull();
         await loadCatalog(minimaxCatalog());
         h.editor.refresh();
         const number = h.field<HTMLInputElement>(
-            "prompt",
+            "stages",
             "Attention window (s)",
             "input.auto-slider-number",
         );
         number.value = "3";
         number.dispatchEvent(new Event("input", { bubbles: true }));
         h.editor.flushPending();
-        expect(committedClips()[0].h3AttentionWindowSeconds).toBe(3);
+        expect(committedClips()[0].stages[0].h3AttentionWindowSeconds).toBe(3);
     });
 
-    it("renders the text encoder below attention with help and commits the selection", async () => {
+    it("renders the clip text encoder with help and commits the selection", async () => {
         backend.currentBackendFeatureSet = [
             H3_ATTENTION_WINDOW_FEATURE,
             H3_TEXT_ENCODER_FEATURE,
@@ -114,7 +136,7 @@ describe("MiniMax H3 clip controls", () => {
             body.querySelectorAll<HTMLElement>(".auto-input-name"),
         ).map((label) => label.textContent);
         expect(labels.indexOf("Text Encoder")).toBeGreaterThan(
-            labels.indexOf("Attention window (s)"),
+            labels.indexOf("Reference resize"),
         );
         const select = h.field<HTMLSelectElement>(
             "prompt",

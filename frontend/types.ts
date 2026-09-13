@@ -58,7 +58,7 @@ export interface AuthoringDocument {
     audioTracks?: AudioTrack[];
 }
 
-export const CURRENT_AUTHORING_SCHEMA_VERSION = 10;
+export const CURRENT_AUTHORING_SCHEMA_VERSION = 11;
 
 export interface UploadedMedia {
     data: string;
@@ -71,6 +71,7 @@ export interface StageLora {
 }
 
 export interface Stage {
+    h3AttentionWindowSeconds: number;
     loras: StageLora[];
     id?: string;
     skipped: boolean;
@@ -193,7 +194,6 @@ export interface Clip {
     useSeedVr: boolean;
     audioOnly?: boolean;
     refFraming: ReferenceFraming;
-    h3AttentionWindowSeconds: number;
     h3TextEncoder: H3TextEncoder;
     audioSource: string;
     icLoras: IcLora[];

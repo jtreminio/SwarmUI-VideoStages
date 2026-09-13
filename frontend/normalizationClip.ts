@@ -26,7 +26,6 @@ import {
     STAGE_REF_STRENGTH_DEFAULT,
 } from "./constants";
 import { REFERENCE_SCALE_FULL } from "./generatedReferenceScale";
-import { normalizeH3AttentionWindowSeconds } from "./h3AttentionWindow";
 import { normalizeH3TextEncoder } from "./h3TextEncoder";
 import { defaultLoraWeight } from "./loraAuthoring";
 import {
@@ -145,7 +144,6 @@ export const buildDefaultClip = (
         useSeedVr: false,
         audioOnly: false,
         refFraming: "crop",
-        h3AttentionWindowSeconds: 0,
         h3TextEncoder: previousClip?.h3TextEncoder ?? "default",
         audioSource:
             previousClip?.audioOnly === true
@@ -345,9 +343,6 @@ export const normalizeClip = (
         useSeedVr: !!rawClip.useSeedVr,
         audioOnly: !!rawClip.audioOnly,
         refFraming: normalizeReferenceFraming(rawClip.refFraming),
-        h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
-            rawClip.h3AttentionWindowSeconds,
-        ),
         h3TextEncoder: normalizeH3TextEncoder(rawClip.h3TextEncoder),
         audioSource,
         icLoras,

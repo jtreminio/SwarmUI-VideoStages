@@ -155,6 +155,7 @@ const maximalClip = (): Clip =>
         stages: [
             {
                 loras: [{ name: "detail.safetensors", weight: 0.6 }],
+                h3AttentionWindowSeconds: 2.5,
                 skipped: false,
                 control: 0.5,
                 controlNetStrength: 0.7,

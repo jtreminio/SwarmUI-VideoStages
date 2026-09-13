@@ -152,7 +152,7 @@ public class AuthoringDocumentContractTests
         Assert.Equal(0.5, clip.BoundaryOutReferenceScale);
         Assert.False(clip.BoundaryOutReferenceIncludeSoundtrack);
         Assert.Equal(ReferenceFramingMode.FitGreen, clip.ReferenceFraming);
-        Assert.Equal(2.5, clip.H3AttentionWindowSeconds);
+        Assert.Equal(2.5, clip.Stages[0].H3AttentionWindowSeconds);
         Assert.Equal(MiniMaxTextEncoder.Qwen3Vl8B, clip.H3TextEncoder);
         Assert.Equal("ltx2", clip.AuthoredArchitectureHint);
         Assert.Equal("ltx-2.3", clip.AuthoredModelProfileHint);
@@ -236,7 +236,7 @@ public class AuthoringDocumentContractTests
     public void RejectsAnUnsupportedSchemaVersion()
     {
         JObject document = JObject.Parse(FixtureJson());
-        document["schemaVersion"] = DocumentJson.SupportedSchemaVersion - 4;
+        document["schemaVersion"] = DocumentJson.SupportedSchemaVersion + 1;
         T2IParamInput input = new(null);
         Fixtures.SetVideoStagesConfig(input, document.ToString());
         SwarmUserErrorException error = Assert.Throws<SwarmUserErrorException>(
@@ -325,6 +325,26 @@ public class AuthoringDocumentContractTests
         Assert.Equal(2, parsed.Stages.Count);
         Assert.All(parsed.Stages, stage =>
             Assert.Equal(new LoraRef("style.safetensors", 0.5), Assert.Single(stage.Loras)));
+    }
+
+    [Fact]
+    public void MigratesVersionTenAttentionWindowToEveryStage()
+    {
+        JObject document = JObject.Parse(FixtureJson());
+        document["schemaVersion"] = 10;
+        JObject clip = (JObject)document["clips"][0];
+        clip["h3AttentionWindowSeconds"] = 3.5;
+        foreach (JObject stage in clip["stages"])
+        {
+            stage.Remove("h3AttentionWindowSeconds");
+            stage["skipped"] = false;
+        }
+        T2IParamInput input = new(null);
+        Fixtures.SetVideoStagesConfig(input, document.ToString());
+        ClipSpec parsed = Assert.Single(RequestReader.Read(input).Clips, candidate => candidate.Id == 0);
+        Assert.Equal(2, parsed.Stages.Count);
+        Assert.All(parsed.Stages, stage => Assert.Equal(3.5, stage.H3AttentionWindowSeconds));
+        Assert.Equal(new LoraRef("style.safetensors", 0.5), Assert.Single(parsed.Stages[0].Loras));
     }
 
     [Fact]

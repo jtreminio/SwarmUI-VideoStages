@@ -13,7 +13,8 @@ internal sealed record MiniMaxCharacterRefinePlan(
 
 internal sealed record MiniMaxStagePayload(
     StockHostVideoStagePayload Host,
-    MiniMaxCharacterRefinePlan CharacterRefine) : IArchitectureStagePayload
+    MiniMaxCharacterRefinePlan CharacterRefine,
+    double AttentionWindowSeconds) : IArchitectureStagePayload
 {
     public ArchitectureId ArchitectureId => Host.ArchitectureId;
     public StageCorePlan Core => Host.Core;

@@ -3788,23 +3788,6 @@
     }
   };
 
-  // frontend/h3AttentionWindow.ts
-  var H3_ATTENTION_WINDOW_FEATURE = "h3_window_attention";
-  var H3_ATTENTION_WINDOW_MIN_SECONDS = 0;
-  var H3_ATTENTION_WINDOW_MAX_SECONDS = 20;
-  var H3_ATTENTION_WINDOW_STEP_SECONDS = 0.5;
-  var normalizeH3AttentionWindowSeconds = (value) => {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) {
-      return H3_ATTENTION_WINDOW_MIN_SECONDS;
-    }
-    return clamp(
-      Math.round(numeric / H3_ATTENTION_WINDOW_STEP_SECONDS) * H3_ATTENTION_WINDOW_STEP_SECONDS,
-      H3_ATTENTION_WINDOW_MIN_SECONDS,
-      H3_ATTENTION_WINDOW_MAX_SECONDS
-    );
-  };
-
   // frontend/generatedMiniMaxTextEncoder.ts
   var H3_TEXT_ENCODER_FEATURE = "clipproj";
   var H3_TEXT_ENCODERS = ["default", "8b", "4b"];
@@ -3844,6 +3827,23 @@
   var CHARACTER_REFINE_CROP_DIMENSION_MIN = 64;
   var CHARACTER_REFINE_CROP_DIMENSION_MAX = 4096;
   var CHARACTER_REFINE_CROP_DIMENSION_STEP = 32;
+
+  // frontend/h3AttentionWindow.ts
+  var H3_ATTENTION_WINDOW_FEATURE = "h3_window_attention";
+  var H3_ATTENTION_WINDOW_MIN_SECONDS = 0;
+  var H3_ATTENTION_WINDOW_MAX_SECONDS = 20;
+  var H3_ATTENTION_WINDOW_STEP_SECONDS = 0.5;
+  var normalizeH3AttentionWindowSeconds = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+      return H3_ATTENTION_WINDOW_MIN_SECONDS;
+    }
+    return clamp(
+      Math.round(numeric / H3_ATTENTION_WINDOW_STEP_SECONDS) * H3_ATTENTION_WINDOW_STEP_SECONDS,
+      H3_ATTENTION_WINDOW_MIN_SECONDS,
+      H3_ATTENTION_WINDOW_MAX_SECONDS
+    );
+  };
 
   // frontend/normalizationStage.ts
   var resolveRootPreferredUpscaleMethod = (upscaleMethodValues) => upscaleMethodValues.find((value) => value === "pixel-lanczos") ?? upscaleMethodValues[0] ?? "";
@@ -3910,6 +3910,7 @@
   var buildDefaultStage = (defaults, defaultStageModel, previousStage, refCount, initialIcLoraStrengths = []) => {
     const model = previousStage ? previousStage.model : defaultStageModel;
     return {
+      h3AttentionWindowSeconds: previousStage?.h3AttentionWindowSeconds ?? 0,
       loras: [],
       skipped: false,
       control: previousStage ? previousStage.control : defaults.control,
@@ -4072,6 +4073,9 @@
       );
     }
     const stage = {
+      h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
+        rawStage.h3AttentionWindowSeconds
+      ),
       loras: normalizeStageLoras(rawStage.loras),
       id: normalizeOptionalEntityId(rawStage.id),
       skipped: !!rawStage.skipped,
@@ -4184,7 +4188,6 @@
       useSeedVr: false,
       audioOnly: false,
       refFraming: "crop",
-      h3AttentionWindowSeconds: 0,
       h3TextEncoder: previousClip?.h3TextEncoder ?? "default",
       audioSource: previousClip?.audioOnly === true ? AUDIO_SOURCE_PREVIOUS_CLIP : AUDIO_SOURCE_NATIVE,
       icLoras: [],
@@ -4338,9 +4341,6 @@
       useSeedVr: !!rawClip.useSeedVr,
       audioOnly: !!rawClip.audioOnly,
       refFraming: normalizeReferenceFraming(rawClip.refFraming),
-      h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
-        rawClip.h3AttentionWindowSeconds
-      ),
       h3TextEncoder: normalizeH3TextEncoder(rawClip.h3TextEncoder),
       audioSource,
       icLoras,
@@ -4511,7 +4511,6 @@
       "useSeedVr",
       "audioOnly",
       "refFraming",
-      "h3AttentionWindowSeconds",
       "h3TextEncoder",
       "audioSource",
       "icLoras",
@@ -4545,6 +4544,7 @@
     idField: "stageId",
     beforeIdField: "beforeStageId",
     patchKeys: [
+      "h3AttentionWindowSeconds",
       "loras",
       "skipped",
       "control",
@@ -4647,7 +4647,7 @@
   };
 
   // frontend/types.ts
-  var CURRENT_AUTHORING_SCHEMA_VERSION = 10;
+  var CURRENT_AUTHORING_SCHEMA_VERSION = 11;
 
   // frontend/identity.ts
   var fallbackSequence = 0;
@@ -6131,7 +6131,6 @@
         useSeedVr: clip.useSeedVr,
         audioOnly: clip.audioOnly,
         refFraming: clip.refFraming,
-        h3AttentionWindowSeconds: clip.h3AttentionWindowSeconds,
         h3TextEncoder: clip.h3TextEncoder,
         audioSource: clip.audioSource,
         icLoras: clip.icLoras.map((entry) => ({
@@ -6209,6 +6208,7 @@
           cfgScale: stage.cfgScale,
           sampler: stage.sampler,
           scheduler: stage.scheduler,
+          h3AttentionWindowSeconds: stage.h3AttentionWindowSeconds,
           ...stage.characterRefine ? { characterRefine: stage.characterRefine } : {}
         }))
       })
@@ -6423,6 +6423,7 @@
   var FRAME_REFS_SCHEMA_VERSION = 7;
   var STAGE_LORA_SCHEMA_VERSION = 8;
   var CLIP_LORA_SCHEMA_VERSION = 9;
+  var CLIP_ATTENTION_WINDOW_SCHEMA_VERSION = 10;
   var renameKey = (target, oldKey, newKey) => {
     if (!(oldKey in target)) {
       return;
@@ -6498,7 +6499,7 @@
     if (parsed.schemaVersion === CURRENT_AUTHORING_SCHEMA_VERSION) {
       return parsed;
     }
-    if (parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION && parsed.schemaVersion !== STAGE_LORA_SCHEMA_VERSION && parsed.schemaVersion !== CLIP_LORA_SCHEMA_VERSION) {
+    if (parsed.schemaVersion !== FRAME_REFS_SCHEMA_VERSION && parsed.schemaVersion !== STAGE_LORA_SCHEMA_VERSION && parsed.schemaVersion !== CLIP_LORA_SCHEMA_VERSION && parsed.schemaVersion !== CLIP_ATTENTION_WINDOW_SCHEMA_VERSION) {
       return null;
     }
     const migrated = structuredClone(parsed);
@@ -6531,9 +6532,12 @@
     if (!hasValidStoredCollections(migrated)) return null;
     for (const clip of migrated.clips) {
       for (const stage of Array.isArray(clip.stages) ? clip.stages : []) {
-        stage.loras = structuredClone(clip.loras ?? []);
+        if (migrated.schemaVersion === CLIP_LORA_SCHEMA_VERSION)
+          stage.loras = structuredClone(clip.loras ?? []);
+        stage.h3AttentionWindowSeconds = clip.h3AttentionWindowSeconds ?? 0;
       }
       delete clip.loras;
+      delete clip.h3AttentionWindowSeconds;
     }
     migrated.schemaVersion = CURRENT_AUTHORING_SCHEMA_VERSION;
     return migrated;
@@ -12452,7 +12456,7 @@ ${slot}`;
     repo.textContent = "ComfyUI-ClipProj";
     help.append(repo, ".");
   };
-  var buildClipColumn = (context, clip, clipIdx, referenceFramingState, showH3AttentionWindow = false, h3TextEncoderState = "hidden", supportsAudioOnly = false) => {
+  var buildClipColumn = (context, clip, clipIdx, referenceFramingState, h3TextEncoderState = "hidden", supportsAudioOnly = false) => {
     const column = document.createElement("div");
     column.className = "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
     const audioOnly = clipIdx === 0 && clip.audioOnly === true;
@@ -12572,29 +12576,6 @@ ${slot}`;
           { disabled: clip.initVideo !== null }
         )
       );
-    }
-    if (showH3AttentionWindow) {
-      const attentionWindow = buildSlider(
-        "Attention window (s)",
-        clip.h3AttentionWindowSeconds,
-        H3_ATTENTION_WINDOW_MIN_SECONDS,
-        H3_ATTENTION_WINDOW_MAX_SECONDS,
-        H3_ATTENTION_WINDOW_STEP_SECONDS,
-        (value) => {
-          context.debouncedCommit("h3AttentionWindowSeconds", (clips) => {
-            const target = clips[clipIdx];
-            if (target) {
-              target.h3AttentionWindowSeconds = value;
-            }
-          });
-        },
-        {
-          hint: "0 disables JuanAttn for this clip.",
-          help: "Total centered temporal attention window. Dense transformer layers remain fixed at 0,9,19,29,39,49."
-        }
-      );
-      attentionWindow.dataset.vstH3AttentionWindow = "true";
-      column.appendChild(attentionWindow);
     }
     if (h3TextEncoderState === "ready") {
       const textEncoder = buildOptionSelect(
@@ -14657,6 +14638,34 @@ ${slot}`;
     }
     fields.appendChild(schedulerField);
   };
+  var appendStageAttentionWindow = ({
+    context,
+    clip,
+    stage,
+    fields,
+    slider
+  }) => {
+    if (context.authoring().capabilities.forClip(clip).architectureId !== "minimax" || !getVideoStagesHostBridge().hasBackendFeature(
+      H3_ATTENTION_WINDOW_FEATURE
+    ))
+      return;
+    const attentionWindow = slider(
+      "Attention window (s)",
+      "h3AttentionWindowSeconds",
+      stage.h3AttentionWindowSeconds,
+      H3_ATTENTION_WINDOW_MIN_SECONDS,
+      H3_ATTENTION_WINDOW_MAX_SECONDS,
+      H3_ATTENTION_WINDOW_STEP_SECONDS,
+      (target, value) => {
+        target.h3AttentionWindowSeconds = value;
+      },
+      {
+        help: "Total centered temporal attention window for this stage. 0 disables JuanAttn. Dense transformer layers remain fixed at 0,9,19,29,39,49."
+      }
+    );
+    attentionWindow.dataset.vstH3AttentionWindow = "true";
+    fields.append(attentionWindow);
+  };
 
   // frontend/detailStrip/stagePanel/upscaleSection.ts
   var UPSCALE_EPSILON = 1e-6;
@@ -14800,6 +14809,7 @@ ${slot}`;
     appendStageModelSection(bindings);
     appendStageDenoisingSection(bindings);
     appendStageSamplerSchedulerSection(bindings);
+    appendStageAttentionWindow(bindings);
     if (isRefine) {
       const heading = document.createElement("div");
       heading.className = "vst-detail-sec vst-detail-span-full vst-detail-crumb vst-detail-subsection-crumb";
@@ -15418,9 +15428,6 @@ ${slot}`;
           capabilities.authoringState(
             "referenceFraming",
             clip.refFraming !== "crop"
-          ),
-          capabilities.architectureId === "minimax" && getVideoStagesHostBridge().hasBackendFeature(
-            H3_ATTENTION_WINDOW_FEATURE
           ),
           capabilities.architectureId !== "minimax" ? "hidden" : getVideoStagesHostBridge().hasBackendFeature(
             H3_TEXT_ENCODER_FEATURE

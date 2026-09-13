@@ -45,6 +45,7 @@ export const icLoraFixture = (overrides: Partial<IcLora> = {}): IcLora => ({
 });
 
 export const minimalStage = (overrides: Partial<Stage> = {}): Stage => ({
+    h3AttentionWindowSeconds: 0,
     loras: [],
     skipped: false,
     control: 1,
@@ -106,7 +107,6 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     useSeedVr: false,
     audioOnly: false,
     refFraming: "crop",
-    h3AttentionWindowSeconds: 0,
     h3TextEncoder: "default",
     audioSource: "Native",
     icLoras: [],

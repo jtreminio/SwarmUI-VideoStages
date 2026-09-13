@@ -119,7 +119,6 @@ const CLIP_ENTITY = defineList<CanonicalAuthoringDocument, CanonicalClip>()({
         "useSeedVr",
         "audioOnly",
         "refFraming",
-        "h3AttentionWindowSeconds",
         "h3TextEncoder",
         "audioSource",
         "icLoras",
@@ -154,6 +153,7 @@ const STAGE_ENTITY = defineList<CanonicalClip, CanonicalStage>()({
     idField: "stageId",
     beforeIdField: "beforeStageId",
     patchKeys: [
+        "h3AttentionWindowSeconds",
         "loras",
         "skipped",
         "control",

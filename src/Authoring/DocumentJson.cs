@@ -19,11 +19,12 @@ internal sealed record AuthoringDocument(
 internal static class DocumentJson
 {
     /// <summary>Must match the frontend's <c>CURRENT_AUTHORING_SCHEMA_VERSION</c>.</summary>
-    public const int SupportedSchemaVersion = 10;
+    public const int SupportedSchemaVersion = 11;
 
     private const int FrameRefsSchemaVersion = 7;
     private const int StageLoraSchemaVersion = 8;
     private const int ClipLoraSchemaVersion = 9;
+    private const int ClipAttentionWindowSchemaVersion = 10;
 
     // The contract test observes all key lookups through Read.
     internal static Action<JObject, string, bool> KeyProbe;
@@ -73,6 +74,18 @@ internal static class DocumentJson
                         stage["loras"] = loras.DeepClone();
                     }
                     entry.Remove("loras");
+                }
+            }
+            if (schemaVersion <= ClipAttentionWindowSchemaVersion)
+            {
+                foreach (JObject entry in entries)
+                {
+                    foreach (JObject stage in GetObjectArray(entry, "stages"))
+                    {
+                        stage["h3AttentionWindowSeconds"] =
+                            entry["h3AttentionWindowSeconds"]?.DeepClone() ?? new JValue(0);
+                    }
+                    entry.Remove("h3AttentionWindowSeconds");
                 }
             }
             return new AuthoringDocument(
@@ -162,6 +175,7 @@ internal static class DocumentJson
     {
         int? version = GetOptionalNullableInt(obj, "schemaVersion");
         if (version is not SupportedSchemaVersion
+            and not ClipAttentionWindowSchemaVersion
             and not ClipLoraSchemaVersion
             and not StageLoraSchemaVersion
             and not FrameRefsSchemaVersion)

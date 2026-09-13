@@ -34,6 +34,7 @@ export const STORED_CLIP_REFERENCE_KEYS = [
 ] as const satisfies readonly (keyof ClipReference)[];
 
 export const STORED_STAGE_KEYS = [
+    "h3AttentionWindowSeconds",
     "loras",
     "id",
     "skipped",
@@ -66,7 +67,6 @@ export const STORED_CLIP_KEYS = [
     "useSeedVr",
     "audioOnly",
     "refFraming",
-    "h3AttentionWindowSeconds",
     "h3TextEncoder",
     "audioSource",
     "icLoras",

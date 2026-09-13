@@ -97,6 +97,47 @@ describe("persistence", () => {
                 getDefaultStageModel(getRootDefaults()),
             );
 
+        it("migrates clip attention to every stage and preserves independent settings on reload", () => {
+            const decoded = decode({
+                schemaVersion: 10,
+                clips: [
+                    {
+                        h3AttentionWindowSeconds: 2.5,
+                        stages: [
+                            {
+                                model: "ltx-2.3.safetensors",
+                                loras: [{ name: "detail", weight: 0.5 }],
+                            },
+                            {
+                                model: "ltx-2.3.safetensors",
+                                skipped: true,
+                                loras: [],
+                            },
+                        ],
+                    },
+                ],
+            });
+            if (!decoded) throw new Error("Expected migrated document");
+            expect(
+                decoded.clips[0].stages.map(
+                    (stage) => stage.h3AttentionWindowSeconds,
+                ),
+            ).toEqual([2.5, 2.5]);
+            expect(decoded.clips[0].stages.map((stage) => stage.loras)).toEqual(
+                [[{ name: "detail", weight: 0.5 }], []],
+            );
+            decoded.clips[0].stages[0].h3AttentionWindowSeconds = 0;
+            const restored = decode({
+                schemaVersion: CURRENT_AUTHORING_SCHEMA_VERSION,
+                clips: serializeClipsForStorage(decoded.clips),
+            });
+            expect(
+                restored?.clips[0].stages.map(
+                    (stage) => stage.h3AttentionWindowSeconds,
+                ),
+            ).toEqual([0, 2.5]);
+        });
+
         it("migrates clip LoRAs into independent stage lists and preserves later empty lists", () => {
             const decoded = decode({
                 schemaVersion: 9,
@@ -274,7 +315,7 @@ describe("persistence", () => {
                     }>;
                 }>;
             };
-            expect(reencoded.schemaVersion).toBe(10);
+            expect(reencoded.schemaVersion).toBe(11);
             expect(reencoded.clips[0].keyframes).toHaveLength(1);
             expect(reencoded.clips[0].frameRefs).toBeUndefined();
             expect(reencoded.clips[0].stages[0].keyframeStrengths).toEqual([
@@ -331,7 +372,7 @@ describe("persistence", () => {
             expect(decoded?.clips[0].stages[1]).not.toHaveProperty(
                 "loraWeights",
             );
-            expect(CURRENT_AUTHORING_SCHEMA_VERSION).toBe(10);
+            expect(CURRENT_AUTHORING_SCHEMA_VERSION).toBe(11);
         });
 
         it("accepts omitted optional collections without inventing stored items", () => {
@@ -418,7 +459,6 @@ describe("persistence", () => {
             const clips = [
                 minimalClip({
                     duration: 3,
-                    h3AttentionWindowSeconds: 2.5,
                     h3TextEncoder: "8b",
                     icLoras: [
                         {
@@ -458,6 +498,7 @@ describe("persistence", () => {
                             loras: [
                                 { name: "detail.safetensors", weight: 0.6 },
                             ],
+                            h3AttentionWindowSeconds: 2.5,
                             controlNetStrength: 0.7,
                             frameRefStrengths: [0.8],
                         }),
@@ -480,7 +521,6 @@ describe("persistence", () => {
                     useSeedVr: false,
                     audioOnly: false,
                     refFraming: "crop",
-                    h3AttentionWindowSeconds: 2.5,
                     h3TextEncoder: "8b",
                     audioSource: "Native",
                     icLoras: [
@@ -543,6 +583,7 @@ describe("persistence", () => {
                             ],
                             skipped: false,
                             control: 1,
+                            h3AttentionWindowSeconds: 2.5,
                             controlNetStrength: 0.7,
                             icLoraStrengths: [],
                             keyframeStrengths: [0.8],

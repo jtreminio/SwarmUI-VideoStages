@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 10,
+    "schemaVersion": 11,
     "width": 768,
     "height": 512,
     "clips": [
@@ -17,7 +17,6 @@
             "useSeedVr": true,
             "audioOnly": true,
             "refFraming": "fit-green",
-            "h3AttentionWindowSeconds": 2.5,
             "h3TextEncoder": "8b",
             "audioSource": "Native",
             "icLoras": [
@@ -150,7 +149,8 @@
                             "name": "style.safetensors",
                             "weight": 0.5
                         }
-                    ]
+                    ],
+                    "h3AttentionWindowSeconds": 2.5
                 },
                 {
                     "id": "stage-1",
@@ -176,7 +176,8 @@
                             "name": "style.safetensors",
                             "weight": 0.5
                         }
-                    ]
+                    ],
+                    "h3AttentionWindowSeconds": 2.5
                 }
             ]
         },
@@ -194,7 +195,6 @@
             "useSeedVr": false,
             "audioOnly": false,
             "refFraming": "crop",
-            "h3AttentionWindowSeconds": 0,
             "h3TextEncoder": "default",
             "audioSource": "Previous Clip",
             "icLoras": [],
@@ -226,7 +226,8 @@
                     "cfgScale": 1,
                     "sampler": "euler",
                     "scheduler": "normal",
-                    "loras": []
+                    "loras": [],
+                    "h3AttentionWindowSeconds": 0
                 }
             ]
         }
