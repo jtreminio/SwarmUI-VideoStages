@@ -346,6 +346,40 @@ public class AudioHandlerTests
             warning => warning.Contains("captured video frame count is unavailable"));
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void PruneAceStepFunUnsavedTracks_handles_core_audio_saves(
+        bool websocketAudio, bool saveTrack)
+    {
+        WorkflowGenerator generator = CreateGenerator([]);
+        if (websocketAudio)
+        {
+            generator.Features.Add("comfy_saveaudio_ws");
+        }
+        string decodeId = AudioHandler.MakeAceStepFunDecodeId(0);
+        using (WorkflowBridge bridge = WorkflowBridge.Create(generator.Workflow))
+        {
+            bridge.AddNode(new VAEDecodeAudioNode(), decodeId);
+            bridge.AddNode(new VAEDecodeAudioNode(), AudioHandler.MakeAceStepFunDecodeId(1));
+        }
+        new WGNodeData(new JArray(decodeId, 0), generator, WGNodeData.DT_AUDIO, null)
+            .SaveOutput(null, null, "64170");
+        new WGNodeData(new JArray(AudioHandler.MakeAceStepFunDecodeId(1), 0), generator, WGNodeData.DT_AUDIO, null)
+            .SaveOutput(null, null, "64270");
+        Assert.Equal(websocketAudio ? "SwarmSaveAudioWS" : "SaveAudioAdvanced",
+            generator.Workflow["64170"]["class_type"].Value<string>());
+
+        new AudioHandler(generator).PruneAceStepFunUnsavedTracks(
+            [Clip(id: 0, audioSource: "audio0", saveAudioTrack: saveTrack)]);
+
+        Assert.Equal(saveTrack, generator.Workflow.ContainsKey("64170"));
+        Assert.True(generator.Workflow.ContainsKey("64270"));
+        Assert.True(generator.Workflow.ContainsKey(decodeId));
+    }
+
     [Fact]
     public void PruneAceStepFunUnsavedTracks_removes_downstream_saves_of_any_audio_save_type()
     {

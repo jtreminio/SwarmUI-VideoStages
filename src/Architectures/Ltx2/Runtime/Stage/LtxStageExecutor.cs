@@ -333,7 +333,9 @@ internal sealed class LtxStageExecutor
         {
             throw Invariant.Failure("LTX audio-only generation loaded no audio VAE.");
         }
+        HashSet<string> existingNodes = g.Workflow.Properties().Select(node => node.Name).ToHashSet();
         genInfo.PrepFullCond(g, null);
+        string conditionedVideoId = g.CurrentMedia.Path[0].Value<string>();
         using (WorkflowBridge bridge = BridgeSync.For(g))
         {
             LTXVAudioOnlyModelNode audioOnlyModel = bridge.AddNode(
@@ -368,6 +370,8 @@ internal sealed class LtxStageExecutor
                 Frames = genInfo.Frames,
                 FPS = genInfo.VideoFPS,
             };
+            WorkflowGraphCleanup.RemoveUnusedUpstreamNodes(
+                bridge, conditionedVideoId, existingNodes, g.NodeHelpers);
         }
         sampler.Execute(genInfo, stageContext);
 

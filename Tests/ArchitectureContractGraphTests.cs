@@ -235,7 +235,8 @@ public sealed class ArchitectureContractGraphTests
 
         Assert.Empty(bridge.Graph.NodesOfType<AudioMergeNode>());
         Assert.Null(live.PublishedAudio());
-        Assert.Empty(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        Assert.DoesNotContain(bridge.Graph.Nodes.Values, node =>
+            node.ClassTypeName.Contains("SaveAudio", StringComparison.Ordinal));
         Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.Null(generator.CurrentMedia.AttachedAudio);
     }

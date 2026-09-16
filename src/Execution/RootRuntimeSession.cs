@@ -269,7 +269,6 @@ internal sealed class RootRuntimeSession
         using WorkflowBridge bridge = WorkflowBridge.Create(_generator.Workflow);
         HashSet<string> liveRoots = [
             .. bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>().Select(save => save.Id),
-            .. bridge.Graph.NodesOfType<SaveAudioMP3Node>().Select(save => save.Id),
         ];
         AddArtifactNodeIds(liveRoots, timeline);
         RecordRootRemovals(

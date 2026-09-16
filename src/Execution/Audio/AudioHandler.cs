@@ -75,21 +75,12 @@ public sealed class AudioHandler(WorkflowGenerator g)
 
     private void PruneDownstreamSaveAudio(WorkflowBridge bridge, VAEDecodeAudioNode decode)
     {
-        List<ComfyNode> toRemove = [];
-        foreach (SaveAudioMP3Node save in bridge.Graph.NodesOfType<SaveAudioMP3Node>())
-        {
-            if (save.AudioInput.Connection?.Node?.Id == decode.Id)
-            {
-                toRemove.Add(save);
-            }
-        }
-        foreach (SaveAudioNode save in bridge.Graph.NodesOfType<SaveAudioNode>())
-        {
-            if (save.AudioInput.Connection?.Node?.Id == decode.Id)
-            {
-                toRemove.Add(save);
-            }
-        }
+        ComfyNode[] toRemove = [.. bridge.Graph.Nodes.Values
+            .Where(node => node.ClassTypeName is SaveAudioMP3Node.ClassType
+                or SaveAudioNode.ClassType
+                or SaveAudioAdvancedNode.ClassType
+                or "SwarmSaveAudioWS")
+            .Where(node => bridge.Graph.FindUpstream(node).Any(upstream => upstream.Id == decode.Id))];
         foreach (ComfyNode node in toRemove)
         {
             VideoGraphHelpers.RemoveNode(g, bridge, node.Id);

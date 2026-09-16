@@ -244,8 +244,10 @@ public class MiniMaxGeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    [Fact]
-    public async Task Audio_only_samples_a_32_pixel_joint_latent_and_publishes_only_audio()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Audio_only_samples_a_32_pixel_joint_latent_and_publishes_only_audio(bool websocketAudio)
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         JObject clip = MakeClip(fixture.Stage());
@@ -254,7 +256,8 @@ public class MiniMaxGeneratedWorkflowContractTests
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
-                fixture.Post(MakeDocument(clip)));
+                fixture.Post(MakeDocument(clip)),
+                extraFeatures: websocketAudio ? ["comfy_saveaudio_ws"] : []);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         SwarmEmptyMiniMaxH3LatentAVNode latent = Assert.Single(
@@ -264,7 +267,15 @@ public class MiniMaxGeneratedWorkflowContractTests
         Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
         Assert.Single(bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>());
         Assert.Single(bridge.Graph.NodesOfType<VAEDecodeAudioNode>());
-        Assert.Single(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        ComfyNode save = Assert.Single(bridge.Graph.Nodes.Values, node =>
+            node.ClassTypeName.Contains("SaveAudio", StringComparison.Ordinal));
+        Assert.Equal(websocketAudio ? "SwarmSaveAudioWS" : "SaveAudioAdvanced", save.ClassTypeName);
+        JObject inputs = (JObject)workflow[save.Id]["inputs"];
+        Assert.Equal("mp3", websocketAudio
+            ? inputs["format"].Value<string>()
+            : inputs["format"]["format"].Value<string>());
+        Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, inputs["audio"]));
+        AssertNoDanglingNodeRefs(workflow);
         Assert.Empty(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.DoesNotContain(workflow.Properties(), property =>
             property.Value["class_type"]?.Value<string>() is string type
@@ -300,7 +311,8 @@ public class MiniMaxGeneratedWorkflowContractTests
             videoInput.AudioLatent.Connection?.Node,
             audioDecode.Id));
         Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
-        Assert.Empty(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        Assert.DoesNotContain(bridge.Graph.Nodes.Values, node =>
+            node.ClassTypeName.Contains("SaveAudio", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -330,7 +342,8 @@ public class MiniMaxGeneratedWorkflowContractTests
             bridge,
             videoInput.AudioLatent.Connection?.Node,
             audioDecode.Id));
-        Assert.Empty(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        Assert.DoesNotContain(bridge.Graph.Nodes.Values, node =>
+            node.ClassTypeName.Contains("SaveAudio", StringComparison.Ordinal));
         Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
     }
 

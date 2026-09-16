@@ -48,8 +48,10 @@ public class Ltx2GeneratedWorkflowContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    [Fact]
-    public async Task Audio_only_uses_the_LTX_audio_model_and_publishes_only_audio()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Audio_only_uses_the_LTX_audio_model_and_publishes_only_audio(bool websocketAudio)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         JObject clip = MakeClip(1.0, fixture.Stage());
@@ -57,7 +59,8 @@ public class Ltx2GeneratedWorkflowContractTests
 
         (JObject workflow, WorkflowGenerator generator) =
             await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
-                fixture.Post(MakeDocument(clip)));
+                fixture.Post(MakeDocument(clip)),
+                extraFeatures: websocketAudio ? ["comfy_saveaudio_ws"] : []);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
 
         Assert.Single(bridge.Graph.NodesOfType<LTXVAudioOnlyModelNode>());
@@ -75,7 +78,15 @@ public class Ltx2GeneratedWorkflowContractTests
         Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
         Assert.Single(bridge.Graph.NodesOfType<LTXVSeparateAVLatentNode>());
         Assert.Single(bridge.Graph.NodesOfType<LTXVAudioVAEDecodeNode>());
-        Assert.Single(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        ComfyNode save = Assert.Single(bridge.Graph.Nodes.Values, node =>
+            node.ClassTypeName.Contains("SaveAudio", StringComparison.Ordinal));
+        Assert.Equal(websocketAudio ? "SwarmSaveAudioWS" : "SaveAudioAdvanced", save.ClassTypeName);
+        JObject inputs = (JObject)workflow[save.Id]["inputs"];
+        Assert.Equal("mp3", websocketAudio
+            ? inputs["format"].Value<string>()
+            : inputs["format"]["format"].Value<string>());
+        Assert.True(JToken.DeepEquals(generator.CurrentMedia.Path, inputs["audio"]));
+        AssertNoDanglingNodeRefs(workflow);
         Assert.Empty(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
         Assert.DoesNotContain(workflow.Properties(), property =>
             property.Value["class_type"]?.Value<string>() is string type
@@ -99,7 +110,8 @@ public class Ltx2GeneratedWorkflowContractTests
         SwarmKSamplerNode videoSampler = StageSampler(bridge, 1);
         Assert.Empty(bridge.Graph.NodesOfType<AudioMergeNode>());
         Assert.True(ReachesUpstream(bridge, videoSampler, audioSampler.Id));
-        Assert.Empty(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        Assert.DoesNotContain(bridge.Graph.Nodes.Values, node =>
+            node.ClassTypeName.Contains("SaveAudio", StringComparison.Ordinal));
         Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
     }
 
@@ -120,7 +132,8 @@ public class Ltx2GeneratedWorkflowContractTests
         SwarmKSamplerNode videoSampler = StageSampler(bridge, 1);
         Assert.Empty(bridge.Graph.NodesOfType<AudioMergeNode>());
         Assert.True(ReachesUpstream(bridge, videoSampler, audioSampler.Id));
-        Assert.Empty(bridge.Graph.NodesOfType<SaveAudioMP3Node>());
+        Assert.DoesNotContain(bridge.Graph.Nodes.Values, node =>
+            node.ClassTypeName.Contains("SaveAudio", StringComparison.Ordinal));
         Assert.Single(bridge.Graph.NodesOfType<SwarmSaveAnimationWSNode>());
     }
 
