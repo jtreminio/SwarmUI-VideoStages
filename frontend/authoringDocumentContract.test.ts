@@ -146,6 +146,10 @@ const contractState = (): AuthoringDocument => ({
                 {
                     id: "stage-0",
                     h3AttentionWindowSeconds: 2.5,
+                    modelAttentionBackend: "comfy kitchen attention",
+                    modelAttentionBackendEnabled: true,
+                    useSparseAttention: "vsa",
+                    useSparseAttentionEnabled: true,
                     loras: [{ name: "style.safetensors", weight: 0.5 }],
                     skipped: false,
                     control: 1,
@@ -178,6 +182,10 @@ const contractState = (): AuthoringDocument => ({
                 {
                     id: "stage-1",
                     h3AttentionWindowSeconds: 2.5,
+                    modelAttentionBackend: "comfy kitchen attention",
+                    modelAttentionBackendEnabled: true,
+                    useSparseAttention: "vsa",
+                    useSparseAttentionEnabled: true,
                     loras: [{ name: "style.safetensors", weight: 0.5 }],
                     skipped: true,
                     control: 0.5,
@@ -232,6 +240,8 @@ const contractState = (): AuthoringDocument => ({
                 {
                     id: "stage-2",
                     h3AttentionWindowSeconds: 0,
+                    modelAttentionBackendEnabled: false,
+                    useSparseAttentionEnabled: false,
                     loras: [],
                     skipped: false,
                     control: 0.5,

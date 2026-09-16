@@ -8,8 +8,7 @@ import type {
 } from "./types";
 
 /**
- * Domain fields included in each storage projection. The wire calls frame
- * references keyframes; exhaustiveness still classifies the domain fields.
+ * The wire calls frame references keyframes; exhaustiveness checks use domain names.
  */
 export const STORED_REF_KEYS = [
     "id",
@@ -35,6 +34,10 @@ export const STORED_CLIP_REFERENCE_KEYS = [
 
 export const STORED_STAGE_KEYS = [
     "h3AttentionWindowSeconds",
+    "modelAttentionBackend",
+    "modelAttentionBackendEnabled",
+    "useSparseAttention",
+    "useSparseAttentionEnabled",
     "loras",
     "id",
     "skipped",

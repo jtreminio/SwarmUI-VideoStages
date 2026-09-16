@@ -35,7 +35,9 @@ internal sealed record StockHostVideoStagePayload(
                 stage.Sampler,
                 stage.Scheduler,
                 StageUpscalePlanCompiler.Compile(stage),
-                LoraPlanCompiler.Compile(stage, loraTarget)));
+                LoraPlanCompiler.Compile(stage, loraTarget),
+                stage.ModelAttentionBackend,
+                stage.UseSparseAttention));
 }
 
 internal static class StockHostVideoStagePayloadExtensions

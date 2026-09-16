@@ -42,7 +42,9 @@ public sealed record StageSpec(
     RetakeWindowSpec RetakeWindow = null,
     CharacterRefineSpec CharacterRefine = null,
     IReadOnlyList<LoraRef> Loras = null,
-    double H3AttentionWindowSeconds = 0
+    double H3AttentionWindowSeconds = 0,
+    string ModelAttentionBackend = null,
+    string UseSparseAttention = null
 );
 
 public sealed record FrameRefSpec(

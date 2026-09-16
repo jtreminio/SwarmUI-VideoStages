@@ -72,28 +72,112 @@
     visibility: hidden;
 }
 
-.vst-audio-upload.auto-input { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: center; }
-.vst-audio-upload.vst-media-pick-has-preview { grid-template-columns: 112px minmax(0, 1fr); }
-.vst-media-pick-details { min-width: 0; }
-.vst-audio-upload .auto-file-input-label { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.vst-media-pick-actions { display: flex; flex-wrap: wrap; gap: 4px; }
-.vst-audio-upload .auto-file-label { display: block; margin: 6px 0 0; }
-.vst-audio-upload .auto-file-input { padding: 0; }
-.vst-audio-upload .auto-file-input-filename { white-space: normal; overflow-wrap: anywhere; }
-.vst-audio-upload .auto-input-preview { margin: 0; width: 112px; }
-.vst-audio-upload .auto-input-preview:empty { display: none; }
-.vst-audio-upload .vst-media-thumbnail { position: relative; display: block; width: 112px; height: 84px; padding: 0; overflow: hidden; background: var(--background-soft); border: 1px solid var(--border-color); border-radius: 5px; }
-.vst-audio-upload .vst-media-thumbnail:is(:hover, :focus-visible) { border-color: var(--emphasis); }
-.vst-media-thumbnail [hidden] { display: none !important; }
-.vst-media-thumbnail[data-media-kind="audio"]::before { content: "♪"; color: var(--text-soft); font-size: 28px; }
-.vst-audio-upload .vst-media-thumbnail :is(img, video) { display: block; width: 100%; height: 100%; max-height: none; max-width: none; object-fit: contain; border: 0; border-radius: 0; }
-.vst-media-thumbnail-hint { position: absolute; bottom: 4px; right: 4px; padding: 1px 5px; background: var(--background-panel); color: var(--text); border-radius: 3px; font-size: 12px; }
-.vst-media-preview-modal .modal-dialog { width: min(900px, calc(100vw - 32px)); max-width: none; }
-.vst-media-preview-modal .modal-title { overflow-wrap: anywhere; min-width: 0; }
-.vst-media-preview-modal .modal-header { gap: 16px; }
-.vst-media-preview-modal .modal-body { display: grid; place-items: center; }
-.vst-media-preview-modal .modal-body > img { max-width: 100%; max-height: 70vh; object-fit: contain; }
-.vst-media-preview-modal .vst-sidebar-video-preview { max-height: 65vh; }
+.vst-audio-upload.auto-input {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+    align-items: center;
+}
+.vst-audio-upload.vst-media-pick-has-preview {
+    grid-template-columns: 112px minmax(0, 1fr);
+}
+.vst-media-pick-details {
+    min-width: 0;
+}
+.vst-audio-upload .auto-file-input-label {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.vst-media-pick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.vst-audio-upload .auto-file-label {
+    display: block;
+    margin: 6px 0 0;
+}
+.vst-audio-upload .auto-file-input {
+    padding: 0;
+}
+.vst-audio-upload .auto-file-input-filename {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.vst-audio-upload .auto-input-preview {
+    margin: 0;
+    width: 112px;
+}
+.vst-audio-upload .auto-input-preview:empty {
+    display: none;
+}
+.vst-audio-upload .vst-media-thumbnail {
+    position: relative;
+    display: block;
+    width: 112px;
+    height: 84px;
+    padding: 0;
+    overflow: hidden;
+    background: var(--background-soft);
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+}
+.vst-audio-upload .vst-media-thumbnail:is(:hover, :focus-visible) {
+    border-color: var(--emphasis);
+}
+.vst-media-thumbnail [hidden] {
+    display: none !important;
+}
+.vst-media-thumbnail[data-media-kind="audio"]::before {
+    content: "♪";
+    color: var(--text-soft);
+    font-size: 28px;
+}
+.vst-audio-upload .vst-media-thumbnail :is(img, video) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    max-width: none;
+    object-fit: contain;
+    border: 0;
+    border-radius: 0;
+}
+.vst-media-thumbnail-hint {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    padding: 1px 5px;
+    background: var(--background-panel);
+    color: var(--text);
+    border-radius: 3px;
+    font-size: 12px;
+}
+.vst-media-preview-modal .modal-dialog {
+    width: min(900px, calc(100vw - 32px));
+    max-width: none;
+}
+.vst-media-preview-modal .modal-title {
+    overflow-wrap: anywhere;
+    min-width: 0;
+}
+.vst-media-preview-modal .modal-header {
+    gap: 16px;
+}
+.vst-media-preview-modal .modal-body {
+    display: grid;
+    place-items: center;
+}
+.vst-media-preview-modal .modal-body > img {
+    max-width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+}
+.vst-media-preview-modal .vst-sidebar-video-preview {
+    max-height: 65vh;
+}
 
 .vst-btn-tiny {
     height: 22px;
@@ -629,16 +713,26 @@ audio.vst-trim-modal-player {
     grid-column: 1 / -1;
     min-width: 0;
 }
-.vst-clip-editor > .vst-catalog-notice { flex-wrap: wrap; }
+.vst-clip-editor > .vst-catalog-notice {
+    flex-wrap: wrap;
+}
 .vst-clip-editor > .vst-catalog-status {
     min-height: 0;
     overflow: auto;
     justify-content: safe center;
 }
-.vst-clip-editor * { box-sizing: border-box; }
-.vst-clip-editor [hidden] { display: none !important; }
-.vst-clip-editor .basic-button { margin: 0; }
-.vst-clip-editor.vst-editor-map-collapsed { --vst-editor-rail-width: 90px; }
+.vst-clip-editor * {
+    box-sizing: border-box;
+}
+.vst-clip-editor [hidden] {
+    display: none !important;
+}
+.vst-clip-editor .basic-button {
+    margin: 0;
+}
+.vst-clip-editor.vst-editor-map-collapsed {
+    --vst-editor-rail-width: 90px;
+}
 .vst-editor-strip {
     position: relative;
     display: flex;
@@ -663,7 +757,10 @@ audio.vst-trim-modal-player {
     color: var(--emphasis);
     font-size: 12px;
 }
-.vst-editor-status > label { margin: 0; cursor: pointer; }
+.vst-editor-status > label {
+    margin: 0;
+    cursor: pointer;
+}
 .vst-editor-status .toggle-switch {
     --toggle-width: 32px;
     --toggle-height: 18px;
@@ -681,7 +778,9 @@ audio.vst-trim-modal-player {
     font-size: 19px;
     line-height: 20px;
 }
-.vst-detail-section-has-toggle .header-label + .toggle-switch { margin-inline-start: 0.6rem; }
+.vst-detail-section-has-toggle .header-label + .toggle-switch {
+    margin-inline-start: 0.6rem;
+}
 .vst-editor-status .auto-slider-toggle:focus-visible + .auto-slider-toggle-content {
     outline: 2px solid var(--emphasis);
     outline-offset: 2px;
@@ -694,8 +793,12 @@ audio.vst-trim-modal-player {
     font-size: 14px;
     line-height: 20px;
 }
-.vst-editor-dimensions-compact, .vst-editor-clip-media { display: none; }
-.vst-editor-dimensions-compact > span { display: block; }
+.vst-editor-dimensions-compact, .vst-editor-clip-media {
+    display: none;
+}
+.vst-editor-dimensions-compact > span {
+    display: block;
+}
 .vst-editor-sequence {
     position: relative;
     z-index: 1;
@@ -709,7 +812,9 @@ audio.vst-trim-modal-player {
     overflow: hidden auto;
     overscroll-behavior: contain;
 }
-.vst-editor-sequence > * { flex-shrink: 0; }
+.vst-editor-sequence > * {
+    flex-shrink: 0;
+}
 .vst-editor-strip[data-enabled="false"]::after {
     content: "";
     position: absolute;
@@ -719,9 +824,16 @@ audio.vst-trim-modal-player {
     background: var(--bs-danger);
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='88'%3E%3Cg transform='rotate(-12 140 44)' font-family='sans-serif'%3E%3Ctext x='12' y='35' font-size='12' font-weight='bold'%3EVIDEOSTAGES DISABLED%3C/text%3E%3Ctext x='12' y='53' font-size='11'%3EUse the switch above to enable%3C/text%3E%3C/g%3E%3C/svg%3E");
 }
-.vst-editor-strip[data-enabled="false"] .vst-editor-sequence > * { filter: saturate(0.65) brightness(0.85); }
-.vst-editor-strip[data-enabled="false"] .vst-editor-dimensions { filter: saturate(0.3); opacity: 0.6; }
-.vst-editor-strip[data-enabled="false"] .vst-editor-sequence > :is(:hover, :focus-within) { filter: none; }
+.vst-editor-strip[data-enabled="false"] .vst-editor-sequence > * {
+    filter: saturate(0.65) brightness(0.85);
+}
+.vst-editor-strip[data-enabled="false"] .vst-editor-dimensions {
+    filter: saturate(0.3);
+    opacity: 0.6;
+}
+.vst-editor-strip[data-enabled="false"] .vst-editor-sequence > :is(:hover, :focus-within) {
+    filter: none;
+}
 .vst-editor-clip {
     position: relative;
     display: grid;
@@ -735,8 +847,13 @@ audio.vst-trim-modal-player {
     border-left-width: 3px;
     border-radius: 7px;
 }
-.vst-editor-clip:hover { border-color: var(--emphasis); }
-.vst-editor-clip.selected { border-color: var(--emphasis); background: color-mix(in srgb, var(--emphasis) 7%, var(--background-gray)); }
+.vst-editor-clip:hover {
+    border-color: var(--emphasis);
+}
+.vst-editor-clip.selected {
+    border-color: var(--emphasis);
+    background: color-mix(in srgb, var(--emphasis) 7%, var(--background-gray));
+}
 #videostages-editor.vst-clip-editor .vst-editor-sequence > [data-media-kind="audio"] {
     border-left-color: var(--bs-success);
     box-shadow: inset 1px 0 var(--bs-success);
@@ -745,14 +862,46 @@ audio.vst-trim-modal-player {
     border-left-color: var(--bs-info);
     box-shadow: inset 1px 0 var(--bs-info);
 }
-.vst-editor-clip-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 9px; }
-.vst-editor-clip-heading { padding-right: 24px; }
-.vst-editor-clip:has(.vst-editor-delete-clip) .vst-editor-clip-heading { padding-right: 54px; }
-.vst-editor-clip .basic-button { border: 0; padding: 0; font-size: 12px; background: transparent; color: var(--text); }
-.vst-editor-clip [data-testid="select-clip"] { grid-column: 1; grid-row: 1 / span 2; align-self: center; text-align: center; font-size: 25px; font-weight: 500; color: var(--text-soft); }
-.vst-editor-clip-heading, .vst-editor-clip .vst-editor-prompt-link { grid-column: 2; min-width: 0; }
-.vst-editor-clip-label { font-size: 12px; font-weight: 600; }
-.vst-editor-clip [data-testid="clip-stages"] { color: var(--text-soft); font-size: 11px; }
+.vst-editor-clip-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px 9px;
+}
+.vst-editor-clip-heading {
+    padding-right: 24px;
+}
+.vst-editor-clip:has(.vst-editor-delete-clip) .vst-editor-clip-heading {
+    padding-right: 54px;
+}
+.vst-editor-clip .basic-button {
+    border: 0;
+    padding: 0;
+    font-size: 12px;
+    background: transparent;
+    color: var(--text);
+}
+.vst-editor-clip [data-testid="select-clip"] {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: center;
+    text-align: center;
+    font-size: 25px;
+    font-weight: 500;
+    color: var(--text-soft);
+}
+.vst-editor-clip-heading, .vst-editor-clip .vst-editor-prompt-link {
+    grid-column: 2;
+    min-width: 0;
+}
+.vst-editor-clip-label {
+    font-size: 12px;
+    font-weight: 600;
+}
+.vst-editor-clip [data-testid="clip-stages"] {
+    color: var(--text-soft);
+    font-size: 11px;
+}
 .vst-editor-clip .vst-editor-prompt-link {
     display: block;
     width: 100%;
@@ -763,11 +912,36 @@ audio.vst-trim-modal-player {
     color: var(--text-soft);
     margin-top: 7px;
 }
-.vst-editor-clip .basic-button:hover { color: var(--emphasis); }
-.vst-editor-duration { color: var(--text-soft); font-size: 11px; white-space: nowrap; }
-.vst-editor-clip .vst-editor-delete-clip { position: absolute; top: 9px; right: 8px; font-size: 17px; line-height: 20px; width: 20px; color: var(--text-soft); }
-.vst-editor-clip .vst-editor-clip-actions { display: block; position: absolute; top: 2px; right: 32px; width: 24px; height: 24px; font-size: 19px; line-height: 20px; }
-.vst-editor-clip .vst-editor-delete-clip:hover { color: var(--bs-danger); }
+.vst-editor-clip .basic-button:hover {
+    color: var(--emphasis);
+}
+.vst-editor-duration {
+    color: var(--text-soft);
+    font-size: 11px;
+    white-space: nowrap;
+}
+.vst-editor-clip .vst-editor-delete-clip {
+    position: absolute;
+    top: 9px;
+    right: 8px;
+    font-size: 17px;
+    line-height: 20px;
+    width: 20px;
+    color: var(--text-soft);
+}
+.vst-editor-clip .vst-editor-clip-actions {
+    display: block;
+    position: absolute;
+    top: 2px;
+    right: 32px;
+    width: 24px;
+    height: 24px;
+    font-size: 19px;
+    line-height: 20px;
+}
+.vst-editor-clip .vst-editor-delete-clip:hover {
+    color: var(--bs-danger);
+}
 .vst-editor-sequence .vst-editor-join {
     align-self: flex-start;
     margin: 7px 0 7px 20px;
@@ -778,13 +952,54 @@ audio.vst-trim-modal-player {
     color: var(--text);
     background: var(--background-soft);
 }
-.vst-editor-join:not([data-source-usage=""]) { display: flex; align-items: center; justify-content: space-between; gap: 8px; align-self: stretch; }
-.vst-editor-join-hint { color: var(--text-soft); font-size: 10px; white-space: nowrap; }
-.vst-editor-sequence > [data-testid="add-clip"] { width: 100%; margin-top: 12px; padding: 6px; border: 1px dashed var(--border-color); background: transparent; color: var(--emphasis); }
-.vst-editor-result { flex: 0 0 auto; padding: 8px 12px; border-top: 1px solid var(--border-color); font-size: 11px; background: var(--background-soft); }
-.vst-editor-output-duration { display: block; color: var(--emphasis); font-weight: 600; }
-.vst-editor-result-clips { display: block; margin-top: 3px; color: var(--text-soft); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.vst-editor-workspace { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; container: vst-workspace / inline-size; }
+.vst-editor-join:not([data-source-usage=""]) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    align-self: stretch;
+}
+.vst-editor-join-hint {
+    color: var(--text-soft);
+    font-size: 10px;
+    white-space: nowrap;
+}
+.vst-editor-sequence > [data-testid="add-clip"] {
+    width: 100%;
+    margin-top: 12px;
+    padding: 6px;
+    border: 1px dashed var(--border-color);
+    background: transparent;
+    color: var(--emphasis);
+}
+.vst-editor-result {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border-color);
+    font-size: 11px;
+    background: var(--background-soft);
+}
+.vst-editor-output-duration {
+    display: block;
+    color: var(--emphasis);
+    font-weight: 600;
+}
+.vst-editor-result-clips {
+    display: block;
+    margin-top: 3px;
+    color: var(--text-soft);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.vst-editor-workspace {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    container: vst-workspace / inline-size;
+}
 .vst-editor-diagnostics {
     flex: 0 0 auto;
     max-height: 35%;
@@ -793,23 +1008,113 @@ audio.vst-trim-modal-player {
     border-bottom: 1px solid var(--border-color);
     font-size: 12px;
 }
-.vst-editor-diagnostics > summary { cursor: pointer; color: var(--text-soft); }
-.vst-editor-diagnostic-list { display: grid; gap: 6px; margin: 8px 0 2px; padding-left: 20px; }
-.vst-editor-diagnostic-list li { overflow-wrap: anywhere; }
-.vst-editor-diagnostic-list .basic-button { margin: 0 6px; }
-.vst-editor-diagnostic-error > strong { color: var(--bs-danger); }
-.vst-editor-diagnostic-warning > strong { color: var(--bs-warning); }
-.vst-editor-navigation { display: flex; flex: 0 0 auto; gap: 3px; padding: 6px 12px; overflow: auto hidden; border-bottom: 1px solid var(--border-color); }
-.vst-editor-navigation .basic-button { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-height: 30px; padding: 4px 8px; border: 0; background: transparent; color: var(--text-soft); font-size: 12px; white-space: nowrap; }
-.vst-editor-navigation .active { background: color-mix(in srgb, var(--emphasis) 12%, transparent); color: var(--emphasis); }
-.vst-editor-navigation span { font-size: 10px; }
-.vst-editor-scroll { flex: 1; min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 20px 20px; }
-.vst-clip-editor .vst-editor-section.input-group { display: block; width: 100%; min-width: 0 !important; max-width: none; margin: 0 0 18px; padding: 0; border: 0; border-radius: 0; background: transparent; overflow: visible; }
-.vst-editor-section:last-child { min-height: 100%; }
-.vst-clip-editor .vst-editor-section-heading.input-group-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 12px; min-height: 42px; margin: 0; padding: 5px 0; border: 0; border-radius: 0; background: var(--background-gray); }
-.vst-editor-section-heading h3 { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: 18px; line-height: 24px; font-weight: 650; color: var(--text); }
-.vst-editor-actions { display: flex; gap: 6px; margin-left: auto; }
-.vst-editor-section-heading > .vst-editor-actions { margin-left: 0; flex-shrink: 0; }
+.vst-editor-diagnostics > summary {
+    cursor: pointer;
+    color: var(--text-soft);
+}
+.vst-editor-diagnostic-list {
+    display: grid;
+    gap: 6px;
+    margin: 8px 0 2px;
+    padding-left: 20px;
+}
+.vst-editor-diagnostic-list li {
+    overflow-wrap: anywhere;
+}
+.vst-editor-diagnostic-list .basic-button {
+    margin: 0 6px;
+}
+.vst-editor-diagnostic-error > strong {
+    color: var(--bs-danger);
+}
+.vst-editor-diagnostic-warning > strong {
+    color: var(--bs-warning);
+}
+.vst-editor-navigation {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 3px;
+    padding: 6px 12px;
+    overflow: auto hidden;
+    border-bottom: 1px solid var(--border-color);
+}
+.vst-editor-navigation .basic-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    min-height: 30px;
+    padding: 4px 8px;
+    border: 0;
+    background: transparent;
+    color: var(--text-soft);
+    font-size: 12px;
+    white-space: nowrap;
+}
+.vst-editor-navigation .active {
+    background: color-mix(in srgb, var(--emphasis) 12%, transparent);
+    color: var(--emphasis);
+}
+.vst-editor-navigation span {
+    font-size: 10px;
+}
+.vst-editor-scroll {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 0 20px 20px;
+}
+.vst-clip-editor .vst-editor-section.input-group {
+    display: block;
+    width: 100%;
+    min-width: 0 !important;
+    max-width: none;
+    margin: 0 0 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+}
+.vst-editor-section:last-child {
+    min-height: 100%;
+}
+.vst-clip-editor .vst-editor-section-heading.input-group-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 42px;
+    margin: 0;
+    padding: 5px 0;
+    border: 0;
+    border-radius: 0;
+    background: var(--background-gray);
+}
+.vst-editor-section-heading h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    margin: 0;
+    font-size: 18px;
+    line-height: 24px;
+    font-weight: 650;
+    color: var(--text);
+}
+.vst-editor-actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+}
+.vst-editor-section-heading > .vst-editor-actions {
+    margin-left: 0;
+    flex-shrink: 0;
+}
 #videostages-editor .vst-editor-card.input-group-content {
     display: block;
     margin: 0 0 16px;
@@ -818,13 +1123,41 @@ audio.vst-trim-modal-player {
     border-radius: 7px;
     background: var(--background-panel);
 }
-.vst-editor-item-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
-.vst-editor-item-state { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-soft); }
-.vst-editor-item-state .toggle-switch { margin: 0; }
-.vst-editor-item-state label { display: flex; align-items: center; min-height: 32px; margin: 0; cursor: pointer; }
-.vst-editor-item[data-enabled="false"] > .vst-editor-fields { opacity: .55; }
-.vst-editor-item-heading h4 { margin: 0; font-size: 17px; font-weight: 650; color: var(--text); }
-#videostages-editor .vst-editor-item > :is(.vst-editor-fields, .vst-editor-item-heading) { padding: 0; }
+.vst-editor-item-heading {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+}
+.vst-editor-item-state {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-soft);
+}
+.vst-editor-item-state .toggle-switch {
+    margin: 0;
+}
+.vst-editor-item-state label {
+    display: flex;
+    align-items: center;
+    min-height: 32px;
+    margin: 0;
+    cursor: pointer;
+}
+.vst-editor-item[data-enabled="false"] > .vst-editor-fields {
+    opacity: .55;
+}
+.vst-editor-item-heading h4 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 650;
+    color: var(--text);
+}
+#videostages-editor .vst-editor-item > :is(.vst-editor-fields, .vst-editor-item-heading) {
+    padding: 0;
+}
 .vst-editor-row {
     display: grid;
     grid-template-columns: 24px minmax(0, 1fr) auto;
@@ -832,16 +1165,41 @@ audio.vst-trim-modal-player {
     gap: 16px;
     padding: 16px 0;
 }
-.vst-editor-section[data-section="references"] .vst-editor-row { grid-template-columns: minmax(0, 1fr) auto; }
-.vst-editor-section[data-section="references"] .vst-editor-row > .vst-editor-item-heading { grid-column: 1; grid-row: 1; }
-.vst-editor-section[data-section="references"] .vst-editor-row > .vst-editor-actions { grid-column: 2; grid-row: 1; }
-.vst-editor-section[data-section="references"] .vst-editor-row > .vst-editor-fields { grid-column: 1 / -1; }
-.vst-editor-row:first-child { padding-top: 0; }
-.vst-editor-row:last-child { padding-bottom: 0; }
-.vst-editor-row + .vst-editor-row { border-top: 1px solid var(--border-color); }
-.vst-editor-row > .vst-editor-item-heading { margin: 0; }
-.vst-editor-row > .vst-editor-item-heading h4 { font-size: 13px; font-weight: 500; color: var(--text-soft); line-height: 28px; }
-.vst-editor-row > .vst-editor-actions { margin: 0; }
+.vst-editor-section[data-section="references"] .vst-editor-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+.vst-editor-section[data-section="references"] .vst-editor-row > .vst-editor-item-heading {
+    grid-column: 1;
+    grid-row: 1;
+}
+.vst-editor-section[data-section="references"] .vst-editor-row > .vst-editor-actions {
+    grid-column: 2;
+    grid-row: 1;
+}
+.vst-editor-section[data-section="references"] .vst-editor-row > .vst-editor-fields {
+    grid-column: 1 / -1;
+}
+.vst-editor-row:first-child {
+    padding-top: 0;
+}
+.vst-editor-row:last-child {
+    padding-bottom: 0;
+}
+.vst-editor-row + .vst-editor-row {
+    border-top: 1px solid var(--border-color);
+}
+.vst-editor-row > .vst-editor-item-heading {
+    margin: 0;
+}
+.vst-editor-row > .vst-editor-item-heading h4 {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-soft);
+    line-height: 28px;
+}
+.vst-editor-row > .vst-editor-actions {
+    margin: 0;
+}
 #videostages-editor :is(.vst-editor-actions, .vst-stage-lora-row) .basic-button {
     --button-text: var(--text);
     padding: 5px 10px;
@@ -866,17 +1224,38 @@ audio.vst-trim-modal-player {
     color: var(--emphasis);
     background: color-mix(in srgb, var(--emphasis) 24%, transparent);
 }
-#videostages-editor :is(.vst-editor-actions, .vst-stage-lora-row) [data-action="delete"] { display: inline-flex; align-items: center; justify-content: center; gap: 5px; line-height: 1; }
-:is(.vst-editor-actions, .vst-stage-lora-row) [data-action="delete"] svg { width: 14px; height: 14px; }
+#videostages-editor :is(.vst-editor-actions, .vst-stage-lora-row) [data-action="delete"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    line-height: 1;
+}
+:is(.vst-editor-actions, .vst-stage-lora-row) [data-action="delete"] svg {
+    width: 14px;
+    height: 14px;
+}
 #videostages-editor :is(.vst-editor-actions, .vst-stage-lora-row) [data-action="delete"]:is(:hover, :focus-visible) {
     color: var(--bs-danger);
     border-color: var(--bs-danger);
     background: color-mix(in srgb, var(--bs-danger) 10%, transparent);
 }
-.vst-editor-empty, .vst-editor-start { padding: 14px 16px; margin: 0; color: var(--text-soft); font-size: 13px; }
-.vst-editor-map-collapsed .vst-editor-output { padding: 8px; }
-.vst-editor-map-collapsed .vst-editor-status { justify-content: center; gap: 6px; }
-.vst-editor-map-collapsed .vst-editor-collapse { margin-left: 0; }
+.vst-editor-empty, .vst-editor-start {
+    padding: 14px 16px;
+    margin: 0;
+    color: var(--text-soft);
+    font-size: 13px;
+}
+.vst-editor-map-collapsed .vst-editor-output {
+    padding: 8px;
+}
+.vst-editor-map-collapsed .vst-editor-status {
+    justify-content: center;
+    gap: 6px;
+}
+.vst-editor-map-collapsed .vst-editor-collapse {
+    margin-left: 0;
+}
 .vst-editor-map-collapsed .vst-editor-status > label,
 .vst-editor-map-collapsed .vst-editor-dimensions-label,
 .vst-editor-map-collapsed .vst-editor-clip-label,
@@ -885,20 +1264,60 @@ audio.vst-trim-modal-player {
 .vst-editor-map-collapsed .vst-editor-clip [data-testid="clip-stages"],
 .vst-editor-map-collapsed .vst-editor-prompt-link,
 .vst-editor-map-collapsed .vst-editor-duration,
-.vst-editor-map-collapsed .vst-editor-result-clips { display: none; }
+.vst-editor-map-collapsed .vst-editor-result-clips {
+    display: none;
+}
 .vst-editor-map-collapsed .vst-editor-dimensions-compact,
 .vst-editor-map-collapsed .vst-editor-clip-index,
-.vst-editor-map-collapsed .vst-editor-clip-media { display: block; }
-.vst-editor-clip[data-clip-index="0"] .vst-editor-clip-actions { right: 4px; }
-.vst-editor-map-collapsed .vst-editor-clip .vst-editor-clip-actions { right: 4px; }
-#videostages-editor.vst-clip-editor.vst-editor-map-collapsed .vst-editor-dimensions { font-size: 10px; line-height: 16px; padding: 4px 0; }
-.vst-editor-map-collapsed .vst-editor-clip { display: block; padding: 8px 5px; text-align: center; }
-.vst-editor-map-collapsed .vst-editor-clip [data-testid="select-clip"] { width: 100%; text-align: center; font-size: 20px; }
-.vst-editor-map-collapsed .vst-editor-clip-media { font-size: 10px; color: var(--text-soft); margin-top: 4px; }
-.vst-editor-map-collapsed .vst-editor-join { align-self: stretch; margin: 6px 0; padding: 3px 1px; font-size: 10px; white-space: normal; }
-.vst-editor-map-collapsed .vst-editor-join-label { display: flex; flex-direction: column; align-items: center; width: 100%; }
-.vst-editor-map-collapsed .vst-editor-join-arrow { line-height: 13px; }
-.vst-editor-map-collapsed .vst-editor-result { text-align: center; padding: 8px 3px; }
+.vst-editor-map-collapsed .vst-editor-clip-media {
+    display: block;
+}
+.vst-editor-clip[data-clip-index="0"] .vst-editor-clip-actions {
+    right: 4px;
+}
+.vst-editor-map-collapsed .vst-editor-clip .vst-editor-clip-actions {
+    right: 4px;
+}
+#videostages-editor.vst-clip-editor.vst-editor-map-collapsed .vst-editor-dimensions {
+    font-size: 10px;
+    line-height: 16px;
+    padding: 4px 0;
+}
+.vst-editor-map-collapsed .vst-editor-clip {
+    display: block;
+    padding: 8px 5px;
+    text-align: center;
+}
+.vst-editor-map-collapsed .vst-editor-clip [data-testid="select-clip"] {
+    width: 100%;
+    text-align: center;
+    font-size: 20px;
+}
+.vst-editor-map-collapsed .vst-editor-clip-media {
+    font-size: 10px;
+    color: var(--text-soft);
+    margin-top: 4px;
+}
+.vst-editor-map-collapsed .vst-editor-join {
+    align-self: stretch;
+    margin: 6px 0;
+    padding: 3px 1px;
+    font-size: 10px;
+    white-space: normal;
+}
+.vst-editor-map-collapsed .vst-editor-join-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+.vst-editor-map-collapsed .vst-editor-join-arrow {
+    line-height: 13px;
+}
+.vst-editor-map-collapsed .vst-editor-result {
+    text-align: center;
+    padding: 8px 3px;
+}
 
 .vst-editor-fields, .vst-clip-editor .vst-detail-fields {
     display: flex;
@@ -912,14 +1331,28 @@ audio.vst-trim-modal-player {
     flex: 0 1 var(--vst-field-width);
     min-width: 0;
 }
-.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > [data-field-kind="number"] { --vst-field-width: 160px; }
-.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > :has(input:is([data-field="steps"], [data-field="cfg"])) { --vst-field-width: 160px; }
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > [data-field-kind="number"] {
+    --vst-field-width: 160px;
+}
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > :has(input:is([data-field="steps"], [data-field="cfg"])) {
+    --vst-field-width: 160px;
+}
 /* Core's .auto-input-flex-wide forces sliders to a full row with !important. */
-.vst-clip-editor .vst-stage-slider { flex-basis: var(--vst-field-width) !important; }
-.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > :has(select:is([data-field="model"], [data-field$="-model"])) { --vst-field-width: 320px; }
-.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > [data-field-kind="file"] { --vst-field-width: 440px; }
-.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > :is(.vst-trim-launcher, .vst-detail-field-hint) { --vst-field-width: 440px; }
-#videostages-editor .vst-editor-fields .input-group-content { padding: 10px 12px; }
+.vst-clip-editor .vst-stage-slider {
+    flex-basis: var(--vst-field-width) !important;
+}
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > :has(select:is([data-field="model"], [data-field$="-model"])) {
+    --vst-field-width: 320px;
+}
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > [data-field-kind="file"] {
+    --vst-field-width: 440px;
+}
+.vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > :is(.vst-trim-launcher, .vst-detail-field-hint) {
+    --vst-field-width: 440px;
+}
+#videostages-editor .vst-editor-fields .input-group-content {
+    padding: 10px 12px;
+}
 .vst-clip-editor .vst-detail-fields > .vst-detail-span-full,
 .vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > :is(.input-group, p, .vst-detail-note, .vst-detail-span-full, .vst-boundary-description, [data-field-kind="textarea"]) {
     flex-basis: 100%;
@@ -971,14 +1404,19 @@ audio.vst-trim-modal-player {
     border-top: 1px solid var(--border-color);
 }
 #videostages-editor .vst-detail-subsection-crumb,
-.vst-stage-loras-header h5 {
+.vst-stage-section-header h5 {
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.04em;
 }
 @container vst-workspace (max-width: 520px) {
-    .vst-editor-scroll { padding-inline: 12px; }
-    .vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > .vst-form-field { --vst-field-width: 100%; flex-basis: 100%; }
+    .vst-editor-scroll {
+        padding-inline: 12px;
+    }
+    .vst-clip-editor :is(.vst-editor-fields, .vst-detail-fields) > .vst-form-field {
+        --vst-field-width: 100%;
+        flex-basis: 100%;
+    }
 }
 .vst-clip-editor .auto-checkbox-box {
     align-self: center;
@@ -990,32 +1428,122 @@ audio.vst-trim-modal-player {
     outline: 2px solid var(--emphasis);
     outline-offset: 2px;
 }
-.vst-clip-editor .vst-form-field :is(input, select, textarea):focus { outline: none; }
+.vst-clip-editor .vst-form-field :is(input, select, textarea):focus {
+    outline: none;
+}
 
-.vst-editor-current-item { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8em; font-weight: 500; color: var(--emphasis); }
+.vst-editor-current-item {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.8em;
+    font-weight: 500;
+    color: var(--emphasis);
+}
 
-.vst-stage-loras { border-top: 1px solid var(--border-color); padding-top: 12px; }
-.vst-stage-loras-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
-.vst-stage-loras-header h5 { margin: 0; }
+.vst-stage-section {
+    border-top: 1px solid var(--border-color);
+    padding-top: 12px;
+}
+.vst-stage-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.vst-stage-section-header h5 {
+    margin: 0;
+}
+.vst-field-label-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.vst-field-label-row > label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    max-width: none;
+    margin: 0;
+}
+.vst-field-label-row > .toggle-switch {
+    flex-shrink: 0;
+}
+.vst-clip-editor .vst-detail-fields > .vst-wide-select {
+    --vst-field-width: 280px;
+}
 #videostages-editor input:is([type="number"], [type="text"], [type="url"], [type="search"]),
 #videostages-editor textarea {
     background-color: var(--background);
     border-radius: 5px;
 }
-.vst-stage-lora-table { width: 100%; max-width: 760px; table-layout: fixed; border-collapse: separate; border-spacing: 0 8px; margin: 0; }
-.vst-stage-lora-table :is(th, td) { padding: 0 10px 0 0; vertical-align: middle; }
-.vst-stage-lora-table th { font-weight: 400; color: var(--text-soft); text-align: left; }
-.vst-stage-lora-table :is(th, td):nth-child(2) { width: 100px; }
-.vst-stage-lora-table :is(th, td):last-child { width: 34px; padding: 0; }
-#videostages-editor .vst-stage-lora-row :is(select, input) { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 32px; margin: 0; }
-#videostages-editor .vst-stage-lora-row .vst-stage-lora-strength { padding: 4px 8px; }
-#videostages-editor .vst-stage-lora-row .vst-stage-lora-remove { width: 34px; height: 32px; padding: 0; margin: 0; }
-#videostages-editor .vst-stage-loras-actions { justify-content: flex-start; flex-wrap: wrap; margin: 4px 0 0; gap: 8px; }
+.vst-stage-lora-table {
+    width: 100%;
+    max-width: 760px;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0 8px;
+    margin: 0;
+}
+.vst-stage-lora-table :is(th, td) {
+    padding: 0 10px 0 0;
+    vertical-align: middle;
+}
+.vst-stage-lora-table th {
+    font-weight: 400;
+    color: var(--text-soft);
+    text-align: left;
+}
+.vst-stage-lora-table :is(th, td):nth-child(2) {
+    width: 100px;
+}
+.vst-stage-lora-table :is(th, td):last-child {
+    width: 34px;
+    padding: 0;
+}
+#videostages-editor .vst-stage-lora-row :is(select, input) {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 32px;
+    margin: 0;
+}
+#videostages-editor .vst-stage-lora-row .vst-stage-lora-strength {
+    padding: 4px 8px;
+}
+#videostages-editor .vst-stage-lora-row .vst-stage-lora-remove {
+    width: 34px;
+    height: 32px;
+    padding: 0;
+    margin: 0;
+}
+#videostages-editor .vst-stage-loras-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    margin: 4px 0 0;
+    gap: 8px;
+}
 @media (max-width: 600px) {
-    .vst-stage-lora-table :is(th, td):nth-child(2) { width: 80px; }
+    .vst-stage-lora-table :is(th, td):nth-child(2) {
+        width: 80px;
+    }
 }
 @media (pointer: coarse) {
-    .vst-stage-lora-table :is(th, td):last-child { width: 44px; }
-    #videostages-editor .vst-stage-lora-row :is(button, input, select) { min-height: 44px; }
-    #videostages-editor .vst-stage-lora-row .vst-stage-lora-remove { width: 44px; height: 44px; }
+    .vst-stage-lora-table :is(th, td):last-child {
+        width: 44px;
+    }
+    #videostages-editor .vst-stage-lora-row :is(button, input, select) {
+        min-height: 44px;
+    }
+    #videostages-editor .vst-stage-lora-row .vst-stage-lora-remove {
+        width: 44px;
+        height: 44px;
+    }
 }

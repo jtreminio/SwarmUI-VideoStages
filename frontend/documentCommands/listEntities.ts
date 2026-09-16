@@ -154,6 +154,10 @@ const STAGE_ENTITY = defineList<CanonicalClip, CanonicalStage>()({
     beforeIdField: "beforeStageId",
     patchKeys: [
         "h3AttentionWindowSeconds",
+        "modelAttentionBackend",
+        "modelAttentionBackendEnabled",
+        "useSparseAttention",
+        "useSparseAttentionEnabled",
         "loras",
         "skipped",
         "control",

@@ -9,6 +9,7 @@ declare const mainGenHandler: {
 declare function showError(message: string): void;
 declare function copyText(text: string): void;
 declare function triggerChangeFor(element: HTMLElement): void;
+declare function doToggleEnable(id: string): void;
 declare function getMediaType(src: string): "image" | "audio" | "video";
 declare function setMediaFileDirect(
     input: HTMLInputElement,

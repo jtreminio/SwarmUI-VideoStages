@@ -23,10 +23,11 @@ export const appendStageLorasSection = ({
     debouncedCommit,
 }: StagePanelBindings): void => {
     const section = document.createElement("section");
-    section.className = "vst-stage-loras vst-detail-span-full";
+    section.className =
+        "vst-stage-loras vst-stage-section vst-detail-span-full";
     section.setAttribute("aria-label", `LoRAs for stage S${stageIdx}`);
     const header = document.createElement("div");
-    header.className = "vst-stage-loras-header";
+    header.className = "vst-stage-section-header";
     const heading = document.createElement("h5");
     heading.className = "vst-detail-crumb";
     heading.textContent = `LoRAs · ${stage.loras.length}`;

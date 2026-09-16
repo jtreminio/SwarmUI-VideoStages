@@ -71,6 +71,10 @@ export interface StageLora {
 }
 
 export interface Stage {
+    modelAttentionBackend?: string;
+    modelAttentionBackendEnabled?: boolean;
+    useSparseAttention?: string;
+    useSparseAttentionEnabled?: boolean;
     h3AttentionWindowSeconds: number;
     loras: StageLora[];
     id?: string;
@@ -163,7 +167,6 @@ export type IcLoraDriveData = "none" | "visual" | "audio";
 export type IcLoraDriveMediaKind = "image" | "video" | "audio";
 export type ReferenceFraming = (typeof REFERENCE_FRAMINGS)[number];
 
-/** One in-context LoRA guide. */
 export interface IcLora {
     id?: string;
     lora: string;

@@ -359,7 +359,13 @@ internal static class RequestReader
             CharacterRefine: CharacterRefineSpec.Read(stage),
             Loras: Loras.ReadNormal(stage, context.Warn),
             H3AttentionWindowSeconds: DocumentJson.GetOptionalDouble(
-                stage, "h3AttentionWindowSeconds", 0, location, context.Warn));
+                stage, "h3AttentionWindowSeconds", 0, location, context.Warn),
+            ModelAttentionBackend: DocumentJson.GetOptionalBool(stage, "modelAttentionBackendEnabled", false)
+                ? DocumentJson.GetOptionalString(stage, "modelAttentionBackend", null, location, false, context.Warn)
+                : null,
+            UseSparseAttention: DocumentJson.GetOptionalBool(stage, "useSparseAttentionEnabled", false)
+                ? DocumentJson.GetOptionalString(stage, "useSparseAttention", null, location, false, context.Warn)
+                : null);
     }
 
     private static ClipReadContext ReadContext(

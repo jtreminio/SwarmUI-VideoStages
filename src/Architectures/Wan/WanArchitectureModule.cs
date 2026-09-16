@@ -51,7 +51,7 @@ internal sealed class WanArchitectureModule : IVideoArchitectureModule
             ArchitectureEntryMode.ImageToVideo,
             ArchitectureEntryMode.InitVideo,
         ],
-        ArchitectureFeature.FrameReferences,
+        ArchitectureFeature.StageAttention | ArchitectureFeature.FrameReferences,
         ArchitectureBoundaryPolicy.CutOnly(
             "wan22",
             "Decoded WAN Video clips can be joined with a hard cut."))

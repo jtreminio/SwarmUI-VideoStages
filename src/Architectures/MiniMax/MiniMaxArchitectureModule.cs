@@ -82,6 +82,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             ArchitectureEntryMode.InitVideo,
         ],
         ArchitectureFeature.FrameReferences
+            | ArchitectureFeature.StageAttention
             | ArchitectureFeature.ClipReferences
             | ArchitectureFeature.AudioDerivedDuration
             | ArchitectureFeature.ReferenceFraming

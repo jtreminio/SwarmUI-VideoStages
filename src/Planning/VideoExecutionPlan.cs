@@ -3,10 +3,6 @@ using VideoStages.Architectures.Abstractions;
 
 namespace VideoStages.Planning;
 
-/// <summary>
-/// Immutable, graph-independent timeline plan. It excludes <c>WorkflowGenerator</c>, graph nodes,
-/// and runtime media so compilation can run before graph construction.
-/// </summary>
 internal sealed record VideoExecutionPlan(
     int Width,
     int Height,
@@ -20,7 +16,6 @@ internal sealed record VideoExecutionPlan(
     public bool HasConfiguredResolution { get; init; } = true;
 }
 
-/// <summary>Compiled host-root ownership decisions.</summary>
 internal sealed record RootPlan(
     HostRootKind HostKind,
     bool IgnoresHostRootOutput,
@@ -29,11 +24,6 @@ internal sealed record RootPlan(
     bool UsesStageHandoff,
     bool DropsTextToVideoRootDonor)
 {
-    /// <summary>
-    /// Core's text-to-video root produced nothing this timeline may reference or condition, so its
-    /// reserved node ids are available for a stage to build under.
-    /// <see cref="StageClaimsTextToVideoRoot"/> is which stage, if any, claims them.
-    /// </summary>
     public bool IgnoresTextToVideoRoot =>
         HostKind == HostRootKind.TextToVideo && IgnoresHostRootOutput;
 
@@ -98,7 +88,6 @@ internal sealed record StagePlan(
         ArchitecturePayload?.ContinuesSamplingFromPreviousStage == true;
 }
 
-/// <summary>Architecture-neutral settings shared by every generated stage.</summary>
 internal sealed record StageCorePlan(
     double Control,
     int Steps,
@@ -106,7 +95,9 @@ internal sealed record StageCorePlan(
     string Sampler,
     string Scheduler,
     StageUpscalePlan Upscale,
-    ImmutableArray<LoraPlan> Loras);
+    ImmutableArray<LoraPlan> Loras,
+    string ModelAttentionBackend = null,
+    string UseSparseAttention = null);
 
 internal enum StageInputKind
 {
@@ -116,7 +107,6 @@ internal enum StageInputKind
     PreviousStage,
 }
 
-/// <summary>A normalized outgoing boundary from clip N to clip N + 1.</summary>
 internal sealed record BoundaryPlan(
     int FromClipId,
     BoundaryJoinType EffectiveJoin,

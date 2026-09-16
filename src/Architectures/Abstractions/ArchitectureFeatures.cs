@@ -31,6 +31,7 @@ internal enum ArchitectureFeature
     CharacterRefine = 1 << 13,
     CharacterRefineAppearanceReferences = 1 << 14,
     CharacterRefineIdentityReferences = 1 << 15,
+    StageAttention = 1 << 16,
 }
 
 /// <summary>The frame positions a model's native image-conditioning path accepts.</summary>

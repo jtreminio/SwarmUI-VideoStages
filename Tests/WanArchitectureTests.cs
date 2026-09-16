@@ -238,7 +238,7 @@ public class WanArchitectureTests
             ["text-to-video", "image-to-video", "init-video"],
             model["capabilities"]["entryModes"].Values<string>());
         Assert.Equal(
-            ["frameReferences"],
+            ["stageAttention", "frameReferences"],
             model["capabilities"]["features"].Values<string>());
         Assert.Equal(WanArchitectureModule.FrameGrid, model.Value<int>("frameGrid"));
     }

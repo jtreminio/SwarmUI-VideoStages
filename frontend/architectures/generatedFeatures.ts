@@ -1,6 +1,7 @@
 // Generated from ArchitectureFeatureVocabulary.cs. Do not edit by hand.
 
 export const ARCHITECTURE_FEATURE_LABELS = {
+    stageAttention: "Stage attention",
     promptRelay: "Prompt relay",
     frameReferences: "Keyframes",
     stageReferenceStrengths: "Stage keyframe strengths",

@@ -97,6 +97,11 @@ export const createAuthoringSession = (
         afterRender: () => {
             const root = host.getRoot();
             if (root) {
+                for (const input of root.querySelectorAll<HTMLElement>(
+                    "[data-vst-host-toggle]",
+                )) {
+                    doToggleEnable(input.id);
+                }
                 focus.restore(root);
             }
         },

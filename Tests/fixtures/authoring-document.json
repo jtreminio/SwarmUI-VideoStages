@@ -150,6 +150,10 @@
                             "weight": 0.5
                         }
                     ],
+                    "modelAttentionBackend": "comfy kitchen attention",
+                    "modelAttentionBackendEnabled": true,
+                    "useSparseAttention": "vsa",
+                    "useSparseAttentionEnabled": true,
                     "h3AttentionWindowSeconds": 2.5
                 },
                 {
@@ -177,6 +181,10 @@
                             "weight": 0.5
                         }
                     ],
+                    "modelAttentionBackend": "comfy kitchen attention",
+                    "modelAttentionBackendEnabled": true,
+                    "useSparseAttention": "vsa",
+                    "useSparseAttentionEnabled": true,
                     "h3AttentionWindowSeconds": 2.5
                 }
             ]
@@ -227,6 +235,8 @@
                     "sampler": "euler",
                     "scheduler": "normal",
                     "loras": [],
+                    "modelAttentionBackendEnabled": false,
+                    "useSparseAttentionEnabled": false,
                     "h3AttentionWindowSeconds": 0
                 }
             ]

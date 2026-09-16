@@ -511,9 +511,8 @@ public sealed class EffectiveVideoRequestProjectionTests
                     null),
             ],
         };
-        // Wan declaring only FrameReferences is what makes ic-lora unsupported here.
         Assert.Equal(
-            ArchitectureFeature.FrameReferences,
+            ArchitectureFeature.FrameReferences | ArchitectureFeature.StageAttention,
             WanArchitectureModule.Instance.Descriptor.Features);
         TimelineSpec spec = Spec(clip);
 

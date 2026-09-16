@@ -177,6 +177,11 @@ export const serializeClipsForStorage = (clips: Clip[]): StoredClip[] => {
                 sampler: stage.sampler,
                 scheduler: stage.scheduler,
                 h3AttentionWindowSeconds: stage.h3AttentionWindowSeconds,
+                modelAttentionBackend: stage.modelAttentionBackend,
+                modelAttentionBackendEnabled:
+                    stage.modelAttentionBackendEnabled,
+                useSparseAttention: stage.useSparseAttention,
+                useSparseAttentionEnabled: stage.useSparseAttentionEnabled,
                 ...(stage.characterRefine
                     ? { characterRefine: stage.characterRefine }
                     : {}),

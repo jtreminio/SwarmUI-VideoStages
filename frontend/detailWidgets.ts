@@ -197,7 +197,7 @@ export interface OptionSpec {
 export const buildOptionSelect = (
     specs: OptionSpec[],
     selected: string,
-    onChange: (value: string) => void,
+    onChange?: (value: string) => void,
 ): HTMLSelectElement => {
     const select = document.createElement("select");
     select.className = "auto-dropdown vst-audio-select";
@@ -210,7 +210,9 @@ export const buildOptionSelect = (
         opt.selected = spec.value === selected;
         select.appendChild(opt);
     }
-    select.addEventListener("change", () => onChange(select.value));
+    if (onChange) {
+        select.addEventListener("change", () => onChange(select.value));
+    }
     return select;
 };
 

@@ -157,6 +157,11 @@ export const buildDefaultStage = (
     const model = previousStage ? previousStage.model : defaultStageModel;
     return {
         h3AttentionWindowSeconds: previousStage?.h3AttentionWindowSeconds ?? 0,
+        modelAttentionBackend: previousStage?.modelAttentionBackend,
+        modelAttentionBackendEnabled:
+            previousStage?.modelAttentionBackendEnabled,
+        useSparseAttention: previousStage?.useSparseAttention,
+        useSparseAttentionEnabled: previousStage?.useSparseAttentionEnabled,
         loras: [],
         skipped: false,
         control: previousStage ? previousStage.control : defaults.control,
@@ -441,6 +446,19 @@ export const normalizeStage = (
         h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
             rawStage.h3AttentionWindowSeconds,
         ),
+        modelAttentionBackend: readRawStageString(
+            rawStage,
+            "modelAttentionBackend",
+        ),
+        modelAttentionBackendEnabled:
+            typeof rawStage.modelAttentionBackendEnabled === "boolean"
+                ? rawStage.modelAttentionBackendEnabled
+                : undefined,
+        useSparseAttention: readRawStageString(rawStage, "useSparseAttention"),
+        useSparseAttentionEnabled:
+            typeof rawStage.useSparseAttentionEnabled === "boolean"
+                ? rawStage.useSparseAttentionEnabled
+                : undefined,
         loras: normalizeStageLoras(rawStage.loras),
         id: normalizeOptionalEntityId(rawStage.id),
         skipped: !!rawStage.skipped,

@@ -75,6 +75,8 @@ internal static class WanClipPlanCompiler
                 && continuationStartStep < stage.Steps
                 && stage.Upscale == 1
                 && previousStage.Steps == stage.Steps
+                && previousStage.ModelAttentionBackend == stage.ModelAttentionBackend
+                && previousStage.UseSparseAttention == stage.UseSparseAttention
                 && string.Equals(
                     previousStage.Scheduler,
                     stage.Scheduler,

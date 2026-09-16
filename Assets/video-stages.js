@@ -540,6 +540,7 @@
 
   // frontend/architectures/generatedFeatures.ts
   var ARCHITECTURE_FEATURE_LABELS = {
+    stageAttention: "Stage attention",
     promptRelay: "Prompt relay",
     frameReferences: "Keyframes",
     stageReferenceStrengths: "Stage keyframe strengths",
@@ -3911,6 +3912,10 @@
     const model = previousStage ? previousStage.model : defaultStageModel;
     return {
       h3AttentionWindowSeconds: previousStage?.h3AttentionWindowSeconds ?? 0,
+      modelAttentionBackend: previousStage?.modelAttentionBackend,
+      modelAttentionBackendEnabled: previousStage?.modelAttentionBackendEnabled,
+      useSparseAttention: previousStage?.useSparseAttention,
+      useSparseAttentionEnabled: previousStage?.useSparseAttentionEnabled,
       loras: [],
       skipped: false,
       control: previousStage ? previousStage.control : defaults.control,
@@ -4076,6 +4081,13 @@
       h3AttentionWindowSeconds: normalizeH3AttentionWindowSeconds(
         rawStage.h3AttentionWindowSeconds
       ),
+      modelAttentionBackend: readRawStageString(
+        rawStage,
+        "modelAttentionBackend"
+      ),
+      modelAttentionBackendEnabled: typeof rawStage.modelAttentionBackendEnabled === "boolean" ? rawStage.modelAttentionBackendEnabled : void 0,
+      useSparseAttention: readRawStageString(rawStage, "useSparseAttention"),
+      useSparseAttentionEnabled: typeof rawStage.useSparseAttentionEnabled === "boolean" ? rawStage.useSparseAttentionEnabled : void 0,
       loras: normalizeStageLoras(rawStage.loras),
       id: normalizeOptionalEntityId(rawStage.id),
       skipped: !!rawStage.skipped,
@@ -4545,6 +4557,10 @@
     beforeIdField: "beforeStageId",
     patchKeys: [
       "h3AttentionWindowSeconds",
+      "modelAttentionBackend",
+      "modelAttentionBackendEnabled",
+      "useSparseAttention",
+      "useSparseAttentionEnabled",
       "loras",
       "skipped",
       "control",
@@ -6209,6 +6225,10 @@
           sampler: stage.sampler,
           scheduler: stage.scheduler,
           h3AttentionWindowSeconds: stage.h3AttentionWindowSeconds,
+          modelAttentionBackend: stage.modelAttentionBackend,
+          modelAttentionBackendEnabled: stage.modelAttentionBackendEnabled,
+          useSparseAttention: stage.useSparseAttention,
+          useSparseAttentionEnabled: stage.useSparseAttentionEnabled,
           ...stage.characterRefine ? { characterRefine: stage.characterRefine } : {}
         }))
       })
@@ -7957,7 +7977,9 @@
       opt.selected = spec.value === selected;
       select2.appendChild(opt);
     }
-    select2.addEventListener("change", () => onChange(select2.value));
+    if (onChange) {
+      select2.addEventListener("change", () => onChange(select2.value));
+    }
     return select2;
   };
   var buildNumber = (value, min, max, step, onChange) => {
@@ -9530,6 +9552,11 @@
       afterRender: () => {
         const root = host.getRoot();
         if (root) {
+          for (const input2 of root.querySelectorAll(
+            "[data-vst-host-toggle]"
+          )) {
+            doToggleEnable(input2.id);
+          }
           focus.restore(root);
         }
       },
@@ -13893,6 +13920,111 @@ ${slot}`;
     return body;
   };
 
+  // frontend/detailStrip/stagePanel/attentionSection.ts
+  var appendStageAttentionSection = (bindings) => {
+    const { context, clip, stage, stageIdx, fields, commit, slider } = bindings;
+    if (!context.authoring().capabilities.forClip(clip).decision("stageAttention").supported)
+      return;
+    const section = document.createElement("section");
+    section.className = "vst-stage-attention vst-stage-section vst-detail-span-full";
+    section.setAttribute("aria-label", `Attention for stage S${stageIdx}`);
+    const header = document.createElement("div");
+    header.className = "vst-stage-section-header";
+    const heading = document.createElement("h5");
+    heading.className = "vst-detail-crumb";
+    heading.textContent = "Attention";
+    header.append(heading);
+    const controls = document.createElement("div");
+    controls.className = "vst-detail-fields";
+    for (const [label, key, enabledKey, paramId] of [
+      [
+        "Model attention backend",
+        "modelAttentionBackend",
+        "modelAttentionBackendEnabled",
+        "modelattentionbackend"
+      ],
+      [
+        "Use sparse attention",
+        "useSparseAttention",
+        "useSparseAttentionEnabled",
+        "usesparseattention"
+      ]
+    ]) {
+      const choices = getDropdownOptions(paramId, `input_${paramId}`);
+      const selected = stage[key] ?? choices.values[0] ?? "";
+      const options = choices.values.map((value, index) => ({
+        value,
+        label: choices.labels[index] ?? value
+      }));
+      preserveSelectedOption(options, selected, "start", (value) => ({
+        value,
+        label: `${value} (unsupported persisted value)`,
+        disabled: true
+      }));
+      let enabled = stage[enabledKey] === true;
+      const select2 = tagFocus(buildOptionSelect(options, selected), key);
+      select2.dataset.vstHostToggle = "true";
+      const field = buildField(
+        label,
+        select2,
+        void 0,
+        key === "useSparseAttention" ? "Sol-Attn uses a training-free threshold (1.3). SLA and VSA keep 10% and require weights trained for their attention pattern; VSA is for FastH3. Sparse attention starts at 20% of sampling and stays dense below 12,288 tokens." : "Choose the attention implementation for this stage, including the dense fallback when sparse attention is active."
+      );
+      field.classList.add("vst-wide-select");
+      const toggle = buildToggleSwitch({
+        checked: enabled,
+        disabled: choices.values.length === 0,
+        title: `Enable ${label.toLowerCase()} for stage S${stageIdx}`,
+        onChange: (nextEnabled) => {
+          if (enabled === nextEnabled) return;
+          enabled = nextEnabled;
+          doToggleEnable(select2.id);
+          commit((target) => {
+            target[enabledKey] = enabled;
+            target[key] = select2.value;
+          });
+        }
+      });
+      toggle.querySelector("input")?.setAttribute("id", `${select2.id}_toggle`);
+      field.addEventListener("change", () => {
+        commit((target) => {
+          target[key] = select2.value;
+          target[enabledKey] = enabled;
+        });
+      });
+      const labelElement = field.querySelector("label");
+      if (labelElement) {
+        const labelRow = document.createElement("div");
+        labelRow.className = "vst-field-label-row";
+        labelElement.before(labelRow);
+        labelRow.append(labelElement, toggle);
+      }
+      controls.append(field);
+    }
+    if (context.authoring().capabilities.forClip(clip).architectureId === "minimax" && getVideoStagesHostBridge().hasBackendFeature(
+      H3_ATTENTION_WINDOW_FEATURE
+    )) {
+      const attentionWindow = slider(
+        "Attention window (s)",
+        "h3AttentionWindowSeconds",
+        stage.h3AttentionWindowSeconds,
+        H3_ATTENTION_WINDOW_MIN_SECONDS,
+        H3_ATTENTION_WINDOW_MAX_SECONDS,
+        H3_ATTENTION_WINDOW_STEP_SECONDS,
+        (target, value) => {
+          target.h3AttentionWindowSeconds = value;
+        },
+        {
+          help: "Total centered temporal attention window for this stage. 0 disables JuanAttn. Dense transformer layers remain fixed at 0,9,19,29,39,49."
+        }
+      );
+      attentionWindow.dataset.vstH3AttentionWindow = "true";
+      controls.append(attentionWindow);
+    }
+    section.append(header, controls);
+    fields.append(section);
+  };
+
   // frontend/detailStrip/stagePanel/characterRefineSection.ts
   var updateCharacterRefineAvailability = (section, upscale) => {
     setFieldDisabled(
@@ -14167,10 +14299,10 @@ ${slot}`;
     debouncedCommit
   }) => {
     const section = document.createElement("section");
-    section.className = "vst-stage-loras vst-detail-span-full";
+    section.className = "vst-stage-loras vst-stage-section vst-detail-span-full";
     section.setAttribute("aria-label", `LoRAs for stage S${stageIdx}`);
     const header = document.createElement("div");
-    header.className = "vst-stage-loras-header";
+    header.className = "vst-stage-section-header";
     const heading = document.createElement("h5");
     heading.className = "vst-detail-crumb";
     heading.textContent = `LoRAs · ${stage.loras.length}`;
@@ -14638,34 +14770,6 @@ ${slot}`;
     }
     fields.appendChild(schedulerField);
   };
-  var appendStageAttentionWindow = ({
-    context,
-    clip,
-    stage,
-    fields,
-    slider
-  }) => {
-    if (context.authoring().capabilities.forClip(clip).architectureId !== "minimax" || !getVideoStagesHostBridge().hasBackendFeature(
-      H3_ATTENTION_WINDOW_FEATURE
-    ))
-      return;
-    const attentionWindow = slider(
-      "Attention window (s)",
-      "h3AttentionWindowSeconds",
-      stage.h3AttentionWindowSeconds,
-      H3_ATTENTION_WINDOW_MIN_SECONDS,
-      H3_ATTENTION_WINDOW_MAX_SECONDS,
-      H3_ATTENTION_WINDOW_STEP_SECONDS,
-      (target, value) => {
-        target.h3AttentionWindowSeconds = value;
-      },
-      {
-        help: "Total centered temporal attention window for this stage. 0 disables JuanAttn. Dense transformer layers remain fixed at 0,9,19,29,39,49."
-      }
-    );
-    attentionWindow.dataset.vstH3AttentionWindow = "true";
-    fields.append(attentionWindow);
-  };
 
   // frontend/detailStrip/stagePanel/upscaleSection.ts
   var UPSCALE_EPSILON = 1e-6;
@@ -14809,7 +14913,6 @@ ${slot}`;
     appendStageModelSection(bindings);
     appendStageDenoisingSection(bindings);
     appendStageSamplerSchedulerSection(bindings);
-    appendStageAttentionWindow(bindings);
     if (isRefine) {
       const heading = document.createElement("div");
       heading.className = "vst-detail-sec vst-detail-span-full vst-detail-crumb vst-detail-subsection-crumb";
@@ -14821,6 +14924,7 @@ ${slot}`;
       appendStageUpscaleSection(bindings, isRefine);
     }
     appendStageReferenceGuideSection(bindings);
+    appendStageAttentionSection(bindings);
     appendStageLorasSection(bindings);
     appendCharacterRefineSection(bindings);
     if (initVideoStage0) {

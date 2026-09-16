@@ -16,6 +16,7 @@ const minimaxCatalog = (): ArchitectureModelCatalog => {
     const catalog = testArchitectureCatalog();
     catalog.architectures[0].id = "minimax";
     catalog.architectures[0].label = "MiniMax H3";
+    catalog.architectures[0].capabilities.features.push("stageAttention");
     for (const entry of catalog.entries) {
         entry.architectureId = "minimax";
         entry.modelProfileId = "minimax-h3";
@@ -65,6 +66,7 @@ describe("MiniMax H3 controls", () => {
             "Attention window (s)",
             "input.auto-slider-number",
         );
+        expect(number.closest(".vst-stage-attention")).not.toBeNull();
         expect(number.value).toBe("0");
         number.value = "2.5";
         number.dispatchEvent(new Event("input", { bubbles: true }));
