@@ -241,20 +241,21 @@ describe("production editor IC-LoRA panel", () => {
         expect(clips[0].icLoras).toHaveLength(1);
         expect(clips[0].icLoras[0]).toEqual({
             lora: IC_LORA_AUTO,
-            preset: "union-control",
-            driveSource: "Upload",
+            preset: "pixel-spatial-upscaler-2.5-x2",
+            driveSource: "Incoming",
             driveData: "visual",
             driveMediaKinds: ["image", "video"],
             stage: -1,
             strength: 1,
             attentionStrength: 1,
-            controlType: "depth",
+            controlType: "none",
             driveMedia: null,
         });
         expect(clips[0].stages[0].icLoraStrengths).toEqual([1]);
         expect(document.querySelector(".vst-detail-iclora")).not.toBeNull();
         expect(controlNetLabels()).not.toContain("LoRA");
-        expect(controlNetLabels()).toContain("Drive Media");
+        expect(controlNetLabels()).toContain("Source");
+        expect(icLoraSelect("Source").value).toBe("Incoming");
     });
 
     it("add IC-LoRA starts on a curated preset and hides its internal model", () => {
@@ -273,7 +274,9 @@ describe("production editor IC-LoRA panel", () => {
         const clips = lastSavedClips<Clip[]>(h.saveSpy);
         expect(clips[0].icLoras).toHaveLength(1);
         expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
-        expect(clips[0].icLoras[0].preset).toBe("union-control");
+        expect(clips[0].icLoras[0].preset).toBe(
+            "pixel-spatial-upscaler-2.5-x2",
+        );
         expect(controlNetLabels()).not.toContain("LoRA");
         expect(document.querySelectorAll(".vst-detail-iclora")).toHaveLength(1);
     });
@@ -292,18 +295,20 @@ describe("production editor IC-LoRA panel", () => {
         if (!presetSelect) {
             throw new Error("preset select missing");
         }
-        presetSelect.value = "union-control";
+        presetSelect.value = "pixel-spatial-upscaler-2.5-x2";
         presetSelect.dispatchEvent(new Event("change", { bubbles: true }));
         const clips = lastSavedClips<Clip[]>(h.saveSpy);
-        expect(clips[0].icLoras[0].preset).toBe("union-control");
+        expect(clips[0].icLoras[0].preset).toBe(
+            "pixel-spatial-upscaler-2.5-x2",
+        );
         expect(clips[0].icLoras[0].lora).toBe(IC_LORA_AUTO);
-        expect(clips[0].icLoras[0].controlType).toBe("depth");
+        expect(clips[0].icLoras[0].controlType).toBe("none");
         expect(clips[0].icLoras[0].strength).toBe(1);
         expect(clips[0].icLoras[0].driveMediaKinds).toEqual(["image", "video"]);
         expect(controlNetLabels()).not.toContain("LoRA");
     });
 
-    it("shows the Control select only for Custom and Union Control presets", () => {
+    it("shows the Control select for Custom and hides it for curated presets", () => {
         h.setup([
             {
                 duration: 4,
@@ -318,15 +323,15 @@ describe("production editor IC-LoRA panel", () => {
                     ".vst-detail-iclora .vst-detail-field-label",
                 ),
             ).map((el) => el.textContent);
-        // Custom (no preset) could be a third-party control LoRA, so Control shows.
+        // Custom LoRAs may need control preprocessing.
         expect(labels()).toContain("Control");
         changeIcLoraSelect("Preset", "deblur");
         expect(labels()).not.toContain("Control");
-        changeIcLoraSelect("Preset", "union-control");
+        changeIcLoraSelect("Preset", "custom");
         expect(labels()).toContain("Control");
     });
 
-    it("gives LipDub Upload or Incoming audio without visual-guide controls", () => {
+    it("gives an authored audio LoRA Upload or Incoming audio without visual-guide controls", () => {
         h.setup([
             {
                 duration: 4,
@@ -546,8 +551,7 @@ describe("production editor IC-LoRA panel", () => {
             "Source",
             "Drive Media",
         ]);
-        // Incoming is disabled because the all-stages target includes a
-        // generated stage 0.
+        // The all-stages target includes stage 0, which has no incoming media.
         expect(icLoraSelect("Source").options[1].disabled).toBe(true);
     });
 
@@ -848,12 +852,14 @@ describe("production editor IC-LoRA panel", () => {
             },
         ]);
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
-        expect(icLoraSelect("Preset").value).toBe("union-control");
+        expect(icLoraSelect("Preset").value).toBe(
+            "pixel-spatial-upscaler-2.5-x2",
+        );
         expect(controlNetLabels()).not.toContain("LoRA");
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledTimes(1);
         expect(swarmGlobals.makeWSRequest).toHaveBeenCalledWith(
             "VideoStagesDownloadIcLoraWS",
-            { presetId: "union-control" },
+            { presetId: "pixel-spatial-upscaler-2.5-x2" },
             expect.any(Function),
             0,
             expect.any(Function),
@@ -865,7 +871,7 @@ describe("production editor IC-LoRA panel", () => {
         onData({ success: true });
         expect(swarmGlobals.refreshParameterValues).toHaveBeenCalledWith(true);
         expect(detail()?.textContent).toContain(
-            "Downloaded to LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-union-control-ref0_5",
+            "Downloaded to LTX-2/IC-LoRA/ltx-2_5-22b-ic-lora-pixel-spatial-upscaler-x2-1_0",
         );
     });
 
@@ -939,13 +945,13 @@ describe("production editor IC-LoRA panel", () => {
             ],
             [
                 "lora-x.safetensors",
-                "LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-deblur-0_9",
+                "LTX-2/IC-LoRA/ltx-2_5-22b-ic-lora-deblur-0_9",
             ],
         );
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(swarmGlobals.makeWSRequest).not.toHaveBeenCalled();
         expect(detail()?.textContent).toContain(
-            "Using LTX-2/IC-LoRA/ltx-2_3-22b-ic-lora-deblur-0_9",
+            "Using LTX-2/IC-LoRA/ltx-2_5-22b-ic-lora-deblur-0_9",
         );
     });
 
@@ -959,12 +965,12 @@ describe("production editor IC-LoRA panel", () => {
                     icLoras: [{ lora: IC_LORA_AUTO, preset: "deblur" }],
                 },
             ],
-            ["LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9"],
+            ["LTX-2/IC-LoRA/ltx-2.5-22b-ic-lora-deblur-0.9"],
         );
         setSelection({ kind: "clip", clipIdx: 0, stageIdx: 0 });
         expect(swarmGlobals.makeWSRequest).not.toHaveBeenCalled();
         expect(detail()?.textContent).toContain(
-            "Using LTX-2/IC-LoRA/ltx-2.3-22b-ic-lora-deblur-0.9",
+            "Using LTX-2/IC-LoRA/ltx-2.5-22b-ic-lora-deblur-0.9",
         );
     });
 

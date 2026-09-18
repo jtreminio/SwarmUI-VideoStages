@@ -9,10 +9,8 @@ import { boundaryWindowConstraints } from "./architectures/boundaryConstraints";
 import { parseVideoArchitectureCatalog } from "./architectures/catalog";
 import {
     DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT,
-    findIcLoraPreset,
     IC_LORA_PRESETS,
     icLoraAutoModelName,
-    icLoraDriveMediaContract,
     icLoraDriveMediaContractForData,
     icLoraLegacyAutoModelName,
 } from "./architectures/ltx2/icLoraPresets";
@@ -30,9 +28,7 @@ import { canonicalControlNetSource } from "./mediaSourceSyntax";
 import { framesForClip } from "./renderUtils";
 import type { BoundaryOut, Clip } from "./types";
 
-// Frontend halves of the cross-language drift tests. Each asserts against the same JSON fixture in
-// Tests/fixtures/ that the C# CrossLanguageMirrorTests reads, so a deliberate constant change on
-// either side breaks the pair.
+// Share fixtures with C# CrossLanguageMirrorTests to catch drift on either side.
 const fixturesDir = path.resolve(__dirname, "..", "Tests", "fixtures");
 const loadFixture = <T>(name: string): T =>
     JSON.parse(fs.readFileSync(path.join(fixturesDir, name), "utf8")) as T;
@@ -255,7 +251,7 @@ describe("cross-language mirror: LTX IC-LoRA Drive Media contracts", () => {
         expect(contract.visual.driveMediaKinds).toEqual(
             DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT.acceptedKinds,
         );
-        expect(icLoraDriveMediaContract(findIcLoraPreset("lipdub"))).toEqual({
+        expect(icLoraDriveMediaContractForData("audio")).toEqual({
             acceptedKinds: contract.audio.acceptedKinds,
             driveData: contract.audio.driveData,
         });

@@ -234,8 +234,7 @@ describe("normalization", () => {
     });
 
     it("re-resolves a stale architecture hint when the model still resolves", () => {
-        // A model can change hands between architectures between saves; the persisted hint is
-        // repair information for an unresolvable model, not a pin.
+        // Persisted hints repair unresolved models; resolved identity takes precedence.
         const clip = normalizeClip(
             {
                 architectureHint: "host-video",
@@ -610,9 +609,9 @@ describe("normalization", () => {
             }),
         ).toMatchObject({
             lora: "[AUTO]",
-            preset: "union-control",
+            preset: "pixel-spatial-upscaler-2.5-x2",
             strength: 1,
-            controlType: "depth",
+            controlType: "none",
         });
     });
 
@@ -627,8 +626,7 @@ describe("normalization", () => {
         ).toBe("Incoming");
     });
 
-    // The backend's Compact drops spaces and nothing else, so a tab-bearing spelling stays
-    // unrecognized there. This is the case that separates the two compacting rules.
+    // Backend Compact removes spaces but preserves tabs.
     it("leaves a tab inside the legacy drive source alone, as the backend does", () => {
         expect(
             normalizeIcLora({
@@ -1649,8 +1647,7 @@ describe("clip reference media scale", () => {
         [0.5, 0.5],
         [0.25, 0.25],
         [1, 1],
-        // Outside the offered factors, so it falls back rather than resampling
-        // to a size nobody picked.
+        // Unsupported factors must fall back.
         [0.7, 1],
         ["half", 1],
         [undefined, 1],
@@ -1724,9 +1721,6 @@ describe("clip length from a reference", () => {
         ).toBe(2);
     });
 
-    /**
-     * A driving reference uses its trimmed length for the clip duration.
-     */
     it("takes the trimmed length, not the file's, from a driving reference", () => {
         expect(
             clipWith([videoReference({ startSeconds: 1, lengthSeconds: 2.5 })])

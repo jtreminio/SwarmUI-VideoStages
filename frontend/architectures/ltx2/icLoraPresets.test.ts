@@ -3,9 +3,14 @@ import {
     DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT,
     findIcLoraPreset,
     icLoraDriveMediaContract,
+    icLoraDriveMediaContractForData,
 } from "./icLoraPresets";
 
-describe("LTX IC-LoRA drive-media contracts", () => {
+describe("LTX IC-LoRA presets", () => {
+    it("uses the pre-scaled Water Simulation strength", () => {
+        expect(findIcLoraPreset("water-simulation")?.strength).toBe(1);
+    });
+
     it("keeps Custom and unknown presets on visual image/video media", () => {
         expect(icLoraDriveMediaContract(null)).toEqual(
             DEFAULT_IC_LORA_DRIVE_MEDIA_CONTRACT,
@@ -15,8 +20,8 @@ describe("LTX IC-LoRA drive-media contracts", () => {
         );
     });
 
-    it("makes LipDub extract audio from audio or video media", () => {
-        expect(icLoraDriveMediaContract(findIcLoraPreset("lipdub"))).toEqual({
+    it("accepts audio or video for audio-consuming LoRAs", () => {
+        expect(icLoraDriveMediaContractForData("audio")).toEqual({
             acceptedKinds: ["audio", "video"],
             driveData: "audio",
         });

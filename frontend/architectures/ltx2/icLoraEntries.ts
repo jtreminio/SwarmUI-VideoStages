@@ -1,3 +1,4 @@
+import { MEDIA_SOURCE_INCOMING } from "../../generatedMediaSource";
 import { defaultLoraWeight } from "../../loraAuthoring";
 import {
     appendIcLoraStrengthToClip,
@@ -25,6 +26,7 @@ export const appendDefaultIcLora = (
         defaultIcLora({
             lora: IC_LORA_AUTO,
             preset: preset.id,
+            driveSource: MEDIA_SOURCE_INCOMING,
             strength: preset.strength,
             controlType: preset.controlType,
             driveData: contract.driveData,

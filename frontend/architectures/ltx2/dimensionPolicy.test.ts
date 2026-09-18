@@ -58,16 +58,19 @@ describe("LTX dimension policy", () => {
     it("resolves preset and exact curated-model factors", () => {
         expect(
             icLoraDimensionFactor(
-                icLora({ preset: "union-control", lora: "[AUTO]" }),
+                icLora({
+                    preset: "pixel-spatial-upscaler-2.5-x2",
+                    lora: "[AUTO]",
+                }),
             ),
         ).toBe(2);
         expect(
             icLoraDimensionFactor(
                 icLora({
-                    lora: "folder/ltx-2.3-22b-ic-lora-pixel-spatial-upscaler-x4-0.9.safetensors",
+                    lora: "folder/ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors",
                 }),
             ),
-        ).toBe(4);
+        ).toBe(2);
     });
 
     it("matches every curated factor in the shared backend fixture", () => {
@@ -103,18 +106,17 @@ describe("LTX dimension policy", () => {
         expect(
             icLoraDimensionFactor(
                 icLora({
-                    lora: "FOLDER\\LTX-2.3-22B-IC-LORA-PIXEL-SPATIAL-UPSCALER-X4-0.9.SAFETENSORS",
+                    lora: "FOLDER\\LTX-2.5-22B-IC-LORA-PIXEL-SPATIAL-UPSCALER-X2-1.0.SAFETENSORS",
                 }),
             ),
-        ).toBe(4);
+        ).toBe(2);
         expect(
             icLoraDimensionFactor(
                 icLora({
-                    preset: "pixel-spatial-upscaler-x2",
+                    preset: "pixel-spatial-upscaler-2.5-x2",
                     lora:
-                        presetCases.find(
-                            (entry) => entry.id === "pixel-spatial-upscaler-x4",
-                        )?.autoModelName ?? "",
+                        presetCases.find((entry) => entry.id === "deblur")
+                            ?.autoModelName ?? "",
                 }),
             ),
         ).toBe(2);
@@ -125,11 +127,11 @@ describe("LTX dimension policy", () => {
 
     it("raises the global grid by the largest active IC-LoRA factor", () => {
         const state = clip(
-            icLora({ preset: "union-control" }),
-            icLora({ preset: "pixel-spatial-upscaler-x4" }),
+            icLora({ preset: "deblur" }),
+            icLora({ preset: "pixel-spatial-upscaler-2.5-x2" }),
         );
-        expect(ltx2DimensionFactor(state)).toBe(4);
-        expect(ltx2DimensionMultiple(state)).toBe(128);
+        expect(ltx2DimensionFactor(state)).toBe(2);
+        expect(ltx2DimensionMultiple(state)).toBe(64);
     });
 
     it("contributes the IC-LoRA grid through the architecture registry", () => {
@@ -137,7 +139,14 @@ describe("LTX dimension policy", () => {
             width: 1232,
             height: 688,
             dimsExplicit: true,
-            clips: [clip(icLora({ preset: "union-control", lora: "[AUTO]" }))],
+            clips: [
+                clip(
+                    icLora({
+                        preset: "pixel-spatial-upscaler-2.5-x2",
+                        lora: "[AUTO]",
+                    }),
+                ),
+            ],
         } as AuthoringDocument;
 
         const catalog = testArchitectureCatalog();
@@ -153,7 +162,7 @@ describe("LTX dimension policy", () => {
 
     it("uses resolved Stage-0 identity for architecture dimension behavior", () => {
         const resolvedLtx = clip(
-            icLora({ preset: "union-control", lora: "[AUTO]" }),
+            icLora({ preset: "pixel-spatial-upscaler-2.5-x2", lora: "[AUTO]" }),
         );
         resolvedLtx.architectureHint = "stale-foreign-hint";
         const unresolved = structuredClone(resolvedLtx);

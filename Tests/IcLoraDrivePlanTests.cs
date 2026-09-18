@@ -278,12 +278,12 @@ public class IcLoraDrivePlanTests
                 Constants.IcLoraControlNone,
                 null,
                 DriveData: IcLoraDriveData.None,
-                Preset: "pixel-spatial-upscaler-x4"),
+                Preset: "pixel-spatial-upscaler-2.5-x2"),
         ]);
 
         IcLoraPlan plan = Assert.Single(PlansFor(clip, clip.Stages[0]));
 
-        Assert.Equal(4, plan.DimensionDownscaleFactor);
+        Assert.Equal(2, plan.DimensionDownscaleFactor);
     }
 
     [Fact]
@@ -298,7 +298,7 @@ public class IcLoraDrivePlanTests
                 Constants.IcLoraControlNone,
                 null,
                 DriveData: IcLoraDriveData.None,
-                Preset: "union-control"),
+                Preset: "pixel-spatial-upscaler-2.5-x2"),
         ]);
 
         VideoExecutionPlan execution = TestPlanCompiler.Compile(

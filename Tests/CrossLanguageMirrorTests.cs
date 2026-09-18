@@ -60,9 +60,7 @@ public class CrossLanguageMirrorTests
         }
     }
 
-    /// <summary>The frontend re-derives this grammar rather than calling the backend, so both
-    /// halves read the same cases — including the space compacting, and the sign and tab that
-    /// int.TryParse would accept if it were not held to NumberStyles.None.</summary>
+    // Shared cases reject signs and tabs that int.TryParse otherwise accepts.
     [Fact]
     public void ControlNetSourceParsing_MatchesSharedFixture()
     {
@@ -80,8 +78,7 @@ public class CrossLanguageMirrorTests
         }
     }
 
-    /// <summary>The unsnapped side of each case is whatever core's own aspect-ratio arithmetic
-    /// produces, so it is read back off a request rather than recomputed here.</summary>
+    // Read unsnapped dimensions from core rather than duplicating its arithmetic.
     [Fact]
     public void DimensionSnap_MatchesSharedFixture()
     {
@@ -193,24 +190,23 @@ public class CrossLanguageMirrorTests
     public void IcLoraDimensionPolicy_ResolvesCuratedModelAliases()
     {
         Assert.Equal(
-            4,
+            2,
             IcLoraDimensionPolicy.Resolve(
                 "custom",
-                "FOLDER\\LTX-2.3-22B-IC-LORA-PIXEL-SPATIAL-UPSCALER-X4-0.9.SAFETENSORS"));
+                "FOLDER\\LTX-2.5-22B-IC-LORA-PIXEL-SPATIAL-UPSCALER-X2-1.0.SAFETENSORS"));
         Assert.Equal(
             2,
             IcLoraDimensionPolicy.Resolve(
                 "custom",
-                IcLoraWeights.LegacyModelNameFor("union-control")));
+                IcLoraWeights.LegacyModelNameFor("pixel-spatial-upscaler-2.5-x2")));
         Assert.Equal(
             2,
             IcLoraDimensionPolicy.Resolve(
-                "pixel-spatial-upscaler-x2",
-                IcLoraWeights.ModelNameFor("pixel-spatial-upscaler-x4")));
+                "pixel-spatial-upscaler-2.5-x2",
+                IcLoraWeights.ModelNameFor("deblur")));
         Assert.Equal(1, IcLoraDimensionPolicy.Resolve("custom", "third-party-x4"));
     }
 
-    /// <summary>Auto-download names must survive core filename cleaning and remain distinct.</summary>
     [Fact]
     public void IcLoraAutoModelNames_SurviveCoreFilenameCleaning()
     {

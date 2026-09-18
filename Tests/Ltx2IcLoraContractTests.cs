@@ -11,8 +11,7 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>Where a stage's positive conditioning is asserted by identity, it holds because no clip
-/// here authors a retake: LtxAudioWindowMasker would legitimately interpose its window node.</summary>
+// These clips omit retakes, which would interpose LtxAudioWindowMasker in conditioning.
 [Collection("VideoStagesTests")]
 public class Ltx2IcLoraContractTests
 {
@@ -92,11 +91,10 @@ public class Ltx2IcLoraContractTests
         return null;
     }
 
-    /// <summary>Production tries the underscored name first and falls back to the dotted one,
-    /// which predates the `.`→`_` rename. Both arms owe the same wiring contract.</summary>
+    // Both current and older dotted download names must resolve.
     [Theory]
-    [InlineData("ltx-2_3-22b-ic-lora-deblur-0_9")]
-    [InlineData("ltx-2.3-22b-ic-lora-deblur-0.9")]
+    [InlineData("ltx-2_5-22b-ic-lora-deblur-0_9")]
+    [InlineData("ltx-2.5-22b-ic-lora-deblur-0.9")]
     public async Task Auto_ic_lora_resolves_either_installed_weight_name(string stem)
     {
         string installed = $"LTX-2/IC-LoRA/{stem}.safetensors";
@@ -200,7 +198,6 @@ public class Ltx2IcLoraContractTests
         Assert.All(stages, stage => Assert.Same(loader, stage.Model.Connection?.Node));
         LTXAddVideoICLoRAGuideNode[] guides = [.. stages.Select(stage =>
             Assert.IsType<LTXAddVideoICLoRAGuideNode>(stage.Positive.Connection?.Node))];
-        // One guide each, and no third stacked anywhere in the graph.
         Assert.Equal(2, guides.Distinct().Count());
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>().Count);
 
@@ -651,11 +648,7 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Preflight reads an uploaded drive through a different entry point per media kind, picked
-    /// from the payload's data-URI prefix, and each one refuses the whole request rather than
-    /// dropping the entry. The expected text is the arm's own, so no arm can stand in for another.
-    /// </summary>
+    // Each media kind has its own preflight reader and refusal message.
     [Theory]
     [InlineData(
         IcLoraDriveData.Audio,
@@ -681,8 +674,7 @@ public class Ltx2IcLoraContractTests
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
         fixture.InstallModel("LoRA", "UnitTest_IcLoraA.safetensors");
 
-        // The exact type is the claim: an internal crash escaping the route is also an
-        // InvalidOperationException, and only a readable refusal reaches the user as a message.
+        // A generic InvalidOperationException could be an internal crash, not a readable refusal.
         SwarmReadableErrorException refusal =
             await Assert.ThrowsAsync<SwarmReadableErrorException>(
                 () => fixture.GenerateAsync(MakeDocument(IcLoraClip(
@@ -830,9 +822,7 @@ public class Ltx2IcLoraContractTests
         Assert.Equal(2, guides.Length);
         ImageFromBatchNode[] guideTrims = [.. guides.Select(
             guide => Assert.IsType<ImageFromBatchNode>(guide.Image.Connection?.Node))];
-        // 0.6s at 24 fps snaps up to 17 frames, and each guide covers those plus the handle ahead
-        // of them. 17 frames cannot fund a full overlap, so the budget fit steps the handle down to
-        // the policy floor, which Ltx2BoundaryPolicy declares with this same constant.
+        // The 17-frame clip cannot fund a full overlap; the handle falls to the policy floor.
         Assert.All(
             guideTrims,
             trim => Assert.Equal(
@@ -1013,9 +1003,7 @@ public class Ltx2IcLoraContractTests
             bridge.Graph.NodesOfType<LTXVAudioVAEEncodeNode>());
         Assert.Same(encode, refTokens.AudioLatent.Connection?.Node);
 
-        // The node counts above are satisfied by a stage-0-only application. Identity, not
-        // reachability: two samplers reaching the node proves nothing about reuse, since a
-        // refining stage reaches its predecessor's branch through the latent.
+        // Refinement reaches its predecessor through the latent. Assert direct conditioning identity.
         SwarmKSamplerNode[] stages = [StageSampler(bridge, 0), StageSampler(bridge, 1)];
         Assert.All(
             stages,
@@ -1026,8 +1014,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>The control for the identity assertion above: scope the same entry to stage 0 and
-    /// the second sampler must stop naming the reference node.</summary>
     [Fact]
     public async Task Lipdub_scoped_to_stage_zero_leaves_the_later_stage_alone()
     {
@@ -1057,8 +1043,7 @@ public class Ltx2IcLoraContractTests
 
         Assert.Same(refTokens, scoped.Positive.Connection?.Node);
         Assert.Same(loader, scoped.Model.Connection?.Node);
-        // Identity for both, and for the same reason: stage 1 refines stage 0's latent, so it
-        // reaches every node stage 0 sampled through. Only what it names directly is evidence.
+        // Refinement reaches stage 0 through the latent; only direct identity proves the scope.
         Assert.NotSame(refTokens, unscoped.Positive.Connection?.Node);
         Assert.NotSame(loader, unscoped.Model.Connection?.Node);
 
@@ -1164,9 +1149,6 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>What the warning names is whatever the resolver looked for: the preset's own
-    /// downloaded weight name, the preset text when the preset carries none, or a stand-in when no
-    /// preset was authored.</summary>
     public static TheoryData<string, string> UninstalledAutoWeights() => new()
     {
         { null, "[unspecified preset]" },
@@ -1204,9 +1186,7 @@ public class Ltx2IcLoraContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>The diagnostic text is interpolated per stream and media kind, so the code is what
-    /// identifies the refusal; <see cref="IcLoraDrivePlanTests"/> owns the compiler's side of it.
-    /// </summary>
+    // Diagnostic codes identify the refusal independently of stream-specific wording.
     [Theory]
     [InlineData(null, "ltx2.ic-lora.drive-media-missing")]
     [InlineData(DriveImage, "ltx2.ic-lora.drive-media-kind-unsupported")]

@@ -349,7 +349,7 @@ public class VideoExecutionPlanCompilerTests
                 Constants.IcLoraControlCanny,
                 new UploadedMediaSpec("data:image/png;base64,Qg==", "drive.png"),
                 DriveData: IcLoraDriveData.Visual,
-                Preset: "pixel-spatial-upscaler-x2",
+                Preset: "pixel-spatial-upscaler-2.5-x2",
                 Stage: 1),
             new(
                 "control.safetensors",
