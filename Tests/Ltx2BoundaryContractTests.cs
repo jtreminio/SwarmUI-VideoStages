@@ -70,7 +70,10 @@ public class Ltx2BoundaryContractTests
                 && node.Length.LiteralAsInt() == ContinueOverlap
                 && node.Image.Connection?.Node.Id == sourceNodeId
                 && bridge.Graph.FindInputsConnectedTo(node.IMAGE).Any(
-                    consumer => consumer.Node is ImageScaleNode or LTXVPreprocessNode));
+                    consumer => consumer.Node is ImageScaleNode
+                        || consumer.Node is SplitImageWithAlphaNode split
+                            && bridge.Graph.FindInputsConnectedTo(split.IMAGE).Any(
+                                next => next.Node is LTXVPreprocessNode)));
 
     /// <summary>
     /// Image scales between an in-place anchor and the continuity tail, or null when the anchor
@@ -91,7 +94,7 @@ public class Ltx2BoundaryContractTests
                     current = scale.Image.Connection;
                     break;
                 case LTXVPreprocessNode preprocess:
-                    current = preprocess.Image.Connection;
+                    current = PreprocessSource(preprocess);
                     break;
                 default:
                     return null;

@@ -1,4 +1,5 @@
 using ComfyTyped.Core;
+using ComfyTyped.SwarmUI;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
@@ -17,7 +18,7 @@ public class Ltx2StageChainContractTests
 
     private static ImageScaleNode FramingOf(LTXVImgToVideoInplaceNode guide) =>
         Assert.IsType<ImageScaleNode>(
-            Assert.IsType<LTXVPreprocessNode>(guide.Image.Connection?.Node).Image.Connection?.Node);
+            PreprocessSource(Assert.IsType<LTXVPreprocessNode>(guide.Image.Connection?.Node)).Node);
 
     [Fact]
     public async Task Stage_zero_injects_the_host_base_image_as_its_guide_exactly_once()
@@ -725,32 +726,63 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    [Fact]
-    public async Task Native_ltx_stage_can_use_base2edit_edit_stage_as_clip_ref_image()
+    [Theory]
+    [InlineData("crop")]
+    [InlineData("stretch")]
+    [InlineData("fit")]
+    [InlineData("fit-green")]
+    public async Task Native_ltx_stage_strips_base2edit_alpha_for_opening_and_later_keyframes(string framing)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject stage = fixture.Stage(control: 0.5);
         stage.Remove("imageReference");
-        stage["keyframeStrengths"] = new JArray(0.35);
-        JObject clip = MakeClipWithRefs([MakeRef("edit0", frame: 1)], stage);
+        stage["keyframeStrengths"] = new JArray(0.35, 0.6);
+        JObject clip = MakeClipWithRefs([MakeRef("edit0", frame: 1), MakeRef("edit0", frame: 2)], stage);
+        clip["referenceFraming"] = framing;
+        WorkflowGenerator.WorkflowGenStep publish = PublishBase2EditImageStep(0);
+        WorkflowGenerator.WorkflowGenStep publishRgba = new(g =>
+        {
+            publish.Action(g);
+            using WorkflowBridge bridge = BridgeSync.For(g);
+            JObject payload = JObject.Parse(g.NodeHelpers["b2e.published.edit.0"]);
+            SolidMaskNode alpha = bridge.AddNode(new SolidMaskNode().With(Value: 0.5, Width: 640, Height: 960));
+            JoinImageWithAlphaNode rgba = bridge.AddNode(new JoinImageWithAlphaNode());
+            rgba.Image.ConnectFromPath(bridge, (JArray)payload["media"]["path"]);
+            rgba.Alpha.ConnectTo(alpha.MASK);
+            payload["media"]["path"] = rgba.IMAGE.ToPath();
+            g.NodeHelpers["b2e.published.edit.0"] = payload.ToString();
+        }, publish.Priority);
 
         JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
             fixture.ImageToVideoPost(MakeDocument(clip)),
-            extraSteps: [PublishBase2EditImageStep(0)]);
+            extraSteps: [publishRgba]);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        SwarmLoadImageB64Node published = Assert.Single(
-            bridge.Graph.NodesOfType<SwarmLoadImageB64Node>());
+        JoinImageWithAlphaNode published = Assert.Single(bridge.Graph.NodesOfType<JoinImageWithAlphaNode>());
         LTXVImgToVideoInplaceNode guide = Assert.Single(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
-        Assert.Same(published, FramingOf(guide).Image.Connection?.Node);
+        SplitImageWithAlphaNode rgb = Assert.Single(bridge.Graph.NodesOfType<SplitImageWithAlphaNode>());
+        LTXVPreprocessNode preprocess = Assert.Single(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
+        Assert.Same(rgb.IMAGE, preprocess.Image.Connection);
+        INodeOutput framedSource = rgb.Image.Connection?.Node switch
+        {
+            ImageScaleNode scale => scale.Image.Connection,
+            SwarmFrameImageNode frame => frame.ImagesInput.Connection,
+            _ => null,
+        };
+        Assert.Same(published.IMAGE, framedSource);
+        Assert.Same(preprocess.OutputImage, guide.Image.Connection);
         Assert.Equal(0.35, guide.Strength.LiteralAsDouble());
+        LTXVAddGuideNode laterGuide = Assert.Single(bridge.Graph.NodesOfType<LTXVAddGuideNode>());
+        Assert.Same(preprocess.OutputImage, laterGuide.Image.Connection);
+        Assert.Equal(0.6, laterGuide.Strength.LiteralAsDouble());
+        Assert.Same(guide.Latent, laterGuide.LatentInput.Connection);
 
         SwarmKSamplerNode stageSampler = StageSampler(bridge, 0);
-        Assert.Same(guide, JointLatentOf(stageSampler).VideoLatent.Connection?.Node);
+        Assert.Same(laterGuide, JointLatentOf(stageSampler).VideoLatent.Connection?.Node);
 
-        live.AssertAllLive(published, guide, stageSampler);
+        live.AssertAllLive(published, rgb, preprocess, guide, laterGuide, stageSampler);
         AssertShippable(bridge, workflow, live);
     }
 

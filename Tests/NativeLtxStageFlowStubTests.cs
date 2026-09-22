@@ -48,7 +48,7 @@ public partial class StageFlowTests
         LTXVPreprocessNode preprocessNode = Assert.Single(bridge.Graph.NodesOfType<LTXVPreprocessNode>());
         AssertGuideReferenceResolvesToPreprocessInput(
             workflow,
-            WorkflowBridge.ToPath(preprocessNode.Image.Connection!),
+            WorkflowBridge.ToPath(PreprocessSource(preprocessNode)),
             store.Generated);
 
         LTXVImgToVideoInplaceNode imgToVideoNode = Assert.Single(bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());

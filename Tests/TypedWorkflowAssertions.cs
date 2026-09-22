@@ -15,6 +15,13 @@ public readonly record struct WorkflowNode(string Id, JObject Node);
 
 internal static class TypedWorkflowAssertions
 {
+    internal static INodeOutput PreprocessSource(LTXVPreprocessNode preprocess)
+    {
+        SplitImageWithAlphaNode split = Assert.IsType<SplitImageWithAlphaNode>(preprocess.Image.Connection?.Node);
+        Assert.Same(split.IMAGE, preprocess.Image.Connection);
+        return Assert.IsAssignableFrom<INodeOutput>(split.Image.Connection);
+    }
+
     /// <summary>Fails when the graph has a dependency cycle (Comfy refuses to run such a workflow).</summary>
     public static void AssertAcyclic(WorkflowBridge bridge)
     {

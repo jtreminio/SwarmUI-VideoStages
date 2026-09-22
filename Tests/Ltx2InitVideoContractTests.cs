@@ -392,10 +392,9 @@ public class Ltx2InitVideoContractTests
         Assert.Same(conform.IMAGE, FootageEncodeOf(refine).Pixels.Connection);
         // Direct wiring distinguishes added framing from a rewritten conform scale.
         ImageScaleNode lastFraming = Assert.IsType<ImageScaleNode>(
-            Assert.IsType<LTXVPreprocessNode>(
+            PreprocessSource(Assert.IsType<LTXVPreprocessNode>(
                 Assert.IsType<LTXVImgToVideoInplaceNode>(
-                    JointLatentOf(last).VideoLatent.Connection?.Node).Image.Connection?.Node)
-                .Image.Connection?.Node);
+                    JointLatentOf(last).VideoLatent.Connection?.Node).Image.Connection?.Node)).Node);
         Assert.Equal(2048, lastFraming.Width.LiteralAsInt());
         Assert.Same(conform.IMAGE, lastFraming.Image.Connection);
 

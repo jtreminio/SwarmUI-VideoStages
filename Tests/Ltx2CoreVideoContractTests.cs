@@ -167,7 +167,7 @@ public class Ltx2CoreVideoContractTests
 
     /// <summary>The <c>ImageScale</c> that frames a guide image for its stage.</summary>
     private static ImageScaleNode FramingOf(LTXVPreprocessNode preprocess) =>
-        Assert.IsType<ImageScaleNode>(preprocess.Image.Connection?.Node);
+        Assert.IsType<ImageScaleNode>(PreprocessSource(preprocess).Node);
 
     private static SwarmSaveAnimationWSNode AssertPublishesGeneratorMedia(
         WorkflowBridge bridge,
@@ -703,7 +703,7 @@ public class Ltx2CoreVideoContractTests
 
         LTXVPreprocessNode preprocess = Assert.Single(
             bridge.Graph.NodesOfType<LTXVPreprocessNode>());
-        Assert.Same(framing.IMAGE, preprocess.Image.Connection);
+        Assert.Same(framing.IMAGE, PreprocessSource(preprocess));
         LTXVImgToVideoInplaceNode guide = Assert.Single(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
         Assert.Equal(0.55, guide.Strength.LiteralAsDouble());

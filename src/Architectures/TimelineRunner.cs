@@ -267,6 +267,7 @@ internal sealed class TimelineRunner
             _generator,
             Constants.SweptHostRootNodesKey,
             rootSession.DisplacedRootRemovals);
+        LtxPreprocessInputs.EnsureRgb(_generator);
         CollapseDuplicateNodes();
     }
 
