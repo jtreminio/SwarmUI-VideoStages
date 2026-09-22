@@ -428,6 +428,13 @@ describe("refineVideoButton", () => {
                         prompt: "selected result prompt",
                         seed: 123,
                     },
+                    sui_extra_data: {
+                        original_prompt:
+                            "<lora:example:1>selected result prompt",
+                        videostages_source_sampler_seed: "987",
+                        prompted_loras: ["example"],
+                        parser_warnings: ["source warning"],
+                    },
                 }),
             interpretMediaMetadata: (metadata: string) => metadata,
             toDataUrl: async () => "data:video/mp4;base64,AA==",
@@ -454,6 +461,10 @@ describe("refineVideoButton", () => {
             images: 1,
             prompt: "selected result prompt",
             seed: 123,
+        });
+        expect(overrides.extra_metadata).toEqual({
+            original_prompt: "<lora:example:1>selected result prompt",
+            videostages_source_sampler_seed: "987",
         });
         const refinedDocument = JSON.parse(
             String(overrides.videostages),
@@ -821,7 +832,11 @@ describe("refineVideoButton", () => {
                     "<wildcard:colors> <getvar:animal>",
                 original_negativeprompt: "<random:blur|noise>",
                 used_wildcards: ["colors"],
+                prompted_loras: ["example"],
+                used_embeddings: ["example-embedding"],
+                parser_warnings: ["source warning"],
                 prompt_variables: { animal: "bird" },
+                generation_time: "12 seconds",
             },
         };
         const base = createDefaultVideoStagesHostBridge();
@@ -858,7 +873,12 @@ describe("refineVideoButton", () => {
             textaudiokeyscale: "Ab major",
             textaudiosigmashift: 6,
             textaudiostyle: "Female voice, eurodance",
-            extra_metadata: sourceMetadata.sui_extra_data,
+        });
+        expect(overrides.extra_metadata).toEqual({
+            original_prompt: sourceMetadata.sui_extra_data.original_prompt,
+            original_negativeprompt:
+                sourceMetadata.sui_extra_data.original_negativeprompt,
+            videostages_source_sampler_seed: "9007199254740993",
         });
         const refinedDocument = JSON.parse(
             String(overrides.videostages),

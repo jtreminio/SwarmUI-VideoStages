@@ -348,7 +348,15 @@ const buildRefineVideoPayload = async (
     }
 
     if (isRecord(sourceExtraMetadata)) {
-        inputOverrides.extra_metadata = structuredClone(sourceExtraMetadata);
+        inputOverrides.extra_metadata = Object.fromEntries(
+            [
+                "original_prompt",
+                "original_negativeprompt",
+                "videostages_source_sampler_seed",
+            ]
+                .filter((key) => key in sourceExtraMetadata)
+                .map((key) => [key, structuredClone(sourceExtraMetadata[key])]),
+        );
     }
 
     return inputOverrides;
