@@ -229,8 +229,6 @@ internal sealed class MiniMaxGenerationSession(
             g.UserInput,
             T2IParamTypes.PromptAudios.Type))
         {
-            // H3 writes its own audio, so core's reference path must not also wire Prompt Audios
-            // into ref_audios.
             g.UserInput.InternalSet.ValuesInput.Remove(
                 T2IParamTypes.PromptAudios.Type.ID);
             WorkflowGenerator.ImageToVideoGenInfo genInfo = BuildGenInfo(
@@ -242,8 +240,6 @@ internal sealed class MiniMaxGenerationSession(
             if (payload.CharacterRefine is not null
                 && g.CurrentMedia?.Frames is int incomingFrames)
             {
-                // Validate the decoded stage at its incoming length; Character Refine grid-aligns
-                // only its internal sample and publishes this original count.
                 genInfo.Frames = incomingFrames;
             }
             WGNodeData incoming = null;
@@ -573,8 +569,6 @@ internal sealed class MiniMaxGenerationSession(
             clip.RequireMiniMaxPayload().TextEncoder,
             textEncoder);
         genInfo.Clip = textEncoder;
-        // H3's reference conditioning reads the host VAE, which this session leaves unset so no
-        // foreign root VAE binds to an uploaded frame. The model just loaded its own.
         g.CurrentVae = genInfo.Vae;
         JArray referenceCollection = BuildReferenceCollection(
                 clip.ClipId,
@@ -584,8 +578,13 @@ internal sealed class MiniMaxGenerationSession(
                 height,
                 includeBoundaryReference,
                 firstReferenceImage);
-        // Whole-clip references are tokenized with the prompt, so they replace the text encode
-        // rather than decorating its output.
+        using ParamSnapshot promptImages = ParamSnapshot.Of(g.UserInput, T2IParamTypes.PromptImages.Type);
+        g.UserInput.Remove(T2IParamTypes.PromptImages);
+        string[] referenceEncodes = g.Workflow.Properties()
+            .Where(node => node.Value["inputs"]?["minimax_refs"] is JArray)
+            .Select(node => node.Name)
+            .ToArray();
+        VideoGraphHelpers.InvalidateForRemovedNodes(g.NodeHelpers, referenceEncodes);
         genInfo.PosCond = referenceCollection is null
             ? g.CreateConditioning(
                 genInfo.Prompt, textEncoder.Path, genInfo.VideoModel, true, isVideo: true)
@@ -1234,10 +1233,6 @@ internal sealed class MiniMaxGenerationSession(
             $"VideoStages: {descriptor} source '{source}' was not available; "
                 + "ignoring it for this generation.");
 
-    /// <summary>
-    /// Falls back to the request-global final frame only on a single-clip timeline that authored
-    /// no reference of its own; more clips leave it no unambiguous target.
-    /// </summary>
     private WGNodeData ResolveEndFrame(NativeFrameReferencePlan authored)
     {
         if (authored is not null)
