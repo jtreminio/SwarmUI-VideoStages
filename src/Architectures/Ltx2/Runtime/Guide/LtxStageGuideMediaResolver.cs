@@ -1,14 +1,12 @@
 using ComfyTyped.Core;
 using ComfyTyped.Families;
 using ComfyTyped.Generated;
-using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using VideoStages.Architectures.Ltx2.Runtime.Chain;
 
 namespace VideoStages.Architectures.Ltx2.Runtime.Guide;
 
-/// <summary>Resolves LTX stage references across post-video-chain and latent boundaries.</summary>
 internal sealed class LtxStageGuideMediaResolver(WorkflowGenerator g)
 {
     internal WGNodeData ResolveGuideMedia(
@@ -38,10 +36,7 @@ internal sealed class LtxStageGuideMediaResolver(WorkflowGenerator g)
         {
             using WorkflowBridge bridge = WorkflowBridge.Create(g.Workflow);
             INodeOutput guideOutput = bridge.ResolvePath(guidePath);
-            // Stop at the sampler: a decode on its far side is of different pixels, so an
-            // unbounded walk resolved a Base reference to the refined image whenever core built no
-            // pre-refiner decode of its own — which, under the default PostApply refiner with no
-            // upscale, is always.
+            // A decode beyond the next sampler contains different pixels from this reference.
             IVaeDecode decode = guideOutput is not null
                 ? bridge.Graph.FindNearestDownstream<IVaeDecode, SwarmKSamplerNode>(guideOutput)
                 : null;
@@ -52,7 +47,7 @@ internal sealed class LtxStageGuideMediaResolver(WorkflowGenerator g)
                     || guideReference.Media.DataType == WGNodeData.DT_LATENT_AUDIOVIDEO
                         ? WGNodeData.DT_VIDEO
                         : WGNodeData.DT_IMAGE;
-                return guideReference.Media.WithPath(decode.IMAGE, rawDataType, guideVae?.Compat);
+                return guideReference.Media.WithPath(decode.IMAGE.ToPath(), rawDataType, guideVae?.Compat);
             }
         }
         return VaeDecodePreference.AsRawImage(g, guideReference.Media, guideVae);

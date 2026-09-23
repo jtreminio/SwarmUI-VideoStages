@@ -245,7 +245,7 @@ describe("applyRefineToClip", () => {
         applyRefineToClip(clip, "data:video/mp4;base64,AA==", null, 1);
 
         expect(clip).toMatchObject({
-            audioSource: "Upload",
+            audioSource: "Native",
             saveAudioTrack: false,
             clipLengthFromAudio: false,
             uploadedAudio: null,

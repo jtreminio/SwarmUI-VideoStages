@@ -12,13 +12,10 @@ using VideoStages.Architectures.Ltx2.Runtime.Stage;
 
 namespace VideoStages.Architectures.Ltx2.Runtime.Audio;
 
-/// <summary>
-/// Applies the retake window to both channels of an AV latent. Mask value 1.0 regenerates content;
-/// 0.0 preserves the encoded reference.
-/// </summary>
+// Both AV channels use mask value 1.0 to regenerate and 0.0 to preserve the reference.
 internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
 {
-    /// <summary>A single audio-latent noise window, in seconds along the clip timeline.</summary>
+    // Window boundaries are seconds along the clip timeline.
     internal readonly record struct AudioMaskWindow(double StartTime, double EndTime)
     {
         public bool IsEmpty => EndTime - StartTime <= 1e-6;
@@ -101,7 +98,7 @@ internal sealed class LtxAudioWindowMasker(WorkflowGenerator g)
         genInfo.PosCond = mask.Positive.ToPath();
         genInfo.NegCond = mask.Negative.ToPath();
         g.CurrentMedia = g.CurrentMedia.WithPath(
-            mask.AvLatent,
+            mask.AvLatent.ToPath(),
             WGNodeData.DT_LATENT_AUDIOVIDEO,
             genInfo.Model.Compat);
         return true;

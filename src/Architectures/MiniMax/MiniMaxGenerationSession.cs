@@ -778,7 +778,7 @@ internal sealed class MiniMaxGenerationSession(
             UpscaleMethod: upscale.MethodName,
             ScaleBy: upscale.Factor));
         node.Samples.ConnectFromPath(bridge, video.Path);
-        WGNodeData scaled = video.WithPath(node.LATENT, WGNodeData.DT_LATENT_VIDEO);
+        WGNodeData scaled = video.WithPath(node.LATENT.ToPath(), WGNodeData.DT_LATENT_VIDEO);
         scaled.Width = width;
         scaled.Height = height;
         g.CurrentMedia = scaled.AsSamplingLatent(g.CurrentVae, g.CurrentAudioVae);
@@ -881,10 +881,7 @@ internal sealed class MiniMaxGenerationSession(
         return reference is null ? null : ResolveHostCapture(reference.Source, descriptor);
     }
 
-    /// <summary>
-    /// The host stage image a "Base", "Refiner" or Base2Edit <c>editN</c> source names, or null with
-    /// a warning. Base2Edit publishes its edit stages itself, so those need no capture of our own.
-    /// </summary>
+    // Base2Edit publishes its own stages; Base and Refiner need our captures.
     private WGNodeData ResolveHostCapture(string source, string descriptor)
     {
         string value = source?.Trim() ?? "";
@@ -914,8 +911,7 @@ internal sealed class MiniMaxGenerationSession(
                     + "ignoring it for this generation.");
             return null;
         }
-        // The base capture happens before the host decodes its latent, so this may need a VAE
-        // round-trip. Image inputs take images; handing them a latent breaks the graph.
+        // Base is captured before core decodes its latent; reference inputs require pixels.
         WGNodeData decoded = captured.AsImage();
         if (decoded is null)
         {

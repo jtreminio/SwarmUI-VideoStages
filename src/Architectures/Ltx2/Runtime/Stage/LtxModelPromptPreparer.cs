@@ -49,8 +49,6 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
             return;
         }
 
-        // Not reached in relay mode, which supplies its own positive conditioning; core's node then
-        // goes unclaimed and is swept as before.
         SwarmClipTextEncodeAdvancedNode posCondNode = AddSwarmClipTextEncodeAdvanced(
             bridge, clipOutput, steps, overridePositive ?? positivePrompt, width, height, guidance,
             stageContext?.Claim.Positive);
@@ -117,8 +115,7 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
             return false;
         }
 
-        // Rounded seconds can miss one frame under LTX's (n-1)/grid+1 mapping, so pass the planned
-        // latent-frame count.
+        // Rounded seconds can lose a frame under LTX's (n-1)/grid+1 mapping.
         JObject relayPayload = new()
         {
             ["latentFrames"] = Ltx2ArchitectureModule.LatentFrameCount(frameCount),
@@ -137,7 +134,7 @@ internal sealed class LtxModelPromptPreparer(WorkflowGenerator g)
         relay.ModelInput.ConnectFromPath(bridge, modelPath);
         relay.Clip.TryConnectToUntyped(clipOutput);
 
-        genInfo.Model = genInfo.Model.WithPath(relay.Model);
+        genInfo.Model = genInfo.Model.WithPath(relay.Model.ToPath());
         genInfo.PosCond = relay.Positive.ToPath();
         return true;
     }

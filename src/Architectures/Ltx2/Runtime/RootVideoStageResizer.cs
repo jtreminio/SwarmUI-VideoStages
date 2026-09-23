@@ -145,7 +145,7 @@ internal sealed class RootVideoStageResizer(WorkflowGenerator g)
             }
             scale = bridge.AddNode(new ImageScaleNode());
             scale.Image.ConnectToUntyped(sourceOutput);
-            g.CurrentMedia = g.CurrentMedia.WithPath(scale.IMAGE);
+            g.CurrentMedia = g.CurrentMedia.WithPath(scale.IMAGE.ToPath());
         }
 
         scale.With(

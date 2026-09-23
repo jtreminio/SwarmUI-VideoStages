@@ -35,8 +35,7 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
         {
             return false;
         }
-        // Uploaded drive media loads through core's own loader, which writes to the workflow behind
-        // any bridge already open — so resolve every drive before this one exists.
+        // Core's loader writes directly to the workflow; load drives before opening the bridge.
         IcLoraVisualGuideResolver driveResolver = new(g);
         List<ResolvedIcLoraDrive> drives = [.. resolved.Select(entry =>
             driveResolver.TryResolve(clip, stage, entry.Plan, stageInput, out ResolvedIcLoraDrive drive)
@@ -60,7 +59,7 @@ internal sealed class IcLoraApplicator(WorkflowGenerator g)
             {
                 loader.ModelInput.ConnectFromPath(bridge, modelPath);
             }
-            genInfo.Model = genInfo.Model.WithPath(loader.Model);
+            genInfo.Model = genInfo.Model.WithPath(loader.Model.ToPath());
             loaders.Add(loader);
         }
 

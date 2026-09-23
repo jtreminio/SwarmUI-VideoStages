@@ -111,7 +111,7 @@ internal sealed class LtxConditioningPipeline(
             stageContext.NeedsCropGuidesAfterSampler = true;
             genInfo.SetConditioning(addGuide);
             g.CurrentMedia = g.CurrentMedia.WithPath(
-                addGuide.Latent,
+                addGuide.Latent.ToPath(),
                 WGNodeData.DT_LATENT_VIDEO,
                 genInfo.Model.Compat);
         }
@@ -125,7 +125,7 @@ internal sealed class LtxConditioningPipeline(
             ScaleBy: scaleBy));
         upscale.Samples.ConnectFromPath(bridge, stageLatent.Path);
 
-        WGNodeData upscaled = stageLatent.WithPath(upscale.LATENT, WGNodeData.DT_LATENT_VIDEO);
+        WGNodeData upscaled = stageLatent.WithPath(upscale.LATENT.ToPath(), WGNodeData.DT_LATENT_VIDEO);
         upscaled.Width = width;
         upscaled.Height = height;
         return upscaled;
@@ -142,16 +142,13 @@ internal sealed class LtxConditioningPipeline(
         upsampler.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
         upsampler.Samples.ConnectFromPath(bridge, stageLatent.Path);
 
-        WGNodeData upscaled = stageLatent.WithPath(upsampler.LATENT, WGNodeData.DT_LATENT_VIDEO);
+        WGNodeData upscaled = stageLatent.WithPath(upsampler.LATENT.ToPath(), WGNodeData.DT_LATENT_VIDEO);
         upscaled.Width = width;
         upscaled.Height = height;
         return upscaled;
     }
 
-    /// <summary>
-    /// Merges a guide image into <paramref name="target"/>'s own latent frames, leaving the rest of
-    /// the latent — and any retake noise mask over it — untouched.
-    /// </summary>
+    // In-place injection preserves the retake mask outside the guide's frames.
     private WGNodeData MergeGuideIntoLatent(
         WGNodeData target,
         JArray guideImagePath,

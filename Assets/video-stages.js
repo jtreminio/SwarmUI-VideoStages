@@ -16196,7 +16196,7 @@ ${slot}`;
       clip.duration
     );
     clip.duration = clip.initVideo.lengthSeconds;
-    clip.audioSource = MEDIA_SOURCE_UPLOAD;
+    clip.audioSource = MEDIA_SOURCE_NATIVE;
     clip.saveAudioTrack = false;
     clip.clipLengthFromAudio = false;
     clip.uploadedAudio = null;

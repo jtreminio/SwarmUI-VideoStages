@@ -2,7 +2,7 @@ import { reconcileClipArchitectureIdentity } from "./architectures/clipIdentity"
 import { isAceStepFunAudioSource } from "./audioSource";
 import { captureAuthoringTransactionSnapshot } from "./authoringSnapshot";
 import { applySkipSuffix } from "./clipSemantics";
-import { MEDIA_SOURCE_UPLOAD } from "./generatedMediaSource";
+import { MEDIA_SOURCE_NATIVE } from "./generatedMediaSource";
 import { getVideoStagesHostBridge } from "./host";
 import type { InitVideoProbe } from "./mediaProbe";
 import { initVideoFromProbe, probeInitVideo } from "./mediaProbe";
@@ -210,7 +210,7 @@ const installRefineSource = (
         clip.duration,
     );
     clip.duration = clip.initVideo.lengthSeconds;
-    clip.audioSource = MEDIA_SOURCE_UPLOAD;
+    clip.audioSource = MEDIA_SOURCE_NATIVE;
     clip.saveAudioTrack = false;
     clip.clipLengthFromAudio = false;
     clip.uploadedAudio = null;

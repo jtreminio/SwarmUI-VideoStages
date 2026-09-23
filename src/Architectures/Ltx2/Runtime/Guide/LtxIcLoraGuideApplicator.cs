@@ -87,7 +87,7 @@ internal sealed class LtxIcLoraGuideApplicator(WorkflowGenerator g)
         downscale.ConnectToUntyped(loader.LatentDownscaleFactor);
         genInfo.SetConditioning(guide);
         g.CurrentMedia = g.CurrentMedia.WithPath(
-            latentOut,
+            latentOut.ToPath(),
             WGNodeData.DT_LATENT_VIDEO,
             genInfo.Model.Compat);
     }

@@ -112,12 +112,12 @@ internal sealed class LtxStageSampler(WorkflowGenerator g)
             concat.AudioLatent.TryConnectToUntyped(audioLatentSource);
 
             g.CurrentMedia = g.CurrentMedia.WithPath(
-                concat.Latent,
+                concat.Latent.ToPath(),
                 WGNodeData.DT_LATENT_AUDIOVIDEO,
                 genInfo.Model.Compat);
             return;
         }
 
-        g.CurrentMedia = g.CurrentMedia.WithPath(crop.Latent, null, genInfo.Model.Compat);
+        g.CurrentMedia = g.CurrentMedia.WithPath(crop.Latent.ToPath(), null, genInfo.Model.Compat);
     }
 }
