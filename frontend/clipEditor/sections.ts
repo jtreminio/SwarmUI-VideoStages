@@ -158,6 +158,7 @@ export function clipSections(
                     "referenceFraming",
                     clip.refFraming !== "crop",
                 ),
+                capabilities.architectureId === "minimax",
                 capabilities.architectureId !== "minimax"
                     ? "hidden"
                     : getVideoStagesHostBridge().hasBackendFeature(

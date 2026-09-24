@@ -154,6 +154,7 @@ public class AuthoringDocumentContractTests
         Assert.Equal(ReferenceFramingMode.FitGreen, clip.ReferenceFraming);
         Assert.Equal(2.5, clip.Stages[0].H3AttentionWindowSeconds);
         Assert.Equal(MiniMaxTextEncoder.Qwen3Vl8B, clip.H3TextEncoder);
+        Assert.Equal(MiniMaxReferenceImageSize.Max, clip.H3ReferenceImageSize);
         Assert.Equal("ltx2", clip.AuthoredArchitectureHint);
         Assert.Equal("ltx-2.3", clip.AuthoredModelProfileHint);
         Assert.Equal("data:audio/wav;base64,QUJD", clip.UploadedAudio.Data);

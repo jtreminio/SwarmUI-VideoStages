@@ -71,6 +71,7 @@ export const STORED_CLIP_KEYS = [
     "audioOnly",
     "refFraming",
     "h3TextEncoder",
+    "h3ReferenceImageSize",
     "audioSource",
     "icLoras",
     "saveAudioTrack",

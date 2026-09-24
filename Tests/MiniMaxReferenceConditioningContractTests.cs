@@ -120,6 +120,25 @@ public class MiniMaxReferenceConditioningContractTests
     }
 
     [Fact]
+    public async Task Clip_reference_image_size_reaches_the_collector()
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(fixture.Stage());
+        clip["duration"] = 1.0;
+        clip["h3ReferenceImageSize"] = "max";
+        clip["references"] = new JArray(
+            MakeClipReference("image", "data:image/png;base64,U1VCSkVDVA==", "subject.png"));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        JObject collector = Assert.Single(
+            workflow.Properties(),
+            node => node.Value["class_type"]?.ToString() == "SwarmMiniMaxH3CollectReferences")
+            .Value as JObject;
+
+        Assert.Equal("max", collector["inputs"]?["ref_image_size"]?.ToString());
+    }
+
+    [Fact]
     public async Task A_video_reference_can_use_the_previous_clip_output()
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();

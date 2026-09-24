@@ -108,6 +108,7 @@ export const minimalClip = (overrides: Partial<Clip> = {}): Clip => ({
     audioOnly: false,
     refFraming: "crop",
     h3TextEncoder: "default",
+    h3ReferenceImageSize: "match",
     audioSource: "Native",
     icLoras: [],
     saveAudioTrack: false,

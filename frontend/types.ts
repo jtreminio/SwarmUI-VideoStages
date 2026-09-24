@@ -9,6 +9,7 @@ import type {
     VideoArchitectureId,
 } from "./architectures/types";
 import type { AudioTrackSourceKind } from "./generatedMediaSource";
+import type { H3ReferenceImageSize } from "./generatedMiniMaxReferenceImageSize";
 import type { H3TextEncoder } from "./generatedMiniMaxTextEncoder";
 
 export interface RootDefaults {
@@ -198,6 +199,7 @@ export interface Clip {
     audioOnly?: boolean;
     refFraming: ReferenceFraming;
     h3TextEncoder: H3TextEncoder;
+    h3ReferenceImageSize: H3ReferenceImageSize;
     audioSource: string;
     icLoras: IcLora[];
     saveAudioTrack: boolean;

@@ -264,6 +264,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 clip.ReferenceFraming,
                 clip.ReuseAudio && activeStages.Count >= 3,
                 clip.H3TextEncoder,
+                clip.H3ReferenceImageSize,
                 first,
                 last,
                 references),
@@ -342,6 +343,7 @@ internal sealed record MiniMaxClipPayload(
     ReferenceFramingMode ReferenceFraming,
     bool ReuseAudio,
     MiniMaxTextEncoder TextEncoder,
+    MiniMaxReferenceImageSize ReferenceImageSize,
     NativeFrameReferencePlan FirstFrameReference,
     NativeFrameReferencePlan LastFrameReference,
     IReadOnlyList<MiniMaxReferencePlan> References) :

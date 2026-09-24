@@ -234,7 +234,9 @@ internal static class RequestReader
                     location,
                     context.Warn)),
             H3TextEncoder: MiniMaxTextEncoders.Parse(
-                DocumentJson.GetString(clipObject, "h3TextEncoder")))
+                DocumentJson.GetString(clipObject, "h3TextEncoder")),
+            H3ReferenceImageSize: MiniMaxReferenceImageSizes.Parse(
+                DocumentJson.GetString(clipObject, "h3ReferenceImageSize")))
         {
             AuthoredArchitectureHint = DocumentJson.GetString(
                 clipObject,

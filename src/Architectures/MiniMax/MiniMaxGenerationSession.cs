@@ -557,6 +557,7 @@ internal sealed class MiniMaxGenerationSession(
         JArray firstReferenceImage = null)
     {
         g.FinalLoadedModel = genInfo.VideoModel;
+        MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
         (genInfo.VideoModel, genInfo.Model, WGNodeData textEncoder, genInfo.Vae) =
             g.CreateModelLoader(
                 genInfo.VideoModel,
@@ -566,7 +567,7 @@ internal sealed class MiniMaxGenerationSession(
                 sectionId: genInfo.ContextID);
         textEncoder = MiniMaxTextEncoderGraph.Apply(
             g,
-            clip.RequireMiniMaxPayload().TextEncoder,
+            payload.TextEncoder,
             textEncoder);
         genInfo.Clip = textEncoder;
         g.CurrentVae = genInfo.Vae;
@@ -574,6 +575,7 @@ internal sealed class MiniMaxGenerationSession(
                 clip.ClipId,
                 references,
                 genInfo,
+                payload.ReferenceImageSize,
                 width,
                 height,
                 includeBoundaryReference,
@@ -927,6 +929,7 @@ internal sealed class MiniMaxGenerationSession(
         int clipId,
         IReadOnlyList<MiniMaxReferencePlan> references,
         WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        MiniMaxReferenceImageSize referenceImageSize,
         int? width = null,
         int? height = null,
         bool includeBoundaryReference = true,
@@ -1004,7 +1007,7 @@ internal sealed class MiniMaxGenerationSession(
                 Width: width ?? (int)genInfo.Width,
                 Height: height ?? (int)genInfo.Height,
                 Length: frames,
-                RefImageSize: "match"));
+                RefImageSize: MiniMaxReferenceImageSizes.WireName(referenceImageSize)));
         node.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
         node.AudioVae.ConnectFromPath(bridge, audioVae.Path);
         Fill(node.RefImages, images);

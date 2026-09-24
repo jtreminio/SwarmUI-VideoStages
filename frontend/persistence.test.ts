@@ -460,6 +460,7 @@ describe("persistence", () => {
                 minimalClip({
                     duration: 3,
                     h3TextEncoder: "8b",
+                    h3ReferenceImageSize: "max",
                     icLoras: [
                         {
                             id: "ic-guide",
@@ -522,6 +523,7 @@ describe("persistence", () => {
                     audioOnly: false,
                     refFraming: "crop",
                     h3TextEncoder: "8b",
+                    h3ReferenceImageSize: "max",
                     audioSource: "Native",
                     icLoras: [
                         {

@@ -164,6 +164,39 @@ describe("MiniMax H3 controls", () => {
         expect(committedClips()[0].h3TextEncoder).toBe("8b");
     });
 
+    it("offers MiniMax reference image size after reference resize and commits it", async () => {
+        await loadCatalog(minimaxCatalog());
+        h.setup([{ duration: 4, stages: [{}] }]);
+        const labels = Array.from(
+            h
+                .section("prompt")
+                .querySelectorAll<HTMLElement>(".auto-input-name"),
+        ).map((label) => label.textContent);
+        expect(labels.indexOf("Reference image size")).toBeGreaterThan(
+            labels.indexOf("Reference resize"),
+        );
+        const select = h.field<HTMLSelectElement>(
+            "prompt",
+            "Reference image size",
+            "select",
+        );
+        expect(select.value).toBe("match");
+        expect(
+            Array.from(select.options).map((option) => option.value),
+        ).toEqual(["match", "max"]);
+        select.value = "max";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        expect(committedClips()[0].h3ReferenceImageSize).toBe("max");
+
+        await loadCatalog(testArchitectureCatalog());
+        h.editor.refresh();
+        expect(
+            h
+                .section("prompt")
+                .querySelector("[data-vst-h3-reference-image-size]"),
+        ).toBeNull();
+    });
+
     it("offers ClipProj installation and exposes encoders after backend installation", async () => {
         await loadCatalog(minimaxCatalog());
         const installFeatureById = jest.fn();

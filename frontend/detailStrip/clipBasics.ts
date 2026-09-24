@@ -8,10 +8,12 @@ import {
     buildOptionSelect,
     buildSlider,
 } from "../detailWidgets";
+import { H3_REFERENCE_IMAGE_SIZES } from "../generatedMiniMaxReferenceImageSize";
 import {
     H3_TEXT_ENCODER_FEATURE,
     H3_TEXT_ENCODERS,
 } from "../generatedMiniMaxTextEncoder";
+import { normalizeH3ReferenceImageSize } from "../h3ReferenceImageSize";
 import { normalizeH3TextEncoder } from "../h3TextEncoder";
 import { getVideoStagesHostBridge } from "../host";
 import { installHostFeature } from "../host/swarmUiAdapters";
@@ -42,6 +44,7 @@ export const buildClipColumn = (
     clip: Clip,
     clipIdx: number,
     referenceFramingState?: AuthoringState,
+    showH3ReferenceImageSize = false,
     h3TextEncoderState: "hidden" | "install" | "ready" = "hidden",
     supportsAudioOnly = false,
 ): HTMLElement => {
@@ -160,6 +163,36 @@ export const buildClipColumn = (
             });
         }
         column.appendChild(field);
+    }
+    if (showH3ReferenceImageSize) {
+        const referenceImageSize = buildOptionSelect(
+            H3_REFERENCE_IMAGE_SIZES.map((value) => ({
+                value,
+                label:
+                    value === "match"
+                        ? "Match generation"
+                        : "Maximum detail (slower)",
+            })),
+            clip.h3ReferenceImageSize,
+            (value) => {
+                context.commit((clips) => {
+                    const target = clips[clipIdx];
+                    if (target) {
+                        target.h3ReferenceImageSize =
+                            normalizeH3ReferenceImageSize(value);
+                    }
+                });
+            },
+        );
+        referenceImageSize.dataset.vstH3ReferenceImageSize = "true";
+        column.appendChild(
+            buildField(
+                "Reference image size",
+                referenceImageSize,
+                undefined,
+                "Applies to every Picture reference in this clip, including Make Them Bonita. Match generation limits each image to the generation's pixel area. Maximum keeps source resolution up to a 2048px short edge and increases VRAM and sampling time.",
+            ),
+        );
     }
     if (supportsAudioOnly && clipIdx === 0) {
         column.appendChild(

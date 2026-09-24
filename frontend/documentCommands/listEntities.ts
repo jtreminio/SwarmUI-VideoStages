@@ -120,6 +120,7 @@ const CLIP_ENTITY = defineList<CanonicalAuthoringDocument, CanonicalClip>()({
         "audioOnly",
         "refFraming",
         "h3TextEncoder",
+        "h3ReferenceImageSize",
         "audioSource",
         "icLoras",
         "saveAudioTrack",

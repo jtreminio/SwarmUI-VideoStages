@@ -25,7 +25,9 @@ import {
     IMAGE_TO_VIDEO_DEFAULT_REF_STRENGTH,
     STAGE_REF_STRENGTH_DEFAULT,
 } from "./constants";
+import { H3_REFERENCE_IMAGE_SIZE_DEFAULT } from "./generatedMiniMaxReferenceImageSize";
 import { REFERENCE_SCALE_FULL } from "./generatedReferenceScale";
+import { normalizeH3ReferenceImageSize } from "./h3ReferenceImageSize";
 import { normalizeH3TextEncoder } from "./h3TextEncoder";
 import { defaultLoraWeight } from "./loraAuthoring";
 import {
@@ -145,6 +147,7 @@ export const buildDefaultClip = (
         audioOnly: false,
         refFraming: "crop",
         h3TextEncoder: previousClip?.h3TextEncoder ?? "default",
+        h3ReferenceImageSize: H3_REFERENCE_IMAGE_SIZE_DEFAULT,
         audioSource:
             previousClip?.audioOnly === true
                 ? AUDIO_SOURCE_PREVIOUS_CLIP
@@ -344,6 +347,9 @@ export const normalizeClip = (
         audioOnly: !!rawClip.audioOnly,
         refFraming: normalizeReferenceFraming(rawClip.refFraming),
         h3TextEncoder: normalizeH3TextEncoder(rawClip.h3TextEncoder),
+        h3ReferenceImageSize: normalizeH3ReferenceImageSize(
+            rawClip.h3ReferenceImageSize,
+        ),
         audioSource,
         icLoras,
         saveAudioTrack: !!rawClip.saveAudioTrack,

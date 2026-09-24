@@ -50,6 +50,7 @@ const contractState = (): AuthoringDocument => ({
             audioOnly: true,
             refFraming: "fit-green",
             h3TextEncoder: "8b",
+            h3ReferenceImageSize: "max",
             audioSource: "Native",
             icLoras: [
                 {
@@ -220,6 +221,7 @@ const contractState = (): AuthoringDocument => ({
             audioOnly: false,
             refFraming: "crop",
             h3TextEncoder: "default",
+            h3ReferenceImageSize: "match",
             audioSource: "Previous Clip",
             icLoras: [],
             saveAudioTrack: false,

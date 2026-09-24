@@ -3619,6 +3619,13 @@
     }
   };
 
+  // frontend/generatedMiniMaxReferenceImageSize.ts
+  var H3_REFERENCE_IMAGE_SIZES = ["match", "max"];
+  var H3_REFERENCE_IMAGE_SIZE_DEFAULT = "match";
+
+  // frontend/h3ReferenceImageSize.ts
+  var normalizeH3ReferenceImageSize = (value) => H3_REFERENCE_IMAGE_SIZES.includes(value) ? value : H3_REFERENCE_IMAGE_SIZE_DEFAULT;
+
   // frontend/generatedMiniMaxTextEncoder.ts
   var H3_TEXT_ENCODER_FEATURE = "clipproj";
   var H3_TEXT_ENCODERS = ["default", "8b", "4b"];
@@ -4031,6 +4038,7 @@
       audioOnly: false,
       refFraming: "crop",
       h3TextEncoder: previousClip?.h3TextEncoder ?? "default",
+      h3ReferenceImageSize: H3_REFERENCE_IMAGE_SIZE_DEFAULT,
       audioSource: previousClip?.audioOnly === true ? AUDIO_SOURCE_PREVIOUS_CLIP : AUDIO_SOURCE_NATIVE,
       icLoras: [],
       saveAudioTrack: false,
@@ -4184,6 +4192,9 @@
       audioOnly: !!rawClip.audioOnly,
       refFraming: normalizeReferenceFraming(rawClip.refFraming),
       h3TextEncoder: normalizeH3TextEncoder(rawClip.h3TextEncoder),
+      h3ReferenceImageSize: normalizeH3ReferenceImageSize(
+        rawClip.h3ReferenceImageSize
+      ),
       audioSource,
       icLoras,
       saveAudioTrack: !!rawClip.saveAudioTrack,
@@ -4354,6 +4365,7 @@
       "audioOnly",
       "refFraming",
       "h3TextEncoder",
+      "h3ReferenceImageSize",
       "audioSource",
       "icLoras",
       "saveAudioTrack",
@@ -5978,6 +5990,7 @@
         audioOnly: clip.audioOnly,
         refFraming: clip.refFraming,
         h3TextEncoder: clip.h3TextEncoder,
+        h3ReferenceImageSize: clip.h3ReferenceImageSize,
         audioSource: clip.audioSource,
         icLoras: clip.icLoras.map((entry) => ({
           id: entry.id,
@@ -12314,7 +12327,7 @@ ${slot}`;
     repo.textContent = "ComfyUI-ClipProj";
     help.append(repo, ".");
   };
-  var buildClipColumn = (context, clip, clipIdx, referenceFramingState, h3TextEncoderState = "hidden", supportsAudioOnly = false) => {
+  var buildClipColumn = (context, clip, clipIdx, referenceFramingState, showH3ReferenceImageSize = false, h3TextEncoderState = "hidden", supportsAudioOnly = false) => {
     const column = document.createElement("div");
     column.className = "input-group-content vst-detail-section-content vst-detail-col vst-detail-clip";
     const audioOnly = clipIdx === 0 && clip.audioOnly === true;
@@ -12414,6 +12427,32 @@ ${slot}`;
         });
       }
       column.appendChild(field);
+    }
+    if (showH3ReferenceImageSize) {
+      const referenceImageSize = buildOptionSelect(
+        H3_REFERENCE_IMAGE_SIZES.map((value) => ({
+          value,
+          label: value === "match" ? "Match generation" : "Maximum detail (slower)"
+        })),
+        clip.h3ReferenceImageSize,
+        (value) => {
+          context.commit((clips) => {
+            const target = clips[clipIdx];
+            if (target) {
+              target.h3ReferenceImageSize = normalizeH3ReferenceImageSize(value);
+            }
+          });
+        }
+      );
+      referenceImageSize.dataset.vstH3ReferenceImageSize = "true";
+      column.appendChild(
+        buildField(
+          "Reference image size",
+          referenceImageSize,
+          void 0,
+          "Applies to every Picture reference in this clip, including Make Them Bonita. Match generation limits each image to the generation's pixel area. Maximum keeps source resolution up to a 2048px short edge and increases VRAM and sampling time."
+        )
+      );
     }
     if (supportsAudioOnly && clipIdx === 0) {
       column.appendChild(
@@ -15364,6 +15403,7 @@ ${slot}`;
             "referenceFraming",
             clip.refFraming !== "crop"
           ),
+          capabilities.architectureId === "minimax",
           capabilities.architectureId !== "minimax" ? "hidden" : getVideoStagesHostBridge().hasBackendFeature(
             H3_TEXT_ENCODER_FEATURE
           ) ? "ready" : "install",
