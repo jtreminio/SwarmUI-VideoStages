@@ -7,8 +7,7 @@ namespace VideoStages.Tests;
 [Collection("VideoStagesTests")]
 public class GeneratedBindingRetentionTests
 {
-    // The bindings the prune tool keeps only because production source references them; everything
-    // else in the namespace is force-kept by comfytyped.keep.json.
+    // Production references retain these bindings; comfytyped.keep.json retains the rest.
     private static readonly string[] DirectlyReferencedProductionBindings =
     [
         nameof(ClipProjApplyNode),
@@ -21,6 +20,7 @@ public class GeneratedBindingRetentionTests
         nameof(SwarmFrameWindowNode),
         nameof(SwarmPromptRelayEncodeNode),
         nameof(SwarmRampMaskBatchNode),
+        nameof(SwarmResizeLatentPixelMismatchNode),
         nameof(SwarmSetAudioMaskWindowsNode),
     ];
 

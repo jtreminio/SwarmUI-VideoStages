@@ -2,13 +2,9 @@ using Newtonsoft.Json.Linq;
 
 namespace VideoStages.Authoring;
 
-/// <summary>
-/// Reads time-based clip media and root audio spans.
-/// </summary>
 internal static class AuthoringTimeline
 {
-    // A span the authoring UI can build has to survive being read back, so these bound the
-    // frontend's audio-span editor too, as AUDIO_SPAN_MIN_LENGTH and AUDIO_SPAN_VOLUME_MIN/MAX.
+    // Shared with the frontend's AUDIO_SPAN_MIN_LENGTH and AUDIO_SPAN_VOLUME_MIN/MAX.
     internal const double MinAudioLength = 0.1;
     internal const double MinAudioVolume = 0.00001;
     internal const double MaxAudioVolume = 100000.0;
@@ -64,8 +60,7 @@ internal static class AuthoringTimeline
         {
             start = 0;
         }
-        double roundedStart = RoundTenth(start);
-        if (!IsRepresentableNonNegativeFrame(Math.Round(roundedStart * fps)))
+        if (!IsRepresentableNonNegativeFrame(Math.Round(start * fps)))
         {
             DocumentJson.Warn(
                 warn,
@@ -73,11 +68,18 @@ internal static class AuthoringTimeline
                     + "frame range; ignoring the source video.");
             return null;
         }
+        double length = DocumentJson.GetOptionalDouble(
+            container, "lengthSeconds", 0, $"Clip {clipIndex} InitVideo", warn);
+        double sourceFrames = Math.Round(length * fps);
+        int? frames = IsRepresentableNonNegativeFrame(sourceFrames) && sourceFrames >= 1
+            ? (int)sourceFrames
+            : null;
         return new InitVideoSpec(
             upload?.Data,
             upload?.FileName,
-            roundedStart,
-            usesPreviousClip ? MediaSource.PreviousClip : MediaSource.Upload);
+            start,
+            usesPreviousClip ? MediaSource.PreviousClip : MediaSource.Upload,
+            frames);
     }
 
     public static RetakeWindowSpec ReadRetake(
@@ -139,8 +141,7 @@ internal static class AuthoringTimeline
         IReadOnlyList<JObject> clips,
         Action<string> warn = null)
     {
-        // The document's own string clip id, which only a span projection refers a clip by.
-        // Everything downstream carries the authored clip number this maps it to.
+        // Persisted span projections use document ids; execution uses clip indices.
         Dictionary<string, int> clipIdsByDocumentId = [];
         for (int clipIndex = 0; clipIndex < clips.Count; clipIndex++)
         {
@@ -303,7 +304,4 @@ internal static class AuthoringTimeline
 
     private static bool IsRepresentableNonNegativeFrame(double value) =>
         double.IsFinite(value) && value >= 0 && value <= int.MaxValue;
-
-    private static double RoundTenth(double value) =>
-        Math.Round(value * 10) / 10;
 }

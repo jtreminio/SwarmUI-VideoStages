@@ -8,9 +8,6 @@ internal sealed record EffectiveVideoRequest(
     TimelineSpec Spec,
     IReadOnlyList<PlanDiagnostic> Diagnostics);
 
-/// <summary>
-/// Projects resolved temporal grids and reports stale model hints.
-/// </summary>
 internal static class EffectiveVideoRequestProjection
 {
     internal static EffectiveVideoRequest Project(
@@ -164,6 +161,11 @@ internal static class EffectiveVideoRequestProjection
         bool countRootStageGrid,
         ICollection<PlanDiagnostic> diagnostics)
     {
+        if (assignment.Architecture.PreservesInitVideoFrameCount
+            && clip.InitVideo?.Frames is int sourceFrames)
+        {
+            return clip with { Frames = sourceFrames };
+        }
         ArchitectureFeature features = assignment.Architecture.Features;
         // Runtime-derived lengths skip grid snapping only when the architecture supports them.
         if (!clip.Frames.HasValue

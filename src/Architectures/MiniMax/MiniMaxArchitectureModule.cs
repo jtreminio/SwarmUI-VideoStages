@@ -97,6 +97,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
         ConsumesTimelineAudio = true,
         FrameGrid = FrameGrid,
         FrameGridOrigin = FrameGridOrigin,
+        PreservesInitVideoFrameCount = true,
         StageGuideReferences = new(
             StageGuideReferenceKind.Generated | StageGuideReferenceKind.PreviousStage),
     };

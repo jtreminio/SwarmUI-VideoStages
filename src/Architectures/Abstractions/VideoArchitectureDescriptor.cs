@@ -11,8 +11,7 @@ internal sealed record VideoArchitectureDescriptor(
     ArchitectureBoundaryPolicy BoundaryPolicy)
 {
     /// <summary>
-    /// The generated-frame grid shared by this architecture. It is an architecture/runtime fact,
-    /// not authorization attached to a persisted profile alias.
+    /// Generated frame counts follow this grid, independent of persisted profile hints.
     /// </summary>
     public int FrameGrid { get; init; } = 1;
 
@@ -22,25 +21,22 @@ internal sealed record VideoArchitectureDescriptor(
     /// </summary>
     public int FrameGridOrigin { get; init; } = 1;
 
+    // Sampling may pad source footage, but published output keeps its measured length.
+    public bool PreservesInitVideoFrameCount { get; init; }
+
     /// <summary>
-    /// The effective stage guide selectors this architecture can execute. Fail closed so a new
-    /// architecture must opt into every selector beyond the generated root.
+    /// Architectures must opt into guide selectors beyond the generated root.
     /// </summary>
     public StageGuideReferencePolicy StageGuideReferences { get; init; } =
         StageGuideReferencePolicy.GeneratedOnly;
 
     /// <summary>
-    /// True when this architecture consumes the authored timeline audio tracks itself — it
-    /// conditions generation on them or muxes them inside its own session. Every other
-    /// architecture gets the generic post-decode overlay, so audio tracks play over any video
-    /// model without the model knowing about them.
+    /// Opts out of the generic audio overlay when the session consumes timeline tracks itself.
     /// </summary>
     public bool ConsumesTimelineAudio { get; init; }
 
     /// <summary>
-    /// True when this architecture's stages are sampled by the host's own <c>CreateImageToVideo</c>
-    /// pass, so request-global video settings reach the graph unless the architecture nulls them
-    /// out. Every other architecture builds its own sampler and never sees them.
+    /// Host CreateImageToVideo passes inherit request-global video settings.
     /// </summary>
     public bool RunsOnStockHostSampler { get; init; }
 

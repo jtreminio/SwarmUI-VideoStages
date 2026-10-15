@@ -7,6 +7,7 @@ from .SwarmFrameImage import SwarmFrameImage
 from .SwarmFrameWindow import SwarmFrameWindow
 from .SwarmPromptRelayEncode import SwarmPromptRelayEncode
 from .SwarmRampMaskBatch import SwarmRampMaskBatch
+from .SwarmResizeLatentPixelMismatch import SwarmResizeLatentPixelMismatch
 from .SwarmSetAudioMaskWindows import SwarmSetAudioMaskWindows
 
 
@@ -16,6 +17,7 @@ NODES: list[tuple[type[io.ComfyNode], str]] = [
     (SwarmFrameWindow, "Swarm Frame Window"),
     (SwarmPromptRelayEncode, "Swarm Prompt Relay Encode"),
     (SwarmRampMaskBatch, "Swarm Ramp Mask Batch"),
+    (SwarmResizeLatentPixelMismatch, "Resize Latent/Pixel Mismatch"),
     (SwarmSetAudioMaskWindows, "Swarm Set Audio Mask Windows"),
 ]
 

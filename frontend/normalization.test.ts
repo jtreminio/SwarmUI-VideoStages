@@ -1361,9 +1361,9 @@ describe("normalizeInitVideo", () => {
             data,
             fileName: "shot.mp4",
             fps: 24,
-            durationSeconds: 10,
-            startSeconds: 2,
-            lengthSeconds: 5.1,
+            durationSeconds: 10.04,
+            startSeconds: 2.04,
+            lengthSeconds: 5.06,
         });
     });
 

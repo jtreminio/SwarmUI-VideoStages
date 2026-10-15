@@ -292,43 +292,138 @@ public class Ltx2StageChainContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    [Fact]
-    public async Task A_latent_model_upscale_carries_both_the_latent_and_the_guide_forward()
+    [Theory]
+    [InlineData(0.5, 1.0)]
+    [InlineData(1.5, 1.0)]
+    [InlineData(2.0, 1.0)]
+    [InlineData(3.0, 1.0)]
+    [InlineData(1.5, 2.0)]
+    public async Task A_latent_model_upscale_resizes_before_sampling_and_carries_the_guide_forward(
+        double scale,
+        double priorScale)
     {
         using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.CreateWithBaseModel();
         JObject clip = MakeClip(1.0, 
             fixture.Stage(control: 0.5),
-            fixture.Stage("PreviousStage", control: 0.5, upscale: 2.0,
+            fixture.Stage("PreviousStage", control: 0.5, upscale: priorScale),
+            fixture.Stage("PreviousStage", control: 0.5, upscale: scale,
                 upscaleMethod: LtxV23SpatialUpscaler),
             fixture.Stage("PreviousStage", control: 0.5));
 
-        JObject workflow = await fixture.GenerateImageToVideoAsync(MakeDocument(clip));
+        JObject workflow = await fixture.GenerateImageToVideoAsync(
+            MakeDocument(clip), post => post["height"] = 768);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        SwarmKSamplerNode first = StageSampler(bridge, 0);
-        SwarmKSamplerNode upscaling = StageSampler(bridge, 1);
-        SwarmKSamplerNode last = StageSampler(bridge, 2);
+        SwarmKSamplerNode first = StageSampler(bridge, 1);
+        SwarmKSamplerNode upscaling = StageSampler(bridge, 2);
+        SwarmKSamplerNode last = StageSampler(bridge, 3);
 
         LTXVLatentUpsamplerNode upsampler = Assert.Single(
             bridge.Graph.NodesOfType<LTXVLatentUpsamplerNode>());
         Assert.Same(OutputOf(bridge, first).VideoLatent, upsampler.Samples.Connection);
-        Assert.Same(
-            upsampler.LATENT,
-            Assert.IsType<LTXVImgToVideoInplaceNode>(
-                JointLatentOf(upscaling).VideoLatent.Connection?.Node).LatentInput.Connection);
+        LTXVImgToVideoInplaceNode upscaleGuide = Assert.IsType<LTXVImgToVideoInplaceNode>(
+            JointLatentOf(upscaling).VideoLatent.Connection?.Node);
+        SwarmResizeLatentPixelMismatchNode select = Assert.IsType<SwarmResizeLatentPixelMismatchNode>(
+            upscaleGuide.LatentInput.Connection?.Node);
+        Assert.Same(upsampler.LATENT, select.Samples.Connection);
+        Assert.Same(upsampler.Vae.Connection, select.Vae.Connection);
+        VAEEncodeNode encode = Assert.IsType<VAEEncodeNode>(select.Resized.Connection?.Node);
+        ImageScaleNode resize = Assert.IsType<ImageScaleNode>(encode.Pixels.Connection?.Node);
+        VAEDecodeTiledNode decode = Assert.IsType<VAEDecodeTiledNode>(resize.Image.Connection?.Node);
+        Assert.Same(upsampler.LATENT, decode.Samples.Connection);
+        Assert.Same(upsampler.Vae.Connection, decode.Vae.Connection);
+        Assert.Same(decode.Vae.Connection, encode.Vae.Connection);
+        Assert.Equal("lanczos", resize.UpscaleMethod.LiteralAsString());
+        Assert.Equal("disabled", resize.Crop.LiteralAsString());
+        Assert.Equal((int)(512 * priorScale * scale), resize.Width.LiteralAsInt());
+        Assert.Equal((int)(768 * priorScale * scale), resize.Height.LiteralAsInt());
+        Assert.Equal(resize.Width.LiteralAsInt(), select.Width.LiteralAsInt());
+        Assert.Equal(resize.Height.LiteralAsInt(), select.Height.LiteralAsInt());
+        Assert.Equal(resize.Width.LiteralAsInt(), FramingOf(upscaleGuide).Width.LiteralAsInt());
+        Assert.Equal(resize.Height.LiteralAsInt(), FramingOf(upscaleGuide).Height.LiteralAsInt());
+        Assert.Same(OutputOf(bridge, first).AudioLatent, JointLatentOf(upscaling).AudioLatent.Connection);
 
         LTXVImgToVideoInplaceNode lastGuide = Assert.IsType<LTXVImgToVideoInplaceNode>(
             JointLatentOf(last).VideoLatent.Connection?.Node);
         Assert.Same(OutputOf(bridge, upscaling).VideoLatent, lastGuide.LatentInput.Connection);
         ImageScaleNode framing = FramingOf(lastGuide);
-        Assert.Equal(UpscaledEdge, framing.Width.LiteralAsInt());
-        Assert.Equal(UpscaledEdge, framing.Height.LiteralAsInt());
+        Assert.Equal(resize.Width.LiteralAsInt(), framing.Width.LiteralAsInt());
+        Assert.Equal(resize.Height.LiteralAsInt(), framing.Height.LiteralAsInt());
         Assert.Same(
             OutputOf(bridge, upscaling).VideoLatent,
             Assert.IsType<VAEDecodeTiledNode>(framing.Image.Connection?.Node).Samples.Connection);
 
-        live.AssertAllLive(upsampler, lastGuide, first, upscaling, last);
+        live.AssertAllLive(upsampler, decode, resize, encode, select, lastGuide, first, upscaling, last);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    [Fact]
+    public async Task A_zero_control_latent_model_upscale_publishes_resized_frames()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        JObject clip = MakeClip(1.0,
+            fixture.Stage(),
+            fixture.Stage(control: 0, upscale: 1.5, upscaleMethod: LtxV23SpatialUpscaler));
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(fixture.Post(MakeDocument(clip)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        VAEDecodeTiledNode published = Assert.IsType<VAEDecodeTiledNode>(
+            live.FinalVideoSave().Images.Connection?.Node);
+        SwarmResizeLatentPixelMismatchNode select = Assert.IsType<SwarmResizeLatentPixelMismatchNode>(
+            published.Samples.Connection?.Node);
+        VAEEncodeNode encode = Assert.IsType<VAEEncodeNode>(select.Resized.Connection?.Node);
+        ImageScaleNode resize = Assert.IsType<ImageScaleNode>(encode.Pixels.Connection?.Node);
+        VAEDecodeTiledNode decode = Assert.IsType<VAEDecodeTiledNode>(resize.Image.Connection?.Node);
+        LTXVLatentUpsamplerNode upsampler = Assert.IsType<LTXVLatentUpsamplerNode>(decode.Samples.Connection?.Node);
+        Assert.Equal("lanczos", resize.UpscaleMethod.LiteralAsString());
+        Assert.Equal(768, resize.Width.LiteralAsInt());
+        Assert.Equal(768, resize.Height.LiteralAsInt());
+        Assert.Equal(768, generator.CurrentMedia.Width);
+        Assert.Equal(768, generator.CurrentMedia.Height);
+        Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+
+        Assert.Same(upsampler.LATENT, select.Samples.Connection);
+        live.AssertAllLive(upsampler, decode, resize, encode, select, published);
+        AssertShippable(bridge, workflow, live);
+    }
+
+    [Fact]
+    public async Task A_latent_model_resize_keeps_the_retake_mask_on_the_encoded_latent()
+    {
+        using Ltx2WorkflowFixture fixture = Ltx2WorkflowFixture.Create();
+        JObject clip = RetakeClip(
+            new JObject
+            {
+                ["startSeconds"] = 1.0,
+                ["lengthSeconds"] = 1.0,
+                ["strength"] = 0.8,
+            },
+            fixture.Stage(control: 0.5, upscale: 1.5, upscaleMethod: LtxV23SpatialUpscaler));
+
+        JObject workflow = await fixture.GenerateAsync(MakeDocument(clip));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+
+        SwarmKSamplerNode sampler = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        LTXVSetVideoLatentNoiseMasksNode mask = Assert.Single(
+            bridge.Graph.NodesOfType<LTXVSetVideoLatentNoiseMasksNode>());
+        LTXVConcatAVLatentNode joint = Assert.Single(bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>());
+        Assert.Same(mask.LATENT, joint.VideoLatent.Connection);
+        SwarmResizeLatentPixelMismatchNode select = Assert.IsType<SwarmResizeLatentPixelMismatchNode>(
+            mask.Samples.Connection?.Node);
+        VAEEncodeNode encode = Assert.IsType<VAEEncodeNode>(select.Resized.Connection?.Node);
+        ImageScaleNode resize = Assert.IsType<ImageScaleNode>(encode.Pixels.Connection?.Node);
+        VAEDecodeTiledNode decode = Assert.IsType<VAEDecodeTiledNode>(resize.Image.Connection?.Node);
+        LTXVLatentUpsamplerNode upsampler = Assert.IsType<LTXVLatentUpsamplerNode>(decode.Samples.Connection?.Node);
+        Assert.Equal(768, resize.Width.LiteralAsInt());
+        Assert.Equal(768, resize.Height.LiteralAsInt());
+
+        Assert.Same(upsampler.LATENT, select.Samples.Connection);
+        live.AssertAllLive(upsampler, decode, resize, encode, select, mask, sampler);
         AssertShippable(bridge, workflow, live);
     }
 

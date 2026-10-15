@@ -95,7 +95,8 @@ public sealed record InitVideoSpec(
     string Data,
     string FileName,
     double StartSeconds,
-    string Source = MediaSource.Upload
+    string Source = MediaSource.Upload,
+    int? Frames = null
 );
 
 /// <summary>Stage -1 applies to every stage. [AUTO] resolves preset weights; presets do not define the media contract. DriveMedia is independent of the clip audio.</summary>

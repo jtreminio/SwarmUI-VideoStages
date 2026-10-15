@@ -237,7 +237,7 @@ internal sealed class MiniMaxGenerationSession(
                 sectionId,
                 positive,
                 negative);
-            if (payload.CharacterRefine is not null
+            if (stage.Input is StageInputKind.PreviousStage or StageInputKind.InitVideo
                 && g.CurrentMedia?.Frames is int incomingFrames)
             {
                 genInfo.Frames = incomingFrames;
@@ -386,6 +386,20 @@ internal sealed class MiniMaxGenerationSession(
                 ?? throw Invariant.Failure(
                     "A MiniMax H3 stage has no resolved frame count.");
             HostRootClaim claim = rootAdoption.ClaimTextRoot(clip, stage, includeLatent: true);
+            int samplingFrames = StaticGeneratedFrameGrid.SnapUp(
+                frames,
+                MiniMaxArchitectureModule.FrameGrid,
+                MiniMaxArchitectureModule.FrameGridOrigin);
+            if (incoming is not null && samplingFrames != frames)
+            {
+                using WorkflowBridge bridge = BridgeSync.For(g);
+                SwarmFrameWindowNode pad = bridge.AddNode(new SwarmFrameWindowNode().With(
+                    StartFrame: 0,
+                    FrameCount: samplingFrames));
+                pad.ImagesInput.ConnectFromPath(bridge, incoming.Path);
+                incoming = incoming.WithPath(pad.Images.ToPath());
+                incoming.Frames = samplingFrames;
+            }
             g.CurrentMedia = incoming is null
                 ? EntryJointLatent(clip, genInfo, frames, claim.Latent)
                 : JointLatent(incoming, genInfo);
@@ -416,6 +430,16 @@ internal sealed class MiniMaxGenerationSession(
             g.CurrentMedia = g.CurrentMedia
                 .WithPath([sampled, 0])
                 .DecodeLatents(genInfo.Vae, false, claim.Decode);
+            if (incoming is not null && samplingFrames != frames)
+            {
+                using WorkflowBridge bridge = BridgeSync.For(g);
+                ImageFromBatchNode trim = bridge.AddNode(new ImageFromBatchNode().With(
+                    BatchIndex: 0,
+                    Length: frames));
+                trim.Image.ConnectFromPath(bridge, g.CurrentMedia.Path);
+                g.CurrentMedia = g.CurrentMedia.WithPath(trim.IMAGE.ToPath());
+                g.CurrentMedia.Frames = frames;
+            }
         }
         finally
         {

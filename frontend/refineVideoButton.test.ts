@@ -12,6 +12,7 @@ import {
 import { MEDIA_SOURCE_PREVIOUS_CLIP } from "./generatedMediaSource";
 import { setVideoStagesHostBridgeForTests } from "./host";
 import { createDefaultVideoStagesHostBridge } from "./host/defaultVideoStagesHostBridge";
+import { normalizeInitVideo } from "./normalizationMedia";
 import { __resetPersistenceForTests } from "./persistence/repository";
 import {
     applyRefineToClip,
@@ -198,6 +199,28 @@ describe("hasRefinementWorkToDo", () => {
 });
 
 describe("applyRefineToClip", () => {
+    it("preserves source frames through probing and normalization", () => {
+        const clip = minimalClip({ stages: [minimalStage(), minimalStage()] });
+        applyRefineToClip(
+            clip,
+            "data:video/mp4;base64,AA==",
+            {
+                durationSeconds: 294 / 24,
+                fps: 24,
+                width: 448,
+                height: 576,
+            },
+            1,
+        );
+        expect(clip.duration).toBe(294 / 24);
+        expect(normalizeInitVideo(clip.initVideo)?.lengthSeconds).toBe(
+            294 / 24,
+        );
+        expect(normalizeInitVideo(clip.initVideo)?.durationSeconds).toBe(
+            294 / 24,
+        );
+    });
+
     it("installs the probed video as the clip source", () => {
         const clip = minimalClip({
             audioOnly: true,

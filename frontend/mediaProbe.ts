@@ -2,7 +2,6 @@ import { mediaPreviewSrc } from "./constants";
 import { MEDIA_SOURCE_UPLOAD } from "./generatedMediaSource";
 import { getVideoStagesHostBridge } from "./host";
 import type { InitVideo } from "./types";
-import { roundToTenth } from "./utils";
 
 export interface InitVideoProbe {
     durationSeconds: number;
@@ -22,7 +21,7 @@ export const initVideoFromProbe = (
     fileName: string | null,
     clipDuration: number,
 ): InitVideo => {
-    const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
+    const durationSeconds = probe?.durationSeconds ?? 0;
     return {
         source: MEDIA_SOURCE_UPLOAD,
         data,
@@ -67,7 +66,6 @@ export const estimateFpsFromMediaTimes = (
     return fps >= 1 && fps <= MAX_PLAUSIBLE_FPS ? fps : null;
 };
 
-/** Tears down the probe after every exit. */
 const withProbedMedia = <T>(
     src: string,
     timeoutMs: number,

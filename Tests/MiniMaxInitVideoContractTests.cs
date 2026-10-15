@@ -9,16 +9,66 @@ using static VideoStages.Tests.TypedWorkflowAssertions;
 
 namespace VideoStages.Tests;
 
-/// <summary>
-/// MiniMax H3 entry from existing footage: conforming an uploaded source clip, and what core's own
-/// base pass contributes once a stage supplies its own first frame.
-/// </summary>
 [Collection("VideoStagesTests")]
 public class MiniMaxInitVideoContractTests
 {
+    [Theory]
+    [InlineData(294)]
+    [InlineData(295)]
+    public async Task Refine_preserves_measured_source_frames_after_sampling(int sourceFrames)
+    {
+        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
+        JObject clip = MakeClip(
+            fixture.Stage(control: 0),
+            fixture.Stage("PreviousStage", control: 0.4, upscale: 1.75));
+        clip["duration"] = 12.3;
+        clip["initVideo"] = new JObject
+        {
+            ["data"] = "data:video/mp4;base64,ESIz",
+            ["fileName"] = "refine-source",
+            ["startSeconds"] = 1 / 24.0,
+            ["durationSeconds"] = (sourceFrames + 1) / 24.0,
+            ["lengthSeconds"] = sourceFrames / 24.0,
+        };
+
+        (JObject workflow, WorkflowGenerator generator) =
+            await ComfyWorkflowApiTestHarness.GenerateWithStateAsync(
+                fixture.Post(MakeDocument(clip)));
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        WorkflowLivePath live = WorkflowLivePath.For(bridge);
+        SwarmFrameWindowNode source = Assert.Single(
+            bridge.Graph.NodesOfType<SwarmFrameWindowNode>(),
+            node => node.ImagesInput.Connection?.Node is SwarmVideoResampleFPSNode);
+        Assert.Equal(1, source.StartFrame.LiteralAsInt());
+        Assert.Equal(sourceFrames, source.FrameCount.LiteralAsInt());
+        Assert.Equal(sourceFrames, generator.CurrentMedia.Frames);
+        TrimAudioDurationNode audio = Assert.Single(
+            bridge.Graph.NodesOfType<TrimAudioDurationNode>());
+        Assert.Equal(sourceFrames / 24.0, audio.Duration.LiteralAsDouble());
+        SwarmKSamplerNode sampler = Assert.Single(bridge.Graph.NodesOfType<SwarmKSamplerNode>());
+        if (sourceFrames == 295)
+        {
+            SwarmFrameWindowNode pad = Assert.Single(
+                bridge.Graph.NodesOfType<SwarmFrameWindowNode>(),
+                node => node.Id != source.Id);
+            Assert.Equal(311, pad.FrameCount.LiteralAsInt());
+            Assert.True(ReachesUpstream(bridge, sampler, pad.Id));
+            ImageFromBatchNode trim = Assert.IsType<ImageFromBatchNode>(
+                live.FinalVideoSave().Images.Connection?.Node);
+            Assert.Equal(sourceFrames, trim.Length.LiteralAsInt());
+            Assert.True(ReachesUpstream(bridge, trim, sampler.Id));
+        }
+        else
+        {
+            Assert.Single(bridge.Graph.NodesOfType<SwarmFrameWindowNode>());
+            Assert.True(ReachesUpstream(bridge, live.FinalVideoSave(), sampler.Id));
+        }
+        live.AssertAllLive(source, audio, sampler);
+        AssertShippable(bridge, workflow, live);
+    }
+
     /// <summary>
-    /// Without <c>comfy_loadimage_b64</c> core loads the upload as a bare image with no attached
-    /// audio and no FPS reference, so only this path exercises the conform chain end to end.
+    /// Without comfy_loadimage_b64, core loads uploads without audio or an FPS reference.
     /// </summary>
     [Fact]
     public async Task Init_video_refines_conformed_footage_and_its_audio()
@@ -61,14 +111,11 @@ public class MiniMaxInitVideoContractTests
         Assert.Equal(4, first.StartAtStep.LiteralAsInt());
         Assert.Equal(4, second.StartAtStep.LiteralAsInt());
 
-        // The refine stage inherits both through stage 0's latent, so asserting them on stage 1
-        // too would be true by transitivity.
         Assert.True(ReachesUpstream(bridge, first, window.Id));
         Assert.True(ReachesUpstream(bridge, first, sourceAudio.Id));
         Assert.Single(bridge.Graph.NodesOfType<VAEEncodeAudioNode>());
 
-        // One joint latent per stage survives core's post-cleanup, which collapses
-        // LTXVSeparateAVLatent over LTXVConcatAVLatent and prunes unused concats.
+        // Core collapses separate/concat pairs and prunes unused concats.
         Assert.Equal(2, bridge.Graph.NodesOfType<LTXVConcatAVLatentNode>().Count());
         Assert.Equal(2, bridge.Graph.NodesOfType<SetLatentNoiseMaskNode>().Count());
 
@@ -77,8 +124,7 @@ public class MiniMaxInitVideoContractTests
     }
 
     /// <summary>
-    /// No stage generates, so the frame count stays authored (25) instead of snapping to the
-    /// 17k+5 grid.
+    /// Legacy uploads without a measured length retain the authored frame count.
     /// </summary>
     [Fact]
     public async Task Init_video_passthrough_publishes_conformed_footage_unsampled()
@@ -115,8 +161,6 @@ public class MiniMaxInitVideoContractTests
             node => ReachesUpstream(bridge, save.Images.Connection?.Node, node.Id));
         Assert.Empty(bridge.Graph.NodesOfType<SwarmEmptyMiniMaxH3LatentAVNode>());
 
-        // The handoff the next clip or stage would read: unsnapped frame count, and the source's
-        // own audio still attached rather than a generated track.
         Assert.Equal(25, generator.CurrentMedia.Frames);
         Assert.True(ReachesUpstream(
             bridge,
@@ -187,10 +231,7 @@ public class MiniMaxInitVideoContractTests
     }
 
     /// <summary>
-    /// The Refine Video shape: a low-resolution pass generated from a first keyframe becomes the
-    /// source, its spent stage drops to Control 0, and the surviving stage upscales. The keyframe
-    /// has to reach that stage at ITS resolution — reframed for the upscale, not for the pass that
-    /// produced the footage — or frame 0 drifts off the image the clip was authored around.
+    /// Refine Video must reframe the original keyframe at the surviving stage's resolution.
     /// </summary>
     [Fact]
     public async Task A_refined_source_clip_reasserts_its_first_keyframe_at_the_refine_resolution()
@@ -213,8 +254,7 @@ public class MiniMaxInitVideoContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        // Only the upscaling stage samples, so only it takes a keyframe — at 768, not the 512 the
-        // source footage was generated at.
+        // Only the upscaling stage samples, so its keyframe must be 768 pixels.
         SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.Single(
             bridge.Graph.NodesOfType<SwarmMiniMaxH3AddKeyframesNode>());
         SwarmFrameImageNode framed = Assert.IsType<SwarmFrameImageNode>(

@@ -102,11 +102,7 @@ export const normalizeRetake = (
     };
 };
 
-/**
- * An uploaded source needs a data blob; the previous-clip source does not.
- * Both need a positive used range. Known durations clamp that range, while
- * unknown upload metadata survives for runtime detection.
- */
+/** Unknown upload metadata survives for runtime detection. */
 export const normalizeInitVideo = (value: unknown): InitVideo | null => {
     if (!isRecord(value)) {
         return null;
@@ -140,21 +136,13 @@ export const normalizeInitVideo = (value: unknown): InitVideo | null => {
             value.fileName == null ? null : text(value.fileName),
         ),
         fps: nonNegativeNumber(value.fps),
-        durationSeconds: roundToTenth(durationSeconds),
-        startSeconds: roundToTenth(startSeconds),
-        lengthSeconds: roundToTenth(lengthSeconds),
+        durationSeconds,
+        startSeconds,
+        lengthSeconds,
     };
 };
 
-/**
- * Whole-clip references are preserved exactly as authored, including an entry
- * whose media is still missing: architecture diagnostics report an unusable
- * reference instead of the document silently dropping one the prompt names.
- *
- * The one thing enforced here is single ownership of the clip's length, the
- * same mutual exclusion the two clip-level length flags already get: at most
- * one reference may claim it, and a clip-level flag outranks all of them.
- */
+/** Keep unusable references for diagnostics. Only one source may own clip length. */
 export const normalizeClipReferences = (
     value: unknown,
     clipLengthClaimedElsewhere = false,
@@ -178,8 +166,7 @@ export const normalizeClipReferences = (
             includeSoundtrack:
                 kind === "video" && raw.includeSoundtrack === true,
             mediaDurationSeconds,
-            // A claim with no length behind it cannot move the clip, so it is
-            // dropped rather than left holding the one slot forever.
+            // A reference without a duration must not claim clip length.
             drivesClipLength:
                 !lengthClaimed &&
                 raw.drivesClipLength === true &&

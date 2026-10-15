@@ -24,13 +24,10 @@ public class Ltx2CoreVideoContractTests
     private const string LtxV15SpatialUpscaler =
         "latentmodel-ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors";
 
-    /// <summary>The stub preprocessor <see cref="UnitTestStubs"/> registers with core.</summary>
     private const string PreprocessorClass = "UnitTestPreprocessor";
 
-    /// <summary>A second ControlNet, for the apply branches core picks by model class.</summary>
     private const string DiffpatchControlNet = "UnitTest_ControlNetDiffpatch";
 
-    /// <summary>A third, for the branch core picks by safetensors metadata.</summary>
     private const string AliMamaControlNet = "UnitTest_ControlNetAliMama";
 
     /// <summary>A 1x1 PNG, for the init/mask pair core needs before it will build an AliMama
@@ -39,7 +36,6 @@ public class Ltx2CoreVideoContractTests
         "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
         + "AAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
-    /// <summary>Enables ControlNet 1 on the request with a video guide payload.</summary>
     private static void RequestControlNet(JObject post)
     {
         post["controlnetstrength"] = 0.8;
@@ -48,7 +44,6 @@ public class Ltx2CoreVideoContractTests
         post["controlnetimageinput"] = VideoPayload;
     }
 
-    /// <summary>The same, on slot 2.</summary>
     private static void RequestControlNetTwo(JObject post)
     {
         post["controlnettwostrength"] = 0.8;
@@ -67,24 +62,16 @@ public class Ltx2CoreVideoContractTests
         return fixture;
     }
 
-    /// <summary>
-    /// Gives an installed ControlNet a model class. Core dispatches its apply branch off
-    /// <c>ModelClass.ID</c>, and installed stubs carry none — which is the default apply path.
-    /// </summary>
+    // Core selects the apply branch by ModelClass.ID; stubs have no class by default.
     private static void ClassifyControlNet(string name, string modelClassId) =>
         Program.T2IModelSets["ControlNet"].Models[$"{name}.safetensors"].ModelClass =
             new T2IModelClass { ID = modelClassId, Name = modelClassId };
 
-    /// <summary>
-    /// Gives an installed ControlNet the safetensors architecture core reads for its AliMama
-    /// branch. <c>T2IModel.Metadata</c> is a plain public field on a settable record, and core's
-    /// only writer is the metadata scan, which no generation goes through.
-    /// </summary>
+    // Core selects AliMama from metadata normally populated by the model scan.
     private static void SetControlNetArchitecture(string name, string modelClassType) =>
         Program.T2IModelSets["ControlNet"].Models[$"{name}.safetensors"].Metadata =
             new T2IModelHandler.ModelMetadataStore { ModelClassType = modelClassType };
 
-    /// <summary>A clip whose IC-LoRA drives its guide from a ControlNet slot's captured media.</summary>
     private static JObject IcLoraClip(string driveSource, params JObject[] stages)
     {
         JObject clip = MakeClip(1.0, stages);
@@ -100,20 +87,12 @@ public class Ltx2CoreVideoContractTests
     private static JObject IcLoraClip(params JObject[] stages) =>
         IcLoraClip(MediaSource.ControlNetOne, stages);
 
-    /// <summary>
-    /// The two resize nodes in a ControlNet chain are told apart by their multiple, not their id:
-    /// core scales its preprocessor output to a multiple of 8, and the extension inserts its own
-    /// scale to LTX's multiple of 64 on top.
-    /// </summary>
+    // Core's preprocessor uses multiples of 8; LTX's resize uses 64.
     private static ResizeImageMaskNodeNode ResizeToMultiple(WorkflowBridge bridge, int multiple) =>
         Assert.Single(
             bridge.Graph.NodesOfType<ResizeImageMaskNodeNode>(),
             node => node.ExtraInputs?["resize_type.multiple"]?.Value<int>() == multiple);
 
-    /// <summary>
-    /// The stage-side guide resize, asserted to hang off core's own preprocessor output rather
-    /// than re-running the preprocessor on a second copy of the source video.
-    /// </summary>
     private static ResizeImageMaskNodeNode GuideResizeOverCorePreprocessor(WorkflowBridge bridge)
     {
         ComfyNode preprocessor = Assert.Single(bridge.Graph.NodesOfType(PreprocessorClass));
@@ -125,10 +104,6 @@ public class Ltx2CoreVideoContractTests
         return guideResize;
     }
 
-    /// <summary>
-    /// The audio encode, asserted to read the captured ControlNet source's audio slot. Every audio
-    /// source is normalised through a <c>SwarmEnsureAudio</c> before it is encoded.
-    /// </summary>
     private static LTXVAudioVAEEncodeNode EncodeOfCapturedControlNetAudio(WorkflowBridge bridge)
     {
         GetVideoComponentsNode components = Assert.Single(
@@ -142,10 +117,7 @@ public class Ltx2CoreVideoContractTests
         return encode;
     }
 
-    /// <summary>
-    /// Core's single-frame unwrap of the guide video. The apply node it feeds differs per branch,
-    /// so callers pass its image input rather than the node.
-    /// </summary>
+    // Apply node types differ by model; their image inputs share this unwrap.
     private static ImageFromBatchNode AssertCoreUnwrapsFirstFrame(
         JObject workflow,
         ResizeImageMaskNodeNode guideResize,
@@ -159,13 +131,11 @@ public class Ltx2CoreVideoContractTests
         return firstFrame;
     }
 
-    /// <summary>The IC-LoRA guide's frame batch, whatever drives its length.</summary>
     private static ImageFromBatchNode GuideFramesOf(WorkflowBridge bridge) =>
         Assert.IsType<ImageFromBatchNode>(
             Assert.Single(bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>())
                 .Image.Connection?.Node);
 
-    /// <summary>The <c>ImageScale</c> that frames a guide image for its stage.</summary>
     private static ImageScaleNode FramingOf(LTXVPreprocessNode preprocess) =>
         Assert.IsType<ImageScaleNode>(PreprocessSource(preprocess).Node);
 
@@ -184,13 +154,6 @@ public class Ltx2CoreVideoContractTests
         return save;
     }
 
-    // ---- host handoff -------------------------------------------------------------------
-
-    /// <summary>
-    /// A request with no video model at all is still an image request to core — it keeps its own
-    /// checkpoint, its own sampler and its own image save. The timeline nevertheless generates
-    /// video, off loaders of its own for the model the stage authored.
-    /// </summary>
     [Fact]
     public async Task A_stage_model_generates_video_even_when_the_request_asks_only_for_an_image()
     {
@@ -217,11 +180,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// One stage on an image-to-video request contributes exactly one video sampler and reuses the
-    /// request's single video save. Two samplers sharing stage 0's seed would mean core's own LTX
-    /// root survived alongside the timeline's.
-    /// </summary>
     [Fact]
     public async Task A_single_stage_publishes_one_video_save_and_owns_the_requests_media()
     {
@@ -243,10 +201,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A second stage adds a second sampler carrying its own authored sampler settings, and still
-    /// publishes through the one video save.
-    /// </summary>
     [Fact]
     public async Task Two_stages_publish_one_video_save_and_carry_their_own_sampler_settings()
     {
@@ -275,10 +229,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Stage 0 replaces core's video root rather than running beside it: core's base pass survives,
-    /// core's own LTX chain does not, and the timeline's guide feeds the only video sampler.
-    /// </summary>
     [Fact]
     public async Task Stage_zero_replaces_cores_video_root_rather_than_adding_to_it()
     {
@@ -289,8 +239,7 @@ public class Ltx2CoreVideoContractTests
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
 
-        // StageSampler is Assert.Single by seed, and core's own image-to-video sampler seeds
-        // Seed + 42 too — so this passing at all is the proof that core's root was pruned.
+        // Core uses the same Seed + 42; StageSampler rejects duplicate samplers.
         SwarmKSamplerNode stage = StageSampler(bridge, 0);
         Assert.Equal(2, bridge.Graph.NodesOfType<SwarmKSamplerNode>().Count);
 
@@ -305,11 +254,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Core's pre-video save prep (step 10) and post-cleanup (200) both rewrite the root chain
-    /// around the timeline's, so the handoff is where an abandoned resolution scale would be left
-    /// behind. Nothing the graph builds may be unreachable from an output.
-    /// </summary>
     [Fact]
     public async Task Root_stage_handoff_leaves_nothing_orphaned_around_cores_video_save()
     {
@@ -345,12 +289,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    // ---- root resolution, length and fps ------------------------------------------------
-
-    /// <summary>
-    /// The document's resolution, not the POST's, is what the host base image is framed to before
-    /// it becomes a guide.
-    /// </summary>
     [Fact]
     public async Task Root_stage_resolution_frames_the_host_base_image_for_the_timeline()
     {
@@ -395,12 +333,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// An init image that is really a video makes core attach its audio and wrap it in a
-    /// preserve-everything noise mask, whose <c>SolidMask</c> core hardcodes at the request's
-    /// dimensions. The mask is spatial, so it has to be rewritten to the resolution the clip
-    /// actually generates at — the document's.
-    /// </summary>
     [Fact]
     public async Task Root_stage_resolution_resizes_the_attached_audio_noise_mask()
     {
@@ -437,12 +369,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// The document's fps replaces the request's everywhere the graph needs a frame rate: the
-    /// audio latent, the frame-rate conditioning and the published save. The frame count is the
-    /// control — a second at 30 fps snaps to 33 on LTX's 8k+1 grid, not to the 25 the request asked
-    /// for at 24.
-    /// </summary>
     [Fact]
     public async Task Document_fps_replaces_the_requests_video_fps()
     {
@@ -471,7 +397,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>An authored clip duration overrides the request's frame count: 30s at 24 fps.</summary>
     [Fact]
     public async Task Clip_duration_replaces_the_requested_video_frame_count()
     {
@@ -490,11 +415,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// With no authored duration the request's frame count passes through untouched, even off
-    /// LTX's grid — the extension does not silently round it. The stage's own step count likewise
-    /// overrides the request's.
-    /// </summary>
     [Fact]
     public async Task An_off_grid_frame_request_without_a_duration_is_preserved()
     {
@@ -523,8 +443,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>Text-to-video takes its length from the clip too: 10s at 24 fps, video and audio
-    /// alike.</summary>
     [Fact]
     public async Task Text_to_video_clip_duration_replaces_the_requested_frame_count()
     {
@@ -577,13 +495,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    // ---- guides -------------------------------------------------------------------------
-
-    /// <summary>
-    /// With no authored image reference anywhere, only the opening stage takes the host base image
-    /// as an implicit guide; the rest of the chain refines the previous stage's latent directly, in
-    /// both the video and the audio half.
-    /// </summary>
     [Fact]
     public async Task Implicit_guides_are_built_only_for_the_opening_stage_of_a_chain()
     {
@@ -637,10 +548,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Without an authored frame reference the implicit guide runs at core's own full strength, off
-    /// the root-framed host base image.
-    /// </summary>
     [Fact]
     public async Task A_stage_without_frame_refs_guides_from_the_framed_base_image_at_full_strength()
     {
@@ -656,9 +563,7 @@ public class Ltx2CoreVideoContractTests
         Assert.Same(BaseImage(bridge), FramingOf(preprocess).Image.Connection?.Node);
         LTXVImgToVideoInplaceNode guide = Assert.Single(
             bridge.Graph.NodesOfType<LTXVImgToVideoInplaceNode>());
-        // Also the node's codegen default, so this catches a wrong strength but not a missing write;
-        // A_frame_one_base_ref_reuses_the_root_framing_at_its_authored_strength is the control that
-        // an authored value reaches this input at all.
+        // Authored non-default strengths are covered by A_frame_one_base_ref_reuses_the_root_framing_at_its_authored_strength.
         Assert.Equal(1.0, guide.Strength.LiteralAsDouble());
         Assert.Same(preprocess.OutputImage, guide.Image.Connection);
 
@@ -666,11 +571,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A frame-1 <c>Base</c> reference names the very image the stage is already driving from, so
-    /// the framing scale is shared rather than duplicated — whether or not the document overrides
-    /// the request's resolution. What the reference does contribute is its own guide strength.
-    /// </summary>
     [Theory]
     [InlineData(null, null, 512, 512)]
     [InlineData(768, 448, 768, 448)]
@@ -713,10 +613,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A reference at a later frame cannot be an in-place guide, so it becomes an
-    /// <c>LTXVAddGuide</c> whose extra frames the crop node takes back off before the decode.
-    /// </summary>
     [Fact]
     public async Task A_frame_two_base_ref_swaps_the_in_place_guide_for_an_add_guide_and_crop()
     {
@@ -745,8 +641,7 @@ public class Ltx2CoreVideoContractTests
         VAEDecodeTiledNode decode = Assert.IsType<VAEDecodeTiledNode>(
             live.FinalVideoSave().Images.Connection?.Node);
         Assert.Same(crop.Latent, decode.Samples.Connection);
-        // Core's own LTX-2 tiling defaults (WGNodeData), not an extension choice — pinned so a core
-        // change surfaces here rather than silently altering every decode.
+        // Defaults come from core's WGNodeData.
         Assert.Equal(2048, decode.TileSize.LiteralAsInt());
         Assert.Equal(256, decode.Overlap.LiteralAsInt());
         Assert.Equal(64, decode.TemporalSize.LiteralAsInt());
@@ -756,10 +651,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// The clip's reference applies to every stage, so each stage gets an add-guide and a crop of
-    /// its own, carrying that stage's authored strength.
-    /// </summary>
     [Fact]
     public async Task Every_stage_of_a_chain_gets_its_own_add_guide_for_a_later_ref_frame()
     {
@@ -787,8 +678,7 @@ public class Ltx2CoreVideoContractTests
                 node => ReferenceEquals(sampler.Positive.Connection?.Node, node));
             Assert.Equal(2, addGuide.FrameIdx.LiteralAsInt());
             Assert.Equal(strengths[stage], addGuide.Strength.LiteralAsDouble());
-            // "A crop of its own" is the claim the bare count above cannot make: each crop must
-            // undo the guide frames on the latent its own stage produced.
+            // Each crop must remove its own stage's guide frames.
             LTXVCropGuidesNode crop = Assert.Single(
                 bridge.Graph.NodesOfType<LTXVCropGuidesNode>(),
                 node => ReferenceEquals(
@@ -800,13 +690,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    // ---- upscales -----------------------------------------------------------------------
-
-    /// <summary>
-    /// Under an add-guide the sampler's latent still carries the guide frames, so a latent-model
-    /// upscale must read the cropped video latent rather than the raw split — upscaling the guide
-    /// frames along with the content.
-    /// </summary>
     [Fact]
     public async Task A_latent_model_upscale_reads_the_cropped_video_latent_not_the_raw_split()
     {
@@ -833,13 +716,18 @@ public class Ltx2CoreVideoContractTests
             bridge.Graph.NodesOfType<LTXVLatentUpsamplerNode>());
         Assert.Same(firstCrop.Latent, upsampler.Samples.Connection);
         SwarmKSamplerNode secondSampler = StageSampler(bridge, 1);
-        Assert.Same(
-            upsampler.LATENT,
+        SwarmResizeLatentPixelMismatchNode select = Assert.IsType<SwarmResizeLatentPixelMismatchNode>(
             Assert.IsType<LTXVAddGuideNode>(
                 JointLatentOf(secondSampler).VideoLatent.Connection?.Node)
-                .LatentInput.Connection);
-        // Stage 1 crops its own output too — otherwise the guide frames the upscale carried
-        // forward would reach the published decode.
+                .LatentInput.Connection?.Node);
+        Assert.Same(upsampler.LATENT, select.Samples.Connection);
+        VAEEncodeNode resized = Assert.IsType<VAEEncodeNode>(select.Resized.Connection?.Node);
+        ImageScaleNode resize = Assert.IsType<ImageScaleNode>(resized.Pixels.Connection?.Node);
+        Assert.Equal(768, resize.Width.LiteralAsInt());
+        Assert.Equal(768, resize.Height.LiteralAsInt());
+        Assert.Same(upsampler.LATENT,
+            Assert.IsType<VAEDecodeTiledNode>(resize.Image.Connection?.Node).Samples.Connection);
+        // Remove stage 1's guide frames before publishing.
         LTXVCropGuidesNode secondCrop = Assert.Single(
             bridge.Graph.NodesOfType<LTXVCropGuidesNode>(),
             crop => ReferenceEquals(
@@ -853,10 +741,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A pixel upscale leaves latent space: the previous stage is decoded, scaled in pixels and
-    /// re-encoded at the new size, and the request's published dimensions follow it.
-    /// </summary>
     [Fact]
     public async Task A_pixel_upscale_runs_in_pixel_space_and_re_encodes_at_the_upscaled_size()
     {
@@ -880,8 +764,7 @@ public class Ltx2CoreVideoContractTests
         Assert.Equal(768, upscale.Height.LiteralAsInt());
         Assert.Equal("lanczos", upscale.UpscaleMethod.LiteralAsString());
 
-        // OutputOf is Assert.Single, so calling it per sampler is also the "at most one separator
-        // splits this sampler" invariant — and the pixel round trip is where a duplicate appears.
+        // OutputOf rejects duplicate AV separators per sampler.
         LTXVSeparateAVLatentNode firstSplit = OutputOf(bridge, StageSampler(bridge, 0));
         OutputOf(bridge, StageSampler(bridge, 1));
         Assert.Same(
@@ -902,11 +785,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Each latent-model upscale moves the whole stage to a new resolution, and every stage's guide
-    /// is re-framed to the resolution that stage generates at — off a fresh decode, never by
-    /// stacking a second scale on the previous stage's framing.
-    /// </summary>
     [Fact]
     public async Task Chained_latent_model_upscales_frame_each_guide_at_its_own_resolution()
     {
@@ -946,8 +824,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    // ---- ControlNet ---------------------------------------------------------------------
-
     // Text-to-video prunes core’s apply chain; the captured preprocessor output survives through the timeline guide.
     [Fact]
     public async Task Text_to_video_stage_guide_reuses_cores_controlnet_preprocessor()
@@ -974,12 +850,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Under image-to-video core's ControlNet still conditions the base image, and at that point
-    /// the current model is not a video model — so core unwraps the guide video to its first frame.
-    /// The timeline must not inherit that single frame: its own guide batch takes every frame of
-    /// the same resize.
-    /// </summary>
     [Fact]
     public async Task Image_to_video_keeps_cores_first_frame_apply_while_the_stage_guide_takes_every_frame()
     {
@@ -1007,11 +877,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// <c>clipLengthFromControlNet</c> makes the captured guide decide the clip length, so every
-    /// length in the graph has to be a wire off one <c>GetImageSize</c> rather than a literal —
-    /// video latent, audio latent and the guide batch alike, or they drift apart at runtime.
-    /// </summary>
     [Fact]
     public async Task Clip_length_from_controlnet_wires_the_captured_batch_count_into_every_length()
     {
@@ -1042,11 +907,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// With no preprocessor selected core scales the source video and unwraps it straight away, so
-    /// there is no multiple-of-8 resize to build on. The stage's multiple-of-64 resize is inserted
-    /// upstream of core's unwrap instead, and both the captured length and the guide read it.
-    /// </summary>
     [Fact]
     public async Task A_stage_guide_resize_is_inserted_when_core_ran_no_preprocessor()
     {
@@ -1084,11 +944,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A ControlNet-driven length has to survive a latent-model upscale on the next stage: the
-    /// upsampler reads the cropped latent of the previous stage, which is where the wired length
-    /// ends up living.
-    /// </summary>
     [Fact]
     public async Task Controlnet_length_survives_a_latent_model_upscale_on_the_next_stage()
     {
@@ -1110,8 +965,7 @@ public class Ltx2CoreVideoContractTests
         LTXVLatentUpsamplerNode upsampler = Assert.Single(
             bridge.Graph.NodesOfType<LTXVLatentUpsamplerNode>());
         Assert.Same(firstCrop.Latent, upsampler.Samples.Connection);
-        // Stage 1's own crop, named by its latent rather than counted: the upscaled latent still
-        // carries guide frames, so the published decode has to come off a second crop.
+        // Stage 1 adds its own guide frames and must crop them before publishing.
         SwarmKSamplerNode second = StageSampler(bridge, 1);
         LTXVCropGuidesNode secondCrop = Assert.Single(
             bridge.Graph.NodesOfType<LTXVCropGuidesNode>(),
@@ -1121,8 +975,7 @@ public class Ltx2CoreVideoContractTests
             Assert.IsType<VAEDecodeTiledNode>(live.FinalVideoSave().Images.Connection?.Node)
                 .Samples.Connection);
 
-        // Reachability proves nothing here: the captured count already sizes stage 0's empty latent,
-        // which stage 1 refines. Every stage's guide batch has to read it directly.
+        // Each guide batch must read the captured count directly, even when refining stage 0.
         GetImageSizeNode size = Assert.Single(bridge.Graph.NodesOfType<GetImageSizeNode>());
         IReadOnlyList<LTXAddVideoICLoRAGuideNode> guides =
             [.. bridge.Graph.NodesOfType<LTXAddVideoICLoRAGuideNode>()];
@@ -1171,7 +1024,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>Each stage applies the ControlNet guide at its own authored strength.</summary>
     [Fact]
     public async Task Stage_controlnet_strength_scales_each_stages_guide()
     {
@@ -1200,9 +1052,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Zero strength disables the stage's IC-LoRA rather than loading an unguided model patch.
-    /// </summary>
     [Theory]
     [InlineData(0.6, 1)]
     [InlineData(0.0, 0)]
@@ -1283,12 +1132,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Captures are bookkept per ControlNet slot. A clip whose IC-LoRA names ControlNet 2 plans
-    /// index 1 outright rather than scanning for the one captured slot. Both slots are configured
-    /// so the scan cannot stand in for the plan: two captured indices are ambiguous, which the
-    /// resolver answers with silence, so only the planned index produces audio at all.
-    /// </summary>
     [Fact]
     public async Task A_second_slot_controlnet_audio_source_is_captured_under_its_own_index()
     {
@@ -1330,11 +1173,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A ControlNet whose model class ends in <c>/control-diffpatch</c> takes core's Qwen branch:
-    /// no <c>ControlNetLoader</c>, no apply node, a model patch instead. The timeline has to capture
-    /// its guide off that shape too — and off the full-length source, not core's first-frame unwrap.
-    /// </summary>
     [Fact]
     public async Task Image_to_video_captures_a_guide_from_cores_qwen_diffsynth_patch()
     {
@@ -1384,13 +1222,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A ControlNet whose safetensors architecture names Alimama inpainting takes core's mask
-    /// branch: a <c>ControlNetInpaintingAliMamaApply</c> instead of the default apply, which core
-    /// refuses outright without a <c>FinalMask</c> — so the request carries an init image and a mask
-    /// image. The timeline captures its guide off that shape too. The union-type wrapper core
-    /// optionally inserts between loader and apply must not hide the loader from the capture.
-    /// </summary>
     [Theory]
     [InlineData(null)]
     [InlineData("auto")]
@@ -1449,11 +1280,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Two stages sharing one clip's IC-LoRA patch the model the same way, so they sample through
-    /// one loader. The strength is authored per stage and lives on the guide, which is why the
-    /// guides stay two: sharing the loader leaves neither strength unreachable.
-    /// </summary>
     [Fact]
     public async Task Stages_sharing_an_ic_lora_share_its_loader_and_keep_their_own_guides()
     {
@@ -1491,7 +1317,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// Identical stage LoRAs share their loader with both IC-LoRA chains.
     [Fact]
     public async Task Clip_lora_loads_for_every_stage_alongside_the_ic_lora()
     {
@@ -1535,13 +1360,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    // ---- text-to-video root replacement --------------------------------------------------
-
-    /// <summary>
-    /// Text-to-video has no host image pass, so references naming one cannot resolve: the stage
-    /// falls back to plain generation, no guide of any kind is built, and nothing is captured under
-    /// the root reference names either.
-    /// </summary>
     [Fact]
     public async Task Text_to_video_ignores_host_image_refs_and_captures_no_root_references()
     {
@@ -1573,11 +1391,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A document resolution that differs from the request's used to detach the published media and
-    /// leave a second save path behind. There is no host image to scale in this shape, so a
-    /// resolution change must move the latent alone.
-    /// </summary>
     [Fact]
     public async Task Text_to_video_root_dimensions_keep_one_save_and_scale_nothing()
     {
@@ -1606,10 +1419,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// Without a host image to guide from, a text-to-video chain hands the joint latent from stage
-    /// to stage untouched — no framing scale, no preprocess, no pixel round trip anywhere.
-    /// </summary>
     [Fact]
     public async Task Text_to_video_stages_hand_the_joint_latent_over_without_pixel_guides()
     {
@@ -1643,11 +1452,6 @@ public class Ltx2CoreVideoContractTests
         AssertShippable(bridge, workflow, live);
     }
 
-    /// <summary>
-    /// A clip with no stages and no source is not executable, so the document — clip-shaped though
-    /// it is — leaves core's generation alone rather than gating it. The extension declines to plan
-    /// at all and says so.
-    /// </summary>
     [Fact]
     public async Task Clip_shaped_json_without_executable_timeline_does_not_gate_core_generation()
     {

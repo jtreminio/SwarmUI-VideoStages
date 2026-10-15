@@ -3,6 +3,8 @@ using ComfyTyped.Generated;
 using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using VideoStages.Execution;
+using VideoStages.Generated;
 using VideoStages.Planning;
 using VideoStages.Architectures.Ltx2.Runtime.Guide;
 
@@ -133,19 +135,44 @@ internal sealed class LtxConditioningPipeline(
 
     private WGNodeData ApplyLatentModelUpscale(string modelName, int width, int height)
     {
-        using WorkflowBridge bridge = BridgeSync.For(g);
-        LatentUpscaleModelLoaderNode loader = bridge.AddNode(new LatentUpscaleModelLoaderNode()).With(
-            ModelName: modelName);
+        WGNodeData upscaled;
+        using (WorkflowBridge bridge = BridgeSync.For(g))
+        {
+            LatentUpscaleModelLoaderNode loader = bridge.AddNode(new LatentUpscaleModelLoaderNode()).With(
+                ModelName: modelName);
 
-        LTXVLatentUpsamplerNode upsampler = bridge.AddNode(new LTXVLatentUpsamplerNode().With(
-            UpscaleModel: loader.LATENTUPSCALEMODEL));
-        upsampler.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
-        upsampler.Samples.ConnectFromPath(bridge, stageLatent.Path);
+            LTXVLatentUpsamplerNode upsampler = bridge.AddNode(new LTXVLatentUpsamplerNode().With(
+                UpscaleModel: loader.LATENTUPSCALEMODEL));
+            upsampler.Vae.ConnectFromPath(bridge, genInfo.Vae.Path);
+            upsampler.Samples.ConnectFromPath(bridge, stageLatent.Path);
 
-        WGNodeData upscaled = stageLatent.WithPath(upsampler.LATENT.ToPath(), WGNodeData.DT_LATENT_VIDEO);
-        upscaled.Width = width;
-        upscaled.Height = height;
-        return upscaled;
+            upscaled = stageLatent.WithPath(upsampler.LATENT.ToPath(), WGNodeData.DT_LATENT_VIDEO);
+        }
+
+        WGNodeData decoded = VaeDecodePreference.AsRawImage(g, upscaled, genInfo.Vae);
+        WGNodeData resized = new StageUpscaleGraph(g).Apply(
+            decoded,
+            width,
+            height,
+            StageUpscaleMode.Pixel,
+            "lanczos").EncodeToLatent(genInfo.Vae);
+
+        using WorkflowBridge resizedBridge = BridgeSync.For(g);
+        SwarmResizeLatentPixelMismatchNode select = resizedBridge.AddNode(
+            new SwarmResizeLatentPixelMismatchNode().With(Width: width, Height: height));
+        select.Samples.ConnectFromPath(resizedBridge, upscaled.Path);
+        select.Vae.ConnectFromPath(resizedBridge, genInfo.Vae.Path);
+        select.Resized.ConnectFromPath(resizedBridge, resized.Path);
+        WGNodeData selected = resized.WithPath(select.Latent.ToPath());
+        if (resizedBridge.NodeAt(stageLatent.Path) is LTXVSetVideoLatentNoiseMasksNode mask)
+        {
+            LTXVLatentUpsamplerNode upsampler =
+                (LTXVLatentUpsamplerNode)resizedBridge.NodeAt(upscaled.Path);
+            upsampler.Samples.ConnectToUntyped(mask.Samples.Connection);
+            mask.Samples.ConnectFromPath(resizedBridge, selected.Path);
+            return selected.WithPath(mask.LATENT.ToPath());
+        }
+        return selected;
     }
 
     // In-place injection preserves the retake mask outside the guide's frames.

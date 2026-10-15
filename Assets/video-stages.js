@@ -1900,9 +1900,9 @@
         value.fileName == null ? null : text(value.fileName)
       ),
       fps: nonNegativeNumber(value.fps),
-      durationSeconds: roundToTenth(durationSeconds),
-      startSeconds: roundToTenth(startSeconds),
-      lengthSeconds: roundToTenth(lengthSeconds)
+      durationSeconds,
+      startSeconds,
+      lengthSeconds
     };
   };
   var normalizeClipReferences = (value, clipLengthClaimedElsewhere = false) => {
@@ -1924,8 +1924,7 @@
         uploadedMedia: normalizeUploadedMedia(raw.uploadedMedia),
         includeSoundtrack: kind === "video" && raw.includeSoundtrack === true,
         mediaDurationSeconds,
-        // A claim with no length behind it cannot move the clip, so it is
-        // dropped rather than left holding the one slot forever.
+        // A reference without a duration must not claim clip length.
         drivesClipLength: !lengthClaimed && raw.drivesClipLength === true && clipReferenceCanDriveLength({ kind }) && mediaDurationSeconds > 0,
         mediaScale: kind === "video" ? normalizeClipReferenceScale(raw.mediaScale) : REFERENCE_SCALE_FULL,
         ...normalizeClipReferenceTrim(raw, kind, mediaDurationSeconds)
@@ -10984,7 +10983,7 @@ ${slot}`;
 
   // frontend/mediaProbe.ts
   var initVideoFromProbe = (probe, data, fileName, clipDuration) => {
-    const durationSeconds = roundToTenth(probe?.durationSeconds ?? 0);
+    const durationSeconds = probe?.durationSeconds ?? 0;
     return {
       source: MEDIA_SOURCE_UPLOAD,
       data,
