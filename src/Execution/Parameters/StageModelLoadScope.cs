@@ -98,7 +98,7 @@ internal sealed class StageModelLoadScope : IDisposable
                     {
                         inputs["selection.keep_percent"] = 10.0;
                     }
-                    inputs["start_percent"] = 0.2;
+                    inputs["start_percent"] = inputs["selection"]?.Value<string>() == "vsa" ? 0.0 : 0.2;
                     inputs["end_percent"] = 1.0;
                     inputs["dense_blocks"] = "";
                     inputs["min_tokens"] = 12288;

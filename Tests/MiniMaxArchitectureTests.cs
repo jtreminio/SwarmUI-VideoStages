@@ -20,8 +20,7 @@ public class MiniMaxArchitectureTests
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
 
-        // The fallback also claims this compat class, so the specialized tier is what keeps H3
-        // off the video-only stock path.
+        // The fallback also claims this compat class; H3 must win.
         Assert.True(HostVideoArchitectureModule.Instance.TryResolveModel(
             models.VideoModel,
             out _));
@@ -32,8 +31,7 @@ public class MiniMaxArchitectureTests
         Assert.Equal(MiniMaxArchitectureModule.ProfileId, resolved.ModelProfileId);
     }
 
-    // Core registers the checkpoint and both support VAEs under the same compat class, so the
-    // class ID is the only thing separating a generation model from a support model.
+    // Checkpoint and support VAEs share a compat class; only the class ID separates them.
     [Theory]
     [InlineData("minimax-h3", true)]
     [InlineData("MiniMax-H3", true)]
@@ -101,6 +99,7 @@ public class MiniMaxArchitectureTests
                 "characterRefineIdentityReferences",
                 "clipReferences",
                 "frameReferences",
+                "latentModelUpscale",
                 "latentUpscale",
                 "referenceFraming",
                 "stageAttention",
@@ -217,11 +216,7 @@ public class MiniMaxArchitectureTests
         Assert.Equal("minimax.stage-control.quantized-zero", refusal.Code);
     }
 
-    /// <summary>
-    /// A quoted "NaN" survives both the document reader's parse and the clamp that normalizes
-    /// control, and floor(steps * (1 - NaN)) is int.MinValue — a malformed start step rather than
-    /// an out-of-range one, so the quantized-zero rule never sees it.
-    /// </summary>
+    // Quoted NaN survives parsing and clamping but produces an invalid sampler start step.
     [Fact]
     public void A_non_finite_control_is_refused()
     {
@@ -374,8 +369,42 @@ public class MiniMaxArchitectureTests
         Assert.Empty(compiledStage.FrameReferences);
     }
 
+    [Theory]
+    [InlineData("latent-bislerp")]
+    [InlineData("latentmodel-minimax_h3_latent_upscaler_3d_bf16.safetensors")]
+    public void Character_refine_rejects_latent_upscaling(string method)
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        JObject stage = MakeStage(models.VideoModel.Name, "PreviousStage",
+            control: 0.5, upscale: 1.5, upscaleMethod: method, steps: 8, cfgScale: 1);
+        stage["characterRefine"] = BonitaTestModels.CharacterRefineSettings();
+        ClipSpec clip = ParseClip(MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1), stage), models);
+
+        Assert.Contains(Compile(clip, models).Diagnostics,
+            diagnostic => diagnostic.Code == "minimax.character-refine.latent-upscale-unsupported");
+    }
+
     [Fact]
-    public void Latent_model_upscale_remains_unsupported()
+    public void Learned_latent_upscale_rejects_downscaling()
+    {
+        using SwarmUiTestContext context = new();
+        TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
+        ClipSpec clip = ParseClip(MakeClip(
+            MakeStage(models.VideoModel.Name, "Generated", steps: 8, cfgScale: 1),
+            MakeStage(models.VideoModel.Name, "PreviousStage", control: 0.5,
+                upscale: 0.5,
+                upscaleMethod: "latentmodel-minimax_h3_latent_upscaler_3d_bf16.safetensors",
+                steps: 8, cfgScale: 1)), models);
+
+        Assert.Contains(Compile(clip, models).Diagnostics,
+            diagnostic => diagnostic.Code == "minimax.latent-upscale.downscale-unsupported"
+                && diagnostic.Severity == PlanDiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public void Latent_model_upscale_activates_a_zero_control_stage()
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
@@ -400,15 +429,17 @@ public class MiniMaxArchitectureTests
                 descriptor,
                 ArchitectureEntryMode.ImageToVideo);
 
-        Assert.True(StagePassthroughPolicy.IsPassthrough(clip.Stages[^1], descriptor));
-        Assert.Contains(
+        Assert.False(StagePassthroughPolicy.IsPassthrough(clip.Stages[^1], descriptor));
+        Assert.DoesNotContain(
             diagnostics,
             diagnostic => diagnostic.Code
                 == "effective-request.unsupported-latent-upscale-ignored");
     }
 
-    [Fact]
-    public void Latent_interpolation_counts_toward_the_projected_final_dimensions()
+    [Theory]
+    [InlineData("latent-bislerp")]
+    [InlineData("latentmodel-minimax_h3_latent_upscaler_3d_bf16.safetensors")]
+    public void Latent_upscale_counts_toward_the_projected_final_dimensions(string method)
     {
         using SwarmUiTestContext context = new();
         TestModelBundle models = TestModelFactory.CreateBaseAndMiniMaxH3Models();
@@ -420,7 +451,7 @@ public class MiniMaxArchitectureTests
                     "PreviousStage",
                     control: 0.5,
                     upscale: 1.5,
-                    upscaleMethod: "latent-bislerp",
+                    upscaleMethod: method,
                     steps: 8,
                     cfgScale: 1)),
             models);
@@ -508,14 +539,10 @@ public class MiniMaxArchitectureTests
         Assert.Null(payload.References[1].Media);
         Assert.True(payload.References[2].IncludeSoundtrack);
         Assert.False(payload.References[3].IncludeSoundtrack);
-        // Only a video reference has frames to downsample.
         Assert.Equal([1, 1, 0.5, 1], payload.References.Select(r => r.MediaScale));
     }
 
-    /// <summary>
-    /// Base2Edit publishes each edit stage's image for other extensions to build on, so an image
-    /// reference may name one exactly as it names the host's own base and refiner outputs.
-    /// </summary>
+    // Base2Edit publishes stage images alongside the host's Base and Refiner sources.
     [Fact]
     public void An_image_clip_reference_can_name_a_base2edit_edit_stage()
     {

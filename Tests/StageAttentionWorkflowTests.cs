@@ -41,13 +41,13 @@ public class StageAttentionWorkflowTests
     }
 
     [Theory]
-    [InlineData(false, "vsa", "vsa")]
-    [InlineData(true, "vsa", "vsa")]
-    [InlineData(false, "sol", "sol-attn")]
-    [InlineData(false, "topk", "sla")]
-    [InlineData(false, "None", null)]
+    [InlineData(false, "vsa", "vsa", 0.0)]
+    [InlineData(true, "vsa", "vsa", 0.0)]
+    [InlineData(false, "sol", "sol-attn", 0.2)]
+    [InlineData(false, "topk", "sla", 0.2)]
+    [InlineData(false, "None", null, 0.0)]
     public async Task Each_stage_uses_its_own_core_attention_chain(
-        bool imageToVideo, string sparse, string selection)
+        bool imageToVideo, string sparse, string selection, double startPercent)
     {
         using MiniMaxWorkflowFixture fixture = imageToVideo
             ? MiniMaxWorkflowFixture.CreateWithBaseModel()
@@ -89,7 +89,7 @@ public class StageAttentionWorkflowTests
             Assert.Equal("BlockSparseAttention", model["class_type"].Value<string>());
             JObject inputs = (JObject)model["inputs"];
             Assert.Equal(selection, inputs["selection"].Value<string>());
-            Assert.Equal(0.2, inputs["start_percent"].Value<double>());
+            Assert.Equal(startPercent, inputs["start_percent"].Value<double>());
             Assert.Equal(1, inputs["end_percent"].Value<double>());
             Assert.Equal(256, inputs["extra_tokens"].Value<int>());
             if (sparse == "sol")

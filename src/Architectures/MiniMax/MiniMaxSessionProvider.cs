@@ -42,6 +42,20 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
             }
             foreach (StagePlan stage in clip.Stages)
             {
+                if (stage.Core.Upscale.Mode == StageUpscaleMode.LatentModel
+                    && !generator.Features.Contains(MiniMaxLatentUpscalerIntegration.FeatureFlag))
+                {
+                    diagnostics.Add(new(
+                        PlanDiagnosticSeverity.Error,
+                        "minimax.latent-upscale.node-required",
+                        "MiniMax H3 learned latent upscaling requires LBH's 3D upscaler. Install "
+                            + "it from VideoStages settings or "
+                            + $"{MiniMaxLatentUpscalerIntegration.NodeUrl} and restart ComfyUI. "
+                            + "Select its 3D weights from latent_upscale_models.",
+                        clip.ClipId,
+                        stage.StageId,
+                        stage.ClipStageRawIndex));
+                }
                 MiniMaxCharacterRefinePlan characterRefine =
                     stage.RequireMiniMaxStagePayload().CharacterRefine;
                 if (characterRefine is not null

@@ -7,6 +7,7 @@ import {
     jest,
 } from "@jest/globals";
 import { editorHarness } from "../__test_helpers__/editor";
+import { getVideoStagesHostBridge } from "../host";
 import { getState } from "../persistence/repository";
 import { TIMELINE_AUTHORING_SETTINGS_CHANGED } from "../timelineAuthoringSettings";
 
@@ -178,5 +179,55 @@ describe("editor extension settings", () => {
         );
         expect(installed.textContent).toBe("ComfyUI-Bonita Installed");
         expect(installed.disabled).toBe(true);
+    });
+
+    it("installs the MiniMax latent upscaler and detects it after refresh", () => {
+        const installFeatureById = jest.fn();
+        Object.assign(globalThis, { installFeatureById });
+        const install = required<HTMLButtonElement>(
+            "[data-vst-install-minimax-latent-upscaler]",
+        );
+        const repository = required<HTMLAnchorElement>(
+            "#vst_minimax_latent_upscaler_install small a",
+        );
+        expect(repository.href).toBe(
+            "https://github.com/LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler",
+        );
+        expect(repository.rel).toBe("noopener noreferrer");
+        expect(install.disabled).toBe(false);
+        install.click();
+        expect(installFeatureById).toHaveBeenCalledWith(
+            "minimax_h3_latent_upscaler",
+            "vst_minimax_latent_upscaler_install",
+        );
+        Object.assign(globalThis, {
+            currentBackendFeatureSet: ["MinimaxH3LatentUpscaler3D"],
+        });
+        h.editor.refresh();
+        const installed = required<HTMLButtonElement>(
+            "[data-vst-install-minimax-latent-upscaler]",
+        );
+        expect(installed.textContent).toBe(
+            "MiniMax H3 Latent Upscaler Installed",
+        );
+        expect(installed.disabled).toBe(true);
+        installed.click();
+        expect(installFeatureById).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports when the host installer is unavailable for the MiniMax latent upscaler", () => {
+        const showError = jest
+            .spyOn(getVideoStagesHostBridge(), "showError")
+            .mockImplementation(() => {});
+        try {
+            required<HTMLButtonElement>(
+                "[data-vst-install-minimax-latent-upscaler]",
+            ).click();
+            expect(showError).toHaveBeenCalledWith(
+                "SwarmUI's ComfyUI feature installer is unavailable.",
+            );
+        } finally {
+            showError.mockRestore();
+        }
     });
 });

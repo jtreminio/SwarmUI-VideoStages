@@ -403,7 +403,7 @@ internal sealed class MiniMaxGenerationSession(
             g.CurrentMedia = incoming is null
                 ? EntryJointLatent(clip, genInfo, frames, claim.Latent)
                 : JointLatent(incoming, genInfo);
-            ApplyLatentInterpolation(stageUpscale);
+            ApplyLatentUpscale(stageUpscale);
             AttachKeyframes(
                 genInfo,
                 stage.RequireMiniMaxStagePayload().FrameReferences);
@@ -788,9 +788,10 @@ internal sealed class MiniMaxGenerationSession(
             .AsSamplingLatent(genInfo.Vae, g.CurrentAudioVae);
     }
 
-    private void ApplyLatentInterpolation(StageUpscalePlan upscale)
+    private void ApplyLatentUpscale(StageUpscalePlan upscale)
     {
-        if (upscale?.Mode != StageUpscaleMode.Latent || g.CurrentMedia is null)
+        if (upscale?.Mode is not (StageUpscaleMode.Latent or StageUpscaleMode.LatentModel)
+            || g.CurrentMedia is null)
         {
             return;
         }
@@ -800,11 +801,28 @@ internal sealed class MiniMaxGenerationSession(
             video.Height ?? _dimensions.Height,
             upscale.Factor);
         using WorkflowBridge bridge = BridgeSync.For(g);
-        LatentUpscaleByNode node = bridge.AddNode(new LatentUpscaleByNode().With(
-            UpscaleMethod: upscale.MethodName,
-            ScaleBy: upscale.Factor));
-        node.Samples.ConnectFromPath(bridge, video.Path);
-        WGNodeData scaled = video.WithPath(node.LATENT.ToPath(), WGNodeData.DT_LATENT_VIDEO);
+        INodeOutput output;
+        if (upscale.Mode == StageUpscaleMode.LatentModel)
+        {
+            MinimaxH3LatentUpscaler3DNode node = new MinimaxH3LatentUpscaler3DNode().With(
+                ModelName: upscale.MethodName,
+                Mode: "target dimensions");
+            // DynamicCombo fields are flattened in ComfyUI's API prompt.
+            node.ExtraInputs["mode.width"] = width;
+            node.ExtraInputs["mode.height"] = height;
+            bridge.AddNode(node);
+            node.LatentInput.ConnectFromPath(bridge, video.Path);
+            output = node.Latent;
+        }
+        else
+        {
+            LatentUpscaleByNode node = bridge.AddNode(new LatentUpscaleByNode().With(
+                UpscaleMethod: upscale.MethodName,
+                ScaleBy: upscale.Factor));
+            node.Samples.ConnectFromPath(bridge, video.Path);
+            output = node.LATENT;
+        }
+        WGNodeData scaled = video.WithPath(output.ToPath(), WGNodeData.DT_LATENT_VIDEO);
         scaled.Width = width;
         scaled.Height = height;
         g.CurrentMedia = scaled.AsSamplingLatent(g.CurrentVae, g.CurrentAudioVae);

@@ -22,6 +22,7 @@ public class VideoStagesExtension : Extension
     public override void OnPreInit()
     {
         MiniMaxTextEncoderGraph.RegisterDependencies();
+        MiniMaxLatentUpscalerIntegration.RegisterDependencies();
         PromptRegion.RegisterCustomPrefix(PromptSyntax.ClipTagName);
         T2IPromptHandling.PromptTagBasicProcessors[PromptSyntax.ClipTagName] = PromptTags.ProcessVideoClip;
         T2IPromptHandling.PromptTagBasicProcessors[PromptSyntax.StagesTagName] = PromptTags.ProcessVideoStages;
@@ -50,8 +51,7 @@ public class VideoStagesExtension : Extension
         VideoArchitectureManifest.RegisterProductionHostHandlers();
         CoreWorkflowCompatibility.Register();
 
-        // The first phase is the only place a request may be rejected — every later phase mutates
-        // the host graph, so a failure past it leaves the user with a broken workflow.
+        // Reject requests before later phases mutate the host graph.
         WorkflowGenerator.AddStep(
             WorkflowPhase.Guarded(context => context.PrepareRequest()),
             Constants.WorkflowStepPriority.PreflightRequest);

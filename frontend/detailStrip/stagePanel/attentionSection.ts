@@ -72,7 +72,7 @@ export const appendStageAttentionSection = (
             select,
             undefined,
             key === "useSparseAttention"
-                ? "Sol-Attn uses a training-free threshold (1.3). SLA and VSA keep 10% and require weights trained for their attention pattern; VSA is for FastH3. Sparse attention starts at 20% of sampling and stays dense below 12,288 tokens."
+                ? "Sol-Attn uses a training-free threshold (1.3). SLA and VSA keep 10% and require weights trained for their attention pattern; VSA is for FastH3. VSA starts at 0% of sampling; Sol-Attn and SLA start at 20%. Sparse attention stays dense below 12,288 tokens."
                 : "Choose the attention implementation for this stage, including the dense fallback when sparse attention is active.",
         );
         field.classList.add("vst-wide-select");

@@ -12,6 +12,7 @@ public class GeneratedBindingRetentionTests
     [
         nameof(ClipProjApplyNode),
         nameof(H3WindowAttentionPatchNode),
+        nameof(MinimaxH3LatentUpscaler3DNode),
         nameof(BonitaSAM3FinderNode),
         nameof(BonitaYOLOFinderNode),
         nameof(BonitaFindAndCropNode),

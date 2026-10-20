@@ -8,7 +8,6 @@ using VideoStages.Planning;
 
 namespace VideoStages.Architectures.MiniMax;
 
-/// <summary>MiniMax H3: one sampling pass over a joint audio-video latent.</summary>
 internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
 {
     internal static ArchitectureId ArchitectureId { get; } = new("minimax");
@@ -89,6 +88,7 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
             | ArchitectureFeature.AudioReuse
             | ArchitectureFeature.AudioBoundaryCarry
             | ArchitectureFeature.LatentUpscale
+            | ArchitectureFeature.LatentModelUpscale
             | ArchitectureFeature.CharacterRefine
             | ArchitectureFeature.CharacterRefineAppearanceReferences
             | ArchitectureFeature.CharacterRefineIdentityReferences,
@@ -163,12 +163,10 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                 diagnostics,
                 "minimax",
                 allowHostStageSources: true,
-                // H3 conditions on keyframes through a node that takes the latent as an input, so
-                // a first keyframe composes with source footage instead of competing for its slot.
+                // H3 keyframes condition the incoming latent without replacing source footage.
                 allowFirstFrameWithInitVideo: true);
         foreach (StageSpec stage in activeStages)
         {
-            // Assignments are resolver-vetted; a missing key is a caller contract violation.
             ResolvedVideoModel resolved = stageModels[stage.ClipStageRawIndex];
             bool passthrough = StagePassthroughPolicy.IsPassthrough(stage, Descriptor);
             bool characterRefine = stage.CharacterRefine is not null && !passthrough;
@@ -215,8 +213,21 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                     stage.Id,
                     stage.ClipStageRawIndex));
             }
+            StageUpscalePlan upscale = StageUpscalePlanCompiler.Compile(stage);
+            if (upscale.Mode == StageUpscaleMode.LatentModel && upscale.Factor < 1)
+            {
+                diagnostics.Add(new(
+                    PlanDiagnosticSeverity.Error,
+                    "minimax.latent-upscale.downscale-unsupported",
+                    $"Clip {clip.Id}: stage {stage.Id} MiniMax H3 learned latent upscaling "
+                        + "cannot shrink video. Set Upscale above 1 or use a pixel method.",
+                    clip.Id,
+                    stage.Id,
+                    stage.ClipStageRawIndex));
+            }
             if (characterRefine
-                && StageUpscalePlanCompiler.Compile(stage).Mode == StageUpscaleMode.Latent)
+                && upscale.Mode is
+                    StageUpscaleMode.Latent or StageUpscaleMode.LatentModel)
             {
                 diagnostics.Add(new(
                     PlanDiagnosticSeverity.Error,
@@ -360,7 +371,7 @@ internal sealed record MiniMaxClipPayload(
         foreach (StagePlan stage in stages ?? [])
         {
             StageUpscaleMode mode = stage.Core.Upscale.Mode;
-            if (mode != StageUpscaleMode.Latent
+            if (mode is not (StageUpscaleMode.Latent or StageUpscaleMode.LatentModel)
                 && (mode is not (StageUpscaleMode.Pixel or StageUpscaleMode.Model)
                     || stage.Input is not (
                         StageInputKind.InitVideo
