@@ -5,6 +5,7 @@ using ComfyTyped.SwarmUI;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
 using SwarmUI.Core;
+using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Authoring;
 using VideoStages.Generated;
@@ -62,17 +63,22 @@ internal static class MiniMaxTextEncoderGraph
         }
 
         WorkflowGenerator.ModelLoadHelpers modelLoader = new(generator);
-        (string encoderName, string loaderType) = selection switch
+        (string encoderFile, string encoderHash) = selection switch
         {
             MiniMaxTextEncoder.Qwen3Vl8B => (
-                modelLoader.GetQwen3vl_8bModel(),
-                CLIPLoaderNode.TypeValues.Boogu),
+                "qwen3vl_8b_int8_convrot.safetensors",
+                "8bfd0f6e12abf2d2d697ecc888e5e90b0d6741d6708f05799f53afa560452e8f"),
             MiniMaxTextEncoder.Qwen3Vl4B => (
-                modelLoader.GetQwen3vl_4bModel(),
-                CLIPLoaderNode.TypeValues.Krea2),
+                "qwen3vl_4b_fp8_scaled.safetensors",
+                "54bd5144df0bbc25dd6ccadfcb826b521445a1b06ae5a42570bdd2974ca87094"),
             _ => throw Invariant.Failure(
                 $"Unsupported MiniMax H3 text encoder '{selection}'."),
         };
+        string encoderName = modelLoader.RequireClipModel(
+            encoderFile,
+            $"https://huggingface.co/Comfy-Org/Qwen3-VL/resolve/main/text_encoders/{encoderFile}",
+            encoderHash,
+            T2IParamTypes.QwenModel);
         (string projectionName, string projectionUrl, string projectionHash) =
             ProjectionFor(selection);
         string projectionDirectory = Utilities.CombinePathWithAbsolute(
@@ -85,21 +91,30 @@ internal static class MiniMaxTextEncoderGraph
             projectionUrl,
             projectionHash);
 
-        using WorkflowBridge bridge = BridgeSync.For(generator);
-        if (textEncoder.Path is not JArray { Count: >= 1 } path
-            || path[0]?.Value<string>() is not string loaderId
-            || !bridge.Graph.Nodes.TryGetValue(loaderId, out ComfyNode node)
-            || node is not CLIPLoaderNode loader)
+        if (textEncoder?.Path is not { Count: > 0 }
+            || textEncoder.SourceNodeData.Item1 != CLIPLoaderNode.ClassType)
         {
             throw Invariant.Failure(
                 "MiniMax H3's core text encoder did not come from CLIPLoader.");
         }
 
-        loader.ClipName.Set(encoderName);
-        loader.Type.Set(loaderType);
+        // Core caches the native loader by input, so load the projected encoder separately.
+        JArray originalLoadingClip = generator.LoadingClip;
+        JArray videoClip;
+        try
+        {
+            modelLoader.LoadClip(CLIPLoaderNode.TypeValues.Minimax, encoderName);
+            videoClip = generator.LoadingClip;
+        }
+        finally
+        {
+            generator.LoadingClip = originalLoadingClip;
+        }
+
+        using WorkflowBridge bridge = BridgeSync.For(generator);
         ClipProjApplyNode projection = bridge.AddNode(
             new ClipProjApplyNode().With(Projection: projectionName));
-        projection.ClipInput.ConnectTo(loader.CLIP);
+        projection.ClipInput.ConnectFromPath(bridge, videoClip);
         return textEncoder.WithPath(projection.Clip.ToPath());
     }
 }

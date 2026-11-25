@@ -3,6 +3,8 @@ using ComfyTyped.Families;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
 using SwarmUI.Builtin_ComfyUIBackend;
+using SwarmUI.Core;
+using SwarmUI.Text2Image;
 using SwarmUI.Utils;
 using VideoStages.Architectures.MiniMax;
 using VideoStages.Generated;
@@ -19,24 +21,40 @@ public class MiniMaxGeneratedWorkflowContractTests
     [Theory]
     [InlineData(
         "8b",
-        "qwen3vl_8b.safetensors",
-        "boogu",
-        "mmh3-8b-ClipProj-v3-mlp.safetensors")]
+        "qwen3vl_8b_int8_convrot.safetensors",
+        "mmh3-8b-ClipProj-v3-mlp.safetensors",
+        false)]
     [InlineData(
         "4b",
-        "qwen3vl_4b.safetensors",
-        "krea2",
-        "mmh3-4b-ClipProj-v3-mlp.safetensors")]
-    public async Task Selected_text_encoder_retargets_core_loader_then_projects_its_clip(
+        "qwen3vl_4b_fp8_scaled.safetensors",
+        "mmh3-4b-ClipProj-v3-mlp.safetensors",
+        false)]
+    [InlineData(
+        "8b",
+        "qwen3vl_8b_int8_convrot.safetensors",
+        "mmh3-8b-ClipProj-v3-mlp.safetensors",
+        true)]
+    [InlineData(
+        "4b",
+        "qwen3vl_4b_fp8_scaled.safetensors",
+        "mmh3-4b-ClipProj-v3-mlp.safetensors",
+        true)]
+    public async Task Selected_video_text_encoder_shares_a_matching_image_projection(
         string selection,
         string expectedEncoder,
-        string expectedLoaderType,
-        string expectedProjection)
+        string expectedProjection,
+        bool imageUsesClipProj)
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
-        fixture.InstallModel("Clip", expectedEncoder);
+        const string imageModelName = "MiniMaxH3Image-Workflow-Test.safetensors";
+        T2IModel imageModel = TestStubModel.Install(Program.MainSDModels, imageModelName);
+        imageModel.OriginatingFolderPath = Path.Join(imageModel.OriginatingFolderPath, "diffusion_models");
+        imageModel.ModelClass = T2IModelClassSorter.ModelClasses["minimax-h3-image"];
+        fixture.InstallModel("VAE", CommonModels.Known["minimax-h3-image-vae"].FileName);
+        fixture.InstallModel("Clip", expectedEncoder)
+            .InstallModel("Clip", $"qwen3vl_{selection}.safetensors");
         string projectionDirectory = Path.Join(
-            SwarmUI.Core.Program.ServerSettings.Paths.ActualModelRoot,
+            Program.ServerSettings.Paths.ActualModelRoot,
             MiniMaxTextEncoderGraph.ProjectionFolder);
         string projectionPath = Path.Join(projectionDirectory, expectedProjection);
         Directory.CreateDirectory(projectionDirectory);
@@ -55,8 +73,23 @@ public class MiniMaxGeneratedWorkflowContractTests
         try
         {
             workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
-                fixture.Post(MakeDocument(clip)),
-                extraFeatures: [MiniMaxTextEncoderGraph.FeatureFlag]);
+                fixture.Post(MakeDocument(clip), post =>
+                {
+                    post["model"] = imageModelName;
+                    post.Remove("text2videoframes");
+                }),
+                extraFeatures: [MiniMaxTextEncoderGraph.FeatureFlag],
+                // WhatTheDuck supplies this encoder before SwarmUI builds the base prompts.
+                extraSteps: imageUsesClipProj ? [new(g =>
+                {
+                    new WorkflowGenerator.ModelLoadHelpers(g).LoadClip("minimax", expectedEncoder);
+                    string projectionId = g.CreateNode(ClipProjApplyNode.ClassType, new JObject
+                    {
+                        ["clip"] = g.LoadingClip,
+                        ["projection"] = expectedProjection,
+                    });
+                    g.CurrentTextEnc = g.CurrentTextEnc.WithPath([projectionId, 0]);
+                }, -9.1)] : []);
         }
         finally
         {
@@ -65,28 +98,43 @@ public class MiniMaxGeneratedWorkflowContractTests
                 File.Delete(projectionPath);
             }
         }
-        JProperty projection = Assert.Single(
-            workflow.Properties(),
-            property => property.Value["class_type"]?.Value<string>()
-                == ClipProjApplyNode.ClassType);
-        JProperty loader = Assert.Single(
-            workflow.Properties(),
-            property => property.Value["class_type"]?.Value<string>() == CLIPLoaderNode.ClassType);
-        JObject loaderInputs = (JObject)loader.Value["inputs"];
-        JObject projectionInputs = (JObject)projection.Value["inputs"];
+        using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
+        SwarmKSamplerNode imageSampler = fixture.BaseSampler(bridge);
+        CLIPTextEncodeNode imagePositive = Assert.IsType<CLIPTextEncodeNode>(imageSampler.Positive.Connection?.Node);
+        CLIPTextEncodeNode imageNegative = Assert.IsType<CLIPTextEncodeNode>(imageSampler.Negative.Connection?.Node);
+        ClipProjApplyNode projection = Assert.Single(bridge.Graph.NodesOfType<ClipProjApplyNode>());
+        CLIPLoaderNode loader = Assert.IsType<CLIPLoaderNode>(projection.ClipInput.Connection?.Node);
+        Assert.Equal(expectedEncoder, loader.ClipName.LiteralAsString());
+        Assert.Equal("minimax", loader.Type.LiteralAsString());
+        Assert.Equal(expectedProjection, projection.Projection.LiteralAsString());
+        Assert.Single(bridge.Graph.NodesOfType<CLIPLoaderNode>(),
+            candidate => candidate.ClipName.LiteralAsString() == expectedEncoder);
 
-        Assert.Equal(expectedEncoder, loaderInputs["clip_name"]?.Value<string>());
-        Assert.Equal(expectedLoaderType, loaderInputs["type"]?.Value<string>());
-        Assert.Equal(expectedProjection, projectionInputs["projection"]?.Value<string>());
-        Assert.Equal(loader.Name, projectionInputs["clip"]?[0]?.Value<string>());
-        JProperty[] encodes = [.. workflow.Properties().Where(property =>
-            property.Value["class_type"]?.Value<string>() == CLIPTextEncodeNode.ClassType)];
-        Assert.NotEmpty(encodes);
-        Assert.All(
-            encodes,
-            encode => Assert.Equal(
-                projection.Name,
-                encode.Value["inputs"]?["clip"]?[0]?.Value<string>()));
+        if (imageUsesClipProj)
+        {
+            Assert.Same(projection.Clip, imagePositive.Clip.Connection);
+            Assert.Same(projection.Clip, imageNegative.Clip.Connection);
+        }
+        else
+        {
+            CLIPLoaderNode imageLoader = Assert.IsType<CLIPLoaderNode>(imagePositive.Clip.Connection?.Node);
+            Assert.Equal("qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", imageLoader.ClipName.LiteralAsString());
+            Assert.Equal("minimax", imageLoader.Type.LiteralAsString());
+            Assert.Same(imageLoader.CLIP, imageNegative.Clip.Connection);
+        }
+
+        foreach (int stageId in new[] { 0, 1 })
+        {
+            SwarmKSamplerNode videoSampler = StageSampler(bridge, stageId);
+            SwarmMiniMaxH3AddKeyframesNode keyframes = Assert.IsType<SwarmMiniMaxH3AddKeyframesNode>(
+                videoSampler.Positive.Connection?.Node);
+            CLIPTextEncodeNode videoPositive = Assert.IsType<CLIPTextEncodeNode>(
+                keyframes.ConditioningInput.Connection?.Node);
+            CLIPTextEncodeNode videoNegative = Assert.IsType<CLIPTextEncodeNode>(
+                videoSampler.Negative.Connection?.Node);
+            Assert.Same(projection.Clip, videoPositive.Clip.Connection);
+            Assert.Same(projection.Clip, videoNegative.Clip.Connection);
+        }
     }
 
     [Fact]
