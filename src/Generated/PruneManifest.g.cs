@@ -38,7 +38,6 @@ public static class PruneManifest
         "LTXVAdainLatentNode",
         "LTXVAddGuideAdvancedAttentionNode",
         "LTXVAddGuideAdvancedNode",
-        "LTXVAddLatentGuideNode",
         "LTXVAddLatentsNode",
         "LTXVApplySTGNode",
         "LTXVAudioOnlyEmptyVideoLatentNode",
