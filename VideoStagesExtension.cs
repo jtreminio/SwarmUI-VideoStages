@@ -22,7 +22,6 @@ public class VideoStagesExtension : Extension
     public override void OnPreInit()
     {
         MiniMaxTextEncoderGraph.RegisterDependencies();
-        MiniMaxLatentUpscalerIntegration.RegisterDependencies();
         PromptRegion.RegisterCustomPrefix(PromptSyntax.ClipTagName);
         T2IPromptHandling.PromptTagBasicProcessors[PromptSyntax.ClipTagName] = PromptTags.ProcessVideoClip;
         T2IPromptHandling.PromptTagBasicProcessors[PromptSyntax.StagesTagName] = PromptTags.ProcessVideoStages;

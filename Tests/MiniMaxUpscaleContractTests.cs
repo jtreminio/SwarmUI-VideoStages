@@ -1,9 +1,6 @@
 using ComfyTyped.Core;
 using ComfyTyped.Generated;
 using Newtonsoft.Json.Linq;
-using SwarmUI.Builtin_ComfyUIBackend;
-using SwarmUI.Utils;
-using VideoStages.Generated;
 using Xunit;
 using static VideoStages.Tests.Fixtures;
 using static VideoStages.Tests.TypedWorkflowAssertions;
@@ -16,11 +13,11 @@ public class MiniMaxUpscaleContractTests
     private const string UpscaleModelFileName = "unit-test-upscaler.pth";
 
     [Theory]
-    [InlineData(0, 1.5, 768)]
-    [InlineData(0.5, 1.5, 768)]
-    [InlineData(0.5, 1.25, 640)]
+    [InlineData(0, 1.5, 768, 576)]
+    [InlineData(0.5, 1.5, 768, 576)]
+    [InlineData(0.5, 1.25, 640, 480)]
     public async Task Learned_latent_upscale_preserves_audio_and_refines_at_target_dimensions(
-        double control, double factor, int expectedSize)
+        double control, double factor, int expectedWidth, int expectedHeight)
     {
         using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
         const string model = "H3/minimax_h3_latent_upscaler_3d_bf16.safetensors";
@@ -30,30 +27,25 @@ public class MiniMaxUpscaleContractTests
                 upscaleMethod: $"latentmodel-{model}"));
         clip["duration"] = 1.0;
 
-        string feature = ComfyUIBackendExtension.NodeToFeatureMap[
-            MinimaxH3LatentUpscaler3DNode.ClassType];
-        JObject workflow = await ComfyWorkflowApiTestHarness.GenerateAsync(
-            fixture.Post(MakeDocument(clip)), extraFeatures: [feature]);
+        JObject workflow = await fixture.GenerateAsync(
+            MakeDocument(clip), post => post["height"] = 384);
         using WorkflowBridge bridge = WorkflowBridge.Create(workflow);
         WorkflowLivePath live = WorkflowLivePath.For(bridge);
-        MinimaxH3LatentUpscaler3DNode scale = Assert.Single(
-            bridge.Graph.NodesOfType<MinimaxH3LatentUpscaler3DNode>());
-        Assert.Equal(model, scale.ModelName.LiteralAsString());
-        Assert.Equal("target dimensions", scale.Mode.LiteralAsString());
-        Assert.Equal(expectedSize, workflow[scale.Id]!["inputs"]!["mode.width"]!.Value<int>());
-        Assert.Equal(expectedSize, workflow[scale.Id]!["inputs"]!["mode.height"]!.Value<int>());
-        Assert.Equal(32, scale.Align.LiteralAsInt());
-        Assert.Equal("cuda", scale.Device.LiteralAsString());
-        Assert.Equal("fp16", scale.Precision.LiteralAsString());
-        Assert.True(workflow[scale.Id]!["inputs"]!["enable_temporal_chunking"]!.Value<bool>());
-        Assert.True(workflow[scale.Id]!["inputs"]!["force_unload"]!.Value<bool>());
+        LatentUpscaleModelLoaderNode loader = Assert.Single(
+            bridge.Graph.NodesOfType<LatentUpscaleModelLoaderNode>());
+        MiniMaxH3LatentUpscaleWithModelNode scale = Assert.Single(
+            bridge.Graph.NodesOfType<MiniMaxH3LatentUpscaleWithModelNode>());
+        Assert.Equal(model, loader.ModelName.LiteralAsString());
+        Assert.Same(loader.LATENTUPSCALEMODEL, scale.Model.Connection);
+        Assert.Equal(expectedWidth, scale.Width.LiteralAsInt());
+        Assert.Equal(expectedHeight, scale.Height.LiteralAsInt());
 
         SwarmKSamplerNode first = StageSampler(bridge, 0);
         Assert.True(ReachesUpstream(bridge, scale, first.Id));
         if (control > 0)
         {
             LTXVConcatAVLatentNode joint = JointLatentOf(StageSampler(bridge, 1));
-            Assert.Same(scale.Latent, joint.VideoLatent.Connection);
+            Assert.Same(scale.LATENT, joint.VideoLatent.Connection);
             Assert.NotNull(joint.AudioLatent.Connection);
             Assert.False(ReachesUpstream(bridge, joint.AudioLatent.Connection.Node, scale.Id));
             Assert.True(ReachesUpstream(bridge, joint.AudioLatent.Connection.Node, first.Id));
@@ -68,21 +60,8 @@ public class MiniMaxUpscaleContractTests
         }
         Assert.Empty(bridge.Graph.NodesOfType<LatentUpscaleByNode>());
         Assert.Empty(bridge.Graph.NodesOfType<ImageUpscaleWithModelNode>());
-        live.AssertAllLive(first, scale);
+        live.AssertAllLive(first, loader, scale);
         AssertShippable(bridge, workflow, live);
-    }
-
-    [Fact]
-    public async Task Learned_latent_upscale_requires_the_LBH_node()
-    {
-        using MiniMaxWorkflowFixture fixture = MiniMaxWorkflowFixture.Create();
-        JObject clip = MakeClip(
-            fixture.Stage(),
-            fixture.Stage("PreviousStage", control: 0.5, upscale: 2,
-                upscaleMethod: "latentmodel-minimax_h3_latent_upscaler_3d_bf16.safetensors"));
-        SwarmReadableErrorException error = await Assert.ThrowsAsync<SwarmReadableErrorException>(
-            () => fixture.GenerateAsync(MakeDocument(clip)));
-        Assert.Contains("requires LBH's 3D upscaler", error.Message);
     }
 
     [Fact]

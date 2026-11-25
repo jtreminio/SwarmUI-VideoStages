@@ -804,15 +804,15 @@ internal sealed class MiniMaxGenerationSession(
         INodeOutput output;
         if (upscale.Mode == StageUpscaleMode.LatentModel)
         {
-            MinimaxH3LatentUpscaler3DNode node = new MinimaxH3LatentUpscaler3DNode().With(
-                ModelName: upscale.MethodName,
-                Mode: "target dimensions");
-            // DynamicCombo fields are flattened in ComfyUI's API prompt.
-            node.ExtraInputs["mode.width"] = width;
-            node.ExtraInputs["mode.height"] = height;
-            bridge.AddNode(node);
-            node.LatentInput.ConnectFromPath(bridge, video.Path);
-            output = node.Latent;
+            LatentUpscaleModelLoaderNode loader = bridge.AddNode(
+                new LatentUpscaleModelLoaderNode().With(ModelName: upscale.MethodName));
+            MiniMaxH3LatentUpscaleWithModelNode node = bridge.AddNode(
+                new MiniMaxH3LatentUpscaleWithModelNode().With(
+                    Model: loader.LATENTUPSCALEMODEL,
+                    Width: width,
+                    Height: height));
+            node.Samples.ConnectFromPath(bridge, video.Path);
+            output = node.LATENT;
         }
         else
         {

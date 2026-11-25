@@ -14805,11 +14805,6 @@ ${slot}`;
     return column;
   };
 
-  // frontend/generatedMiniMaxLatentUpscaler.ts
-  var H3_LATENT_UPSCALER_INSTALL_FEATURE = "minimax_h3_latent_upscaler";
-  var H3_LATENT_UPSCALER_FEATURE = "MinimaxH3LatentUpscaler3D";
-  var H3_LATENT_UPSCALER_REPOSITORY_URL = "https://github.com/LBH-123-AI/Comfyui_Minimax_h3_latent_Upscaler";
-
   // frontend/multiSelectPicker.ts
   var pickerSequence = 0;
   var selectedValues = (picker) => Array.from(
@@ -15052,48 +15047,6 @@ ${slot}`;
 
   // frontend/detailStrip/videoStagesSettings.ts
   var STORAGE_PREFIX = "videostages";
-  var buildMiniMaxLatentUpscalerInstallSetting = () => {
-    const installed = getVideoStagesHostBridge().hasBackendFeature(
-      H3_LATENT_UPSCALER_FEATURE
-    );
-    const section = document.createElement("fieldset");
-    section.id = "vst_minimax_latent_upscaler_install";
-    const legend = document.createElement("legend");
-    legend.textContent = "MiniMax H3 Latent Upscaler";
-    const hint = document.createElement("small");
-    if (installed) {
-      hint.textContent = "MiniMax H3 Latent Upscaler is installed. ";
-    } else {
-      const repository = document.createElement("a");
-      repository.href = H3_LATENT_UPSCALER_REPOSITORY_URL;
-      repository.target = "_blank";
-      repository.rel = "noopener noreferrer";
-      repository.textContent = "LBH's MiniMax H3 Latent Upscaler";
-      hint.append("Install ", repository, " for learned latent upscaling. ");
-    }
-    hint.append(
-      "Place its 3D weights in latent_upscale_models and select them as the stage's Upscale Method."
-    );
-    const install = buildDetailActionButton({
-      label: installed ? "MiniMax H3 Latent Upscaler Installed" : "Install MiniMax H3 Latent Upscaler",
-      title: installed ? "MiniMax H3 Latent Upscaler is installed" : "Install MiniMax H3 Latent Upscaler",
-      className: "vst-install-minimax-latent-upscaler",
-      disabled: installed,
-      onClick: () => {
-        if (!installHostFeature(
-          H3_LATENT_UPSCALER_INSTALL_FEATURE,
-          section.id
-        )) {
-          getVideoStagesHostBridge().showError(
-            "SwarmUI's ComfyUI feature installer is unavailable."
-          );
-        }
-      }
-    });
-    install.dataset.vstInstallMinimaxLatentUpscaler = "true";
-    section.append(legend, hint, install);
-    return section;
-  };
   var buildBonitaInstallSetting = () => {
     const installed = CHARACTER_REFINE_REQUIRED_FEATURES.every(
       (feature) => getVideoStagesHostBridge().hasBackendFeature(feature)
@@ -15198,8 +15151,7 @@ ${slot}`;
     fields.className = "vst-videostages-settings-fields";
     fields.append(
       buildLoraFolderSetting(onLoraFoldersChanged),
-      buildBonitaInstallSetting(),
-      buildMiniMaxLatentUpscalerInstallSetting()
+      buildBonitaInstallSetting()
     );
     return fields;
   };
