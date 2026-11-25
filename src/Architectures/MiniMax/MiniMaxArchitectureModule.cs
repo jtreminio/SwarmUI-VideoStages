@@ -14,18 +14,13 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
 
     internal static ModelProfileId ProfileId { get; } = new("minimax-h3");
 
-    /// <summary>
-    /// H3 samples 17-frame blocks after an opening five-frame block, so valid generated counts
-    /// are 5, 22, 39, ... Mirrors core's <c>WorkflowGenerator.MiniMaxH3AlignFrames</c>.
-    /// </summary>
+    // Match WorkflowGenerator.MiniMaxH3AlignFrames.
     internal const int FrameGrid = 17;
     internal const int FrameGridOrigin = 5;
     internal const double ReferenceFramesPerSecond = 24;
 
-    /// <summary>The checkpoint class; core registers its video VAE under the same compat class.</summary>
     internal const string ModelClassId = "minimax-h3";
 
-    /// <summary>H3 is guidance-distilled; core's own path defaults it to a CFG of one.</summary>
     internal const double UnguidedCfgScale = 1;
 
     private static ArchitectureBoundaryPolicy BoundaryPolicy { get; } =
@@ -262,13 +257,26 @@ internal sealed class MiniMaxArchitectureModule : IVideoArchitectureModule
                         ? []
                         : FrameRefPlanCompiler.Compile(clip, stage),
                 };
+            MiniMaxPiH3Adapter[] adapters = passthrough
+                ? []
+                : [.. host.Core.Loras.Select(MiniMaxPiH3Adapter.FromLora).OfType<MiniMaxPiH3Adapter>()];
+            if (adapters.Length > 0)
+            {
+                host = host with
+                {
+                    Core = host.Core with { Loras = host.Core.Loras.RemoveRange(adapters.Select(a => a.Lora)) },
+                };
+            }
+            bool skipsSampling = decodedInput
+                && StageStartStepPolicy.StartStep(stage.Steps, stage.Control) >= stage.Steps;
             MiniMaxCharacterRefinePlan characterRefinePlan = characterRefine
                 ? CompileCharacterRefine(clip, stage, diagnostics)
                 : null;
             stages[stage.ClipStageRawIndex] = new MiniMaxStagePayload(
                 host,
                 characterRefinePlan,
-                MiniMaxAttentionWindowGraph.NormalizeSeconds(stage.H3AttentionWindowSeconds));
+                MiniMaxAttentionWindowGraph.NormalizeSeconds(stage.H3AttentionWindowSeconds),
+                skipsSampling ? [] : [.. adapters.Where(adapter => adapter.Lora.ModelWeight != 0)]);
         }
 
         return new(

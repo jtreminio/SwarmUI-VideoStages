@@ -14805,6 +14805,11 @@ ${slot}`;
     return column;
   };
 
+  // frontend/generatedPiH3.ts
+  var PI_H3_INSTALL_FEATURE = "piflow";
+  var PI_H3_REPOSITORY_URL = "https://github.com/Lakonik/ComfyUI-piFlow";
+  var PI_H3_REQUIRED_FEATURES = ["Load LakonLab Adapter", "DWD Decode"];
+
   // frontend/multiSelectPicker.ts
   var pickerSequence = 0;
   var selectedValues = (picker) => Array.from(
@@ -15047,47 +15052,41 @@ ${slot}`;
 
   // frontend/detailStrip/videoStagesSettings.ts
   var STORAGE_PREFIX = "videostages";
-  var buildBonitaInstallSetting = () => {
-    const installed = CHARACTER_REFINE_REQUIRED_FEATURES.every(
+  var buildNodeInstallSetting = (options) => {
+    const { key, title, name, description, repositoryUrl, installFeature } = options;
+    const installed = options.requiredFeatures.every(
       (feature) => getVideoStagesHostBridge().hasBackendFeature(feature)
     );
     const section = document.createElement("fieldset");
-    section.id = "vst_bonita_install";
-    section.className = "vst-bonita-install-setting";
+    section.id = `vst_${key}_install`;
+    section.className = `vst-node-install-setting vst-${key}-install-setting`;
     const legend = document.createElement("legend");
-    legend.textContent = "Make Them Bonita";
+    legend.textContent = title;
     const hint = document.createElement("small");
     if (installed) {
-      hint.textContent = "ComfyUI-Bonita is installed.";
+      hint.textContent = `${name} is installed.`;
     } else {
       const repository = document.createElement("a");
-      repository.href = CHARACTER_REFINE_REPOSITORY_URL;
+      repository.href = repositoryUrl;
       repository.target = "_blank";
       repository.rel = "noopener noreferrer";
-      repository.textContent = "ComfyUI-Bonita";
-      hint.append(
-        "Install ",
-        repository,
-        " - tracked detail repair for supported video models"
-      );
+      repository.textContent = name;
+      hint.append("Install ", repository, description);
     }
     const install = buildDetailActionButton({
-      label: installed ? "ComfyUI-Bonita Installed" : "Install ComfyUI-Bonita",
-      title: installed ? "ComfyUI-Bonita is installed" : "Install ComfyUI-Bonita",
-      className: "vst-install-bonita",
+      label: installed ? `${name} Installed` : `Install ${name}`,
+      title: installed ? `${name} is installed` : `Install ${name}`,
+      className: `vst-install-${key}`,
       disabled: installed,
       onClick: () => {
-        if (!installHostFeature(
-          CHARACTER_REFINE_INSTALL_FEATURE,
-          section.id
-        )) {
+        if (!installHostFeature(installFeature, section.id)) {
           getVideoStagesHostBridge().showError(
             "SwarmUI's ComfyUI feature installer is unavailable."
           );
         }
       }
     });
-    install.dataset.vstInstallBonita = "true";
+    install.setAttribute(`data-vst-install-${key}`, "true");
     section.append(legend, hint, install);
     return section;
   };
@@ -15151,7 +15150,24 @@ ${slot}`;
     fields.className = "vst-videostages-settings-fields";
     fields.append(
       buildLoraFolderSetting(onLoraFoldersChanged),
-      buildBonitaInstallSetting()
+      buildNodeInstallSetting({
+        key: "bonita",
+        title: "Make Them Bonita",
+        name: "ComfyUI-Bonita",
+        description: " - tracked detail repair for supported video models",
+        repositoryUrl: CHARACTER_REFINE_REPOSITORY_URL,
+        installFeature: CHARACTER_REFINE_INSTALL_FEATURE,
+        requiredFeatures: CHARACTER_REFINE_REQUIRED_FEATURES
+      }),
+      buildNodeInstallSetting({
+        key: "pi-h3",
+        title: "MiniMax pi-H3",
+        name: "ComfyUI-piFlow",
+        description: " for pi-H3 adapters on MiniMax H3 stages.",
+        repositoryUrl: PI_H3_REPOSITORY_URL,
+        installFeature: PI_H3_INSTALL_FEATURE,
+        requiredFeatures: PI_H3_REQUIRED_FEATURES
+      })
     );
     return fields;
   };

@@ -102,7 +102,7 @@ internal sealed class MiniMaxGenerationSession(
         if (clip.EntryMode != ArchitectureEntryMode.InitVideo
             && g.CurrentMedia is not null)
         {
-            // Incoming audio belongs to whichever architecture owns the shared root, not to H3.
+            // The shared root owns the incoming audio track.
             g.CurrentMedia.AttachedAudio = null;
         }
 
@@ -146,29 +146,8 @@ internal sealed class MiniMaxGenerationSession(
             stage,
             includeLatent: true);
         WGNodeData joint = EmptyJointLatent(genInfo, frames, claim.Latent);
-        string sampled = g.CreateKSampler(
-            genInfo.Model.Path,
-            genInfo.PosCond,
-            genInfo.NegCond,
-            joint.Path,
-            genInfo.VideoCFG.Value,
-            genInfo.Steps,
-            startStep: 0,
-            endStep: 10000,
-            seed: genInfo.Seed,
-            returnWithLeftoverNoise: false,
-            addNoise: true,
-            sigmin: 0.002,
-            sigmax: 1000,
-            previews: g.UserInput.Get(
-                ComfyUIBackendExtension.VideoPreviewType,
-                "animate"),
-            id: claim.Sampler,
-            hadSpecialCond: true,
-            explicitSampler: genInfo.DefaultSampler,
-            explicitScheduler: genInfo.DefaultScheduler,
-            sectionId: genInfo.ContextID);
-        WGNodeData separated = joint.WithPath([sampled, 0]).AsLatentImage(genInfo.Vae);
+        WGNodeData sampled = Sample(genInfo, joint, payload.PiH3Adapters, 0, claim.Sampler);
+        WGNodeData separated = sampled.AsLatentImage(genInfo.Vae);
         WGNodeData audio = separated.AttachedAudio
             ?? throw Invariant.Failure(
                 $"MiniMax H3 audio-only clip {clip.ClipId} produced no audio latent.");
@@ -374,6 +353,8 @@ internal sealed class MiniMaxGenerationSession(
         int startStep,
         StageUpscalePlan stageUpscale)
     {
+        MiniMaxStagePayload stagePayload = stage.RequireMiniMaxStagePayload();
+        WGNodeData inputVae = g.CurrentVae;
         bool ambientImageToVideo = g.IsImageToVideo;
         try
         {
@@ -381,7 +362,7 @@ internal sealed class MiniMaxGenerationSession(
             MiniMaxClipPayload payload = clip.RequireMiniMaxPayload();
             PrepModelAndPrompt(clip, genInfo, payload.References);
             MiniMaxAttentionWindowGraph.Apply(
-                g, stage.RequireMiniMaxStagePayload().AttentionWindowSeconds, genInfo);
+                g, stagePayload.AttentionWindowSeconds, genInfo);
             int frames = genInfo.Frames
                 ?? throw Invariant.Failure(
                     "A MiniMax H3 stage has no resolved frame count.");
@@ -402,34 +383,12 @@ internal sealed class MiniMaxGenerationSession(
             }
             g.CurrentMedia = incoming is null
                 ? EntryJointLatent(clip, genInfo, frames, claim.Latent)
-                : JointLatent(incoming, genInfo);
+                : JointLatent(incoming, genInfo, inputVae);
             ApplyLatentUpscale(stageUpscale);
-            AttachKeyframes(
-                genInfo,
-                stage.RequireMiniMaxStagePayload().FrameReferences);
-            string sampled = g.CreateKSampler(
-                genInfo.Model.Path,
-                genInfo.PosCond,
-                genInfo.NegCond,
-                g.CurrentMedia.Path,
-                genInfo.VideoCFG.Value,
-                genInfo.Steps,
-                startStep,
-                endStep: 10000,
-                seed: genInfo.Seed,
-                returnWithLeftoverNoise: false,
-                addNoise: true,
-                sigmin: 0.002,
-                sigmax: 1000,
-                previews: g.UserInput.Get(ComfyUIBackendExtension.VideoPreviewType, "animate"),
-                id: claim.Sampler,
-                hadSpecialCond: true,
-                explicitSampler: genInfo.DefaultSampler,
-                explicitScheduler: genInfo.DefaultScheduler,
-                sectionId: genInfo.ContextID);
-            g.CurrentMedia = g.CurrentMedia
-                .WithPath([sampled, 0])
-                .DecodeLatents(genInfo.Vae, false, claim.Decode);
+            AttachKeyframes(genInfo, stagePayload.FrameReferences);
+            WGNodeData sampled = Sample(genInfo, g.CurrentMedia, stagePayload.PiH3Adapters,
+                startStep, claim.Sampler);
+            g.CurrentMedia = DecodeSample(sampled, genInfo.Vae, stagePayload, claim.Decode);
             if (incoming is not null && samplingFrames != frames)
             {
                 using WorkflowBridge bridge = BridgeSync.For(g);
@@ -509,10 +468,8 @@ internal sealed class MiniMaxGenerationSession(
                 targetHeight,
                 includeBoundaryReference: false,
                 firstReferenceImage: identityIsFirstPicture ? identityImage : null);
-            MiniMaxAttentionWindowGraph.Apply(
-                g,
-                stage.RequireMiniMaxStagePayload().AttentionWindowSeconds,
-                genInfo);
+            MiniMaxStagePayload stagePayload = stage.RequireMiniMaxStagePayload();
+            MiniMaxAttentionWindowGraph.Apply(g, stagePayload.AttentionWindowSeconds, genInfo);
             JArray cropPath = cropMedia.Path;
             if (samplingFrames != incomingFrames)
             {
@@ -527,28 +484,8 @@ internal sealed class MiniMaxGenerationSession(
             WGNodeData crops = cropMedia.WithPath(cropPath);
             WGNodeData latent = JointLatent(crops, genInfo);
 
-            string sampled = g.CreateKSampler(
-                genInfo.Model.Path,
-                genInfo.PosCond,
-                genInfo.NegCond,
-                latent.Path,
-                genInfo.VideoCFG.Value,
-                samplerSteps,
-                startStep,
-                endStep: 10000,
-                seed: genInfo.Seed,
-                returnWithLeftoverNoise: false,
-                addNoise: true,
-                sigmin: 0.002,
-                sigmax: 1000,
-                previews: g.UserInput.Get(
-                    ComfyUIBackendExtension.VideoPreviewType,
-                    "animate"),
-                hadSpecialCond: true,
-                explicitSampler: genInfo.DefaultSampler,
-                explicitScheduler: genInfo.DefaultScheduler,
-                sectionId: genInfo.ContextID);
-            WGNodeData decoded = latent.WithPath([sampled, 0]).DecodeLatents(genInfo.Vae, false);
+            WGNodeData sampled = Sample(genInfo, latent, stagePayload.PiH3Adapters, startStep);
+            WGNodeData decoded = DecodeSample(sampled, genInfo.Vae, stagePayload);
             JArray decodedPath = (JArray)decoded.Path;
             if (samplingFrames != incomingFrames)
             {
@@ -570,6 +507,47 @@ internal sealed class MiniMaxGenerationSession(
             g.IsImageToVideo = ambientImageToVideo;
         }
     }
+
+    private WGNodeData Sample(
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        WGNodeData latent,
+        IReadOnlyList<MiniMaxPiH3Adapter> adapters,
+        int startStep,
+        string id = null)
+    {
+        JArray model = genInfo.Model.Path;
+        foreach (MiniMaxPiH3Adapter adapter in adapters)
+        {
+            model = adapter.Apply(g, model);
+        }
+        string sampled = g.CreateKSampler(
+            model,
+            genInfo.PosCond,
+            genInfo.NegCond,
+            latent.Path,
+            genInfo.VideoCFG.Value,
+            genInfo.Steps,
+            startStep,
+            endStep: 10000,
+            seed: genInfo.Seed,
+            returnWithLeftoverNoise: false,
+            addNoise: true,
+            sigmin: 0.002,
+            sigmax: 1000,
+            previews: g.UserInput.Get(ComfyUIBackendExtension.VideoPreviewType, "animate"),
+            id: id,
+            hadSpecialCond: true,
+            explicitSampler: genInfo.DefaultSampler,
+            explicitScheduler: genInfo.DefaultScheduler,
+            sectionId: genInfo.ContextID);
+        return latent.WithPath([sampled, 0]);
+    }
+
+    private WGNodeData DecodeSample(
+        WGNodeData sampled, WGNodeData vae, MiniMaxStagePayload stage, string id = null) =>
+        stage.DecodesWithDwd
+            ? MiniMaxPiH3Adapter.DecodePixels(g, sampled, vae, id)
+            : sampled.DecodeLatents(vae, false, id);
 
     private void PrepModelAndPrompt(
         ClipPlan clip,
@@ -779,9 +757,15 @@ internal sealed class MiniMaxGenerationSession(
 
     private WGNodeData JointLatent(
         WGNodeData incoming,
-        WorkflowGenerator.ImageToVideoGenInfo genInfo)
+        WorkflowGenerator.ImageToVideoGenInfo genInfo,
+        WGNodeData inputVae = null)
     {
-        WGNodeData videoLatent = incoming.EncodeToLatent(genInfo.Vae);
+        WGNodeData videoLatent = null;
+        if (inputVae is not null && JToken.DeepEquals(inputVae.Path, genInfo.Vae.Path))
+        {
+            videoLatent = MiniMaxPiH3Adapter.VideoLatentBeforeDecode(g, incoming, genInfo.Vae);
+        }
+        videoLatent ??= incoming.EncodeToLatent(genInfo.Vae);
         videoLatent.AttachedAudio = incoming.AttachedAudio;
         return videoLatent
             .WithMaskedAudio(g.CurrentAudioVae)
@@ -1089,9 +1073,7 @@ internal sealed class MiniMaxGenerationSession(
         return WorkflowBridge.ToPath(encode.CONDITIONING);
     }
 
-    // H3 reads reference batches at 24 fps and embeds every twelfth frame.
-    // Resample before trimming so authored seconds use that timebase, then scale
-    // to reduce reference tokens. Unknown-rate references keep their whole length.
+    // H3 embeds every twelfth reference frame at 24 fps. Trim on that timebase.
     private JArray ConformReferenceVideo(
         WGNodeData video,
         MiniMaxReferencePlan reference,

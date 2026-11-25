@@ -227,7 +227,7 @@
     text-overflow: ellipsis;
 }
 .vst-lora-folder-setting,
-.vst-bonita-install-setting {
+.vst-node-install-setting {
     min-width: 0;
     margin: 4px 0 0;
     padding: 8px;
@@ -235,12 +235,12 @@
     border-radius: var(--vst-radius-sm);
 }
 .vst-lora-folder-setting legend,
-.vst-bonita-install-setting legend {
+.vst-node-install-setting legend {
     padding: 0 4px;
     font-weight: 600;
 }
 .vst-lora-folder-setting > small,
-.vst-bonita-install-setting > small {
+.vst-node-install-setting > small {
     display: block;
     margin-bottom: 6px;
     color: var(--text-soft);

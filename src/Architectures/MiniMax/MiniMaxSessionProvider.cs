@@ -42,8 +42,23 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
             }
             foreach (StagePlan stage in clip.Stages)
             {
-                MiniMaxCharacterRefinePlan characterRefine =
-                    stage.RequireMiniMaxStagePayload().CharacterRefine;
+                MiniMaxStagePayload stagePayload = stage.RequireMiniMaxStagePayload();
+                if (stagePayload.PiH3Adapters.Count > 0
+                    && (!generator.Features.Contains(MiniMaxPiH3Adapter.LoaderFeature)
+                        || (!clip.AudioOnly && stagePayload.DecodesWithDwd
+                            && !generator.Features.Contains(MiniMaxPiH3Adapter.DecodeFeature))))
+                {
+                    diagnostics.Add(new(
+                        PlanDiagnosticSeverity.Error,
+                        "minimax.pi-h3.nodes-required",
+                        "MiniMax H3 pi-H3 adapters require ComfyUI-piFlow 1.4 or newer. "
+                            + "Install it from VideoStages settings or "
+                            + $"{MiniMaxPiH3Adapter.RepositoryUrl} and restart ComfyUI.",
+                        clip.ClipId,
+                        stage.StageId,
+                        stage.ClipStageRawIndex));
+                }
+                MiniMaxCharacterRefinePlan characterRefine = stagePayload.CharacterRefine;
                 if (characterRefine is not null
                     && StageStartStepPolicy.StartStep(
                         stage.Core.Steps,
@@ -52,8 +67,7 @@ internal sealed class MiniMaxSessionProvider(WorkflowGenerator generator) :
                     PreflightCharacterRefine(clip, stage, diagnostics);
                 }
                 foreach (FrameRefPlan reference in
-                    stage.RequireMiniMaxStagePayload()
-                        .FrameReferences
+                    stagePayload.FrameReferences
                         .Where(reference =>
                             !reference.IsEndpoint
                             && reference.SourceKind == FrameRefSourceKind.Upload))

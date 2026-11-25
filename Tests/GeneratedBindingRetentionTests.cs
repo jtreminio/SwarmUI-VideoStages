@@ -11,7 +11,9 @@ public class GeneratedBindingRetentionTests
     private static readonly string[] DirectlyReferencedProductionBindings =
     [
         nameof(ClipProjApplyNode),
+        nameof(DWDDecodeNode),
         nameof(H3WindowAttentionPatchNode),
+        nameof(LoadLakonLabAdapterNode),
         nameof(BonitaSAM3FinderNode),
         nameof(BonitaYOLOFinderNode),
         nameof(BonitaFindAndCropNode),

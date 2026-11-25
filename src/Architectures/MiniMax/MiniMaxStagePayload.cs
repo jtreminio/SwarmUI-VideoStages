@@ -14,7 +14,8 @@ internal sealed record MiniMaxCharacterRefinePlan(
 internal sealed record MiniMaxStagePayload(
     StockHostVideoStagePayload Host,
     MiniMaxCharacterRefinePlan CharacterRefine,
-    double AttentionWindowSeconds) : IArchitectureStagePayload
+    double AttentionWindowSeconds,
+    IReadOnlyList<MiniMaxPiH3Adapter> PiH3Adapters) : IArchitectureStagePayload
 {
     public ArchitectureId ArchitectureId => Host.ArchitectureId;
     public StageCorePlan Core => Host.Core;
@@ -22,6 +23,7 @@ internal sealed record MiniMaxStagePayload(
     public string CompatibilityClassId => Host.CompatibilityClassId;
     public LoraTarget LoraTarget => Host.LoraTarget;
     public ImmutableArray<FrameRefPlan> FrameReferences => Host.FrameReferences;
+    internal bool DecodesWithDwd => PiH3Adapters.Any(adapter => adapter.DecodesPixels);
 }
 
 internal static class MiniMaxStagePayloadExtensions
